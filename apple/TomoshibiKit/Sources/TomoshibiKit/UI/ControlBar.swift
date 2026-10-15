@@ -34,15 +34,29 @@ struct ControlBar: View {
     @State private var busy = false
 
     var body: some View {
-        HStack(spacing: 6) {
+        // The whole bar where it fits, and where it does not (a phone, a
+        // narrowed window) the same bar with the panels behind one menu.
+        // On a phone the whole bar was wider than the screen and both ends
+        // hung off it, hanging up with them.
+        ViewThatFits(in: .horizontal) {
+            bar(compact: false)
+            bar(compact: true)
+        }
+        .padding(.horizontal, 10)
+        .disabled(busy)
+    }
+
+    private func bar(compact: Bool) -> some View {
+        let size: CGFloat = compact ? 40 : 44
+        return HStack(spacing: compact ? 4 : 6) {
             Control(symbol: model.microphoneOn ? "mic.fill" : "mic.slash.fill",
                     label: model.microphoneOn ? t("Mute microphone") : t("Unmute microphone"),
-                    lit: false, warn: !model.microphoneOn) {
+                    lit: false, warn: !model.microphoneOn, size: size) {
                 act { try await model.setMicrophone(!model.microphoneOn) }
             }
             Control(symbol: model.cameraOn ? "video.fill" : "video.slash.fill",
                     label: model.cameraOn ? t("Turn camera off") : t("Turn camera on"),
-                    lit: false, warn: !model.cameraOn) {
+                    lit: false, warn: !model.cameraOn, size: size) {
                 act { try await model.setCamera(!model.cameraOn) }
             }
             #if os(macOS)
@@ -52,7 +66,7 @@ struct ControlBar: View {
             // the whole phone is the system's to do, through the extension.
             ZStack {
                 Control(symbol: "rectangle.on.rectangle", label: model.phoneSharing ? t("Stop sharing") : t("Share your screen"),
-                        lit: model.phoneSharing) { BroadcastPicker.press() }
+                        lit: model.phoneSharing, size: size) { BroadcastPicker.press() }
                 BroadcastPicker().frame(width: 1, height: 1).opacity(0.02).allowsHitTesting(false)
             }
             #endif
@@ -60,7 +74,7 @@ struct ControlBar: View {
             // (HandButton.tsx).
             HandControl(model: model, act: act, panel: $panel)
             Control(symbol: "bubble.left.fill", label: panel == .messages ? t("Hide messages") : t("Show messages"),
-                    lit: panel == .messages) {
+                    lit: panel == .messages, size: size) {
                 panel = panel == .messages ? nil : .messages
             }
             // The one dot that says something was said while the messages were
@@ -75,73 +89,79 @@ struct ControlBar: View {
             }
             .animation(Theme.settle, value: model.unread)
             .animation(Theme.settle, value: offers)
-            Control(symbol: "speaker.wave.2.fill", label: panel == .sound ? t("Hide sound") : t("Show sound"),
-                    lit: panel == .sound) {
-                panel = panel == .sound ? nil : .sound
-            }
-            if !model.sealed && (offers.watch || panel == .watch) {
-                Control(symbol: "play.rectangle.fill", label: panel == .watch ? t("Hide watch together") : t("Show watch together"),
-                        lit: panel == .watch) {
-                    panel = panel == .watch ? nil : .watch
+            if compact {
+                more(size: size)
+            } else {
+                Control(symbol: "speaker.wave.2.fill", label: panel == .sound ? t("Hide sound") : t("Show sound"),
+                        lit: panel == .sound) {
+                    panel = panel == .sound ? nil : .sound
                 }
-                // The show is playing while its panel is closed (ControlBar.tsx ~430).
-                .overlay(alignment: .topTrailing) {
-                    if offers.watchPlaying && panel != .watch {
-                        Circle().fill(Theme.tally).frame(width: 9, height: 9)
-                            .overlay(Circle().strokeBorder(Theme.surfaceHigh, lineWidth: 2))
-                            .offset(x: -2, y: 2)
-                            .transition(Theme.arrive)
+                if !model.sealed && (offers.watch || panel == .watch) {
+                    Control(symbol: "play.rectangle.fill", label: panel == .watch ? t("Hide watch together") : t("Show watch together"),
+                            lit: panel == .watch) {
+                        panel = panel == .watch ? nil : .watch
                     }
-                }
-                .transition(Theme.arrive)
-            }
-            if offers.music || panel == .music {
-                Control(symbol: "music.note", label: panel == .music ? t("Hide music") : t("Show music"),
-                        lit: panel == .music) {
-                    panel = panel == .music ? nil : .music
-                }
-                .overlay(alignment: .topTrailing) {
-                    if offers.musicPlaying && panel != .music {
-                        Circle().fill(Theme.tally).frame(width: 9, height: 9)
-                            .overlay(Circle().strokeBorder(Theme.surfaceHigh, lineWidth: 2))
-                            .offset(x: -2, y: 2)
-                            .transition(Theme.arrive)
+                    // The show is playing while its panel is closed (ControlBar.tsx ~430).
+                    .overlay(alignment: .topTrailing) {
+                        if offers.watchPlaying && panel != .watch {
+                            Circle().fill(Theme.tally).frame(width: 9, height: 9)
+                                .overlay(Circle().strokeBorder(Theme.surfaceHigh, lineWidth: 2))
+                                .offset(x: -2, y: 2)
+                                .transition(Theme.arrive)
+                        }
                     }
+                    .transition(Theme.arrive)
                 }
-                .transition(Theme.arrive)
-            }
-            if offers.host || panel == .host {
-                Control(symbol: "crown.fill", label: t("Running this room"), lit: panel == .host) {
-                    panel = panel == .host ? nil : .host
-                }
-                // Counted as well as coloured (HostPanel.tsx ~400): somebody
-                // waiting outside is the one thing in the room that is lost if
-                // nobody notices.
-                .overlay(alignment: .topTrailing) {
-                    if offers.knocking > 0 && panel != .host {
-                        Text("\(offers.knocking)")
-                            .font(.system(size: 10, weight: .bold).monospacedDigit())
-                            .foregroundStyle(Theme.tallyForeground)
-                            .padding(.horizontal, 4).frame(minWidth: 16, minHeight: 16)
-                            .background(Capsule().fill(Theme.tally))
-                            .overlay(Capsule().strokeBorder(Theme.surfaceHigh, lineWidth: 2))
-                            .offset(x: 2, y: -2)
-                            .transition(Theme.arrive)
+                if offers.music || panel == .music {
+                    Control(symbol: "music.note", label: panel == .music ? t("Hide music") : t("Show music"),
+                            lit: panel == .music) {
+                        panel = panel == .music ? nil : .music
                     }
+                    .overlay(alignment: .topTrailing) {
+                        if offers.musicPlaying && panel != .music {
+                            Circle().fill(Theme.tally).frame(width: 9, height: 9)
+                                .overlay(Circle().strokeBorder(Theme.surfaceHigh, lineWidth: 2))
+                                .offset(x: -2, y: 2)
+                                .transition(Theme.arrive)
+                        }
+                    }
+                    .transition(Theme.arrive)
                 }
-                .transition(Theme.arrive)
+                if offers.host || panel == .host {
+                    Control(symbol: "crown.fill", label: t("Running this room"), lit: panel == .host) {
+                        panel = panel == .host ? nil : .host
+                    }
+                    // Counted as well as coloured (HostPanel.tsx ~400): somebody
+                    // waiting outside is the one thing in the room that is lost if
+                    // nobody notices.
+                    .overlay(alignment: .topTrailing) {
+                        if offers.knocking > 0 && panel != .host {
+                            Text("\(offers.knocking)")
+                                .font(.system(size: 10, weight: .bold).monospacedDigit())
+                                .foregroundStyle(Theme.tallyForeground)
+                                .padding(.horizontal, 4).frame(minWidth: 16, minHeight: 16)
+                                .background(Capsule().fill(Theme.tally))
+                                .overlay(Capsule().strokeBorder(Theme.surfaceHigh, lineWidth: 2))
+                                .offset(x: 2, y: -2)
+                                .transition(Theme.arrive)
+                        }
+                    }
+                    .transition(Theme.arrive)
+                }
+                Control(symbol: "gearshape.fill", label: t("Devices"), lit: panel == .devices) {
+                    panel = panel == .devices ? nil : .devices
+                }
             }
-            Control(symbol: "gearshape.fill", label: t("Devices"), lit: panel == .devices) {
-                panel = panel == .devices ? nil : .devices
+            if !compact {
+                Divider().frame(height: 26).overlay(Theme.border)
             }
-            Divider().frame(height: 26).overlay(Theme.border)
             Button {
                 confirmLeave = true
             } label: {
                 Image(systemName: "phone.down.fill")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(Theme.dangerForeground)
-                    .frame(width: 56, height: 44)
+                    .frame(width: compact ? 52 : 56, height: size)
                     .background(Capsule().fill(Theme.danger))
             }
             .buttonStyle(.plain)
@@ -151,11 +171,65 @@ struct ControlBar: View {
                 Button(t("Leave"), role: .destructive) { Task { await model.leave() } }
             }
         }
-        .padding(6)
+        .padding(compact ? 4 : 6)
         .background(Capsule().fill(Theme.surfaceHigh))
         .overlay(Capsule().strokeBorder(Theme.border))
         .shadow(color: .black.opacity(0.4), radius: 16, y: 6)
-        .disabled(busy)
+        .fixedSize()
+    }
+
+    /// The panels, behind one button on a narrow bar. It carries the signal
+    /// dot whenever one of the buttons it stands for would: a show or the
+    /// music playing, somebody at the door.
+    private func more(size: CGFloat) -> some View {
+        let behind: [RoomView.Panel] = [.sound, .watch, .music, .host, .devices]
+        let open = panel.map { behind.contains($0) } ?? false
+        let busy = (offers.watchPlaying && panel != .watch) || (offers.musicPlaying && panel != .music)
+            || (offers.knocking > 0 && panel != .host)
+        return Menu {
+            item(t("Sound"), "speaker.wave.2.fill", .sound)
+            if !model.sealed && (offers.watch || panel == .watch) {
+                item(t("Watch together"), "play.rectangle.fill", .watch)
+            }
+            if offers.music || panel == .music {
+                item(t("Music"), "music.note", .music)
+            }
+            if offers.host || panel == .host {
+                item(offers.knocking > 0 ? "\(t("Running this room")) (\(offers.knocking))" : t("Running this room"),
+                     "crown.fill", .host)
+            }
+            item(t("Devices"), "gearshape.fill", .devices)
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(open ? Theme.tallyForeground : Theme.foreground)
+                .frame(width: size, height: size)
+                .background(Circle().fill(open ? Theme.tally : Theme.surface))
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel(t("More"))
+        .help(t("More"))
+        .overlay(alignment: .topTrailing) {
+            if busy {
+                Circle().fill(Theme.tally).frame(width: 9, height: 9)
+                    .overlay(Circle().strokeBorder(Theme.surfaceHigh, lineWidth: 2))
+                    .offset(x: -2, y: 2)
+                    .transition(Theme.arrive)
+            }
+        }
+        .animation(Theme.settle, value: busy)
+        .animation(Theme.settle, value: open)
+    }
+
+    private func item(_ title: String, _ symbol: String, _ target: RoomView.Panel) -> some View {
+        Button {
+            panel = panel == target ? nil : target
+        } label: {
+            Label(title, systemImage: panel == target ? "checkmark" : symbol)
+        }
     }
 
     /// A press that did not take is over, so it says so briefly and goes.
@@ -180,6 +254,7 @@ struct ControlBar: View {
         let label: String
         var lit = false
         var warn = false
+        var size: CGFloat = 44
         let action: () -> Void
 
         var body: some View {
@@ -187,7 +262,7 @@ struct ControlBar: View {
                 Image(systemName: symbol)
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(lit ? Theme.tallyForeground : (warn ? Theme.muted : Theme.foreground))
-                    .frame(width: 44, height: 44)
+                    .frame(width: size, height: size)
                     .background(Circle().fill(lit ? Theme.tally : Theme.surface))
                     .animation(Theme.settle, value: lit)
             }
