@@ -74,6 +74,22 @@ public final class CallModel {
     public private(set) var endedReason: String?
     public private(set) var localTracks: [String: TrackInfo] = [:]
 
+    /// What others said in the last six seconds, for the corner while the
+    /// messages are closed (live/chat.ts SAID_FOR, components/room/Said.tsx).
+    public private(set) var arriving: [ChatLine] = []
+    /// Something was said while the messages were closed (useChat.ts).
+    public private(set) var unread = false
+    /// Whether the messages panel is open; set by the room view.
+    public var chatOpen = false {
+        didSet {
+            if chatOpen {
+                unread = false
+                arriving.removeAll()
+            }
+        }
+    }
+    static let saidFor: Duration = .seconds(6)
+
     public private(set) var microphoneOn = false
     public private(set) var cameraOn = false
     public private(set) var handUp = false
@@ -186,6 +202,15 @@ public final class CallModel {
         messages.append(ChatLine(id: UUID().uuidString, identity: localIdentity, name: localName, text: trimmed, at: Date(), mine: true))
     }
 
+    private var watchingWritten = ""
+
+    /// The `watching` attribute, written only when it changes (watching.ts).
+    public func setWatching(_ sharer: String) async throws {
+        guard sharer != watchingWritten else { return }
+        try await call.setAttributes(attributes: ["watching": sharer])
+        watchingWritten = sharer
+    }
+
     /// The hand is an attribute, written only when it changes (hands.ts).
     public func setHand(_ up: Bool) async throws {
         guard up != handUp else { return }
@@ -253,6 +278,14 @@ public final class CallModel {
                                      at: Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000), mine: false))
             // The web keeps the last 500 (chat.ts).
             if messages.count > 500 { messages.removeFirst(messages.count - 500) }
+            if !chatOpen, let line = messages.last {
+                unread = true
+                arriving.append(line)
+                Task { [weak self] in
+                    try? await Task.sleep(for: Self.saidFor)
+                    self?.arriving.removeAll { $0.id == line.id }
+                }
+            }
         case let .data(topic, identity, payload):
             // Server messages come with no sender, and only those are
             // believed (host.ts, App.tsx).

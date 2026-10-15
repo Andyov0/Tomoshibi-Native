@@ -47,6 +47,11 @@ struct RemoteEvents {
 struct RemoteInfo {
     subscribed: bool,
     allowed: bool,
+    /// Tomoshibi: the size this subscriber last asked for, kept apart from the
+    /// publisher's own dimensions. Asking used to overwrite those, so the
+    /// track's real shape (portrait or not, which rung answers a size) was
+    /// lost the moment a view said how large it was.
+    requested: Option<TrackDimension>,
 }
 
 struct RemoteInner {
@@ -78,7 +83,7 @@ impl RemoteTrackPublication {
         Self {
             inner: super::new_inner(info, track.map(Into::into)),
             remote: Arc::new(RemoteInner {
-                info: RwLock::new(RemoteInfo { subscribed: auto_subscribe, allowed: true }),
+                info: RwLock::new(RemoteInfo { subscribed: auto_subscribe, allowed: true, requested: None }),
                 events: Default::default(),
             }),
         }
@@ -300,13 +305,7 @@ impl RemoteTrackPublication {
 
     pub fn update_video_dimensions(&self, dimension: TrackDimension) {
         if self.is_subscribed() {
-            if dimension != self.dimension() {
-                let TrackDimension(width, height) = dimension;
-                let mut new_info = self.proto_info();
-                new_info.width = width;
-                new_info.height = height;
-                self.update_info(new_info);
-            }
+            self.remote.info.write().requested = Some(dimension);
             // Request to send an update to the SFU
             if let Some(video_dimensions_changed) =
                 self.remote.events.video_dimensions_changed.lock().as_ref()
@@ -374,6 +373,20 @@ impl RemoteTrackPublication {
 
     pub fn dimension(&self) -> TrackDimension {
         self.inner.info.read().dimension
+    }
+
+    /// Tomoshibi: the size last asked for with `update_video_dimensions`.
+    pub fn requested_dimension(&self) -> Option<TrackDimension> {
+        self.remote.info.read().requested
+    }
+
+    /// Tomoshibi: the sizes of the layers the publisher sends, from the
+    /// track's own description (its codecs' layers, or the older field).
+    pub fn video_layers(&self) -> Vec<TrackDimension> {
+        let info = self.proto_info();
+        #[allow(deprecated)]
+        let layers = info.codecs.iter().map(|codec| &codec.layers).find(|layers| !layers.is_empty()).unwrap_or(&info.layers);
+        layers.iter().map(|layer| TrackDimension(layer.width, layer.height)).collect()
     }
 
     pub fn track(&self) -> Option<RemoteTrack> {

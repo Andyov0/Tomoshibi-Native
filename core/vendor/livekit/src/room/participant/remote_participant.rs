@@ -407,7 +407,8 @@ impl RemoteParticipant {
                 let rtc_engine = rtc_engine.clone();
                 tokio::spawn(async move {
                     let tsid: String = publication.sid().into();
-                    let TrackDimension(width, height) = publication.dimension();
+                    let TrackDimension(width, height) =
+                        publication.requested_dimension().unwrap_or(publication.dimension());
                     let update_track_settings = proto::UpdateTrackSettings {
                         track_sids: vec![tsid.clone()],
                         disabled: !enabled,

@@ -8,6 +8,7 @@
 //! What is published, and how, is in `publish`; the remote sinks are in
 //! `remote`.
 
+mod freeze;
 mod publish;
 mod remote;
 mod types;
@@ -60,6 +61,7 @@ pub struct Call {
     /// publication; the first build showed a remote camera at its lowest rung
     /// for good because of it. The wish is kept and applied on subscription.
     wanted_sizes: Mutex<HashMap<String, (u32, u32)>>,
+    freezes: freeze::Freezes,
 }
 
 /// Opens the call described by `options` and starts telling `observer` about
@@ -122,6 +124,7 @@ impl Call {
             sinks: remote::Sinks::default(),
             share_playout_ms: Mutex::new(SHARE_PLAYOUT_MS),
             wanted_sizes: Mutex::new(HashMap::new()),
+            freezes: freeze::Freezes::default(),
         });
 
         call.observer.on_event(CallEvent::StateChanged { state: CallState::Connected });
@@ -129,6 +132,7 @@ impl Call {
             call.observer.on_event(CallEvent::ParticipantJoined { participant: describe(participant) });
         }
         tokio::spawn(Self::pump(Arc::downgrade(&call), events));
+        tokio::spawn(freeze::keep(Arc::downgrade(&call)));
         Ok(call)
     }
 
@@ -169,6 +173,7 @@ impl Call {
             RoomEvent::TrackUnpublished { publication, participant } => {
                 self.sinks.detach(&publication.sid().to_string());
                 self.wanted_sizes.lock().unwrap().remove(&publication.sid().to_string());
+                self.freezes.forget(&publication.sid().to_string());
                 say(CallEvent::TrackUnpublished {
                     identity: participant.identity().to_string(),
                     sid: publication.sid().to_string(),
@@ -180,7 +185,10 @@ impl Call {
                     let ms = *self.share_playout_ms.lock().unwrap();
                     let _ = track.set_playout_delay((ms > 0).then(|| ms as f64 / 1000.0));
                 }
-                if let Some(&(width, height)) = self.wanted_sizes.lock().unwrap().get(&publication.sid().to_string()) {
+                let sid = publication.sid().to_string();
+                let wanted = self.wanted_sizes.lock().unwrap().get(&sid).copied();
+                let cap = if source == TrackSource::Screenshare { self.freezes.subscribed(&sid) } else { None };
+                if let Some((width, height)) = freeze::combined(cap, wanted) {
                     publication.update_video_dimensions(livekit::track::TrackDimension(width, height));
                 }
                 self.sinks.subscribed(&publication.sid().to_string(), track);
@@ -375,9 +383,18 @@ impl Call {
     /// freeze is being sat out.
     pub fn request_video_size(&self, sid: String, width: u32, height: u32) -> Result<(), CallError> {
         self.wanted_sizes.lock().unwrap().insert(sid.clone(), (width, height));
+        let cap = self.freezes.capped(&sid);
         let publication = self.publication(&sid).ok_or(CallError::NoSuchTrack { sid })?;
-        publication.update_video_dimensions(livekit::track::TrackDimension(width, height));
+        if let Some((width, height)) = freeze::combined(cap, Some((width, height))) {
+            publication.update_video_dimensions(livekit::track::TrackDimension(width, height));
+        }
         Ok(())
+    }
+
+    /// Whether the app is in the background: readings taken there are not
+    /// evidence of a freeze (the web skips a hidden tab for the same reason).
+    pub fn set_background(&self, background: bool) {
+        *self.freezes.background.lock().unwrap() = background;
     }
 
     /// Sends this remote video's frames to `sink` from now until it is

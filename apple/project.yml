@@ -19,6 +19,9 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "6.0"
     OTHER_LDFLAGS: ["-ObjC"]
+    # The core is built for Apple silicon only (the Mac, phones, and the
+    # simulator on Apple silicon); an Intel simulator slice does not exist.
+    "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
 targets:
   Tomoshibi-macOS:
     type: application
@@ -32,6 +35,9 @@ targets:
         CFBundleDisplayName: Tomoshibi
         NSMicrophoneUsageDescription: Tomoshibi uses the microphone so that others in a call can hear you.
         NSCameraUsageDescription: Tomoshibi uses the camera so that others in a call can see you.
+        CFBundleURLTypes:
+          - CFBundleURLName: app.tomoshibi.link
+            CFBundleURLSchemes: [tomoshibi]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.tomoshibi.mac
@@ -52,6 +58,13 @@ targets:
         NSLocalNetworkUsageDescription: Tomoshibi talks to a meeting server on your network.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        # A call goes on with the screen locked or another app in front, as a
+        # telephone call does; a browser tab cannot, which is half of why the
+        # app exists.
+        UIBackgroundModes: [audio, voip]
+        CFBundleURLTypes:
+          - CFBundleURLName: app.tomoshibi.link
+            CFBundleURLSchemes: [tomoshibi]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.tomoshibi.ios

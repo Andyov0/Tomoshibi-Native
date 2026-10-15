@@ -86,6 +86,15 @@ public struct RoomView: View {
                     .id(panel)
                 }
             }
+            .overlay(alignment: .bottomLeading) {
+                if !model.arriving.isEmpty && panel != .messages {
+                    SaidView(lines: model.arriving)
+                        .frame(maxWidth: min(320, size.width - 32), alignment: .leading)
+                        .padding(.leading, 12)
+                        .padding(.bottom, Plan.island + 8)
+                        .transition(Theme.slideUp)
+                }
+            }
             .overlay(alignment: .top) {
                 if let problem {
                     Notice(text: problem, danger: true)
@@ -95,6 +104,9 @@ public struct RoomView: View {
                 }
             }
             .animation(Theme.settle, value: panel)
+            .animation(Theme.settle, value: model.arriving)
+            .onChange(of: panel) { model.chatOpen = panel == .messages }
+            .onChange(of: stageOwner(in: size)) { _, owner in watching(owner) }
             .animation(Theme.settle, value: problem)
             .animation(Theme.settle, value: model.state)
         }
@@ -152,6 +164,21 @@ public struct RoomView: View {
             }
             .animation(Theme.settle, value: model.cameraOn)
         }
+    }
+
+    // MARK: Whose share is on my stage
+
+    /// The sharer whose screen is on this participant's stage, or "" (the
+    /// web's `watched`, Room.tsx ~460-463): written to the `watching`
+    /// attribute so a sharer can see who is looking at their screen.
+    private func stageOwner(in size: CGSize) -> String {
+        let screens = model.surfaces.filter { $0.kind == .screen }
+        let stage = pinned ?? (watch.onStage ? Self.watchStage : nil) ?? screens.first?.id
+        return screens.first { $0.id == stage }?.person.id ?? ""
+    }
+
+    private func watching(_ owner: String) {
+        Task { try? await model.setWatching(owner) }
     }
 
     // MARK: Sharing

@@ -6,6 +6,7 @@ import TomoshibiCore
 /// same two curves the web uses.
 public struct AppRoot: View {
     @Bindable var app: AppModel
+    @Environment(\.scenePhase) private var scenePhase
 
     public init(app: AppModel) {
         self.app = app
@@ -40,6 +41,9 @@ public struct AppRoot: View {
         .animation(Theme.settle, value: app.screen)
         .preferredColorScheme(.dark)
         .task { await app.start() }
+        // Readings taken while the app is in the background say nothing about
+        // a freeze (the web skips a hidden tab); inactive is still on screen.
+        .onChange(of: scenePhase) { app.call?.call.setBackground(background: scenePhase == .background) }
         .onOpenURL { url in Task { await app.open(url) } }
         .environment(\.locale, Localization.shared.language.locale)
     }

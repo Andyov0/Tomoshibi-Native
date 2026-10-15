@@ -38,6 +38,17 @@ struct ControlBar: View {
                     lit: panel == .messages) {
                 panel = panel == .messages ? nil : .messages
             }
+            // The one dot that says something was said while the messages were
+            // closed, in the signal colour (ControlBar.tsx ~383).
+            .overlay(alignment: .topTrailing) {
+                if model.unread && panel != .messages {
+                    Circle().fill(Theme.tally).frame(width: 9, height: 9)
+                        .overlay(Circle().strokeBorder(Theme.surfaceHigh, lineWidth: 2))
+                        .offset(x: -2, y: 2)
+                        .transition(Theme.arrive)
+                }
+            }
+            .animation(Theme.settle, value: model.unread)
             Control(symbol: "speaker.wave.2.fill", label: panel == .sound ? t("Hide sound") : t("Show sound"),
                     lit: panel == .sound) {
                 panel = panel == .sound ? nil : .sound
