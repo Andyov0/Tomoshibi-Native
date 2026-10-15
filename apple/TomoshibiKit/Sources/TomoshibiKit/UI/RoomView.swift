@@ -120,6 +120,16 @@ public struct RoomView: View {
                         .transition(Theme.slideUp)
                 }
             }
+            #if os(macOS)
+            .overlay(alignment: .bottomTrailing) {
+                if let hint = model.strainHint, sharing.active {
+                    StrainCard(hint: hint, model: model, sharing: sharing)
+                        .padding(.trailing, 12)
+                        .padding(.bottom, Plan.island + 8)
+                        .transition(Theme.slideUp)
+                }
+            }
+            #endif
             .overlay(alignment: .top) {
                 if let problem {
                     Notice(text: problem, danger: true)
@@ -131,6 +141,7 @@ public struct RoomView: View {
             .animation(Theme.settle, value: panel)
             .animation(Theme.settle, value: model.arriving)
             .animation(Theme.settle, value: model.people.isEmpty)
+            .animation(Theme.settle, value: model.strainHint)
             .onChange(of: panel) { model.chatOpen = panel == .messages }
             // TOMOSHIBI_DEBUG_PANEL=messages|sound|watch|music|host|devices opens
             // that panel on arrival, so a script can look at it without a pointer.

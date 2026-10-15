@@ -11,6 +11,7 @@
 mod freeze;
 mod publish;
 mod remote;
+mod strain;
 mod types;
 
 use std::{
@@ -62,6 +63,7 @@ pub struct Call {
     /// for good because of it. The wish is kept and applied on subscription.
     wanted_sizes: Mutex<HashMap<String, (u32, u32)>>,
     freezes: freeze::Freezes,
+    strain: strain::Strain,
 }
 
 /// Opens the call described by `options` and starts telling `observer` about
@@ -125,6 +127,7 @@ impl Call {
             share_playout_ms: Mutex::new(SHARE_PLAYOUT_MS),
             wanted_sizes: Mutex::new(HashMap::new()),
             freezes: freeze::Freezes::default(),
+            strain: strain::Strain::default(),
         });
 
         call.observer.on_event(CallEvent::StateChanged { state: CallState::Connected });
@@ -133,6 +136,7 @@ impl Call {
         }
         tokio::spawn(Self::pump(Arc::downgrade(&call), events));
         tokio::spawn(freeze::keep(Arc::downgrade(&call)));
+        tokio::spawn(strain::keep(Arc::downgrade(&call)));
         Ok(call)
     }
 
@@ -389,6 +393,22 @@ impl Call {
             publication.update_video_dimensions(livekit::track::TrackDimension(width, height));
         }
         Ok(())
+    }
+
+    /// The person pressed the uplink card's button. `Apply` carries the
+    /// setting to restart the share at; say how that went with
+    /// `strain_accepted`.
+    pub fn strain_accept(&self) -> tomoshibi_protocol::strain::StrainAccept {
+        self.strain.watch.accept(self.strain.running())
+    }
+
+    pub fn strain_accepted(&self, took: bool) -> bool {
+        self.strain.watch.accepted(took)
+    }
+
+    /// The person put the card away for this share.
+    pub fn strain_decline(&self) {
+        self.strain.watch.decline()
     }
 
     /// Whether the app is in the background: readings taken there are not

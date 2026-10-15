@@ -111,6 +111,9 @@ pub enum CallEvent {
     /// Whether frames from this participant can be read: in a sealed call a
     /// wrong word still subscribes, and only this says it.
     Sealed { identity: String, readable: bool },
+    /// This participant's own share is more than its line carries (the card
+    /// strain.ts shows), or no longer, when `hint` is absent.
+    Strain { hint: Option<tomoshibi_protocol::strain::StrainHint> },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]

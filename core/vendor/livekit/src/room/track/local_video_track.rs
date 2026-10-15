@@ -321,6 +321,13 @@ impl LocalVideoTrack {
         self.inner.events.lock().unmuted.replace(Box::new(f));
     }
 
+    /// Tomoshibi: the sender's encodings as they stand, which the uplink hint
+    /// reads beside the stats (web/src/live/strain.ts reads the browser
+    /// sender's parameters the same way).
+    pub fn sender_encodings(&self) -> Vec<libwebrtc::rtp_parameters::RtpEncodingParameters> {
+        self.transceiver().map(|t| t.sender().parameters().encodings).unwrap_or_default()
+    }
+
     pub(crate) fn transceiver(&self) -> Option<RtpTransceiver> {
         self.inner.info.read().transceiver.clone()
     }

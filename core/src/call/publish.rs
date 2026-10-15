@@ -167,6 +167,12 @@ pub struct VideoInput {
     call: Arc<Call>,
 }
 
+impl Drop for VideoInput {
+    fn drop(&mut self) {
+        self.call.strain.stopped(&self.sid);
+    }
+}
+
 #[uniffi::export]
 impl VideoInput {
     pub fn sid(&self) -> String {
@@ -199,6 +205,7 @@ impl VideoInput {
     }
 
     pub async fn unpublish(self: Arc<Self>) -> Result<(), CallError> {
+        self.call.strain.stopped(&self.sid);
         on_core(async move { unpublish(&self.call, &self.sid).await }).await
     }
 }
@@ -277,7 +284,11 @@ impl Call {
                 .publish_track(LocalTrack::Video(track.clone()), options)
                 .await
                 .map_err(|e| CallError::Publish { message: e.to_string() })?;
-            Ok(Arc::new(VideoInput { sid: publication.sid().to_string(), source, track, call: self.clone() }))
+            let sid = publication.sid().to_string();
+            if let VideoKind::Screen { fps, quality } = kind {
+                self.strain.started(sid.clone(), track.clone(), quality, fps);
+            }
+            Ok(Arc::new(VideoInput { sid, source, track, call: self.clone() }))
         })
         .await
     }

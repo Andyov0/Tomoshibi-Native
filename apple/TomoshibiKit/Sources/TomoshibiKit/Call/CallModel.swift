@@ -91,6 +91,10 @@ public final class CallModel {
     }
     static let saidFor: Duration = .seconds(6)
 
+    /// The uplink card for this participant's own share, while it stands
+    /// (strain.ts): what the line carries, what the share needs, what fits.
+    public private(set) var strainHint: StrainHint?
+
     /// This participant's own connection, as the server grades it.
     public private(set) var localQuality: LinkQuality = .good
 
@@ -354,6 +358,8 @@ public final class CallModel {
             }
         case let .sealed(identity, readable):
             update(identity) { $0.readable = readable }
+        case let .strain(hint):
+            strainHint = hint
         }
         for listener in listeners { listener(event) }
     }

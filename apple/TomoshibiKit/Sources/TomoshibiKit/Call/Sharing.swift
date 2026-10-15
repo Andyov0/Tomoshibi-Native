@@ -24,6 +24,8 @@ public final class Sharing {
     public var withSound = true
 
     private let capture = ScreenCapture()
+    /// What was picked, kept so a change of setting does not ask again.
+    private var filter: SCContentFilter?
     private var video: VideoInput?
     private var sound: AudioInput?
 
@@ -46,6 +48,25 @@ public final class Sharing {
     /// Asks the person what to share and starts sending it.
     public func start(on call: Call) async throws {
         guard let filter = await capture.pick() else { return }
+        try await begin(filter, on: call)
+    }
+
+    /// The same thing shared again at another setting: the uplink card's
+    /// switch, and the menu while a share is running.
+    public func restart(quality: ScreenCapture.Quality, fps: Int, on call: Call) async throws {
+        guard let filter else { return }
+        self.quality = quality
+        self.fps = fps
+        await capture.stop()
+        if let video { try? await video.unpublish() }
+        if let sound { try? await sound.unpublish() }
+        video = nil
+        sound = nil
+        try await begin(filter, on: call)
+    }
+
+    private func begin(_ filter: SCContentFilter, on call: Call) async throws {
+        self.filter = filter
         let rate = quality == .auto ? 60 : (Self.rates(for: quality).contains(fps) ? fps : 60)
         let size = ScreenCapture.size(for: filter, quality: quality)
         let video = try await call.publishVideo(kind: .screen(fps: UInt32(rate), quality: quality.share), width: UInt32(size.width), height: UInt32(size.height))
