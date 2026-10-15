@@ -27,15 +27,15 @@ public final class AppModel {
     public var problem: String?
 
     public var serverAddress: String {
-        didSet { UserDefaults.standard.set(serverAddress, forKey: Self.serverKey) }
+        didSet { if !rehearsal { UserDefaults.standard.set(serverAddress, forKey: Self.serverKey) } }
     }
     public var room = ""
     /// The web's own storage name, so the habit carries over.
     public var name: String {
-        didSet { UserDefaults.standard.set(name, forKey: "meet-live.name") }
+        didSet { if !rehearsal { UserDefaults.standard.set(name, forKey: "meet-live.name") } }
     }
     public var passphrase = "" {
-        didSet { Keychain.write(passphraseKey, passphrase) }
+        didSet { if !rehearsal { Keychain.write(passphraseKey, passphrase) } }
     }
     /// Never stored, as the web never stores it (secrecy.ts).
     public var sealingWord = ""
@@ -54,8 +54,28 @@ public final class AppModel {
 
     private static let serverKey = "tomoshibi.server"
 
+    /// The deployment this app is made for, which it opens on until somebody
+    /// chooses another: the one whose web client it stands beside. Left empty,
+    /// the app opened on a blank address field, and after the tests had run
+    /// it opened on theirs.
+    public static let home = "https://meet.example.com"
+
+    /// A test is driving the app (TOMOSHIBI_BASE, honoured only in a debug
+    /// build), and nothing it does is kept: not the server, the name, the
+    /// passphrase, the session or the identity. The tests run the very app
+    /// somebody uses, under the same bundle identifier, and the server they
+    /// pointed it at was kept as the last one used, so the app opened by hand
+    /// went to a loopback test deployment where no account existed, and
+    /// signing in could only fail.
+    let rehearsal: Bool
+
     public init() {
-        serverAddress = UserDefaults.standard.string(forKey: Self.serverKey) ?? ""
+        #if DEBUG
+        rehearsal = ProcessInfo.processInfo.environment["TOMOSHIBI_BASE"] != nil
+        #else
+        rehearsal = false
+        #endif
+        serverAddress = UserDefaults.standard.string(forKey: Self.serverKey) ?? Self.home
         name = UserDefaults.standard.string(forKey: "meet-live.name") ?? ""
     }
 
@@ -72,7 +92,7 @@ public final class AppModel {
     /// permission is asked for: what the interop scripts drive.
     public func start() async {
         let environment = ProcessInfo.processInfo.environment
-        if let room = environment["TOMOSHIBI_AUTOJOIN"], let base = environment["TOMOSHIBI_BASE"] {
+        if rehearsal, let room = environment["TOMOSHIBI_AUTOJOIN"], let base = environment["TOMOSHIBI_BASE"] {
             serverAddress = base
             name = environment["TOMOSHIBI_NAME"] ?? "Native App"
             startWithMicrophone = false
@@ -164,7 +184,7 @@ public final class AppModel {
         defer { busy = false }
         do {
             account = try await deployment.signIn(name: name, passphrase: passphrase)
-            Keychain.write(cookieKey, deployment.accountCookie())
+            if !rehearsal { Keychain.write(cookieKey, deployment.accountCookie()) }
             problem = nil
         } catch {
             problem = explain(error)
@@ -204,7 +224,7 @@ public final class AppModel {
                 invite: invite)
             // Every join's identity is kept: signing in or out makes the server
             // issue a new one, and a stale one sent back would be refused.
-            UserDefaults.standard.set(grant.identity, forKey: identityKey)
+            if !rehearsal { UserDefaults.standard.set(grant.identity, forKey: identityKey) }
             let options = CallOptions(
                 url: grant.url, token: grant.token, room: grant.room,
                 sealingWord: sealingWord.isEmpty ? nil : sealingWord,
