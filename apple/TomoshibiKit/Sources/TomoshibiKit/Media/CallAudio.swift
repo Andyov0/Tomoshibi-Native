@@ -56,15 +56,14 @@ public final class CallAudio {
         try session.setPreferredSampleRate(48_000)
         try session.setActive(true)
         #endif
-        // TOMOSHIBI_MUTE silences everything this engine plays. The interop
-        // scripts set it: a test browser's fake microphone beeps once a
-        // second, and a native app in the same room plays that through the
-        // machine's real speakers, which once sounded exactly like a fault.
-        if ProcessInfo.processInfo.environment["TOMOSHIBI_MUTE"] != nil {
-            engine.mainMixerNode.outputVolume = 0
-        }
         do {
+            // Voice processing is chosen before anything touches the output:
+            // asking for the mixer first builds and initialises a plain I/O
+            // unit that turning voice processing on then has to tear down,
+            // and that first initialisation is where the simulator's audio
+            // server once timed out and aborted the app.
             try engine.inputNode.setVoiceProcessingEnabled(!originalSound)
+            muteForTests()
             engine.prepare()
             try engine.start()
             voiceProcessing = !originalSound
@@ -78,6 +77,7 @@ public final class CallAudio {
             // without sound is not. So the engine starts again without it.
             engine.stop()
             try engine.inputNode.setVoiceProcessingEnabled(false)
+            muteForTests()
             engine.prepare()
             try engine.start()
             voiceProcessing = false
@@ -94,6 +94,16 @@ public final class CallAudio {
     /// What happened to the engine, in the system log under the app's own
     /// subsystem: a call without sound otherwise left nothing to go on.
     static let log = Logger(subsystem: "app.tomoshibi", category: "audio")
+
+    /// TOMOSHIBI_MUTE silences everything this engine plays. The interop
+    /// scripts set it: a test browser's fake microphone beeps once a second,
+    /// and a native app in the same room plays that through the machine's
+    /// real speakers, which once sounded exactly like a fault.
+    private func muteForTests() {
+        if ProcessInfo.processInfo.environment["TOMOSHIBI_MUTE"] != nil {
+            engine.mainMixerNode.outputVolume = 0
+        }
+    }
 
     public func stop() {
         stopMicrophone()
