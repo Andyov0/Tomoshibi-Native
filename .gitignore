@@ -4,3 +4,6 @@
 xcuserdata/
 DerivedData/
 /apple/build/
+/apple/TomoshibiCore/TomoshibiCoreFFI.xcframework/
+/apple/TomoshibiCore/Sources/TomoshibiCore/Core.generated.swift
+/apple/TomoshibiCore/.build/

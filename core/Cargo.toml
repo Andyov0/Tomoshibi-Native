@@ -5,13 +5,24 @@ edition = "2021"
 license = "AGPL-3.0-or-later"
 publish = false
 
+[lib]
+# A static library for the Apple apps to link, and an ordinary one for the
+# examples and for the binding generator to read.
+crate-type = ["lib", "staticlib"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "uniffi-bindgen.rs"
+
 [dependencies]
+uniffi = { version = "0.32", features = ["cli"] }
 livekit = { version = "=0.9.5", default-features = false, features = ["native", "rustls-tls-native-roots"] }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "cookies"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 futures-util = "0.3"
+thiserror = "2"
 
 # Two LiveKit crates carry small changes this project needs, each marked
 # "Tomoshibi:" where it is made. See vendor/README.md.

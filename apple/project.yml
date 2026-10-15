@@ -1,0 +1,57 @@
+# XcodeGen describes the project; the .xcodeproj is generated and not kept.
+#   cd apple && xcodegen
+name: Tomoshibi
+options:
+  bundleIdPrefix: app.tomoshibi
+  deploymentTarget:
+    macOS: "14.0"
+    iOS: "17.0"
+packages:
+  TomoshibiCore:
+    path: TomoshibiCore
+settings:
+  base:
+    DEVELOPMENT_TEAM: SM86NB3CPZ
+    CODE_SIGN_STYLE: Automatic
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    SWIFT_VERSION: "6.0"
+    OTHER_LDFLAGS: ["-ObjC"]
+targets:
+  Tomoshibi-macOS:
+    type: application
+    platform: macOS
+    sources: [App]
+    dependencies:
+      - package: TomoshibiCore
+    info:
+      path: build/Info-macOS.plist
+      properties:
+        CFBundleDisplayName: Tomoshibi
+        NSMicrophoneUsageDescription: Tomoshibi uses the microphone so that others in a call can hear you.
+        NSCameraUsageDescription: Tomoshibi uses the camera so that others in a call can see you.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.tomoshibi.mac
+        PRODUCT_NAME: Tomoshibi
+  Tomoshibi-iOS:
+    type: application
+    platform: iOS
+    sources: [App]
+    dependencies:
+      - package: TomoshibiCore
+    info:
+      path: build/Info-iOS.plist
+      properties:
+        CFBundleDisplayName: Tomoshibi
+        UILaunchScreen: {}
+        NSMicrophoneUsageDescription: Tomoshibi uses the microphone so that others in a call can hear you.
+        NSCameraUsageDescription: Tomoshibi uses the camera so that others in a call can see you.
+        NSLocalNetworkUsageDescription: Tomoshibi talks to a meeting server on your network.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.tomoshibi.ios
+        PRODUCT_NAME: Tomoshibi
+        TARGETED_DEVICE_FAMILY: "1,2"

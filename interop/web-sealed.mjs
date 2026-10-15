@@ -45,7 +45,7 @@ await page.send("Page.addScriptToEvaluateOnNewDocument", { source: `(() => {
 await page.go("http://127.0.0.1:8080/robots.txt"); await wait(800);
 await page.run("localStorage.clear(); sessionStorage.clear(); 'cleared'");
 await page.go("about:blank"); await wait(300);
-await page.go(`http://127.0.0.1:8080/?invite=${INVITE}#/${ROOM}`);
+await page.go(INVITE === "-" ? `http://127.0.0.1:8080/#/${ROOM}` : `http://127.0.0.1:8080/?invite=${INVITE}#/${ROOM}`);
 await wait(3500);
 console.log("name:", await type(page, 'input[aria-label="Your name"]', "Web Peer"));
 if (WORD) {
