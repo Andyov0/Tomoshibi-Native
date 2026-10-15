@@ -117,6 +117,10 @@ pub enum CallEvent {
     /// The lossless stream beside this participant's sound was given up on:
     /// the upload could not keep up. Everyone still hears the Opus track.
     LosslessGaveUp,
+    /// How the call is going, every two seconds (connection.ts): the grade,
+    /// the round trip, loss, rates, jitter, the share and this device's
+    /// address as the relay sees it.
+    Connection { reading: tomoshibi_protocol::quality::ConnectionReading },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]

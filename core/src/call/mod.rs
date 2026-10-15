@@ -10,6 +10,7 @@
 
 mod freeze;
 mod lossless;
+mod meter;
 mod publish;
 mod remote;
 mod strain;
@@ -67,6 +68,7 @@ pub struct Call {
     freezes: freeze::Freezes,
     strain: strain::Strain,
     lossless: lossless::Lossless,
+    meter: std::sync::Arc<tomoshibi_protocol::quality::ConnectionMeter>,
     /// The lossless streams this participant offers, for routing asks.
     senders: Mutex<Vec<Arc<Mutex<tomoshibi_protocol::lossless::sender::LosslessSender>>>>,
 }
@@ -135,6 +137,7 @@ impl Call {
             strain: strain::Strain::default(),
             lossless: lossless::Lossless::new(options.sealing_word.as_ref().is_some_and(|w| !w.is_empty())),
             senders: Mutex::new(Vec::new()),
+            meter: tomoshibi_protocol::quality::ConnectionMeter::new(),
         });
 
         call.observer.on_event(CallEvent::StateChanged { state: CallState::Connected });
@@ -145,6 +148,7 @@ impl Call {
         tokio::spawn(freeze::keep(Arc::downgrade(&call)));
         tokio::spawn(strain::keep(Arc::downgrade(&call)));
         tokio::spawn(lossless::keep(Arc::downgrade(&call)));
+        tokio::spawn(meter::keep(Arc::downgrade(&call)));
         Ok(call)
     }
 
@@ -248,10 +252,14 @@ impl Call {
             RoomEvent::ActiveSpeakersChanged { speakers } => say(CallEvent::Speaking {
                 identities: speakers.iter().map(|p| p.identity().to_string()).collect(),
             }),
-            RoomEvent::ConnectionQualityChanged { quality, participant } => say(CallEvent::Quality {
-                identity: participant.identity().to_string(),
-                quality: quality.into(),
-            }),
+            RoomEvent::ConnectionQualityChanged { quality, participant } => {
+                // Only this participant's own verdict reaches the meter:
+                // somebody else's bad connection is their news.
+                if participant.identity() == self.room.local_participant().identity() {
+                    self.meter.heard(meter::server_quality(quality));
+                }
+                say(CallEvent::Quality { identity: participant.identity().to_string(), quality: quality.into() })
+            }
             RoomEvent::ChatMessage { message, participant } => {
                 let (identity, name) = participant
                     .map(|p| (p.identity().to_string(), p.name()))
