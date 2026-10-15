@@ -43,3 +43,12 @@ Never attribute a commit, or anything else, to an assistant.
 - Build with the release Xcode (`/Applications/Xcode.app`), not a beta.
 - `perl -e 'alarm …'` strips `DYLD_*` variables, because perl is a protected
   system binary; run a binary directly when injecting anything.
+- Test the Swift packages with `swift test` (for example
+  `cd apple/TomoshibiKit && swift test`). `xcodebuild test` timed out before
+  the first test on this machine, on the Mac and in the simulator alike, for a
+  bundle with nothing of the core in it.
+- A Debug build of the app launched from a shell may restore a window state
+  left by an earlier build and open no window at all; pass
+  `-ApplePersistenceIgnoreState YES`. `TOMOSHIBI_BASE` and
+  `TOMOSHIBI_AUTOJOIN` take it straight into a call, which is what the
+  interop scripts use.

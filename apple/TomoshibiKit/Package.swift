@@ -1,7 +1,12 @@
 // swift-tools-version:5.9
-// The Swift that both apps share: the bridge from Apple's audio, video and
-// screen capture to the core, the views that draw a call, the phrases in four
-// languages. The apps themselves are thin shells over this package.
+// The Swift that both apps share.
+//
+// TomoshibiBasics is everything that needs no core: the phrases in four
+// languages, where pictures go, the palette. It is apart so that its tests run
+// on their own; a test bundle that links the core's debug build (with WebRTC
+// inside it) timed out before the first test, on the Mac and in the simulator
+// alike. TomoshibiKit is the rest: the bridge from Apple's audio, video and
+// screen capture to the core, and the views that draw a call.
 import PackageDescription
 
 let package = Package(
@@ -12,11 +17,15 @@ let package = Package(
     dependencies: [.package(path: "../TomoshibiCore")],
     targets: [
         .target(
-            name: "TomoshibiKit",
-            dependencies: [.product(name: "TomoshibiCore", package: "TomoshibiCore")],
-            path: "Sources/TomoshibiKit",
+            name: "TomoshibiBasics",
+            path: "Sources/TomoshibiBasics",
             resources: [.process("Resources")]
         ),
-        .testTarget(name: "TomoshibiKitTests", dependencies: ["TomoshibiKit"], path: "Tests/TomoshibiKitTests"),
+        .target(
+            name: "TomoshibiKit",
+            dependencies: ["TomoshibiBasics", .product(name: "TomoshibiCore", package: "TomoshibiCore")],
+            path: "Sources/TomoshibiKit"
+        ),
+        .testTarget(name: "TomoshibiBasicsTests", dependencies: ["TomoshibiBasics"], path: "Tests/TomoshibiBasicsTests"),
     ]
 )

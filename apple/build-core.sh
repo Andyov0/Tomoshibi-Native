@@ -31,10 +31,18 @@ GEN=$(mktemp -d)
     --library "$CORE/target/aarch64-apple-darwin/$PROFILE/libtomoshibi_core.a" \
     --language swift --out-dir "$GEN"
 
-cp "$GEN/tomoshibi_core.swift" "$OUT/Sources/TomoshibiCore/Core.generated.swift"
+# One Swift file and one C module per crate that exports anything (the core
+# and the protocol crate today). All the Swift goes into the one package
+# target, so types from either crate are visible to the other's bindings, and
+# the C modules share one module.modulemap in the XCFramework's headers.
+rm -f "$OUT"/Sources/TomoshibiCore/*.generated.swift
+for swift in "$GEN"/*.swift; do
+    name=$(basename "$swift" .swift)
+    cp "$swift" "$OUT/Sources/TomoshibiCore/$name.generated.swift"
+done
 HEADERS="$GEN/headers"; mkdir -p "$HEADERS"
-cp "$GEN/tomoshibi_coreFFI.h" "$HEADERS/"
-cp "$GEN/tomoshibi_coreFFI.modulemap" "$HEADERS/module.modulemap"
+cp "$GEN"/*.h "$HEADERS/"
+cat "$GEN"/*.modulemap > "$HEADERS/module.modulemap"
 
 rm -rf "$OUT/TomoshibiCoreFFI.xcframework"
 ARGS=()

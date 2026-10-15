@@ -1,0 +1,292 @@
+import Foundation
+import Observation
+import TomoshibiCore
+
+/// One person in the call, as the screens see them.
+public struct Person: Identifiable, Equatable, Sendable {
+    public let id: String
+    public var name: String
+    public var attributes: [String: String]
+    public var tracks: [String: TrackInfo]
+    public var quality: LinkQuality = .good
+    public var speaking = false
+    /// Whether their sealed frames can be read; nil until the call says.
+    public var readable: Bool?
+
+    public var handUp: Bool { attributes["hand"] == "up" }
+
+    public func track(_ source: MediaSource) -> TrackInfo? {
+        tracks.values.first { $0.source == source }
+    }
+
+    public var musicTrack: TrackInfo? {
+        tracks.values.first { $0.source == .unknown && $0.name.hasPrefix("music") }
+    }
+}
+
+/// The unit of layout: a picture, not a person (the web's `Surface`). Someone
+/// sharing their screen with their camera on is two of these.
+public struct Surface: Identifiable, Equatable, Sendable {
+    public enum Kind: Sendable { case camera, screen }
+    public let id: String
+    public let person: Person
+    public let kind: Kind
+    /// The picture's track, when there is one and it is not muted.
+    public let sid: String?
+}
+
+public struct ChatLine: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let identity: String
+    public let name: String
+    public let text: String
+    public let at: Date
+    public let mine: Bool
+}
+
+/// A call and everything the screens draw from it.
+///
+/// The core speaks on its own threads; every event is carried to the main
+/// thread in the order it was said, applied here, and SwiftUI redraws from
+/// this object. Remote sound is played the moment it is subscribed, because a
+/// participant nobody can hear is a fault nobody can see.
+@MainActor
+@Observable
+public final class CallModel {
+    public let call: Call
+    public let room: String
+    public let localIdentity: String
+    public let localName: String
+
+    public private(set) var state: CallState = .connected
+    public private(set) var people: [Person] = []
+    public private(set) var messages: [ChatLine] = []
+    public private(set) var endedReason: String?
+    public private(set) var localTracks: [String: TrackInfo] = [:]
+
+    public private(set) var microphoneOn = false
+    public private(set) var cameraOn = false
+    public private(set) var handUp = false
+
+    /// The relay a move is taking this call to, between the server saying so
+    /// and the room closing (web App.tsx ~560-627).
+    public private(set) var moving: (relay: String, at: Date)?
+
+    /// Data packets for the protocols layered over the call (watching
+    /// together, the song desk, the lossless stream), passed on untouched.
+    public var onData: ((_ topic: String, _ identity: String?, _ payload: Data) -> Void)?
+    /// The call ended because the server moved it; the app joins again.
+    public var onMoved: ((_ relay: String) -> Void)?
+
+    public let audio = CallAudio()
+    public let camera = CameraCapture()
+    private var microphoneInput: AudioInput?
+    private var cameraInput: VideoInput?
+    private var bridge: Bridge?
+
+    init(call: Call) {
+        self.call = call
+        self.room = call.roomName()
+        self.localIdentity = call.localIdentity()
+        self.localName = call.localName()
+    }
+
+    /// Joins the call that `options` describes.
+    public static func join(_ options: CallOptions) async throws -> CallModel {
+        let bridge = Bridge()
+        let call = try await joinCall(options: options, observer: bridge)
+        let model = CallModel(call: call)
+        model.bridge = bridge
+        bridge.model = model
+        bridge.flush()
+        return model
+    }
+
+    // MARK: What the screens read
+
+    public var surfaces: [Surface] {
+        people.flatMap { person -> [Surface] in
+            var out = [Surface(id: person.id + "/camera", person: person, kind: .camera,
+                               sid: person.track(.camera).flatMap { $0.muted ? nil : $0.sid })]
+            if let screen = person.track(.screenShare) {
+                out.append(Surface(id: person.id + "/screen", person: person, kind: .screen, sid: screen.sid))
+            }
+            return out
+        }
+    }
+
+    public func person(_ identity: String) -> Person? {
+        people.first { $0.id == identity }
+    }
+
+    // MARK: What the person does
+
+    public func setMicrophone(_ on: Bool) async throws {
+        if on {
+            if microphoneInput == nil {
+                let input = try await call.publishAudio(kind: .voice(original: audio.originalSound))
+                microphoneInput = input
+            }
+            try audio.startMicrophone(into: microphoneInput!)
+            microphoneInput?.setMuted(muted: false)
+        } else {
+            microphoneInput?.setMuted(muted: true)
+            audio.stopMicrophone()
+        }
+        microphoneOn = on
+    }
+
+    public func setCamera(_ on: Bool) async throws {
+        if on {
+            let input = try await call.publishVideo(kind: .camera, width: CameraCapture.width, height: CameraCapture.height)
+            cameraInput = input
+            try camera.start(into: input)
+        } else {
+            camera.stop()
+            if let input = cameraInput {
+                cameraInput = nil
+                try? await input.unpublish()
+            }
+        }
+        cameraOn = on
+    }
+
+    public func say(_ text: String) async throws {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        try await call.sendChat(text: trimmed)
+        messages.append(ChatLine(id: UUID().uuidString, identity: localIdentity, name: localName, text: trimmed, at: Date(), mine: true))
+    }
+
+    /// The hand is an attribute, written only when it changes (hands.ts).
+    public func setHand(_ up: Bool) async throws {
+        guard up != handUp else { return }
+        try await call.setAttributes(attributes: ["hand": up ? "up" : ""])
+        handUp = up
+    }
+
+    public func send(topic: String, payload: Data, to destinations: [String] = [], reliable: Bool = true) async throws {
+        try await call.sendData(topic: topic, payload: payload, destinations: destinations, reliable: reliable)
+    }
+
+    public func leave() async {
+        audio.stop()
+        camera.stop()
+        await call.leave()
+    }
+
+    // MARK: Events
+
+    fileprivate func apply(_ event: CallEvent) {
+        switch event {
+        case let .stateChanged(state):
+            self.state = state
+        case let .ended(reason):
+            endedReason = reason
+            audio.stop()
+            camera.stop()
+            if let moving, Date().timeIntervalSince(moving.at) < 15, reason.contains("RoomClosed") || reason.contains("ParticipantRemoved") {
+                onMoved?(moving.relay)
+            }
+        case let .participantJoined(participant):
+            upsert(participant)
+        case let .participantChanged(participant):
+            upsert(participant)
+        case let .participantLeft(identity):
+            if let person = person(identity) {
+                for sid in person.tracks.keys { audio.stopPlaying(sid: sid) }
+            }
+            people.removeAll { $0.id == identity }
+        case let .trackPublished(identity, track), let .trackSubscribed(identity, track):
+            update(identity) { $0.tracks[track.sid] = track }
+            if case .trackSubscribed = event, track.kind == .audio {
+                let stereo = track.source == .screenShareAudio || track.source == .unknown
+                try? audio.play(sid: track.sid, channels: stereo ? 2 : 1, from: call)
+            }
+        case let .trackUnpublished(identity, sid):
+            audio.stopPlaying(sid: sid)
+            update(identity) { $0.tracks[sid] = nil }
+        case let .trackUnsubscribed(identity, sid):
+            audio.stopPlaying(sid: sid)
+            update(identity) { $0.tracks[sid]?.subscribed = false }
+        case let .trackMuted(identity, sid, muted):
+            update(identity) { $0.tracks[sid]?.muted = muted }
+        case let .localTrackPublished(track):
+            localTracks[track.sid] = track
+        case let .localTrackUnpublished(sid):
+            localTracks[sid] = nil
+        case let .speaking(identities):
+            let now = Set(identities)
+            for index in people.indices { people[index].speaking = now.contains(people[index].id) }
+        case let .quality(identity, quality):
+            update(identity) { $0.quality = quality }
+        case let .chat(id, identity, name, text, timestamp):
+            messages.append(ChatLine(id: id, identity: identity, name: name, text: text,
+                                     at: Date(timeIntervalSince1970: TimeInterval(timestamp) / 1000), mine: false))
+            // The web keeps the last 500 (chat.ts).
+            if messages.count > 500 { messages.removeFirst(messages.count - 500) }
+        case let .data(topic, identity, payload):
+            // Server messages come with no sender, and only those are
+            // believed (host.ts, App.tsx).
+            if identity == nil, topic == "moving" || topic == "placing" {
+                moving = (String(decoding: payload, as: UTF8.self), Date())
+            }
+            onData?(topic, identity, Data(payload))
+        case let .attributesChanged(identity, attributes):
+            if identity == localIdentity {
+                handUp = attributes["hand"] == "up"
+            } else {
+                update(identity) { $0.attributes = attributes }
+            }
+        case let .sealed(identity, readable):
+            update(identity) { $0.readable = readable }
+        }
+    }
+
+    private func upsert(_ participant: ParticipantInfo) {
+        var tracks: [String: TrackInfo] = [:]
+        for track in participant.tracks { tracks[track.sid] = track }
+        if let index = people.firstIndex(where: { $0.id == participant.identity }) {
+            people[index].name = participant.name
+            people[index].attributes = participant.attributes
+            people[index].tracks.merge(tracks) { _, new in new }
+        } else {
+            people.append(Person(id: participant.identity, name: participant.name, attributes: participant.attributes, tracks: tracks))
+        }
+    }
+
+    private func update(_ identity: String, _ change: (inout Person) -> Void) {
+        guard let index = people.firstIndex(where: { $0.id == identity }) else { return }
+        change(&people[index])
+    }
+
+    /// Carries the core's events to the main thread in order. Events that
+    /// arrive before the model exists (the participants already in the room
+    /// are announced during the join itself) wait for it.
+    private final class Bridge: CallObserver, @unchecked Sendable {
+        weak var model: CallModel?
+        private var early: [CallEvent] = []
+        private let lock = NSLock()
+
+        func onEvent(event: CallEvent) {
+            lock.lock()
+            if model == nil {
+                early.append(event)
+                lock.unlock()
+                return
+            }
+            lock.unlock()
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated { self?.model?.apply(event) }
+            }
+        }
+
+        @MainActor func flush() {
+            lock.lock()
+            let pending = early
+            early.removeAll()
+            lock.unlock()
+            for event in pending { model?.apply(event) }
+        }
+    }
+}

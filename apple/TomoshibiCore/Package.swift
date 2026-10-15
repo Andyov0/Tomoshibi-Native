@@ -46,7 +46,7 @@ let package = Package(
                 .linkedFramework("Network", ios),
                 // The prebuilt WebRTC's Objective-C categories are only kept
                 // when the final link is told to; see core/.cargo/config.toml.
-                .unsafeFlags(["-ObjC"]),
+                .unsafeFlags(["-Xlinker", "-ObjC"]),
             ]
         ),
     ]

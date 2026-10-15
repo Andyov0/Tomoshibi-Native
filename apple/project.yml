@@ -9,6 +9,8 @@ options:
 packages:
   TomoshibiCore:
     path: TomoshibiCore
+  TomoshibiKit:
+    path: TomoshibiKit
 settings:
   base:
     DEVELOPMENT_TEAM: SM86NB3CPZ
@@ -23,7 +25,7 @@ targets:
     platform: macOS
     sources: [App]
     dependencies:
-      - package: TomoshibiCore
+      - package: TomoshibiKit
     info:
       path: build/Info-macOS.plist
       properties:
@@ -39,7 +41,7 @@ targets:
     platform: iOS
     sources: [App]
     dependencies:
-      - package: TomoshibiCore
+      - package: TomoshibiKit
     info:
       path: build/Info-iOS.plist
       properties:

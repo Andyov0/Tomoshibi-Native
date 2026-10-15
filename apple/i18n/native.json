@@ -1,0 +1,35 @@
+{
+  "comment": "Phrases only the native apps say: menu items, window titles and anything else a browser never shows. The web client's own dictionaries are read directly by generate.mjs and are not copied here; a phrase the web already has belongs there, and the generator refuses one that appears in both. Each entry is keyed by its English, exactly as t() is called, and gives all four languages: \"en\" (normally the key itself), \"zh-Hans\", \"zh-Hant\" and \"ja\". Placeholders are written {likeThis} and must appear unchanged in every language. After editing, run: node apple/i18n/generate.mjs",
+  "phrases": {
+    "Connect": {
+      "en": "Connect",
+      "zh-Hans": "连接",
+      "zh-Hant": "連線",
+      "ja": "接続"
+    },
+    "Could not reach the server.": {
+      "en": "Could not reach the server.",
+      "zh-Hans": "连不上服务器。",
+      "zh-Hant": "連不上伺服器。",
+      "ja": "サーバーに接続できません。"
+    },
+    "You left the call.": {
+      "en": "You left the call.",
+      "zh-Hans": "你已离开通话。",
+      "zh-Hant": "你已離開通話。",
+      "ja": "通話から退出しました。"
+    },
+    "Join again": {
+      "en": "Join again",
+      "zh-Hans": "重新加入",
+      "zh-Hant": "重新加入",
+      "ja": "もう一度参加"
+    },
+    "The server address": {
+      "en": "The server address",
+      "zh-Hans": "服务器地址",
+      "zh-Hant": "伺服器位址",
+      "ja": "サーバーのアドレス"
+    }
+  }
+}
