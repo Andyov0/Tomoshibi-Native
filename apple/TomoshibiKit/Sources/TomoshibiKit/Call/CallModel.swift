@@ -165,6 +165,7 @@ public final class CallModel {
         bridge.flush()
         call.setLosslessSink(sink: model.lossless)
         #if os(iOS)
+        model.watchInterruptions()
         let receiver = BroadcastReceiver(call: call)
         receiver.onChange = { [weak model] on in model?.phoneSharing = on }
         receiver.start()
@@ -281,6 +282,29 @@ public final class CallModel {
     public func send(topic: String, payload: Data, to destinations: [String] = [], reliable: Bool = true) async throws {
         try await call.sendData(topic: topic, payload: payload, destinations: destinations, reliable: reliable)
     }
+
+    #if os(iOS)
+    @ObservationIgnored private var interruptions: NSObjectProtocol?
+
+    /// A telephone call, an alarm or Siri takes the audio session away; when
+    /// it is handed back the engine is started again, with the microphone if
+    /// it was on. Without this a call came back silent in both directions.
+    private func watchInterruptions() {
+        interruptions = NotificationCenter.default.addObserver(
+            forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                  AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                try? self.audio.start()
+                if self.microphoneOn, let input = self.microphoneInput {
+                    try? self.audio.startMicrophone(into: input)
+                }
+            }
+        }
+    }
+    #endif
 
     /// The listener's setting for one of a person's sounds (hearing.ts): the
     /// level on the Opus track's node and on any lossless stream standing in

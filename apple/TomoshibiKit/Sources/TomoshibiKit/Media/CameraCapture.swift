@@ -19,6 +19,12 @@ public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
     private let queue = DispatchQueue(label: "tomoshibi.camera")
     private var input: VideoInput?
     public private(set) var device: AVCaptureDevice?
+    #if os(iOS)
+    /// Keeps the picture upright however the phone is held: the system says
+    /// which way is up for this camera, and the connection is turned to match.
+    private var rotation: AVCaptureDevice.RotationCoordinator?
+    private var rotationWatch: NSKeyValueObservation?
+    #endif
     /// What this device sends, by the web's rule for its kind.
     public static let size: TomoshibiCore.CameraCapture = {
         #if os(iOS)
@@ -72,8 +78,17 @@ public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         if !session.outputs.contains(output), session.canAddOutput(output) { session.addOutput(output) }
         #if os(iOS)
         if let connection = output.connection(with: .video) {
-            if connection.isVideoRotationAngleSupported(90) { connection.videoRotationAngle = 90 }
             if device.position == .front, connection.isVideoMirroringSupported { connection.isVideoMirrored = false }
+            let coordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: nil)
+            rotation = coordinator
+            let apply = { [weak connection] (angle: CGFloat) in
+                guard let connection, connection.isVideoRotationAngleSupported(angle) else { return }
+                connection.videoRotationAngle = angle
+            }
+            apply(coordinator.videoRotationAngleForHorizonLevelCapture)
+            rotationWatch = coordinator.observe(\.videoRotationAngleForHorizonLevelCapture, options: [.new]) { coordinator, _ in
+                apply(coordinator.videoRotationAngleForHorizonLevelCapture)
+            }
         }
         #endif
         session.commitConfiguration()
