@@ -210,3 +210,81 @@ final class RingSink: AudioSink, @unchecked Sendable {
         ring.write(samples)
     }
 }
+
+// MARK: - What the song desk needs (Music/)
+
+extension CallAudio {
+    /// Plays sound this app makes itself on a node of its own, filed under
+    /// `key` beside the remote tracks, so that `setVolume`, `setDuck` and
+    /// `stopPlaying` work on it as on any other sound. The song desk's holder
+    /// hears the music this way (sound.ts `monitor`): through the same engine,
+    /// so that the echo canceller takes it back out of the microphone, and
+    /// with a volume of its own that nothing sent is touched by.
+    func playLocally(key: String, channels: Int) throws -> PCMRing {
+        try start()
+        stopPlaying(sid: key)
+        let player = Player(channels: channels)
+        engine.attach(player.node)
+        engine.connect(player.node, to: engine.mainMixerNode, format: player.node.outputFormat(forBus: 0))
+        players[key] = player
+        return player.ring
+    }
+
+    /// The listener's own setting for this sound, where it is playing.
+    public func volume(sid: String) -> Float? {
+        players[sid]?.volume
+    }
+
+    /// How loud a remote sound playing here is, read off its node as it
+    /// plays, before the listener's volume and the duck.
+    ///
+    /// Read here rather than taken from the server's speaker events because
+    /// the music's duck wants a reading every 40 ms (duck.ts reads an
+    /// analyser on every microphone), and the server says who is speaking a
+    /// few times a second, smoothed. And read off the node rather than off
+    /// the core's samples, because attaching a second sink to a subscribed
+    /// track is a call the core cannot take from this thread.
+    func meter(sid: String) -> SoundLevel? {
+        guard let player = players[sid] else { return nil }
+        let level = SoundLevel()
+        let node = player.node
+        node.removeTap(onBus: 0)
+        node.installTap(onBus: 0, bufferSize: 1024, format: nil) { buffer, _ in
+            guard let data = buffer.floatChannelData else { return }
+            level.add(data[0], frames: Int(buffer.frameLength), stride: buffer.stride, rate: buffer.format.sampleRate)
+        }
+        return level
+    }
+
+    /// How loud this participant's own microphone is, after the system's
+    /// voice processing, as duck.ts reads the local track.
+    ///
+    /// The microphone's tap is the sender's and a bus takes one tap, so this
+    /// listens from a sink node on the input instead. Only while the
+    /// microphone is on: a node on the input holds it open, and a microphone
+    /// held open after it was turned off would be a light that lies.
+    func meterMicrophone() -> MicrophoneMeter? {
+        guard started else { return nil }
+        let input = engine.inputNode
+        let format = input.outputFormat(forBus: 0)
+        guard format.sampleRate > 0, format.channelCount > 0, format.commonFormat == .pcmFormatFloat32 else { return nil }
+        let level = SoundLevel()
+        let stride = format.isInterleaved ? Int(format.channelCount) : 1
+        let rate = format.sampleRate
+        let node = AVAudioSinkNode { _, frames, list in
+            let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: list))
+            if let first = buffers.first, let data = first.mData?.assumingMemoryBound(to: Float.self) {
+                level.add(data, frames: Int(frames), stride: stride, rate: rate)
+            }
+            return noErr
+        }
+        engine.attach(node)
+        engine.connect(input, to: node, format: format)
+        return MicrophoneMeter(level: level, node: node)
+    }
+
+    func unmeter(_ meter: MicrophoneMeter) {
+        engine.disconnectNodeInput(meter.node)
+        engine.detach(meter.node)
+    }
+}
