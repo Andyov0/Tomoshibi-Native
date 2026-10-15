@@ -179,6 +179,19 @@ struct LobbyScreen: View {
                 }
                 .font(.system(size: 13))
                 .transition(Theme.arrive)
+                // The account's own page and the management pages stay on the
+                // web, where they already are; the app opens them there.
+                HStack(spacing: 14) {
+                    if let base = app.deployment?.baseUrl(), let url = URL(string: base + "/account") {
+                        Link(t("User console"), destination: url)
+                    }
+                    if account.admin, let base = app.deployment?.baseUrl(), let url = URL(string: base + "/admin") {
+                        Link(t("Admin console"), destination: url)
+                    }
+                }
+                .font(.system(size: 12.5))
+                .foregroundStyle(Theme.muted)
+                .transition(Theme.arrive)
             } else {
                 Field(label: t("Name"), text: $signInName)
                 Field(label: t("Passphrase"), text: $signInPassphrase, secure: true)

@@ -7,7 +7,6 @@ uniffi::setup_scaffolding!();
 pub use tomoshibi_protocol::runtime;
 
 pub mod call;
-pub mod spike;
 
 /// The core's own version, which the apps show beside theirs so that a report
 /// says which core it came from.
