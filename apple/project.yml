@@ -19,6 +19,7 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "6.0"
     OTHER_LDFLAGS: ["-ObjC"]
+    "EXCLUDED_ARCHS[sdk=iphonesimulator*]": x86_64
 targets:
   Tomoshibi-macOS:
     type: application
