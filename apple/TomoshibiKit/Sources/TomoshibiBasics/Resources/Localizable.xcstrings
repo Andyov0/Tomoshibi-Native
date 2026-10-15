@@ -14371,6 +14371,36 @@
         }
       }
     },
+    "Somebody else runs this room." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Somebody else runs this room."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この部屋は別の人が主催しています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个房间由别人主持。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個房間由別人主持。"
+          }
+        }
+      }
+    },
     "Somebody is in that room. Close it first, then forget it." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,

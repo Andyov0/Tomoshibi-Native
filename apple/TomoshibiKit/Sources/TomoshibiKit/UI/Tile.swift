@@ -7,7 +7,8 @@ import TomoshibiCore
 /// Drawn as the web draws a tile (components/room/SurfaceTile.tsx, Tile.tsx):
 /// the picture fitted rather than cropped when it is a screen, the name at the
 /// foot, a muted microphone said in the corner, an amber edge while the person
-/// speaks, and the raised hand in the top corner until it is lowered.
+/// speaks, the raised hand in the top corner until it is lowered, and whatever
+/// they just reacted with floating up off it.
 struct Tile: View {
     let surface: Surface
     let call: Call
@@ -28,6 +29,9 @@ struct Tile: View {
             }
             Label(surface: surface, compact: compact)
                 .padding(compact ? 4 : 8)
+            // What they just reacted with, rising off every picture of theirs
+            // as the web draws it on each (Room.tsx, Reacting.tsx).
+            FloatingReactions(call: call, identity: surface.person.id, compact: compact)
             if surface.person.handUp && surface.kind == .camera {
                 Text("\u{270B}")
                     .font(.system(size: compact ? 12 : 15))

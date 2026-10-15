@@ -48,6 +48,12 @@
       "zh-Hans": "画中画",
       "zh-Hant": "子母畫面",
       "ja": "ピクチャ・イン・ピクチャ"
+    },
+    "Somebody else runs this room.": {
+      "en": "Somebody else runs this room.",
+      "zh-Hans": "这个房间由别人主持。",
+      "zh-Hant": "這個房間由別人主持。",
+      "ja": "この部屋は別の人が主催しています。"
     }
   }
 }

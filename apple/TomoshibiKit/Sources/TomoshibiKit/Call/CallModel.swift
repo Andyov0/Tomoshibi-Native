@@ -347,7 +347,12 @@ public final class CallModel {
             endedReason = reason
             audio.stop()
             camera.stop()
-            if let moving, Date().timeIntervalSince(moving.at) < 15, reason.contains("RoomClosed") || reason.contains("ParticipantRemoved") {
+            // The server deleting the room is `RoomDeleted` in the Rust SDK
+            // (the protocol's ROOM_DELETED, 5, which the web's SDK reads as
+            // its room-closed reason); waiting only for `RoomClosed` left the
+            // app sitting in a call that had gone, never rejoining.
+            let gone = ["RoomDeleted", "RoomClosed", "ParticipantRemoved"].contains { reason.contains($0) }
+            if let moving, Date().timeIntervalSince(moving.at) < 15, gone {
                 onMoved?(moving.relay)
             }
         case let .participantJoined(participant):

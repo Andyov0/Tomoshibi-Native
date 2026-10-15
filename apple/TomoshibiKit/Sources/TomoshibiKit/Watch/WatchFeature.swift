@@ -15,7 +15,11 @@ import TomoshibiCore
 @MainActor
 @Observable
 public final class WatchFeature {
-    unowned let call: CallModel
+    /// Held, not borrowed: the view keeps this object for as long as it
+    /// likes, through its leaving transition and through tasks a press
+    /// started (ending the meeting ends the call under the task that asked),
+    /// and an unowned reference to a call already let go killed the app.
+    let call: CallModel
     let engine: WatchEngine
 
     /// Whether a show is running and its picture belongs on the stage: the
