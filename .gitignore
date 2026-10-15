@@ -8,3 +8,4 @@ DerivedData/
 /apple/TomoshibiCore/Sources/TomoshibiCore/*.generated.swift
 /apple/TomoshibiCore/.build/
 /apple/TomoshibiKit/.build/
+/interop/.window-of

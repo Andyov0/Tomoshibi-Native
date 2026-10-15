@@ -57,6 +57,16 @@ public final class CallModel {
     public let room: String
     public let localIdentity: String
     public let localName: String
+    /// The deployment the call was joined through: host controls, watching
+    /// together and the song desk all speak to it.
+    public let deployment: Deployment
+    /// The join answer's region for the relay this call came in through, when
+    /// the server said: a mainland one sends YouTube through the relay
+    /// (relays.ts `mainland`, WatchScreen.tsx ~240).
+    public let region: String?
+    /// Whether the call is sealed; watching together, the song desk's
+    /// broadcast and the lossless stream switch themselves off in one.
+    public let sealed: Bool
 
     public private(set) var state: CallState = .connected
     public private(set) var people: [Person] = []
@@ -72,11 +82,26 @@ public final class CallModel {
     /// and the room closing (web App.tsx ~560-627).
     public private(set) var moving: (relay: String, at: Date)?
 
-    /// Data packets for the protocols layered over the call (watching
-    /// together, the song desk, the lossless stream), passed on untouched.
-    public var onData: ((_ topic: String, _ identity: String?, _ payload: Data) -> Void)?
     /// The call ended because the server moved it; the app joins again.
     public var onMoved: ((_ relay: String) -> Void)?
+
+    /// Everybody else who wants to hear what the call says: the protocols
+    /// layered over it (watching together, the song desk, hosting) each
+    /// subscribe here and pick out what concerns them. Called on the main
+    /// thread after the model itself has applied the event.
+    private var listeners: [(CallEvent) -> Void] = []
+
+    public func listen(_ listener: @escaping (CallEvent) -> Void) {
+        listeners.append(listener)
+    }
+
+    /// The identities of everybody else here, for protocols that keep a
+    /// roster (the theatre's and the desk's `roster`).
+    public var identities: [String] { people.map(\.id) }
+
+    /// Panels and stage pieces layered over the call, created once per call
+    /// by whoever owns them, so the room view can find them.
+    public var parts: [String: AnyObject] = [:]
 
     public let audio = CallAudio()
     public let camera = CameraCapture()
@@ -84,18 +109,21 @@ public final class CallModel {
     private var cameraInput: VideoInput?
     private var bridge: Bridge?
 
-    init(call: Call) {
+    init(call: Call, deployment: Deployment, region: String?, sealed: Bool) {
         self.call = call
         self.room = call.roomName()
         self.localIdentity = call.localIdentity()
         self.localName = call.localName()
+        self.deployment = deployment
+        self.region = region
+        self.sealed = sealed
     }
 
     /// Joins the call that `options` describes.
-    public static func join(_ options: CallOptions) async throws -> CallModel {
+    public static func join(_ options: CallOptions, deployment: Deployment, region: String?) async throws -> CallModel {
         let bridge = Bridge()
         let call = try await joinCall(options: options, observer: bridge)
-        let model = CallModel(call: call)
+        let model = CallModel(call: call, deployment: deployment, region: region, sealed: options.sealingWord != nil)
         model.bridge = bridge
         bridge.model = model
         bridge.flush()
@@ -231,7 +259,6 @@ public final class CallModel {
             if identity == nil, topic == "moving" || topic == "placing" {
                 moving = (String(decoding: payload, as: UTF8.self), Date())
             }
-            onData?(topic, identity, Data(payload))
         case let .attributesChanged(identity, attributes):
             if identity == localIdentity {
                 handUp = attributes["hand"] == "up"
@@ -241,6 +268,7 @@ public final class CallModel {
         case let .sealed(identity, readable):
             update(identity) { $0.readable = readable }
         }
+        for listener in listeners { listener(event) }
     }
 
     private func upsert(_ participant: ParticipantInfo) {

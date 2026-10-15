@@ -56,7 +56,13 @@ public final class CallAudio {
         try session.setActive(true)
         #endif
         try engine.inputNode.setVoiceProcessingEnabled(!originalSound)
-        _ = engine.mainMixerNode
+        // TOMOSHIBI_MUTE silences everything this engine plays. The interop
+        // scripts set it: a test browser's fake microphone beeps once a
+        // second, and a native app in the same room plays that through the
+        // machine's real speakers, which once sounded exactly like a fault.
+        if ProcessInfo.processInfo.environment["TOMOSHIBI_MUTE"] != nil {
+            engine.mainMixerNode.outputVolume = 0
+        }
         engine.prepare()
         try engine.start()
         started = true

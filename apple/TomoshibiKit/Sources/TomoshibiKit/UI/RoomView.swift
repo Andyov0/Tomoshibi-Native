@@ -18,11 +18,17 @@ public struct RoomView: View {
     @State private var panel: Panel?
     @State private var pinned: String?
     @State private var problem: String?
+    @State private var watch: WatchFeature
+    @State private var music: MusicFeature
+    @State private var host: HostFeature
 
-    enum Panel { case messages, sound }
+    enum Panel { case messages, sound, watch, music, host }
 
     public init(model: CallModel) {
         self.model = model
+        _watch = State(initialValue: WatchFeature(call: model))
+        _music = State(initialValue: MusicFeature(call: model))
+        _host = State(initialValue: HostFeature(call: model))
     }
 
     public var body: some View {
@@ -31,6 +37,13 @@ public struct RoomView: View {
             let plan = arrangement(in: size)
             ZStack(alignment: .topLeading) {
                 Theme.background.ignoresSafeArea()
+                if watch.onStage, let spot = plan[Self.watchStage] {
+                    WatchStageView(feature: watch)
+                        .clipShape(RoundedRectangle(cornerRadius: Theme.tileRadius))
+                        .frame(width: spot.width, height: spot.height)
+                        .offset(x: spot.minX, y: spot.minY)
+                        .transition(Theme.arrive)
+                }
                 ForEach(pictures) { picture in
                     if let spot = plan[picture.id] {
                         tile(for: picture, compact: spot.height < 140)
@@ -41,6 +54,8 @@ public struct RoomView: View {
                     }
                 }
                 .animation(Theme.settle, value: plan.mapValues { [$0.minX, $0.minY, $0.width, $0.height] })
+
+                CallOverlayView(feature: host)
 
                 if model.state == .reconnecting {
                     Notice(text: t("Reconnecting…"))
@@ -54,12 +69,21 @@ public struct RoomView: View {
                     .padding(.bottom, 20)
             }
             .overlay(alignment: .trailing) {
-                if panel == .messages {
-                    ChatPanel(model: model, close: { panel = nil })
-                        .frame(width: min(340, size.width - 32))
-                        .padding(12)
-                        .padding(.bottom, Plan.island)
-                        .transition(Theme.slideIn)
+                if let panel {
+                    Group {
+                        switch panel {
+                        case .messages: ChatPanel(model: model, close: { self.panel = nil })
+                        case .sound: SoundPanelView(feature: host, close: { self.panel = nil })
+                        case .watch: WatchPanelView(feature: watch, close: { self.panel = nil })
+                        case .music: MusicPanelView(feature: music, close: { self.panel = nil })
+                        case .host: HostPanelView(feature: host, close: { self.panel = nil })
+                        }
+                    }
+                    .frame(width: min(360, size.width - 32))
+                    .padding(12)
+                    .padding(.bottom, Plan.island)
+                    .transition(Theme.slideIn)
+                    .id(panel)
                 }
             }
             .overlay(alignment: .top) {
@@ -85,15 +109,18 @@ public struct RoomView: View {
     }
 
     private static let me = "me/camera"
+    /// The shared video, when a show is running: it takes the stage the way a
+    /// shared screen does (Room.tsx).
+    private static let watchStage = "watch/stage"
 
     private var pictures: [Picture] {
         model.surfaces.map { Picture(id: $0.id, surface: $0) } + [Picture(id: Self.me, surface: nil)]
     }
 
     private func arrangement(in size: CGSize) -> [String: CGRect] {
-        let ids = pictures.map(\.id)
+        let ids = pictures.map(\.id) + (watch.onStage ? [Self.watchStage] : [])
         let screens = model.surfaces.filter { $0.kind == .screen }.map(\.id)
-        let stage = pinned.flatMap { ids.contains($0) ? $0 : nil } ?? screens.first
+        let stage = pinned.flatMap { ids.contains($0) ? $0 : nil } ?? (watch.onStage ? Self.watchStage : nil) ?? screens.first
         if let stage {
             let rest = ids.filter { $0 != stage }
             return Plan.focus(size, stage: stage, strip: Array(rest.prefix(Plan.stripCapacity(size))))

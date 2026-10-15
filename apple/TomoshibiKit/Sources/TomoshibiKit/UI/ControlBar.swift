@@ -38,6 +38,23 @@ struct ControlBar: View {
                     lit: panel == .messages) {
                 panel = panel == .messages ? nil : .messages
             }
+            Control(symbol: "speaker.wave.2.fill", label: panel == .sound ? t("Hide sound") : t("Show sound"),
+                    lit: panel == .sound) {
+                panel = panel == .sound ? nil : .sound
+            }
+            if !model.sealed {
+                Control(symbol: "play.rectangle.fill", label: panel == .watch ? t("Hide watch together") : t("Show watch together"),
+                        lit: panel == .watch) {
+                    panel = panel == .watch ? nil : .watch
+                }
+                Control(symbol: "music.note", label: panel == .music ? t("Hide music") : t("Show music"),
+                        lit: panel == .music) {
+                    panel = panel == .music ? nil : .music
+                }
+            }
+            Control(symbol: "person.2.badge.gearshape.fill", label: t("Running this room"), lit: panel == .host) {
+                panel = panel == .host ? nil : .host
+            }
             Divider().frame(height: 26).overlay(Theme.border)
             Button {
                 confirmLeave = true

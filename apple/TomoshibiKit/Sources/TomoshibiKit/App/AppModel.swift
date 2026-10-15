@@ -194,7 +194,7 @@ public final class AppModel {
                 url: grant.url, token: grant.token, room: grant.room,
                 sealingWord: sealingWord.isEmpty ? nil : sealingWord,
                 forward: grant.forward.map { IceServer(url: $0.url, username: $0.username, credential: $0.credential) })
-            let model = try await CallModel.join(options)
+            let model = try await CallModel.join(options, deployment: deployment, region: grant.region)
             model.onMoved = { [weak self] _ in
                 Task { await self?.rejoin() }
             }
