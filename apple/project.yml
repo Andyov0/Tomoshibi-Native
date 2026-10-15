@@ -42,6 +42,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.tomoshibi.mac
         PRODUCT_NAME: Tomoshibi
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
   Tomoshibi-iOS:
     type: application
     platform: iOS
@@ -73,6 +74,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.tomoshibi.ios
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         PRODUCT_NAME: Tomoshibi
         TARGETED_DEVICE_FAMILY: "1,2"
   # The iPhone's screen, captured by ReplayKit and handed to the app over the
