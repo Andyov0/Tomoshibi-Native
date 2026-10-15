@@ -1,0 +1,21 @@
+[package]
+name = "tomoshibi-core"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+publish = false
+
+[dependencies]
+livekit = { version = "=0.9.5", default-features = false, features = ["native", "rustls-tls-native-roots"] }
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "cookies"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+futures-util = "0.3"
+
+# Two LiveKit crates carry small changes this project needs, each marked
+# "Tomoshibi:" where it is made. See vendor/README.md.
+[patch.crates-io]
+livekit = { path = "vendor/livekit" }
+livekit-signaling = { path = "vendor/livekit-signaling" }
+libwebrtc = { path = "vendor/libwebrtc" }

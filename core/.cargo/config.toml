@@ -1,0 +1,24 @@
+# The prebuilt WebRTC is a static library whose Objective-C++ static
+# initializers call +[NSString stringForStdString:], a category method that
+# lives in an object file nothing else refers to. Without -ObjC the linker
+# drops that file, the selector is missing, the exception escapes an
+# initializer and dyld aborts before main with no message at all. A link flag
+# set by webrtc-sys's own build script does not reach the final binary, so it
+# is set here for every Apple target.
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-ObjC"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-ObjC"]
+
+[target.aarch64-apple-ios]
+rustflags = ["-C", "link-arg=-ObjC"]
+
+[target.aarch64-apple-ios-sim]
+rustflags = ["-C", "link-arg=-ObjC"]
+
+# The oldest systems the apps support; set so that the core and the apps that
+# link it agree on what they may call.
+[env]
+MACOSX_DEPLOYMENT_TARGET = "14.0"
+IPHONEOS_DEPLOYMENT_TARGET = "17.0"
