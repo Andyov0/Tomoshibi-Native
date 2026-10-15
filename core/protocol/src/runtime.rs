@@ -39,3 +39,13 @@ where
         Err(fault) => std::panic::resume_unwind(fault.into_panic()),
     }
 }
+
+/// Starts `work` on the core's runtime without waiting for it, from wherever
+/// the caller is: a call from the app's capture thread has no runtime of its
+/// own to spawn onto.
+pub fn spawn<F>(work: F)
+where
+    F: Future<Output = ()> + Send + 'static,
+{
+    runtime().spawn(work);
+}

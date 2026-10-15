@@ -30,7 +30,7 @@ struct ControlBar: View {
                 act { try await model.setCamera(!model.cameraOn) }
             }
             #if os(macOS)
-            ShareMenu(sharing: sharing, active: sharingActive, problem: $problem, call: model.call)
+            ShareMenu(sharing: sharing, active: sharingActive, problem: $problem, call: model.call, sealed: model.sealed)
             #else
             // The system's own broadcast sheet: starting and stopping a share of
             // the whole phone is the system's to do, through the extension.
@@ -230,6 +230,7 @@ struct ShareMenu: View {
     let active: Bool
     @Binding var problem: String?
     let call: Call
+    let sealed: Bool
 
     var body: some View {
         Menu {
@@ -237,7 +238,10 @@ struct ShareMenu: View {
                 Button(sharing.listening ? t("Stop sharing sound") : t("Stop sharing")) { Task { await sharing.stop() } }
             } else {
                 Button(t("Share your screen")) { run { try await sharing.start(on: call) } }
-                Button(t("Share only sound")) { run { try await sharing.startSoundOnly(on: call) } }
+                Button(t("Share only sound")) { run { try await sharing.startSoundOnly(on: call, sealed: sealed) } }
+                if !sealed {
+                    Toggle(t("Lossless"), isOn: $sharing.lossless)
+                }
                 Divider()
                 Picker(t("Picture"), selection: $sharing.quality) {
                     Text(t("Automatic")).tag(ScreenCapture.Quality.auto)

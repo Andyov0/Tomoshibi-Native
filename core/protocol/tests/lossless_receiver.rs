@@ -96,7 +96,7 @@ impl Harness {
         let made = players.clone();
         let receiver = LosslessReceiver::new(
             encrypted,
-            Box::new(move |rate, _channels| {
+            Box::new(move |_from, _sound, rate, _channels| {
                 let state = Arc::new(Mutex::new(PlayerState {
                     rate,
                     level: 1.0,

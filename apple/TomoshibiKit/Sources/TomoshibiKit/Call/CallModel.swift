@@ -91,6 +91,9 @@ public final class CallModel {
     }
     static let saidFor: Duration = .seconds(6)
 
+    /// Something that happened and is over, said for a moment over the call.
+    public var notice: String?
+
     /// The uplink card for this participant's own share, while it stands
     /// (strain.ts): what the line carries, what the share needs, what fits.
     public private(set) var strainHint: StrainHint?
@@ -135,6 +138,7 @@ public final class CallModel {
     #endif
 
     public let audio = CallAudio()
+    @ObservationIgnored let lossless = LosslessPlayback()
     public let camera = CameraCapture()
     private var microphoneInput: AudioInput?
     private var cameraInput: VideoInput?
@@ -148,6 +152,7 @@ public final class CallModel {
         self.deployment = deployment
         self.region = region
         self.sealed = sealed
+        lossless.audio = audio
     }
 
     /// Joins the call that `options` describes.
@@ -158,6 +163,7 @@ public final class CallModel {
         model.bridge = bridge
         bridge.model = model
         bridge.flush()
+        call.setLosslessSink(sink: model.lossless)
         #if os(iOS)
         let receiver = BroadcastReceiver(call: call)
         receiver.onChange = { [weak model] on in model?.phoneSharing = on }
@@ -276,7 +282,23 @@ public final class CallModel {
         try await call.sendData(topic: topic, payload: payload, destinations: destinations, reliable: reliable)
     }
 
+    /// The listener's setting for one of a person's sounds (hearing.ts): the
+    /// level on the Opus track's node and on any lossless stream standing in
+    /// for it, and a block that the core applies at the server to both.
+    public func hear(_ identity: String, sound: MediaSource, level: Float, blocked: Bool) async {
+        if let sid = person(identity)?.tracks.values.first(where: { track in
+            sound == .unknown ? (track.source == .unknown && track.name.hasPrefix("music")) : track.source == sound
+        })?.sid {
+            audio.setVolume(sid: sid, level)
+        }
+        guard sound == .screenShareAudio || sound == .unknown else { return }
+        let music = sound == .unknown
+        lossless.setLevel(identity, music: music, level)
+        await call.setHearing(identity: identity, music: music, level: level, blocked: blocked)
+    }
+
     public func leave() async {
+        lossless.closeAll()
         #if os(iOS)
         broadcast?.stop()
         #endif
@@ -360,6 +382,12 @@ public final class CallModel {
             update(identity) { $0.readable = readable }
         case let .strain(hint):
             strainHint = hint
+        case .losslessGaveUp:
+            notice = t("Your connection could not keep up. Everyone still hears the sound in real time.")
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(8))
+                self?.notice = nil
+            }
         }
         for listener in listeners { listener(event) }
     }

@@ -89,7 +89,11 @@ pub trait Player: Send {
 }
 
 /// Makes a player for a stream at a rate, with a number of channels.
-pub type MakePlayer = Box<dyn FnMut(u32, usize) -> Box<dyn Player> + Send>;
+/// Makes the player for one stream: whose it is, which of their sounds, its
+/// rate and its channel count. The web's receiver makes one per stream inside
+/// a closure that already knows whose it is; a native app plays each stream on
+/// a node of its own and has to be told.
+pub type MakePlayer = Box<dyn FnMut(&str, Sound, u32, usize) -> Box<dyn Player> + Send>;
 
 /// What the listener has decided about hearing people, which this consults on
 /// every refresh: the web client's hearing.ts, and duck.ts for the music.
@@ -270,7 +274,7 @@ impl LosslessReceiver {
         let source = &mut self.sources[i];
         if source.stream != Some(block.stream) {
             source.close();
-            let mut player = (self.make_player)(block.rate, block.channels.len());
+            let mut player = (self.make_player)(from, channel.sound, block.rate, block.channels.len());
             player.volume(hearing.level(from, channel.sound));
             source.player = Some(player);
             source.stream = Some(block.stream);

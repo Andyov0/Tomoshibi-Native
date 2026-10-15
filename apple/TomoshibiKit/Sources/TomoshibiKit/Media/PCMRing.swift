@@ -57,6 +57,29 @@ final class PCMRing: @unchecked Sendable {
         }
     }
 
+    /// Interleaved 32-bit float samples, as a lossless stream arrives.
+    func write(floats input: [Float]) {
+        let frames = input.count / channels
+        lock.withLockUnchecked {
+            for frame in 0..<frames {
+                if count == capacity {
+                    read = (read + 1) % capacity
+                    count -= 1
+                }
+                let at = ((read + count) % capacity) * channels
+                for c in 0..<channels {
+                    samples[at + c] = input[frame * channels + c]
+                }
+                count += 1
+            }
+            if count > ceiling {
+                let drop = count - settle
+                read = (read + drop) % capacity
+                count -= drop
+            }
+        }
+    }
+
     /// Fills `frames` frames of each non-interleaved channel buffer the
     /// hardware gave, from the ring or with silence. Called on the render
     /// thread: no allocation, one short lock.

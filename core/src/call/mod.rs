@@ -9,6 +9,7 @@
 //! `remote`.
 
 mod freeze;
+mod lossless;
 mod publish;
 mod remote;
 mod strain;
@@ -32,6 +33,7 @@ use livekit::{
 };
 use tokio::sync::mpsc::UnboundedReceiver;
 
+pub use lossless::LosslessSink;
 pub use publish::{AudioInput, VideoInput, VideoKind};
 pub use remote::{AudioSink, RemoteFrame, VideoSink};
 pub use types::*;
@@ -64,6 +66,9 @@ pub struct Call {
     wanted_sizes: Mutex<HashMap<String, (u32, u32)>>,
     freezes: freeze::Freezes,
     strain: strain::Strain,
+    lossless: lossless::Lossless,
+    /// The lossless streams this participant offers, for routing asks.
+    senders: Mutex<Vec<Arc<Mutex<tomoshibi_protocol::lossless::sender::LosslessSender>>>>,
 }
 
 /// Opens the call described by `options` and starts telling `observer` about
@@ -128,6 +133,8 @@ impl Call {
             wanted_sizes: Mutex::new(HashMap::new()),
             freezes: freeze::Freezes::default(),
             strain: strain::Strain::default(),
+            lossless: lossless::Lossless::new(options.sealing_word.as_ref().is_some_and(|w| !w.is_empty())),
+            senders: Mutex::new(Vec::new()),
         });
 
         call.observer.on_event(CallEvent::StateChanged { state: CallState::Connected });
@@ -137,6 +144,7 @@ impl Call {
         tokio::spawn(Self::pump(Arc::downgrade(&call), events));
         tokio::spawn(freeze::keep(Arc::downgrade(&call)));
         tokio::spawn(strain::keep(Arc::downgrade(&call)));
+        tokio::spawn(lossless::keep(Arc::downgrade(&call)));
         Ok(call)
     }
 
@@ -153,9 +161,22 @@ impl Call {
 
     fn handle(self: &Arc<Self>, event: RoomEvent) {
         let say = |event: CallEvent| self.observer.on_event(event);
+        if matches!(
+            event,
+            RoomEvent::TrackPublished { .. }
+                | RoomEvent::TrackUnpublished { .. }
+                | RoomEvent::ParticipantConnected(_)
+                | RoomEvent::ParticipantDisconnected(_)
+        ) {
+            let call = self.clone();
+            tokio::spawn(async move { call.lossless_tick().await });
+        }
         match event {
             RoomEvent::ParticipantConnected(p) => say(CallEvent::ParticipantJoined { participant: describe(&p) }),
             RoomEvent::ParticipantDisconnected(p) => {
+                for sender in self.senders.lock().unwrap().iter() {
+                    sender.lock().unwrap().on_left(p.identity().as_str());
+                }
                 say(CallEvent::ParticipantLeft { identity: p.identity().to_string() })
             }
             RoomEvent::ParticipantNameChanged { participant, .. }
@@ -242,6 +263,23 @@ impl Call {
                     text: message.message,
                     timestamp: message.timestamp,
                 })
+            }
+            // Lossless streams are fifty packets a second and are the core's to
+            // play; the app never sees them.
+            RoomEvent::DataReceived { payload, topic: Some(topic), participant: Some(from), .. }
+                if topic == "lossless" || topic == "lossless-music" =>
+            {
+                let call = self.clone();
+                let from = from.identity().to_string();
+                tokio::spawn(async move { call.lossless_data(&from, &topic, &payload).await });
+            }
+            RoomEvent::DataReceived { payload, topic: Some(topic), participant: Some(from), .. }
+                if topic == "lossless-ask" || topic == "lossless-music-ask" =>
+            {
+                let now = freeze::now_ms() as u64;
+                for sender in self.senders.lock().unwrap().iter() {
+                    sender.lock().unwrap().on_ask(now, from.identity().as_str(), &topic, &payload);
+                }
             }
             RoomEvent::DataReceived { payload, topic, participant, .. } => say(CallEvent::Data {
                 topic: topic.unwrap_or_default(),
@@ -409,6 +447,23 @@ impl Call {
     /// The person put the card away for this share.
     pub fn strain_decline(&self) {
         self.strain.watch.decline()
+    }
+
+    /// Where lossless streams are played.
+    pub fn set_lossless_sink(&self, sink: Arc<dyn LosslessSink>) {
+        self.lossless.set_sink(sink);
+    }
+
+    /// The listener's own setting for one of a person's sounds (hearing.ts):
+    /// a level from 0 to 1 and whether it is blocked. Screen sound and music
+    /// tracks are switched at the server here, together with the lossless
+    /// streams that may be standing in for them; the app turns the level.
+    pub async fn set_hearing(self: Arc<Self>, identity: String, music: bool, level: f32, blocked: bool) {
+        on_core(async move {
+            self.lossless.settings.lock().unwrap().levels_set(identity, music, level, blocked);
+            self.lossless_tick().await;
+        })
+        .await
     }
 
     /// Whether the app is in the background: readings taken there are not

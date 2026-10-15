@@ -74,6 +74,13 @@ public struct RoomView: View {
                         .transition(Theme.arrive)
                 }
 
+                if let notice = model.notice {
+                    Notice(text: notice)
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 48)
+                        .transition(Theme.arrive)
+                }
+
                 if model.state == .reconnecting {
                     Notice(text: t("Reconnecting…"))
                         .frame(maxWidth: .infinity)
@@ -142,6 +149,7 @@ public struct RoomView: View {
             .animation(Theme.settle, value: model.arriving)
             .animation(Theme.settle, value: model.people.isEmpty)
             .animation(Theme.settle, value: model.strainHint)
+            .animation(Theme.settle, value: model.notice)
             .onChange(of: panel) { model.chatOpen = panel == .messages }
             // TOMOSHIBI_DEBUG_PANEL=messages|sound|watch|music|host|devices opens
             // that panel on arrival, so a script can look at it without a pointer.

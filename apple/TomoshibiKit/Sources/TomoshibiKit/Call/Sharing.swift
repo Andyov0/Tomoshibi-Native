@@ -22,6 +22,11 @@ public final class Sharing {
     /// Whether the shared thing's sound goes too. On by default: a share of a
     /// video with no sound is the complaint that started all of this.
     public var withSound = true
+    /// Whether a share of sound alone goes losslessly as well, under the web's
+    /// own storage name: on unless turned off (sound.ts `rememberedLossless`).
+    public var lossless: Bool = UserDefaults.standard.string(forKey: "meet-live.lossless") != "off" {
+        didSet { UserDefaults.standard.set(lossless ? nil : "off", forKey: "meet-live.lossless") }
+    }
 
     private let capture = ScreenCapture()
     /// What was picked, kept so a change of setting does not ask again.
@@ -88,9 +93,12 @@ public final class Sharing {
     /// "listening", with no picture.
     public private(set) var listening = false
 
-    public func startSoundOnly(on call: Call) async throws {
+    public func startSoundOnly(on call: Call, sealed: Bool) async throws {
         guard let filter = await capture.pick() else { return }
-        let sound = try await call.publishAudio(kind: .listening(losslessOffered: false))
+        // Never in a sealed call: the stream is data, which crosses the relay
+        // in the clear, in a call whose promise is that the relay hears nothing.
+        let offered = soundLosslessOffered(wanted: lossless, encrypted: sealed, able: true)
+        let sound = try await call.publishAudio(kind: .listening(losslessOffered: offered))
         do {
             try await capture.start(filter: filter, width: 2, height: 2, fps: 1, video: nil, sound: sound)
         } catch {

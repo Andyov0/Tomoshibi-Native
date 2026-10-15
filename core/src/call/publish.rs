@@ -9,7 +9,11 @@
 //! own source and name, never mixed into another: a browser turns a voice, a
 //! screen's sound and the music up and down separately.
 
-use std::{borrow::Cow, ffi::c_void, sync::Arc};
+use std::{
+    borrow::Cow,
+    ffi::c_void,
+    sync::{Arc, Mutex},
+};
 
 use livekit::{
     options::{AudioEncoding, TrackPublishOptions, VideoCodec, VideoEncoding, VideoPreset},
@@ -24,6 +28,7 @@ use livekit::{
 };
 use tokio::sync::mpsc;
 
+use tomoshibi_protocol::lossless::{sender::LosslessSender, Channel, Sound};
 use tomoshibi_protocol::share::{
     camera_publish, share_publish, sound_profile, MediaSource, PublishLayer, ShareCapture, ShareQuality, SoundKind,
     VideoDegradation,
@@ -124,6 +129,10 @@ pub struct AudioInput {
     track: LocalAudioTrack,
     feed: mpsc::UnboundedSender<Vec<i16>>,
     call: Arc<Call>,
+    /// The lossless stream beside a sound offered without loss (sound.ts
+    /// `publishSound`): asked for by listeners, fed the captured floats.
+    lossless: Option<Arc<Mutex<LosslessSender>>>,
+    draining: Arc<Mutex<bool>>,
 }
 
 #[uniffi::export]
@@ -152,7 +161,65 @@ impl AudioInput {
         self.channels
     }
 
+    /// The same sound as captured, before any conversion: interleaved 32-bit
+    /// floats at the capture's own rate, for the lossless stream. Does
+    /// nothing for a sound not offered without loss.
+    pub fn push_lossless(self: Arc<Self>, samples: Vec<f32>, channels: u32, rate: u32, timestamp_us: i64) {
+        let Some(sender) = self.lossless.clone() else { return };
+        let channels = channels.max(1) as usize;
+        let frames = samples.len() / channels;
+        let mut planes = vec![Vec::with_capacity(frames); channels];
+        for frame in 0..frames {
+            for (c, plane) in planes.iter_mut().enumerate() {
+                plane.push(samples[frame * channels + c]);
+            }
+        }
+        let present: Vec<String> = self.call.room.remote_participants().keys().map(|k| k.to_string()).collect();
+        let captured = sender
+            .lock()
+            .unwrap()
+            .capture(super::freeze::now_ms() as u64, rate, timestamp_us, &planes, |who| present.iter().any(|p| p == who));
+        match captured {
+            Ok(captured) if captured.gave_up => self.call.observer.on_event(super::CallEvent::LosslessGaveUp),
+            Ok(captured) if captured.queued > 0 => self.drain(),
+            _ => {}
+        }
+    }
+
+    /// Publishes queued packets one at a time until the queue is empty, as the
+    /// sender expects (its give-up threshold counts the queue, not the packet
+    /// being sent).
+    fn drain(self: &Arc<Self>) {
+        {
+            let mut draining = self.draining.lock().unwrap();
+            if *draining {
+                return;
+            }
+            *draining = true;
+        }
+        let input = self.clone();
+        crate::runtime::spawn(async move {
+            loop {
+                let next = input.lossless.as_ref().and_then(|s| s.lock().unwrap().next_packet());
+                let Some(packet) = next else { break };
+                let data = DataPacket {
+                    payload: packet.payload,
+                    topic: Some(packet.topic.to_string()),
+                    reliable: true,
+                    destination_identities: packet.to.into_iter().map(ParticipantIdentity).collect(),
+                    ..Default::default()
+                };
+                let _ = input.call.room.local_participant().publish_data(data).await;
+            }
+            *input.draining.lock().unwrap() = false;
+        });
+    }
+
     pub async fn unpublish(self: Arc<Self>) -> Result<(), CallError> {
+        if let Some(sender) = self.lossless.as_ref() {
+            sender.lock().unwrap().stop();
+            self.call.senders.lock().unwrap().retain(|s| !Arc::ptr_eq(s, sender));
+        }
         on_core(async move { unpublish(&self.call, &self.sid).await }).await
     }
 }
@@ -226,6 +293,18 @@ impl Call {
     pub async fn publish_audio(self: Arc<Self>, kind: SoundKind) -> Result<Arc<AudioInput>, CallError> {
         on_core(async move {
             let (name, channels, options) = audio_options(kind);
+            // The sender is made, and listening for asks, before the track that
+            // invites them is published: a listener who saw the publication at
+            // once asked before anything was listening, and the ask was lost.
+            let lossless = match kind {
+                SoundKind::Listening { lossless_offered: true } => Some(Channel::of(Sound::Screen)),
+                SoundKind::LibraryMusic { lossless_offered: true } => Some(Channel::of(Sound::Music)),
+                _ => None,
+            }
+            .map(|channel| Arc::new(Mutex::new(LosslessSender::captured(channel))));
+            if let Some(sender) = lossless.as_ref() {
+                self.senders.lock().unwrap().push(sender.clone());
+            }
             let source = NativeAudioSource::new(AudioSourceOptions::default(), RATE, channels, 0);
             let track = LocalAudioTrack::create_audio_track(&name, RtcAudioSource::Native(source.clone()));
             let publication = self
@@ -258,7 +337,15 @@ impl Call {
                 }
             });
 
-            Ok(Arc::new(AudioInput { sid: publication.sid().to_string(), channels, track, feed, call: self.clone() }))
+            Ok(Arc::new(AudioInput {
+                sid: publication.sid().to_string(),
+                channels,
+                track,
+                feed,
+                call: self.clone(),
+                lossless,
+                draining: Arc::new(Mutex::new(false)),
+            }))
         })
         .await
     }

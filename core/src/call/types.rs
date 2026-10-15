@@ -114,6 +114,9 @@ pub enum CallEvent {
     /// This participant's own share is more than its line carries (the card
     /// strain.ts shows), or no longer, when `hint` is absent.
     Strain { hint: Option<tomoshibi_protocol::strain::StrainHint> },
+    /// The lossless stream beside this participant's sound was given up on:
+    /// the upload could not keep up. Everyone still hears the Opus track.
+    LosslessGaveUp,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
