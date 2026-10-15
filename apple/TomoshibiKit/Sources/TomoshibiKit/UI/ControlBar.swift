@@ -29,6 +29,14 @@ struct ControlBar: View {
             #if os(macOS)
             Control(symbol: "rectangle.on.rectangle", label: sharingActive ? t("Stop sharing") : t("Share your screen"),
                     lit: sharingActive) { toggleShare() }
+            #else
+            // The system's own broadcast sheet: starting and stopping a share of
+            // the whole phone is the system's to do, through the extension.
+            ZStack {
+                Control(symbol: "rectangle.on.rectangle", label: model.phoneSharing ? t("Stop sharing") : t("Share your screen"),
+                        lit: model.phoneSharing) { BroadcastPicker.press() }
+                BroadcastPicker().frame(width: 1, height: 1).opacity(0.02).allowsHitTesting(false)
+            }
             #endif
             Control(symbol: "hand.raised.fill", label: model.handUp ? t("Lower your hand") : t("Raise your hand"),
                     lit: model.handUp) {

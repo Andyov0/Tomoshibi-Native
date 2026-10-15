@@ -120,6 +120,13 @@ public final class CallModel {
     /// by whoever owns them, so the room view can find them.
     public var parts: [String: AnyObject] = [:]
 
+    /// Whether this iPhone's screen is being shared through the broadcast
+    /// extension right now.
+    public private(set) var phoneSharing = false
+    #if os(iOS)
+    private var broadcast: BroadcastReceiver?
+    #endif
+
     public let audio = CallAudio()
     public let camera = CameraCapture()
     private var microphoneInput: AudioInput?
@@ -144,6 +151,12 @@ public final class CallModel {
         model.bridge = bridge
         bridge.model = model
         bridge.flush()
+        #if os(iOS)
+        let receiver = BroadcastReceiver(call: call)
+        receiver.onChange = { [weak model] on in model?.phoneSharing = on }
+        receiver.start()
+        model.broadcast = receiver
+        #endif
         return model
     }
 
@@ -247,6 +260,9 @@ public final class CallModel {
     }
 
     public func leave() async {
+        #if os(iOS)
+        broadcast?.stop()
+        #endif
         audio.stop()
         camera.stop()
         await call.leave()

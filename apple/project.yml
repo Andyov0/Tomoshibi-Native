@@ -48,6 +48,7 @@ targets:
     sources: [App]
     dependencies:
       - package: TomoshibiKit
+      - target: Tomoshibi-Broadcast
     info:
       path: build/Info-iOS.plist
       properties:
@@ -65,8 +66,40 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: app.tomoshibi.link
             CFBundleURLSchemes: [tomoshibi]
+    entitlements:
+      path: build/Tomoshibi-iOS.entitlements
+      properties:
+        com.apple.security.application-groups: [group.app.tomoshibi]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.tomoshibi.ios
         PRODUCT_NAME: Tomoshibi
         TARGETED_DEVICE_FAMILY: "1,2"
+  # The iPhone's screen, captured by ReplayKit and handed to the app over the
+  # app group (TomoshibiBasics/BroadcastWire.swift). It links TomoshibiBasics
+  # alone: an extension has fifty megabytes, and the core does not fit.
+  Tomoshibi-Broadcast:
+    type: app-extension
+    platform: iOS
+    sources: [Broadcast]
+    dependencies:
+      - package: TomoshibiKit
+        product: TomoshibiBasics
+    info:
+      path: build/Info-Broadcast.plist
+      properties:
+        CFBundleDisplayName: Tomoshibi
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.broadcast-services-upload
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SampleHandler
+          RPBroadcastProcessMode: RPBroadcastProcessModeSampleBuffer
+    entitlements:
+      path: build/Tomoshibi-Broadcast.entitlements
+      properties:
+        com.apple.security.application-groups: [group.app.tomoshibi]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.tomoshibi.ios.broadcast
+        PRODUCT_NAME: TomoshibiBroadcast
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES

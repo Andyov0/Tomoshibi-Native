@@ -30,6 +30,12 @@
       "zh-Hans": "服务器地址",
       "zh-Hant": "伺服器位址",
       "ja": "サーバーのアドレス"
+    },
+    "Open Tomoshibi and join a call first.": {
+      "en": "Open Tomoshibi and join a call first.",
+      "zh-Hans": "请先打开 Tomoshibi 并加入通话。",
+      "zh-Hant": "請先打開 Tomoshibi 並加入通話。",
+      "ja": "先に Tomoshibi を開いて通話に参加してください。"
     }
   }
 }

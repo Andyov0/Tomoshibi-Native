@@ -10201,6 +10201,36 @@
         }
       }
     },
+    "Open Tomoshibi and join a call first." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Tomoshibi and join a call first."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先に Tomoshibi を開いて通話に参加してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请先打开 Tomoshibi 并加入通话。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請先打開 Tomoshibi 並加入通話。"
+          }
+        }
+      }
+    },
     "Open new rooms" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,

@@ -13,7 +13,11 @@ let package = Package(
     name: "TomoshibiKit",
     defaultLocalization: "en",
     platforms: [.macOS(.v14), .iOS(.v17)],
-    products: [.library(name: "TomoshibiKit", targets: ["TomoshibiKit"])],
+    products: [
+        .library(name: "TomoshibiKit", targets: ["TomoshibiKit"]),
+        // For the iOS broadcast extension, which must not carry the core.
+        .library(name: "TomoshibiBasics", targets: ["TomoshibiBasics"]),
+    ],
     dependencies: [.package(path: "../TomoshibiCore")],
     targets: [
         .target(
