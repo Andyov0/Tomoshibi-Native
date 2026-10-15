@@ -30,6 +30,12 @@
       "zh-Hans": "服务器地址",
       "zh-Hant": "伺服器位址",
       "ja": "サーバーのアドレス"
+    },
+    "Picture in picture": {
+      "en": "Picture in picture",
+      "zh-Hans": "画中画",
+      "zh-Hant": "子母畫面",
+      "ja": "ピクチャ・イン・ピクチャ"
     }
   }
 }
