@@ -76,11 +76,11 @@ final class SurfaceView: NSView {
     func connect(call: Call, sid: String) {
         self.call = call
         self.sid = sid
-        call.attachVideo(sid: sid, sink: renderer)
+        VideoHub.of(call).add(renderer, to: sid)
     }
 
     func disconnect() {
-        call?.detach(sid: sid)
+        if let call { VideoHub.of(call).remove(renderer, from: sid) }
         call = nil
     }
 
@@ -88,7 +88,7 @@ final class SurfaceView: NSView {
         let wanted = (Int(points.width * scale), Int(points.height * scale))
         guard wanted.0 > 0, wanted.1 > 0, wanted != asked, let call else { return }
         asked = wanted
-        try? call.requestVideoSize(sid: sid, width: UInt32(wanted.0), height: UInt32(wanted.1))
+        VideoHub.of(call).want(wanted, for: renderer, on: sid)
     }
 }
 #else
@@ -138,11 +138,11 @@ final class SurfaceView: UIView {
     func connect(call: Call, sid: String) {
         self.call = call
         self.sid = sid
-        call.attachVideo(sid: sid, sink: renderer)
+        VideoHub.of(call).add(renderer, to: sid)
     }
 
     func disconnect() {
-        call?.detach(sid: sid)
+        if let call { VideoHub.of(call).remove(renderer, from: sid) }
         call = nil
     }
 
@@ -150,7 +150,7 @@ final class SurfaceView: UIView {
         let wanted = (Int(points.width * scale), Int(points.height * scale))
         guard wanted.0 > 0, wanted.1 > 0, wanted != asked, let call else { return }
         asked = wanted
-        try? call.requestVideoSize(sid: sid, width: UInt32(wanted.0), height: UInt32(wanted.1))
+        VideoHub.of(call).want(wanted, for: renderer, on: sid)
     }
 }
 #endif

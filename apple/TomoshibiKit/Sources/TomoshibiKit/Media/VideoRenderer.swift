@@ -12,7 +12,7 @@ import TomoshibiCore
 /// once and given to a display layer, so nothing is copied or converted on the
 /// way to the screen. Timing is the network's business and has already been
 /// done by the time a frame arrives here.
-public final class VideoRenderer: VideoSink, @unchecked Sendable {
+public final class VideoRenderer: @unchecked Sendable {
     public let layer = AVSampleBufferDisplayLayer()
     private var format: CMVideoFormatDescription?
     private var lastSize: (Int, Int) = (0, 0)
@@ -27,17 +27,9 @@ public final class VideoRenderer: VideoSink, @unchecked Sendable {
         layer.videoGravity = .resizeAspect
     }
 
-    public func onFrame(frame: RemoteFrame) {
-        let buffer: CVPixelBuffer?
-        if frame.pixelBuffer != 0, let pointer = UnsafeRawPointer(bitPattern: UInt(frame.pixelBuffer)) {
-            buffer = Unmanaged<CVPixelBuffer>.fromOpaque(pointer).takeRetainedValue()
-        } else if let planes = frame.i420 {
-            buffer = Self.pixelBuffer(i420: planes, width: Int(frame.width), height: Int(frame.height))
-        } else {
-            buffer = nil
-        }
-        guard let buffer else { return }
-        enqueue(buffer, rotation: Int(frame.rotation))
+    /// One frame, from the hub that fans a track out to its renderers.
+    func show(_ buffer: CVPixelBuffer, rotation: Int) {
+        enqueue(buffer, rotation: rotation)
     }
 
     private func enqueue(_ buffer: CVPixelBuffer, rotation: Int) {

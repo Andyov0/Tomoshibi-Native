@@ -37,6 +37,13 @@ public struct RoomView: View {
             let plan = arrangement(in: size)
             ZStack(alignment: .topLeading) {
                 Theme.background.ignoresSafeArea()
+                #if os(iOS)
+                // Under everything, the size of the screen: only a layer in a
+                // window can be taken into the small window.
+                PictureInPictureHost(call: model.call, sid: model.pictureInPictureSid)
+                    .frame(width: size.width, height: size.height)
+                    .allowsHitTesting(false)
+                #endif
                 if watch.onStage, let spot = plan[Self.watchStage] {
                     WatchStageView(feature: watch)
                         .clipShape(RoundedRectangle(cornerRadius: Theme.tileRadius))

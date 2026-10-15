@@ -173,6 +173,16 @@ public final class CallModel {
         }
     }
 
+    /// What the small window shows when the app is in the background: a
+    /// shared screen first, then the one other person in a call of two, then
+    /// whoever is speaking with a camera on.
+    public var pictureInPictureSid: String? {
+        if let screen = surfaces.first(where: { $0.kind == .screen && $0.sid != nil }) { return screen.sid }
+        let cameras = surfaces.filter { $0.kind == .camera && $0.sid != nil }
+        if cameras.count == 1 { return cameras[0].sid }
+        return cameras.first { $0.person.speaking }?.sid ?? cameras.first?.sid
+    }
+
     public func person(_ identity: String) -> Person? {
         people.first { $0.id == identity }
     }
