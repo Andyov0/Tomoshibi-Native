@@ -150,6 +150,7 @@ impl AudioInput {
     /// Muted at the track: the server and everybody else see it muted, as
     /// they do when a browser turns its microphone off.
     pub fn set_muted(&self, muted: bool) {
+        let _core = crate::runtime::enter();
         if muted {
             self.track.mute()
         } else {
@@ -264,6 +265,7 @@ impl VideoInput {
     }
 
     pub fn set_muted(&self, muted: bool) {
+        let _core = crate::runtime::enter();
         if muted {
             self.track.mute()
         } else {

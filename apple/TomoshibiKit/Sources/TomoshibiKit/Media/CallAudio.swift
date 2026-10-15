@@ -1,4 +1,5 @@
 import AVFoundation
+import os
 import Foundation
 import TomoshibiCore
 
@@ -55,7 +56,6 @@ public final class CallAudio {
         try session.setPreferredSampleRate(48_000)
         try session.setActive(true)
         #endif
-        try engine.inputNode.setVoiceProcessingEnabled(!originalSound)
         // TOMOSHIBI_MUTE silences everything this engine plays. The interop
         // scripts set it: a test browser's fake microphone beeps once a
         // second, and a native app in the same room plays that through the
@@ -63,10 +63,37 @@ public final class CallAudio {
         if ProcessInfo.processInfo.environment["TOMOSHIBI_MUTE"] != nil {
             engine.mainMixerNode.outputVolume = 0
         }
-        engine.prepare()
-        try engine.start()
+        do {
+            try engine.inputNode.setVoiceProcessingEnabled(!originalSound)
+            engine.prepare()
+            try engine.start()
+            voiceProcessing = !originalSound
+            Self.log.notice("engine started, voice processing \(self.voiceProcessing ? "on" : "off", privacy: .public)")
+        } catch where !originalSound {
+            Self.log.error("voice processing would not start (\(String(describing: error), privacy: .public)); starting without it")
+            // The system's voice processing would not start: on the macOS 27
+            // Mac this was written on, the output unit failed to initialise
+            // with it on (-10875) and the call had no sound at all, either
+            // way. A call without echo cancellation is still a call; one
+            // without sound is not. So the engine starts again without it.
+            engine.stop()
+            try engine.inputNode.setVoiceProcessingEnabled(false)
+            engine.prepare()
+            try engine.start()
+            voiceProcessing = false
+            Self.log.notice("engine started without voice processing")
+        }
         started = true
     }
+
+    /// Whether the system's voice processing (echo cancellation, noise
+    /// suppression) is really on, which is not the same as asked for: it is
+    /// left off when it would not start.
+    public private(set) var voiceProcessing = false
+
+    /// What happened to the engine, in the system log under the app's own
+    /// subsystem: a call without sound otherwise left nothing to go on.
+    static let log = Logger(subsystem: "app.tomoshibi", category: "audio")
 
     public func stop() {
         stopMicrophone()
@@ -144,6 +171,7 @@ public final class CallAudio {
         engine.connect(player.node, to: engine.mainMixerNode, format: player.node.outputFormat(forBus: 0))
         players[sid] = player
         call.attachAudio(sid: sid, sink: player.sink)
+        Self.log.notice("playing \(sid, privacy: .public) in \(channels) channels")
     }
 
     public func stopPlaying(sid: String, call: Call? = nil) {

@@ -49,3 +49,16 @@ where
 {
     runtime().spawn(work);
 }
+
+/// Puts the caller inside the core's runtime until the guard is dropped.
+///
+/// Every exported function that is not async is called straight from an app
+/// thread, and much of the SDK starts tasks of its own from inside ordinary
+/// calls: attaching a sink to a track, switching a subscription on or off,
+/// asking for a layer, muting. Outside a runtime each of those panicked with
+/// "there is no reactor running", the panic crossed into Swift as an
+/// unexpected error, and the app quit the moment somebody with a microphone
+/// was heard. Every such function takes this guard first.
+pub fn enter() -> tokio::runtime::EnterGuard<'static> {
+    runtime().enter()
+}

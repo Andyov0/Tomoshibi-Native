@@ -399,6 +399,7 @@ impl Call {
     /// How long shared screens are held before they are played, from now on
     /// and for those already arriving. Zero turns the cushion off.
     pub fn set_share_playout_ms(&self, ms: u32) {
+        let _core = crate::runtime::enter();
         let ms = ms.min(1000);
         *self.share_playout_ms.lock().unwrap() = ms;
         for participant in self.room.remote_participants().values() {
@@ -415,6 +416,7 @@ impl Call {
     /// Stops a remote track at the server (the web's block, hearing.ts) or
     /// lets it flow again.
     pub fn set_remote_enabled(&self, sid: String, enabled: bool) -> Result<(), CallError> {
+        let _core = crate::runtime::enter();
         let publication = self.publication(&sid).ok_or(CallError::NoSuchTrack { sid })?;
         publication.set_enabled(enabled);
         Ok(())
@@ -424,6 +426,7 @@ impl Call {
     /// in device pixels: the picture's size on screen, or a lower rung while a
     /// freeze is being sat out.
     pub fn request_video_size(&self, sid: String, width: u32, height: u32) -> Result<(), CallError> {
+        let _core = crate::runtime::enter();
         self.wanted_sizes.lock().unwrap().insert(sid.clone(), (width, height));
         let cap = self.freezes.capped(&sid);
         let publication = self.publication(&sid).ok_or(CallError::NoSuchTrack { sid })?;
@@ -437,15 +440,18 @@ impl Call {
     /// setting to restart the share at; say how that went with
     /// `strain_accepted`.
     pub fn strain_accept(&self) -> tomoshibi_protocol::strain::StrainAccept {
+        let _core = crate::runtime::enter();
         self.strain.watch.accept(self.strain.running())
     }
 
     pub fn strain_accepted(&self, took: bool) -> bool {
+        let _core = crate::runtime::enter();
         self.strain.watch.accepted(took)
     }
 
     /// The person put the card away for this share.
     pub fn strain_decline(&self) {
+        let _core = crate::runtime::enter();
         self.strain.watch.decline()
     }
 
@@ -475,6 +481,7 @@ impl Call {
     /// Sends this remote video's frames to `sink` from now until it is
     /// detached, replaced or the track goes away.
     pub fn attach_video(&self, sid: String, sink: Arc<dyn VideoSink>) {
+        let _core = crate::runtime::enter();
         let track = self.publication(&sid).and_then(|p| p.track());
         self.sinks.attach_video(&sid, sink, track);
     }
@@ -482,6 +489,7 @@ impl Call {
     /// Sends this remote sound to `sink` as 48 kHz PCM, in the channel count
     /// it was published with.
     pub fn attach_audio(&self, sid: String, sink: Arc<dyn AudioSink>) {
+        let _core = crate::runtime::enter();
         let publication = self.publication(&sid);
         let channels = match publication.as_ref().map(|p| (p.source(), p.name())) {
             Some((TrackSource::ScreenshareAudio, _)) | Some((TrackSource::Unknown, _)) => 2,
@@ -492,6 +500,7 @@ impl Call {
     }
 
     pub fn detach(&self, sid: String) {
+        let _core = crate::runtime::enter();
         self.sinks.detach(&sid);
     }
 
