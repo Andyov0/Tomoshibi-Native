@@ -2,9 +2,9 @@ import SwiftUI
 import TomoshibiCore
 
 /// The island of controls at the foot of the call (components/room/ControlBar.tsx):
-/// microphone, camera, share, hand, messages, leave. Forty-four point buttons
-/// on a raised surface, the active ones in the one signal colour, leaving in
-/// red and nothing else in red.
+/// microphone, camera, share, hand and reactions, messages, leave.
+/// Forty-four point buttons on a raised surface, the active ones in the one
+/// signal colour, leaving in red and nothing else in red.
 struct ControlBar: View {
     @Bindable var model: CallModel
     @Binding var panel: RoomView.Panel?
@@ -30,10 +30,9 @@ struct ControlBar: View {
             Control(symbol: "rectangle.on.rectangle", label: sharingActive ? t("Stop sharing") : t("Share your screen"),
                     lit: sharingActive) { toggleShare() }
             #endif
-            Control(symbol: "hand.raised.fill", label: model.handUp ? t("Lower your hand") : t("Raise your hand"),
-                    lit: model.handUp) {
-                act { try await model.setHand(!model.handUp) }
-            }
+            // The hand and, behind the narrow half beside it, the reactions
+            // (HandButton.tsx).
+            HandControl(model: model, act: act, panel: $panel)
             Control(symbol: "bubble.left.fill", label: panel == .messages ? t("Hide messages") : t("Show messages"),
                     lit: panel == .messages) {
                 panel = panel == .messages ? nil : .messages

@@ -73,6 +73,10 @@ public final class AppModel {
             startWithMicrophone = false
             startWithCamera = false
             await connect()
+            // A passphrase to join with, so a test can join as the host of the
+            // room it opens. Read after connecting, which fills the field from
+            // the Keychain; an empty value forgets what is kept there.
+            if let typed = environment["TOMOSHIBI_PASSPHRASE"] { passphrase = typed }
             prepare(room: room)
             await join()
             return

@@ -30,6 +30,12 @@
       "zh-Hans": "服务器地址",
       "zh-Hant": "伺服器位址",
       "ja": "サーバーのアドレス"
+    },
+    "Somebody else runs this room.": {
+      "en": "Somebody else runs this room.",
+      "zh-Hans": "这个房间由别人主持。",
+      "zh-Hant": "這個房間由別人主持。",
+      "ja": "この部屋は別の人が主催しています。"
     }
   }
 }
