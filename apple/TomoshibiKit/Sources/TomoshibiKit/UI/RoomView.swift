@@ -103,6 +103,14 @@ public struct RoomView: View {
                         .transition(Theme.slideUp)
                 }
             }
+            // Over everything, the controls included: drawn under them, the
+            // bar stayed pressable through "you will be back in a moment".
+            .overlay {
+                if let to = host.movingTo {
+                    MovingOverlay(to: to).transition(Theme.arrive)
+                }
+            }
+            .animation(Theme.settle, value: host.movingTo)
             .overlay(alignment: .topTrailing) {
                 if stageID(in: size) != nil {
                     Button { filled.toggle() } label: {
@@ -304,6 +312,10 @@ public struct RoomView: View {
                 } else {
                     Avatar(name: model.localName, identity: model.localIdentity)
                 }
+                // What this participant sent, over their own picture as
+                // everybody else sees it there (the web draws reactions on
+                // every tile, its own included).
+                FloatingReactions(call: model.call, identity: model.localIdentity, compact: compact)
                 Text(t("{name} (you)", ["name": model.localName]))
                     .font(.system(size: compact ? 10.5 : 12.5, weight: .medium))
                     .foregroundStyle(Theme.foreground)

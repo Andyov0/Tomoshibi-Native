@@ -210,8 +210,8 @@ public final class AppModel {
                 sealingWord: sealingWord.isEmpty ? nil : sealingWord,
                 forward: grant.forward.map { IceServer(url: $0.url, username: $0.username, credential: $0.credential) })
             let model = try await CallModel.join(options, deployment: deployment, region: grant.region)
-            model.onMoved = { [weak self] _ in
-                Task { await self?.rejoin() }
+            model.onMoved = { [weak self] relay in
+                Task { await self?.rejoin(to: relay) }
             }
             call = model
             room = grant.room
@@ -233,13 +233,21 @@ public final class AppModel {
 
     /// The server moved the call to another relay; the web rejoins at once
     /// with the same passphrase and word, and lets the server choose.
-    private func rejoin() async {
+    private func rejoin(to relay: String) async {
         let old = call
+        movingTo = relay
+        defer { movingTo = nil }
         call = nil
         await old?.leave()
         relayChoice = nil
         await join()
     }
+
+    /// Where a move is taking the meeting while there is no call to show it
+    /// over: between leaving the old room and entering the new one the room
+    /// view is gone, and the screen was blank for those seconds. The web keeps
+    /// its moving notice above every page for the same reason (App.tsx).
+    public private(set) var movingTo: String?
 
     public func leave() async {
         await call?.leave()

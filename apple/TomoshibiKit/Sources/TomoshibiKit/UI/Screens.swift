@@ -27,6 +27,9 @@ public struct AppRoot: View {
             case .waiting:
                 WaitingScreen(app: app).transition(Theme.arrive)
             case .call:
+                if app.call == nil, let to = app.movingTo {
+                    MovingOverlay(to: to).transition(Theme.arrive)
+                }
                 if let call = app.call {
                     RoomView(model: call)
                         .transition(Theme.arrive)

@@ -46,12 +46,7 @@ struct CallOverlayView: View {
                 .animation(Theme.settle, value: feature.reactions.trayOpen)
             }
 
-            if let to = feature.movingTo {
-                MovingOverlay(to: to)
-                    .transition(Theme.arrive)
-            }
         }
-        .animation(Theme.settle, value: feature.movingTo)
         .task { await feature.run() }
         // App.tsx: a hard limit on how long the move is shown. The rejoin
         // takes two or three seconds; a move that never ends the call (the
