@@ -20,6 +20,8 @@ public struct RoomView: View {
     /// Which page of the grid or the strip is showing (usePagination.ts):
     /// pictures on other pages are not drawn at all, so they cost nothing.
     @State private var page = 0
+    /// The stage given the whole window (the web's "Fill the screen").
+    @State private var filled = false
     @State private var problem: String?
     @State private var watch: WatchFeature
     @State private var music: MusicFeature
@@ -94,8 +96,33 @@ public struct RoomView: View {
                 }
             }
             .overlay(alignment: .bottom) {
-                controls
-                    .padding(.bottom, 20)
+                if !filled {
+                    controls
+                        .padding(.bottom, 20)
+                        .transition(Theme.slideUp)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if stageID(in: size) != nil {
+                    Button { filled.toggle() } label: {
+                        Image(systemName: filled ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                            .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.foreground)
+                            .frame(width: 32, height: 32)
+                            .background(Circle().fill(.black.opacity(0.5)))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(filled ? t("Leave fullscreen") : t("Fill the screen"))
+                    .help(filled ? t("Leave fullscreen") : t("Fill the screen"))
+                    .padding(14)
+                    .transition(Theme.arrive)
+                }
+            }
+            .overlay(alignment: .topTrailing) {
+                if sharingActive && !filled && panel == nil {
+                    WatchersCard(model: model)
+                        .padding(.top, 58).padding(.trailing, 14)
+                        .transition(Theme.arrive)
+                }
             }
             .overlay(alignment: .topTrailing) {
                 if let panel {
@@ -155,6 +182,7 @@ public struct RoomView: View {
             .animation(Theme.settle, value: model.people.isEmpty)
             .animation(Theme.settle, value: model.strainHint)
             .animation(Theme.settle, value: model.notice)
+            .animation(Theme.settle, value: filled)
             .onChange(of: panel) { model.chatOpen = panel == .messages }
             // TOMOSHIBI_DEBUG_PANEL=messages|sound|watch|music|host|devices opens
             // that panel on arrival, so a script can look at it without a pointer.
@@ -198,7 +226,7 @@ public struct RoomView: View {
         let stage = pinned.flatMap { ids.contains($0) ? $0 : nil } ?? (watch.onStage ? Self.watchStage : nil) ?? screens.first
         if let stage {
             let rest = ids.filter { $0 != stage }
-            return Plan.focus(size, stage: stage, strip: Self.slice(rest, page: page, per: Plan.stripCapacity(size)))
+            return Plan.focus(size, stage: stage, strip: Self.slice(rest, page: page, per: Plan.stripCapacity(size)), fullscreen: filled)
         }
         if ids.count == Plan.aloneTogether, let other = ids.first(where: { $0 != Self.me }) {
             return Plan.close(size, filling: other, cards: [Self.me])
@@ -210,6 +238,14 @@ public struct RoomView: View {
         let pages = max(1, (ids.count + per - 1) / per)
         let start = min(page, pages - 1) * per
         return Array(ids[start..<min(ids.count, start + per)])
+    }
+
+    /// What is on the stage, if anything.
+    private func stageID(in size: CGSize) -> String? {
+        let ids = pictures.map(\.id) + (watch.onStage ? [Self.watchStage] : [])
+        let screens = model.surfaces.filter { $0.kind == .screen }.map(\.id)
+        let stage = pinned.flatMap { ids.contains($0) ? $0 : nil } ?? (watch.onStage ? Self.watchStage : nil) ?? screens.first
+        return stage
     }
 
     /// How many pages there are at this size: the strip's when something is
