@@ -66,6 +66,9 @@ struct ControlBar: View {
             Control(symbol: "person.2.badge.gearshape.fill", label: t("Running this room"), lit: panel == .host) {
                 panel = panel == .host ? nil : .host
             }
+            Control(symbol: "gearshape.fill", label: t("Devices"), lit: panel == .devices) {
+                panel = panel == .devices ? nil : .devices
+            }
             Divider().frame(height: 26).overlay(Theme.border)
             Button {
                 confirmLeave = true

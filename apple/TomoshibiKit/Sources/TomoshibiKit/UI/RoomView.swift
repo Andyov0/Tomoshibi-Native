@@ -22,7 +22,7 @@ public struct RoomView: View {
     @State private var music: MusicFeature
     @State private var host: HostFeature
 
-    enum Panel { case messages, sound, watch, music, host }
+    enum Panel { case messages, sound, watch, music, host, devices }
 
     public init(model: CallModel) {
         self.model = model
@@ -68,8 +68,11 @@ public struct RoomView: View {
                 ControlBar(model: model, panel: $panel, problem: $problem, sharingActive: sharingActive, toggleShare: toggleShare)
                     .padding(.bottom, 20)
             }
-            .overlay(alignment: .trailing) {
+            .overlay(alignment: .topTrailing) {
                 if let panel {
+                    // Never taller than the space above the controls: a panel
+                    // that grows past it covers the buttons that close it.
+                    ScrollView {
                     Group {
                         switch panel {
                         case .messages: ChatPanel(model: model, close: { self.panel = nil })
@@ -77,11 +80,16 @@ public struct RoomView: View {
                         case .watch: WatchPanelView(feature: watch, close: { self.panel = nil })
                         case .music: MusicPanelView(feature: music, close: { self.panel = nil })
                         case .host: HostPanelView(feature: host, close: { self.panel = nil })
+                        case .devices: DevicesPanel(model: model, close: { self.panel = nil })
                         }
                     }
+                    }
+                    .scrollIndicators(.hidden)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
                     .frame(width: min(360, size.width - 32))
+                    .frame(maxHeight: max(160, size.height - Plan.island - 24), alignment: .top)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(12)
-                    .padding(.bottom, Plan.island)
                     .transition(Theme.slideIn)
                     .id(panel)
                 }
@@ -106,6 +114,19 @@ public struct RoomView: View {
             .animation(Theme.settle, value: panel)
             .animation(Theme.settle, value: model.arriving)
             .onChange(of: panel) { model.chatOpen = panel == .messages }
+            // TOMOSHIBI_DEBUG_PANEL=messages|sound|watch|music|host|devices opens
+            // that panel on arrival, so a script can look at it without a pointer.
+            .onAppear {
+                switch ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_PANEL"] {
+                case "messages": panel = .messages
+                case "sound": panel = .sound
+                case "watch": panel = .watch
+                case "music": panel = .music
+                case "host": panel = .host
+                case "devices": panel = .devices
+                default: break
+                }
+            }
             .onChange(of: stageOwner(in: size)) { _, owner in watching(owner) }
             .animation(Theme.settle, value: problem)
             .animation(Theme.settle, value: model.state)

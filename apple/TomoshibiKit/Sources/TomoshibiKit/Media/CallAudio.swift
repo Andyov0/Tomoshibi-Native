@@ -12,7 +12,7 @@ import TomoshibiCore
 /// as the web client's sound panel does (web/src/live/hearing.ts).
 @MainActor
 public final class CallAudio {
-    private let engine = AVAudioEngine()
+    let engine = AVAudioEngine()
     private var players: [String: Player] = [:]
     private var microphone: AudioInput?
     private var converter: AVAudioConverter?

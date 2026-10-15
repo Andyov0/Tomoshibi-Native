@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import Observation
 import TomoshibiCore
@@ -178,6 +179,29 @@ public final class CallModel {
             audio.stopMicrophone()
         }
         microphoneOn = on
+    }
+
+    /// The web's "original sound" (sound.ts `applyOriginalSound`): the
+    /// system's voice processing off and the voice republished at the higher
+    /// rate, because nothing is taken out of it any more.
+    public func setOriginalSound(_ original: Bool) async throws {
+        guard original != audio.originalSound else { return }
+        try audio.setOriginalSound(original)
+        guard let old = microphoneInput else { return }
+        let fresh = try await call.publishAudio(kind: .voice(original: original))
+        microphoneInput = fresh
+        try? await old.unpublish()
+        if microphoneOn {
+            try audio.startMicrophone(into: fresh)
+        } else {
+            fresh.setMuted(muted: true)
+        }
+    }
+
+    /// Sends another camera instead, keeping the same track.
+    public func useCamera(_ device: AVCaptureDevice) throws {
+        guard let input = cameraInput else { return }
+        try camera.start(device: device, into: input)
     }
 
     public func setCamera(_ on: Bool) async throws {
