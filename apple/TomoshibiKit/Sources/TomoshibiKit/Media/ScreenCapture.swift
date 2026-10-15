@@ -3,6 +3,7 @@ import AVFoundation
 import CoreMedia
 import Foundation
 import ScreenCaptureKit
+import TomoshibiBasics
 import TomoshibiCore
 
 /// Sharing a screen, a window or an app on a Mac, with its sound.
@@ -128,12 +129,13 @@ public final class ScreenCapture: NSObject {
                 let micros = Int64(CMTimeGetSeconds(sample.presentationTimeStamp) * 1_000_000)
                 video.push(pixelBuffer: UInt64(UInt(bitPattern: Unmanaged.passRetained(buffer).toOpaque())), timestampUs: micros, rotation: 0)
             case .audio:
-                guard let sound, let (samples, floats) = Self.interleaved(sample) else { return }
-                sound.push(samples: samples)
+                guard let sound, let read = SampleAudio.interleaved(sample) else { return }
+                let floats = SampleAudio.stereo(read.samples, channels: read.channels)
+                sound.push(samples: SampleAudio.int16(floats))
                 // The same sound before it was rounded to 16 bits, for the
                 // lossless stream (it does nothing for a sound not offered so).
                 let micros = Int64(CMTimeGetSeconds(sample.presentationTimeStamp) * 1_000_000)
-                sound.pushLossless(samples: floats, channels: 2, rate: 48_000, timestampUs: micros)
+                sound.pushLossless(samples: floats, channels: 2, rate: UInt32(read.rate), timestampUs: micros)
             default:
                 break
             }
@@ -146,34 +148,6 @@ public final class ScreenCapture: NSObject {
                   let raw = attachments.first?[.status] as? Int,
                   let status = SCFrameStatus(rawValue: raw) else { return false }
             return status == .complete
-        }
-
-        /// The sound as 16-bit interleaved stereo, which is what the input
-        /// takes; ScreenCaptureKit gives 32-bit float, one buffer per channel.
-        static func interleaved(_ sample: CMSampleBuffer) -> ([Int16], [Float])? {
-            var list = AudioBufferList()
-            var block: CMBlockBuffer?
-            let status = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
-                sample, bufferListSizeNeededOut: nil, bufferListOut: &list,
-                bufferListSize: MemoryLayout<AudioBufferList>.size + MemoryLayout<AudioBuffer>.size,
-                blockBufferAllocator: nil, blockBufferMemoryAllocator: nil,
-                flags: kCMSampleBufferFlag_AudioBufferList_Assure16ByteAlignment, blockBufferOut: &block)
-            guard status == noErr else { return nil }
-            let buffers = UnsafeMutableAudioBufferListPointer(&list)
-            let frames = CMSampleBufferGetNumSamples(sample)
-            guard frames > 0, buffers.count > 0 else { return nil }
-            var out = [Int16](repeating: 0, count: frames * 2)
-            var floats = [Float](repeating: 0, count: frames * 2)
-            let left = buffers[0].mData?.assumingMemoryBound(to: Float.self)
-            let right = (buffers.count > 1 ? buffers[1] : buffers[0]).mData?.assumingMemoryBound(to: Float.self)
-            guard let left, let right else { return nil }
-            for i in 0..<frames {
-                floats[i * 2] = left[i]
-                floats[i * 2 + 1] = right[i]
-                out[i * 2] = Int16(max(-1, min(1, left[i])) * 32767)
-                out[i * 2 + 1] = Int16(max(-1, min(1, right[i])) * 32767)
-            }
-            return (out, floats)
         }
     }
 }

@@ -105,29 +105,13 @@ final class SampleHandler: RPBroadcastSampleHandler, @unchecked Sendable {
     /// The app's sound as 16-bit interleaved samples at whatever rate ReplayKit
     /// gives; the app resamples to the call's 48 kHz.
     private func audio(_ sample: CMSampleBuffer) {
-        guard let description = CMSampleBufferGetFormatDescription(sample),
-              let stream = CMAudioFormatDescriptionGetStreamBasicDescription(description)?.pointee else { return }
-        var list = AudioBufferList()
-        var block: CMBlockBuffer?
-        guard CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
-            sample, bufferListSizeNeededOut: nil, bufferListOut: &list, bufferListSize: MemoryLayout<AudioBufferList>.size,
-            blockBufferAllocator: nil, blockBufferMemoryAllocator: nil, flags: 0, blockBufferOut: &block) == noErr,
-            let data = list.mBuffers.mData else { return }
-        let frames = CMSampleBufferGetNumSamples(sample)
-        let channels = Int(stream.mChannelsPerFrame)
-        var samples = [Int16](repeating: 0, count: frames * channels)
-        let float = stream.mFormatFlags & kAudioFormatFlagIsFloat != 0
-        let bigEndian = stream.mFormatFlags & kAudioFormatFlagIsBigEndian != 0
-        if float {
-            let source = data.assumingMemoryBound(to: Float.self)
-            for i in 0..<samples.count { samples[i] = Int16(max(-1, min(1, source[i])) * 32767) }
-        } else {
-            let source = data.assumingMemoryBound(to: Int16.self)
-            for i in 0..<samples.count { samples[i] = bigEndian ? Int16(bigEndian: source[i]) : source[i] }
-        }
+        // Read through the one reader both platforms share, which takes
+        // sound in one buffer or in one per channel (SampleAudio).
+        guard let read = SampleAudio.interleaved(sample) else { return }
+        let samples = SampleAudio.int16(read.samples)
         var header = BroadcastWire.Header(kind: .audio)
-        header.channels = channels
-        header.rate = Int(stream.mSampleRate)
+        header.channels = read.channels
+        header.rate = Int(read.rate)
         send(header, payload: samples.withUnsafeBufferPointer { Data(buffer: $0) }, always: true)
     }
 
