@@ -4,7 +4,8 @@
 
 uniffi::setup_scaffolding!();
 
-mod runtime;
+pub use tomoshibi_protocol::runtime;
+
 pub mod spike;
 
 /// The core's own version, which the apps show beside theirs so that a report

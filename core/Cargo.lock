@@ -2791,7 +2791,24 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "tokio",
+ "tomoshibi-protocol",
  "uniffi",
+]
+
+[[package]]
+name = "tomoshibi-protocol"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "futures-util",
+ "rand 0.9.5",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+ "uniffi",
+ "url",
 ]
 
 [[package]]

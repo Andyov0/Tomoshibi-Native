@@ -5,6 +5,13 @@ edition = "2021"
 license = "AGPL-3.0-or-later"
 publish = false
 
+# The protocol crate holds everything that is logic rather than media: the
+# deployment's API, the in-call protocols, the lossless codec. It does not link
+# WebRTC, so it builds and tests in seconds and can be worked on in parallel.
+[workspace]
+members = [".", "protocol"]
+exclude = ["vendor"]
+
 [lib]
 # A static library for the Apple apps to link, and an ordinary one for the
 # examples and for the binding generator to read.
@@ -15,6 +22,7 @@ name = "uniffi-bindgen"
 path = "uniffi-bindgen.rs"
 
 [dependencies]
+tomoshibi-protocol = { path = "protocol" }
 uniffi = { version = "0.32", features = ["cli"] }
 livekit = { version = "=0.9.5", default-features = false, features = ["native", "rustls-tls-native-roots"] }
 tokio = { version = "1", features = ["full"] }

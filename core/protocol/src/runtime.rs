@@ -1,4 +1,5 @@
-//! The core's own tokio runtime, which every exported async function runs on.
+//! The clients' own tokio runtime, which every exported async function runs on,
+//! in this crate and in the media crate above it.
 //!
 //! UniFFI can drive futures on a runtime of its own choosing, and that runtime
 //! gives its threads the default 2 MiB stack. Joining a room on one of them
@@ -28,7 +29,7 @@ fn runtime() -> &'static Runtime {
 
 /// Runs `work` on the core's runtime and waits for it from wherever the
 /// caller is, which for the apps is a UniFFI future polled by Swift.
-pub(crate) async fn on_core<F>(work: F) -> F::Output
+pub async fn on_core<F>(work: F) -> F::Output
 where
     F: Future + Send + 'static,
     F::Output: Send + 'static,
