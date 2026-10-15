@@ -11,6 +11,8 @@ struct ControlBar: View {
     @Binding var problem: String?
     let sharingActive: Bool
     let toggleShare: () -> Void
+    let watchOffered: Bool
+    let watchPlaying: Bool
     #if os(macOS)
     let sharing: Sharing
     #endif
@@ -59,15 +61,27 @@ struct ControlBar: View {
                 }
             }
             .animation(Theme.settle, value: model.unread)
+            .animation(Theme.settle, value: watchOffered)
+            .animation(Theme.settle, value: watchPlaying)
             Control(symbol: "speaker.wave.2.fill", label: panel == .sound ? t("Hide sound") : t("Show sound"),
                     lit: panel == .sound) {
                 panel = panel == .sound ? nil : .sound
             }
-            if !model.sealed {
+            if !model.sealed && (watchOffered || panel == .watch) {
                 Control(symbol: "play.rectangle.fill", label: panel == .watch ? t("Hide watch together") : t("Show watch together"),
                         lit: panel == .watch) {
                     panel = panel == .watch ? nil : .watch
                 }
+                // The show is playing while its panel is closed (ControlBar.tsx ~430).
+                .overlay(alignment: .topTrailing) {
+                    if watchPlaying && panel != .watch {
+                        Circle().fill(Theme.tally).frame(width: 9, height: 9)
+                            .overlay(Circle().strokeBorder(Theme.surfaceHigh, lineWidth: 2))
+                            .offset(x: -2, y: 2)
+                            .transition(Theme.arrive)
+                    }
+                }
+                .transition(Theme.arrive)
                 Control(symbol: "music.note", label: panel == .music ? t("Hide music") : t("Show music"),
                         lit: panel == .music) {
                     panel = panel == .music ? nil : .music

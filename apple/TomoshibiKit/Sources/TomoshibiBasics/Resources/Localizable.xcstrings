@@ -10951,6 +10951,36 @@
         }
       }
     },
+    "Picture in picture" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Picture in picture"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ピクチャ・イン・ピクチャ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画中画"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "子母畫面"
+          }
+        }
+      }
+    },
     "Picture quality" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,

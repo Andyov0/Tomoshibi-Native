@@ -321,7 +321,13 @@ public final class CallModel {
         await call.setHearing(identity: identity, music: music, level: level, blocked: blocked)
     }
 
+    /// What the parts layered over the call say before it goes, each awaited
+    /// while the call can still carry it.
+    @ObservationIgnored public var beforeLeaving: [String: @MainActor () async -> Void] = [:]
+
     public func leave() async {
+        for last in beforeLeaving.values { await last() }
+        beforeLeaving = [:]
         lossless.closeAll()
         #if os(iOS)
         broadcast?.stop()

@@ -50,10 +50,11 @@ public struct RoomView: View {
                     .allowsHitTesting(false)
                 #endif
                 if watch.onStage, let spot = plan[Self.watchStage] {
-                    WatchStageView(feature: watch)
+                    WatchStageView(feature: watch, openPanel: { panel = .watch })
                         .clipShape(RoundedRectangle(cornerRadius: Theme.tileRadius))
                         .frame(width: spot.width, height: spot.height)
                         .offset(x: spot.minX, y: spot.minY)
+                        .onTapGesture(count: 2) { pinned = pinned == Self.watchStage ? nil : Self.watchStage }
                         .transition(Theme.arrive)
                 }
                 ForEach(pictures) { picture in
@@ -310,9 +311,9 @@ public struct RoomView: View {
 
     @ViewBuilder private var controls: some View {
         #if os(macOS)
-        ControlBar(model: model, panel: $panel, problem: $problem, sharingActive: sharingActive, toggleShare: toggleShare, sharing: sharing)
+        ControlBar(model: model, panel: $panel, problem: $problem, sharingActive: sharingActive, toggleShare: toggleShare, watchOffered: watch.offered, watchPlaying: watch.playing, sharing: sharing)
         #else
-        ControlBar(model: model, panel: $panel, problem: $problem, sharingActive: sharingActive, toggleShare: toggleShare)
+        ControlBar(model: model, panel: $panel, problem: $problem, sharingActive: sharingActive, toggleShare: toggleShare, watchOffered: watch.offered, watchPlaying: watch.playing)
         #endif
     }
 
