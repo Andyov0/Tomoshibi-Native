@@ -64,6 +64,16 @@ public struct RoomView: View {
 
                 CallOverlayView(feature: host)
 
+                RoomTitle(model: model)
+                    .padding(.leading, 14)
+                    .padding(.top, 12)
+
+                if model.people.isEmpty {
+                    EmptyRoomCard(model: model)
+                        .frame(width: size.width, height: size.height - Plan.island)
+                        .transition(Theme.arrive)
+                }
+
                 if model.state == .reconnecting {
                     Notice(text: t("Reconnecting…"))
                         .frame(maxWidth: .infinity)
@@ -72,7 +82,7 @@ public struct RoomView: View {
                 }
             }
             .overlay(alignment: .bottom) {
-                ControlBar(model: model, panel: $panel, problem: $problem, sharingActive: sharingActive, toggleShare: toggleShare)
+                controls
                     .padding(.bottom, 20)
             }
             .overlay(alignment: .topTrailing) {
@@ -120,6 +130,7 @@ public struct RoomView: View {
             }
             .animation(Theme.settle, value: panel)
             .animation(Theme.settle, value: model.arriving)
+            .animation(Theme.settle, value: model.people.isEmpty)
             .onChange(of: panel) { model.chatOpen = panel == .messages }
             // TOMOSHIBI_DEBUG_PANEL=messages|sound|watch|music|host|devices opens
             // that panel on arrival, so a script can look at it without a pointer.
@@ -192,6 +203,14 @@ public struct RoomView: View {
             }
             .animation(Theme.settle, value: model.cameraOn)
         }
+    }
+
+    @ViewBuilder private var controls: some View {
+        #if os(macOS)
+        ControlBar(model: model, panel: $panel, problem: $problem, sharingActive: sharingActive, toggleShare: toggleShare, sharing: sharing)
+        #else
+        ControlBar(model: model, panel: $panel, problem: $problem, sharingActive: sharingActive, toggleShare: toggleShare)
+        #endif
     }
 
     // MARK: Whose share is on my stage

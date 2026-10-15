@@ -91,6 +91,9 @@ public final class CallModel {
     }
     static let saidFor: Duration = .seconds(6)
 
+    /// This participant's own connection, as the server grades it.
+    public private(set) var localQuality: LinkQuality = .good
+
     public private(set) var microphoneOn = false
     public private(set) var cameraOn = false
     public private(set) var handUp = false
@@ -322,6 +325,7 @@ public final class CallModel {
             let now = Set(identities)
             for index in people.indices { people[index].speaking = now.contains(people[index].id) }
         case let .quality(identity, quality):
+            if identity == localIdentity { localQuality = quality }
             update(identity) { $0.quality = quality }
         case let .chat(id, identity, name, text, timestamp):
             messages.append(ChatLine(id: id, identity: identity, name: name, text: text,

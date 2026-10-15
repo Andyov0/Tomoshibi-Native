@@ -14,7 +14,7 @@ import TomoshibiCore
 @Observable
 public final class AppModel {
     public enum Screen: Equatable, Sendable {
-        case server, lobby, prejoin, knocking, call, ended
+        case server, lobby, prejoin, knocking, waiting, call, ended
     }
 
     public private(set) var screen: Screen = .server
@@ -46,6 +46,11 @@ public final class AppModel {
     public private(set) var invite: String?
     public private(set) var invitation: InviteInfo?
     private var knockTask: Task<Void, Never>?
+    /// The arranged meeting a `?meeting=` link points at, while it is waited
+    /// for (meeting.ts, components/room/Waiting.tsx).
+    public private(set) var arrangement: Arrangement?
+    public private(set) var waitingSays: String?
+    private var waitTask: Task<Void, Never>?
 
     private static let serverKey = "tomoshibi.server"
 
@@ -121,6 +126,7 @@ public final class AppModel {
         let fragment = components.fragment ?? ""
         let linkRoom = fragment.hasPrefix("/") ? String(fragment.dropFirst()) : fragment
         let token = components.queryItems?.first { $0.name == "invite" }?.value
+        let meeting = components.queryItems?.first { $0.name == "meeting" }?.value
         components.query = nil
         components.fragment = nil
         components.path = ""
@@ -130,6 +136,11 @@ public final class AppModel {
             await connect()
         }
         guard let deployment else { return }
+        if let meeting {
+            if !linkRoom.isEmpty { room = linkRoom }
+            wait(for: meeting, on: deployment)
+            return
+        }
         if let token {
             invite = token
             invitation = try? await deployment.inviteInfo(token: token)
@@ -236,6 +247,72 @@ public final class AppModel {
     public func backToLobby() {
         screen = .lobby
         problem = nil
+    }
+
+    // MARK: An arranged meeting
+
+    /// Asks after the meeting at the web's pace until it has begun (then
+    /// joins with the invitation the server gives) or cannot any more.
+    private func wait(for token: String, on deployment: Deployment) {
+        waitTask?.cancel()
+        screen = .waiting
+        waitingSays = nil
+        waitTask = Task { [weak self] in
+            var firstSeen: Date?
+            while !Task.isCancelled {
+                guard let self else { return }
+                do {
+                    let arrangement = try await deployment.arranged(token: token)
+                    self.arrangement = arrangement
+                    self.room = arrangement.room
+                    if arrangement.ended {
+                        self.waitingSays = t("That meeting has ended.")
+                        return
+                    }
+                    if let invite = arrangement.invite {
+                        self.invite = invite
+                        await self.join()
+                        return
+                    }
+                    self.waitingSays = nil
+                    let at = Self.instant(arrangement.at)
+                    if let at, Date().timeIntervalSince(at) * 1000 > Double(hostNotComingAfterMs()) {
+                        self.waitingSays = t("The host has not started this meeting.")
+                        return
+                    }
+                    firstSeen = firstSeen ?? Date()
+                    let pause = meetingAskEveryMs(at: arrangement.at, nowMs: Int64(Date().timeIntervalSince1970 * 1000))
+                    try? await Task.sleep(for: .milliseconds(Int(pause)))
+                } catch let error as ProtocolError {
+                    if case let .Refused(_, code) = error, code == "no_such_meeting" {
+                        self.waitingSays = t("That invitation is no longer good. Ask for another.")
+                        return
+                    }
+                    self.waitingSays = t("Could not reach the meeting. Trying again.")
+                    try? await Task.sleep(for: .seconds(5))
+                } catch {
+                    try? await Task.sleep(for: .seconds(5))
+                }
+            }
+        }
+    }
+
+    /// The host of an arranged meeting starts it by joining.
+    public func startArranged() async {
+        waitTask?.cancel()
+        await join()
+    }
+
+    public func stopWaiting() {
+        waitTask?.cancel()
+        arrangement = nil
+        screen = .lobby
+    }
+
+    static func instant(_ text: String) -> Date? {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.date(from: text) ?? ISO8601DateFormatter().date(from: text)
     }
 
     // MARK: The door

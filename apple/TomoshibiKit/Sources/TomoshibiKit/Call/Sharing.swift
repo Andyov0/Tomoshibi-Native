@@ -62,6 +62,25 @@ public final class Sharing {
         active = true
     }
 
+    /// A share of sound alone (the web's "Share only sound", sound.ts
+    /// `startListening`): 510 kb/s stereo on the share's sound channel, named
+    /// "listening", with no picture.
+    public private(set) var listening = false
+
+    public func startSoundOnly(on call: Call) async throws {
+        guard let filter = await capture.pick() else { return }
+        let sound = try await call.publishAudio(kind: .listening(losslessOffered: false))
+        do {
+            try await capture.start(filter: filter, width: 2, height: 2, fps: 1, video: nil, sound: sound)
+        } catch {
+            try? await sound.unpublish()
+            throw error
+        }
+        self.sound = sound
+        listening = true
+        active = true
+    }
+
     public func stop() async {
         await capture.stop()
         if let video { try? await video.unpublish() }
@@ -69,6 +88,7 @@ public final class Sharing {
         video = nil
         sound = nil
         active = false
+        listening = false
     }
 }
 #endif

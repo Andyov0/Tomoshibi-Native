@@ -73,9 +73,9 @@ public final class ScreenCapture: NSObject {
         return (Int(width) & ~1, Int(height) & ~1)
     }
 
-    /// Starts sending `filter` at `fps` to `video`, and its sound to `sound`
-    /// when there is one.
-    public func start(filter: SCContentFilter, width: Int, height: Int, fps: Int, video: VideoInput, sound: AudioInput?) async throws {
+    /// Starts sending `filter` at `fps` to `video` (or no picture at all, for
+    /// a share of sound alone), and its sound to `sound` when there is one.
+    public func start(filter: SCContentFilter, width: Int, height: Int, fps: Int, video: VideoInput?, sound: AudioInput?) async throws {
         await stop()
         let configuration = SCStreamConfiguration()
         configuration.width = width
@@ -90,6 +90,14 @@ public final class ScreenCapture: NSObject {
         configuration.channelCount = 2
         output.video = video
         output.sound = sound
+        if video == nil {
+            // ScreenCaptureKit will not capture sound without a picture; the
+            // least picture there is, once a second, thrown away (the web's
+            // dummy video track for the same reason, sound.ts ~252-263).
+            configuration.width = 2
+            configuration.height = 2
+            configuration.minimumFrameInterval = CMTime(value: 1, timescale: 1)
+        }
         let stream = SCStream(filter: filter, configuration: configuration, delegate: nil)
         try stream.addStreamOutput(output, type: .screen, sampleHandlerQueue: output.queue)
         if sound != nil {

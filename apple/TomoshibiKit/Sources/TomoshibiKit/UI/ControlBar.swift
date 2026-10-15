@@ -11,6 +11,9 @@ struct ControlBar: View {
     @Binding var problem: String?
     let sharingActive: Bool
     let toggleShare: () -> Void
+    #if os(macOS)
+    let sharing: Sharing
+    #endif
     @State private var confirmLeave = false
     @State private var busy = false
 
@@ -27,8 +30,7 @@ struct ControlBar: View {
                 act { try await model.setCamera(!model.cameraOn) }
             }
             #if os(macOS)
-            Control(symbol: "rectangle.on.rectangle", label: sharingActive ? t("Stop sharing") : t("Share your screen"),
-                    lit: sharingActive) { toggleShare() }
+            ShareMenu(sharing: sharing, active: sharingActive, problem: $problem, call: model.call)
             #else
             // The system's own broadcast sheet: starting and stopping a share of
             // the whole phone is the system's to do, through the extension.
@@ -218,3 +220,58 @@ struct ChatPanel: View {
         Task { try? await model.say(text) }
     }
 }
+
+#if os(macOS)
+/// The share control on a Mac is a menu, as the web's is (ShareButton.tsx):
+/// a screen, a window or an app with its sound; sound alone; the size and the
+/// frame rate; and stopping.
+struct ShareMenu: View {
+    @Bindable var sharing: Sharing
+    let active: Bool
+    @Binding var problem: String?
+    let call: Call
+
+    var body: some View {
+        Menu {
+            if active {
+                Button(sharing.listening ? t("Stop sharing sound") : t("Stop sharing")) { Task { await sharing.stop() } }
+            } else {
+                Button(t("Share your screen")) { run { try await sharing.start(on: call) } }
+                Button(t("Share only sound")) { run { try await sharing.startSoundOnly(on: call) } }
+                Divider()
+                Picker(t("Picture"), selection: $sharing.quality) {
+                    Text(t("Automatic")).tag(ScreenCapture.Quality.auto)
+                    Text("1080p").tag(ScreenCapture.Quality.p1080)
+                    Text("1440p").tag(ScreenCapture.Quality.p1440)
+                    Text("4K").tag(ScreenCapture.Quality.p2160)
+                }
+                if sharing.quality != .auto {
+                    Picker(t("Frames a second"), selection: $sharing.fps) {
+                        ForEach(Sharing.rates(for: sharing.quality), id: \.self) { rate in
+                            Text("\(rate) fps").tag(rate)
+                        }
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "rectangle.on.rectangle")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(active ? Theme.tallyForeground : Theme.foreground)
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(active ? Theme.tally : Theme.surface))
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .accessibilityLabel(active ? t("Stop sharing") : t("Share your screen"))
+        .help(active ? t("Stop sharing") : t("Share your screen"))
+    }
+
+    private func run(_ work: @escaping () async throws -> Void) {
+        Task {
+            do { try await work() } catch { problem = t("That could not be done. Try again.") }
+        }
+    }
+}
+#endif

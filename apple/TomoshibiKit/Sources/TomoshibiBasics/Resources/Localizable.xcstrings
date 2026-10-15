@@ -2851,6 +2851,36 @@
         }
       }
     },
+    "Call" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Call"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通話"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通话"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通話"
+          }
+        }
+      }
+    },
     "Calls already on this relay keep running; this only stops new ones being sent there." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,

@@ -14,6 +14,27 @@ struct TomoshibiApp: App {
         }
         #if os(macOS)
         .windowStyle(.hiddenTitleBar)
+        .commands {
+            // The two switches people reach for without looking, on the keys
+            // other call apps on the Mac use for them.
+            CommandMenu(t("Call")) {
+                Button(app.call?.microphoneOn == true ? t("Mute microphone") : t("Unmute microphone")) {
+                    guard let call = app.call else { return }
+                    Task { try? await call.setMicrophone(!call.microphoneOn) }
+                }
+                .keyboardShortcut("d", modifiers: .command)
+                .disabled(app.call == nil)
+                Button(app.call?.cameraOn == true ? t("Turn camera off") : t("Turn camera on")) {
+                    guard let call = app.call else { return }
+                    Task { try? await call.setCamera(!call.cameraOn) }
+                }
+                .keyboardShortcut("e", modifiers: .command)
+                .disabled(app.call == nil)
+                Divider()
+                Button(t("Leave")) { Task { await app.leave() } }
+                    .disabled(app.call == nil)
+            }
+        }
         #endif
     }
 }

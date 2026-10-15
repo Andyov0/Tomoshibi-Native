@@ -24,6 +24,8 @@ public struct AppRoot: View {
                 PreJoinScreen(app: app).transition(Theme.arrive)
             case .knocking:
                 KnockingScreen(app: app).transition(Theme.arrive)
+            case .waiting:
+                WaitingScreen(app: app).transition(Theme.arrive)
             case .call:
                 if let call = app.call {
                     RoomView(model: call)
@@ -304,6 +306,40 @@ struct KnockingScreen: View {
             Button(t("Back")) { app.stopKnocking() }
                 .buttonStyle(.plain).font(.system(size: 12.5)).foregroundStyle(Theme.muted)
         }
+    }
+}
+
+// MARK: - An arranged meeting
+
+struct WaitingScreen: View {
+    @Bindable var app: AppModel
+
+    var body: some View {
+        Card {
+            Text(app.room).font(.system(size: 20, weight: .semibold)).foregroundStyle(Theme.foreground)
+            if let arrangement = app.arrangement {
+                let when = AppModel.instant(arrangement.at).map { $0.formatted(date: .abbreviated, time: .shortened) } ?? arrangement.at
+                if arrangement.mine {
+                    Text(t("Your meeting is arranged for {when}. Joining starts it.", ["when": when]))
+                        .font(.system(size: 13.5)).foregroundStyle(Theme.foreground)
+                    PrimaryButton(title: t("Start the meeting"), busy: app.busy) { Task { await app.startArranged() } }
+                } else {
+                    Text(t("This meeting is arranged for {when}.", ["when": when]))
+                        .font(.system(size: 13.5)).foregroundStyle(Theme.foreground)
+                    HStack(spacing: 10) {
+                        ProgressView().controlSize(.small)
+                        Text(t("Waiting for the host to start the meeting.")).font(.system(size: 13)).foregroundStyle(Theme.muted)
+                    }
+                }
+            } else {
+                ProgressView().controlSize(.small)
+            }
+            Problem(text: app.waitingSays)
+            Button(t("Back")) { app.stopWaiting() }
+                .buttonStyle(.plain).font(.system(size: 12.5)).foregroundStyle(Theme.muted)
+        }
+        .animation(Theme.settle, value: app.waitingSays)
+        .animation(Theme.settle, value: app.arrangement?.mine)
     }
 }
 
