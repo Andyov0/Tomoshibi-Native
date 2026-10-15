@@ -17,6 +17,9 @@ public struct RoomView: View {
     #endif
     @State private var panel: Panel?
     @State private var pinned: String?
+    /// Which page of the grid or the strip is showing (usePagination.ts):
+    /// pictures on other pages are not drawn at all, so they cost nothing.
+    @State private var page = 0
     @State private var problem: String?
     @State private var watch: WatchFeature
     @State private var music: MusicFeature
@@ -63,6 +66,8 @@ public struct RoomView: View {
                 .animation(Theme.settle, value: plan.mapValues { [$0.minX, $0.minY, $0.width, $0.height] })
 
                 CallOverlayView(feature: host)
+
+                pager(in: size)
 
                 RoomTitle(model: model)
                     .padding(.leading, 14)
@@ -193,12 +198,55 @@ public struct RoomView: View {
         let stage = pinned.flatMap { ids.contains($0) ? $0 : nil } ?? (watch.onStage ? Self.watchStage : nil) ?? screens.first
         if let stage {
             let rest = ids.filter { $0 != stage }
-            return Plan.focus(size, stage: stage, strip: Array(rest.prefix(Plan.stripCapacity(size))))
+            return Plan.focus(size, stage: stage, strip: Self.slice(rest, page: page, per: Plan.stripCapacity(size)))
         }
         if ids.count == Plan.aloneTogether, let other = ids.first(where: { $0 != Self.me }) {
             return Plan.close(size, filling: other, cards: [Self.me])
         }
-        return Plan.grid(size, ids: Array(ids.prefix(Plan.tilesPerPage)))
+        return Plan.grid(size, ids: Self.slice(ids, page: page, per: Plan.tilesPerPage))
+    }
+
+    static func slice(_ ids: [String], page: Int, per: Int) -> [String] {
+        let pages = max(1, (ids.count + per - 1) / per)
+        let start = min(page, pages - 1) * per
+        return Array(ids[start..<min(ids.count, start + per)])
+    }
+
+    /// How many pages there are at this size: the strip's when something is
+    /// on the stage, the grid's otherwise.
+    private func pages(in size: CGSize) -> Int {
+        let ids = pictures.map(\.id)
+        let staged = pinned != nil || watch.onStage || model.surfaces.contains { $0.kind == .screen }
+        let per = staged ? Plan.stripCapacity(size) : Plan.tilesPerPage
+        let count = staged ? max(0, ids.count - (watch.onStage ? 0 : 1)) : ids.count
+        if !staged && ids.count == Plan.aloneTogether { return 1 }
+        return max(1, (count + per - 1) / per)
+    }
+
+    @ViewBuilder
+    private func pager(in size: CGSize) -> some View {
+        let total = pages(in: size)
+        if total > 1 {
+            HStack {
+                arrow("chevron.left", t("Previous page")) { page = (min(page, total - 1) - 1 + total) % total }
+                Spacer()
+                arrow("chevron.right", t("Next page")) { page = (min(page, total - 1) + 1) % total }
+            }
+            .padding(.horizontal, 8)
+            .frame(maxHeight: .infinity)
+            .transition(Theme.arrive)
+        }
+    }
+
+    private func arrow(_ symbol: String, _ label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 14, weight: .bold)).foregroundStyle(Theme.foreground)
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(Theme.surfaceHigh.opacity(0.9)))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .help(label)
     }
 
     @ViewBuilder
