@@ -14,10 +14,13 @@ import TomoshibiCore
 @Observable
 public final class AppModel {
     public enum Screen: Equatable, Sendable {
+        /// The deployment the app opens on is being asked about; nothing to
+        /// fill in yet.
+        case starting
         case server, lobby, prejoin, knocking, waiting, call, ended
     }
 
-    public private(set) var screen: Screen = .server
+    public private(set) var screen: Screen = .starting
     public private(set) var deployment: Deployment?
     public private(set) var info: DeploymentInfo?
     public private(set) var account: Account?
@@ -92,21 +95,36 @@ public final class AppModel {
     /// permission is asked for: what the interop scripts drive.
     public func start() async {
         let environment = ProcessInfo.processInfo.environment
-        if rehearsal, let room = environment["TOMOSHIBI_AUTOJOIN"], let base = environment["TOMOSHIBI_BASE"] {
+        if rehearsal, let base = environment["TOMOSHIBI_BASE"] {
             serverAddress = base
             name = environment["TOMOSHIBI_NAME"] ?? "Native App"
             startWithMicrophone = false
             startWithCamera = false
             await connect()
+            // TOMOSHIBI_SIGNIN=<name>:<file holding the passphrase> signs in
+            // first, so a test can see what somebody signed in sees; the
+            // passphrase is read from a file to keep it off the command line.
+            if let signIn = environment["TOMOSHIBI_SIGNIN"], let colon = signIn.firstIndex(of: ":"),
+               let kept = try? String(contentsOfFile: String(signIn[signIn.index(after: colon)...]), encoding: .utf8) {
+                await self.signIn(name: String(signIn[..<colon]), passphrase: kept.trimmingCharacters(in: .whitespacesAndNewlines))
+            }
             // A passphrase to join with, so a test can join as the host of the
-            // room it opens. Read after connecting, which fills the field from
-            // the Keychain; an empty value forgets what is kept there.
+            // room it opens.
             if let typed = environment["TOMOSHIBI_PASSPHRASE"] { passphrase = typed }
-            prepare(room: room)
-            await join()
+            if let room = environment["TOMOSHIBI_AUTOJOIN"] {
+                prepare(room: room)
+                await join()
+            } else if let room = environment["TOMOSHIBI_PREPARE"] {
+                // Stops before the call, for a test to look at that screen.
+                prepare(room: room)
+            }
             return
         }
-        if !serverAddress.isEmpty { await connect() }
+        if serverAddress.isEmpty {
+            screen = .server
+        } else {
+            await connect()
+        }
     }
 
     public func connect() async {
@@ -130,7 +148,17 @@ public final class AppModel {
             Task { relays = try? await deployment.relays() }
         } catch {
             problem = explain(error)
+            // Opening on a deployment that will not answer leaves somebody
+            // where they can choose another, rather than on the mark.
+            if screen == .starting { screen = .server }
         }
+    }
+
+    /// Asks again how much of the fleet is answering, for the light in the
+    /// corner (Lobby.tsx `Fleet`, every minute).
+    public func refreshRelays() async {
+        guard let deployment else { return }
+        if let fresh = try? await deployment.relays() { relays = fresh }
     }
 
     public func forgetServer() {
@@ -171,6 +199,13 @@ public final class AppModel {
             if let name = invitation?.name, !name.isEmpty { self.name = name }
             room = invitation?.room ?? linkRoom
         } else if !linkRoom.isEmpty {
+            // A link with a room and nothing else is a room name, and only
+            // somebody signed in is taken anywhere by one of those.
+            guard account != nil else {
+                problem = t("{room} is by invitation. Ask the organiser for a link.", ["room": linkRoom])
+                screen = .lobby
+                return
+            }
             room = linkRoom
         }
         if !room.isEmpty { screen = .prejoin }
@@ -200,7 +235,15 @@ public final class AppModel {
 
     // MARK: Joining
 
+    /// Only somebody signed in, or holding an invitation, is taken to a room
+    /// by its name: the app is a way in for the people who belong to the
+    /// deployment and for the people they send links to, and a name typed by
+    /// somebody nobody knows is neither (the owner's rule, 2026-10-15).
     public func prepare(room: String) {
+        guard account != nil || invite != nil || rehearsal else {
+            problem = t("Rooms here are by invitation. Open the link you were sent, or sign in.")
+            return
+        }
         self.room = room.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         problem = nil
         screen = .prejoin
@@ -235,7 +278,10 @@ public final class AppModel {
             }
             call = model
             room = grant.room
-            invite = nil
+            // The invitation is kept for as long as this call is: a move to
+            // another relay and "Join again" both join once more, and an
+            // invitation spent on the first join left a guest refused at the
+            // door of the room they had just been in.
             problem = nil
             screen = .call
             if startWithMicrophone { try? await model.setMicrophone(true) }
@@ -279,6 +325,8 @@ public final class AppModel {
     public func backToLobby() {
         screen = .lobby
         problem = nil
+        invite = nil
+        invitation = nil
     }
 
     // MARK: An arranged meeting

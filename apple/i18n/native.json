@@ -60,6 +60,12 @@
       "zh-Hans": "更多",
       "zh-Hant": "更多",
       "ja": "その他"
+    },
+    "Paste the link you were sent.": {
+      "en": "Paste the link you were sent.",
+      "zh-Hans": "粘贴别人发给你的链接。",
+      "zh-Hant": "貼上別人傳給你的連結。",
+      "ja": "送られてきたリンクを貼り付けてください。"
     }
   }
 }

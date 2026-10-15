@@ -10741,6 +10741,36 @@
         }
       }
     },
+    "Paste the link you were sent." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Paste the link you were sent."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送られてきたリンクを貼り付けてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粘贴别人发给你的链接。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "貼上別人傳給你的連結。"
+          }
+        }
+      }
+    },
     "Pause" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,

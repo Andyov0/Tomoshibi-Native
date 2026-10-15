@@ -1,5 +1,6 @@
 import AVFoundation
 import SwiftUI
+import TomoshibiBasics
 import TomoshibiCore
 
 /// The whole app: one screen at a time, each arriving and leaving with the
@@ -16,10 +17,18 @@ public struct AppRoot: View {
         ZStack {
             Theme.background.ignoresSafeArea()
             switch app.screen {
+            case .starting:
+                StartingScreen().transition(Theme.arrive)
             case .server:
                 ServerScreen(app: app).transition(Theme.arrive)
             case .lobby:
-                LobbyScreen(app: app).transition(Theme.arrive)
+                // Signed in or not is the whole difference between the two
+                // screens a deployment that keeps its rooms shows.
+                if let account = app.account {
+                    HomeScreen(app: app, account: account).transition(Theme.arrive)
+                } else {
+                    SignInScreen(app: app).transition(Theme.arrive)
+                }
             case .prejoin:
                 PreJoinScreen(app: app).transition(Theme.arrive)
             case .knocking:
@@ -44,8 +53,17 @@ public struct AppRoot: View {
             }
         }
         .animation(Theme.settle, value: app.screen)
+        .animation(Theme.settle, value: app.account?.name)
         .preferredColorScheme(.dark)
         .task { await app.start() }
+        // The light in the corner, asked again every minute: a reassurance
+        // rather than a monitor (Lobby.tsx `Fleet`).
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(60))
+                if app.screen != .call { await app.refreshRelays() }
+            }
+        }
         // Readings taken while the app is in the background say nothing about
         // a freeze (the web skips a hidden tab); inactive is still on screen.
         .onChange(of: scenePhase) { app.call?.call.setBackground(background: scenePhase == .background) }
@@ -54,82 +72,41 @@ public struct AppRoot: View {
     }
 }
 
-/// A column of fields on a card, the shape every screen before a call shares.
-struct Card<Content: View>: View {
-    @ViewBuilder let content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) { content }
-            .padding(24)
-            .frame(maxWidth: 420)
-            .background(RoundedRectangle(cornerRadius: 14).fill(Theme.surface))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.border))
-            .padding(16)
-    }
-}
-
-struct Field: View {
-    let label: String
-    @Binding var text: String
-    var secure = false
-    var prompt: String?
+/// The plainer screens' heading: a title, and a line under it.
+private struct Heading: View {
+    let title: String
+    var detail: String?
+    var mono = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(label).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.muted)
-            Group {
-                if secure {
-                    SecureField(prompt ?? "", text: $text)
-                } else {
-                    TextField(prompt ?? "", text: $text)
-                }
+            Text(title)
+                .font(mono ? .system(size: 20, design: .monospaced) : .system(size: 22, weight: .semibold))
+                .tracking(mono ? 0 : -0.4)
+                .foregroundStyle(Theme.foreground)
+                .lineLimit(2)
+            if let detail {
+                Text(detail).font(.system(size: 13)).foregroundStyle(Theme.muted).lineSpacing(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .textFieldStyle(.plain)
-            .font(.system(size: 14))
-            .foregroundStyle(Theme.foreground)
-            .padding(.horizontal, 12).padding(.vertical, 9)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.background))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.border))
-            #if os(iOS)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            #endif
-            .accessibilityLabel(label)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
-struct PrimaryButton: View {
-    let title: String
-    var busy = false
+/// A quiet way back, under a screen's main action.
+private struct BackButton: View {
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                if busy { ProgressView().controlSize(.small).tint(Theme.tallyForeground) }
-                Text(title).font(.system(size: 14, weight: .semibold))
+            HStack(spacing: 4) {
+                Image(systemName: "chevron.left").font(.system(size: 10, weight: .semibold))
+                Text(t("Back")).font(.system(size: 12.5))
             }
-            .foregroundStyle(Theme.tallyForeground)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.tally))
+            .foregroundStyle(Theme.muted)
         }
         .buttonStyle(.plain)
-        .disabled(busy)
-    }
-}
-
-struct Problem: View {
-    let text: String?
-
-    var body: some View {
-        if let text {
-            Text(text)
-                .font(.system(size: 12.5))
-                .foregroundStyle(Theme.danger)
-                .transition(Theme.arrive)
-        }
     }
 }
 
@@ -139,154 +116,198 @@ struct ServerScreen: View {
     @Bindable var app: AppModel
 
     var body: some View {
-        Card {
-            Text("Tomoshibi").font(.system(size: 22, weight: .semibold)).foregroundStyle(Theme.foreground)
-            Field(label: t("Server"), text: $app.serverAddress, prompt: t("The server address"))
-                .onSubmit { Task { await app.connect() } }
-            Problem(text: app.problem)
-            PrimaryButton(title: t("Connect"), busy: app.busy) { Task { await app.connect() } }
-                .disabled(app.serverAddress.trimmingCharacters(in: .whitespaces).isEmpty)
-        }
-        .animation(Theme.settle, value: app.problem)
-    }
-}
-
-// MARK: - Lobby
-
-struct LobbyScreen: View {
-    @Bindable var app: AppModel
-    @State private var roomName = ""
-    @State private var signInName = ""
-    @State private var signInPassphrase = ""
-
-    var body: some View {
-        Card {
-            HStack {
-                Text(app.account.map { t("Hello, {name}", ["name": $0.name]) } ?? t("Join a meeting"))
-                    .font(.system(size: 20, weight: .semibold)).foregroundStyle(Theme.foreground)
-                Spacer()
-                Button(app.deployment?.baseUrl().replacingOccurrences(of: "https://", with: "") ?? "") { app.forgetServer() }
-                    .buttonStyle(.plain).font(.system(size: 11)).foregroundStyle(Theme.muted)
-            }
-            Field(label: t("Room name"), text: $roomName, prompt: t("Name it yourself, or leave it blank for one nobody has used."))
-                .onSubmit(go)
-            Problem(text: app.problem)
-            PrimaryButton(title: roomName.isEmpty ? t("Start a meeting") : t("Join"), busy: app.busy, action: go)
-
-            Divider().overlay(Theme.border).padding(.vertical, 4)
-            if let account = app.account {
-                HStack {
-                    Text(account.name).foregroundStyle(Theme.foreground)
-                    Spacer()
-                    Button(t("Sign out")) { Task { await app.signOut() } }.buttonStyle(.plain).foregroundStyle(Theme.muted)
-                }
-                .font(.system(size: 13))
-                .transition(Theme.arrive)
-                // The account's own page and the management pages stay on the
-                // web, where they already are; the app opens them there.
-                HStack(spacing: 14) {
-                    if let base = app.deployment?.baseUrl(), let url = URL(string: base + "/account") {
-                        Link(t("User console"), destination: url)
+        LobbyFrame(app: app) {
+            LanguageMenu()
+        } content: {
+            VStack(alignment: .leading, spacing: 20) {
+                Heading(title: t("Server"), detail: t("The server address")).rise()
+                VStack(spacing: 12) {
+                    LobbyInput(placeholder: AppModel.home.replacingOccurrences(of: "https://", with: ""),
+                               text: $app.serverAddress) { Task { await app.connect() } }
+                    Button { Task { await app.connect() } } label: {
+                        HStack {
+                            if app.busy {
+                                ProgressView().controlSize(.small).tint(Theme.background)
+                            } else {
+                                Text(t("Connect"))
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
                     }
-                    if account.admin, let base = app.deployment?.baseUrl(), let url = URL(string: base + "/admin") {
-                        Link(t("Admin console"), destination: url)
-                    }
+                    .buttonStyle(LobbyButtonStyle(tall: true))
+                    .disabled(app.busy || app.serverAddress.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
-                .font(.system(size: 12.5))
-                .foregroundStyle(Theme.muted)
-                .transition(Theme.arrive)
-            } else {
-                Field(label: t("Name"), text: $signInName)
-                Field(label: t("Passphrase"), text: $signInPassphrase, secure: true)
-                Button(t("Sign in")) { Task { await app.signIn(name: signInName, passphrase: signInPassphrase) } }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Theme.foreground)
-                    .transition(Theme.arrive)
+                .rise(0.06)
             }
         }
-        .animation(Theme.settle, value: app.account?.name)
-        .animation(Theme.settle, value: app.problem)
-    }
-
-    private func go() {
-        let wanted = roomName.trimmingCharacters(in: .whitespaces)
-        app.prepare(room: wanted.isEmpty ? generateRoomName() : wanted)
     }
 }
 
 // MARK: - Before joining
 
+/// PreJoin.tsx: the picture of yourself beside what you are about to join,
+/// side by side where there is room and one above the other where there is
+/// not.
 struct PreJoinScreen: View {
     @Bindable var app: AppModel
     @State private var preview = CameraCapture()
     @State private var sealing = false
 
     var body: some View {
-        ScrollView {
-            Card {
-                Text(app.room).font(.system(size: 20, weight: .semibold)).foregroundStyle(Theme.foreground)
-                if let invitation = app.invitation, let name = invitation.name, !name.isEmpty {
-                    Text(t("You were invited to this room as {name}.", ["name": name]))
-                        .font(.system(size: 12.5)).foregroundStyle(Theme.muted)
+        LobbyFrame(app: app, width: 1040) {
+            LanguageMenu()
+        } content: {
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 32) {
+                    stage.frame(minWidth: 480)
+                    details.frame(width: 380)
                 }
-                ZStack {
-                    RoundedRectangle(cornerRadius: Theme.tileRadius).fill(Theme.background)
-                    if app.startWithCamera {
-                        SelfView(session: preview.session).transition(.opacity.animation(Theme.settle))
-                    } else {
-                        Avatar(name: app.name, identity: app.name)
-                    }
+                VStack(spacing: 24) {
+                    stage
+                    details
                 }
-                .aspectRatio(16 / 9, contentMode: .fit)
-                .animation(Theme.settle, value: app.startWithCamera)
-                HStack(spacing: 8) {
-                    Toggle(isOn: $app.startWithMicrophone) { Image(systemName: app.startWithMicrophone ? "mic.fill" : "mic.slash.fill") }
-                        .toggleStyle(.button)
-                        .accessibilityLabel(app.startWithMicrophone ? t("Mute microphone") : t("Unmute microphone"))
-                    Toggle(isOn: $app.startWithCamera) { Image(systemName: app.startWithCamera ? "video.fill" : "video.slash.fill") }
-                        .toggleStyle(.button)
-                        .accessibilityLabel(app.startWithCamera ? t("Turn camera off") : t("Turn camera on"))
-                }
-                if app.account == nil {
-                    Field(label: t("Your name"), text: $app.name)
-                    Field(label: t("Passphrase"), text: $app.passphrase, secure: true)
-                    Text(t("Add a passphrase to keep your name, and to run the room you open."))
-                        .font(.system(size: 11.5)).foregroundStyle(Theme.muted)
-                }
-                if sealing {
-                    Field(label: t("Sealing word"), text: $app.sealingWord, secure: true).transition(Theme.arrive)
-                } else {
-                    Button(t("Seal this call")) { sealing = true }
-                        .buttonStyle(.plain).font(.system(size: 12.5)).foregroundStyle(Theme.muted)
-                }
-                if let relays = app.relays, !relays.relays.isEmpty {
-                    Picker(t("Server"), selection: $app.relayChoice) {
-                        Text(t("Whichever answers fastest")).tag(String?.none)
-                        ForEach(relays.relays.filter { !$0.adminOnly && !$0.maintenance }, id: \.name) { relay in
-                            Text(relay.label ?? relay.name).tag(String?.some(relay.name))
-                        }
-                    }
-                    .font(.system(size: 13))
-                }
-                Problem(text: app.problem)
-                PrimaryButton(title: t("Join"), busy: app.busy) { Task { await join() } }
-                    .disabled(app.account == nil && app.name.trimmingCharacters(in: .whitespaces).isEmpty)
-                if app.canKnock {
-                    Button(t("Ask to be let in")) { Task { await app.knock() } }
-                        .buttonStyle(.plain).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.foreground)
-                        .transition(Theme.arrive)
-                }
-                Button(t("Back")) { app.backToLobby() }
-                    .buttonStyle(.plain).font(.system(size: 12.5)).foregroundStyle(Theme.muted)
             }
-            .frame(maxWidth: .infinity)
+            .padding(.top, 24)
         }
         .animation(Theme.settle, value: sealing)
         .animation(Theme.settle, value: app.problem)
         .onChange(of: app.startWithCamera) { showPreview(app.startWithCamera) }
         .onAppear { showPreview(app.startWithCamera) }
         .onDisappear { preview.session.stopRunning() }
+    }
+
+    /// The preview, with the two switches on it as the web puts them.
+    private var stage: some View {
+        ZStack(alignment: .bottom) {
+            RoundedRectangle(cornerRadius: 12).fill(Theme.surface)
+            if app.startWithCamera {
+                SelfView(session: preview.session)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .transition(.opacity.animation(Theme.settle))
+            } else {
+                Image(systemName: "video.slash").font(.system(size: 26)).foregroundStyle(Theme.muted)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .transition(.opacity.animation(Theme.settle))
+            }
+            HStack(spacing: 6) {
+                toggle(on: app.startWithMicrophone, symbol: app.startWithMicrophone ? "mic.fill" : "mic.slash.fill",
+                       label: app.startWithMicrophone ? t("Mute microphone") : t("Unmute microphone")) {
+                    app.startWithMicrophone.toggle()
+                }
+                toggle(on: app.startWithCamera, symbol: app.startWithCamera ? "video.fill" : "video.slash.fill",
+                       label: app.startWithCamera ? t("Turn camera off") : t("Turn camera on")) {
+                    app.startWithCamera.toggle()
+                }
+            }
+            .padding(5)
+            .background(Capsule().fill(Theme.background.opacity(0.75)))
+            .overlay(Capsule().strokeBorder(Theme.border))
+            .padding(.bottom, 14)
+        }
+        .aspectRatio(16 / 9, contentMode: .fit)
+        .animation(Theme.settle, value: app.startWithCamera)
+        .rise()
+    }
+
+    /// Off is drawn in red, as the web draws a switched-off device here: this
+    /// is the last moment to notice before everybody else does.
+    private func toggle(on: Bool, symbol: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol).font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(on ? Theme.foreground : Theme.dangerForeground)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(on ? Theme.surfaceHigh : Theme.danger))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .help(label)
+        .animation(Theme.settle, value: on)
+    }
+
+    private var details: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Heading(title: app.room, detail: explanation, mono: true)
+            if app.account == nil {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 0) {
+                        TextField("", text: $app.name, prompt: Text(t("Your name")).foregroundStyle(Theme.muted))
+                            .padding(.horizontal, 12)
+                        Rectangle().fill(Theme.border).frame(width: 1)
+                        HStack(spacing: 8) {
+                            Image(systemName: "key").font(.system(size: 12))
+                                .foregroundStyle(app.passphrase.isEmpty ? Theme.muted : Theme.tally)
+                            SecureField("", text: $app.passphrase, prompt: Text(t("Passphrase")).foregroundStyle(Theme.muted))
+                        }
+                        .padding(.horizontal, 12)
+                    }
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.foreground)
+                    .frame(height: 46)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Theme.surface))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.border))
+                    #if os(iOS)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    #endif
+                    Text(t("Add a passphrase to keep your name, and to run the room you open."))
+                        .font(.system(size: 12)).foregroundStyle(Theme.muted)
+                }
+            }
+            if sealing {
+                LobbyInput(placeholder: t("Sealing word"), text: $app.sealingWord, secure: true).transition(Theme.arrive)
+            } else {
+                Button { sealing = true } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "lock").font(.system(size: 11))
+                        Text(t("Seal this call")).font(.system(size: 12))
+                    }
+                    .foregroundStyle(Theme.muted)
+                }
+                .buttonStyle(.plain)
+            }
+            if let relays = app.relays, relays.relays.count > 1 {
+                Picker(t("Server"), selection: $app.relayChoice) {
+                    Text(t("Whichever answers fastest")).tag(String?.none)
+                    ForEach(relays.relays.filter { !$0.maintenance }, id: \.name) { relay in
+                        Text(say(relay.label ?? relay.name)).tag(String?.some(relay.name))
+                    }
+                }
+                .font(.system(size: 13))
+                .tint(Theme.foreground)
+            }
+            Button { Task { await join() } } label: {
+                HStack {
+                    if app.busy {
+                        ProgressView().controlSize(.small).tint(Theme.background)
+                    } else {
+                        Text(t("Join"))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(LobbyButtonStyle(tall: true))
+            .disabled(app.busy || (app.account == nil && app.name.trimmingCharacters(in: .whitespaces).isEmpty))
+            if app.canKnock {
+                Button { Task { await app.knock() } } label: {
+                    Text(t("Ask to be let in")).frame(maxWidth: .infinity)
+                }
+                .buttonStyle(LobbyButtonStyle(primary: false))
+                .transition(Theme.arrive)
+            }
+            BackButton { app.backToLobby() }
+        }
+        .rise(0.08)
+    }
+
+    private var explanation: String? {
+        if let invitation = app.invitation {
+            if let name = invitation.name, !name.isEmpty {
+                return t("You were invited to this room as {name}.", ["name": name])
+            }
+            return t("You were invited to this room. Choose a name and go in.")
+        }
+        return nil
     }
 
     private func showPreview(_ on: Bool) {
@@ -313,14 +334,20 @@ struct KnockingScreen: View {
     @Bindable var app: AppModel
 
     var body: some View {
-        Card {
-            Text(app.room).font(.system(size: 20, weight: .semibold)).foregroundStyle(Theme.foreground)
-            HStack(spacing: 10) {
-                ProgressView().controlSize(.small)
-                Text(t("Waiting for somebody to let you in.")).font(.system(size: 13.5)).foregroundStyle(Theme.foreground)
+        LobbyFrame(app: app) {
+            LanguageMenu()
+        } content: {
+            VStack(alignment: .leading, spacing: 20) {
+                Heading(title: app.room, mono: true).rise()
+                Panel {
+                    HStack(spacing: 12) {
+                        ProgressView().controlSize(.small).tint(Theme.tally)
+                        Text(t("Waiting for somebody to let you in.")).font(.system(size: 13.5)).foregroundStyle(Theme.foreground)
+                    }
+                }
+                .rise(0.06)
+                BackButton { app.stopKnocking() }.rise(0.12)
             }
-            Button(t("Back")) { app.stopKnocking() }
-                .buttonStyle(.plain).font(.system(size: 12.5)).foregroundStyle(Theme.muted)
         }
     }
 }
@@ -331,31 +358,49 @@ struct WaitingScreen: View {
     @Bindable var app: AppModel
 
     var body: some View {
-        Card {
-            Text(app.room).font(.system(size: 20, weight: .semibold)).foregroundStyle(Theme.foreground)
-            if let arrangement = app.arrangement {
-                let when = AppModel.instant(arrangement.at).map { $0.formatted(date: .abbreviated, time: .shortened) } ?? arrangement.at
-                if arrangement.mine {
-                    Text(t("Your meeting is arranged for {when}. Joining starts it.", ["when": when]))
-                        .font(.system(size: 13.5)).foregroundStyle(Theme.foreground)
-                    PrimaryButton(title: t("Start the meeting"), busy: app.busy) { Task { await app.startArranged() } }
-                } else {
-                    Text(t("This meeting is arranged for {when}.", ["when": when]))
-                        .font(.system(size: 13.5)).foregroundStyle(Theme.foreground)
-                    HStack(spacing: 10) {
-                        ProgressView().controlSize(.small)
-                        Text(t("Waiting for the host to start the meeting.")).font(.system(size: 13)).foregroundStyle(Theme.muted)
+        LobbyFrame(app: app) {
+            LanguageMenu()
+        } content: {
+            VStack(alignment: .leading, spacing: 20) {
+                Heading(title: app.room, mono: true).rise()
+                Panel {
+                    if let arrangement = app.arrangement {
+                        let when = AppModel.instant(arrangement.at).map { $0.formatted(date: .abbreviated, time: .shortened) } ?? arrangement.at
+                        if arrangement.mine {
+                            Text(t("Your meeting is arranged for {when}. Joining starts it.", ["when": when]))
+                                .font(.system(size: 13.5)).foregroundStyle(Theme.foreground)
+                            Button { Task { await app.startArranged() } } label: {
+                                HStack {
+                                    if app.busy {
+                                        ProgressView().controlSize(.small).tint(Theme.background)
+                                    } else {
+                                        Text(t("Start the meeting"))
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(LobbyButtonStyle())
+                        } else {
+                            Text(t("This meeting is arranged for {when}.", ["when": when]))
+                                .font(.system(size: 13.5)).foregroundStyle(Theme.foreground)
+                            HStack(spacing: 10) {
+                                ProgressView().controlSize(.small).tint(Theme.tally)
+                                Text(t("Waiting for the host to start the meeting.")).font(.system(size: 13)).foregroundStyle(Theme.muted)
+                            }
+                        }
+                    } else {
+                        ProgressView().controlSize(.small).tint(Theme.muted).frame(maxWidth: .infinity)
+                    }
+                    if let says = app.waitingSays {
+                        Text(says).font(.system(size: 12.5)).foregroundStyle(Theme.danger).transition(Theme.arrive)
                     }
                 }
-            } else {
-                ProgressView().controlSize(.small)
+                .rise(0.06)
+                BackButton { app.stopWaiting() }.rise(0.12)
             }
-            Problem(text: app.waitingSays)
-            Button(t("Back")) { app.stopWaiting() }
-                .buttonStyle(.plain).font(.system(size: 12.5)).foregroundStyle(Theme.muted)
+            .animation(Theme.settle, value: app.waitingSays)
+            .animation(Theme.settle, value: app.arrangement?.mine)
         }
-        .animation(Theme.settle, value: app.waitingSays)
-        .animation(Theme.settle, value: app.arrangement?.mine)
     }
 }
 
@@ -365,11 +410,25 @@ struct EndedScreen: View {
     @Bindable var app: AppModel
 
     var body: some View {
-        Card {
-            Text(t("You left the call.")).font(.system(size: 20, weight: .semibold)).foregroundStyle(Theme.foreground)
-            PrimaryButton(title: t("Join again"), busy: app.busy) { Task { await app.join() } }
-            Button(t("Back")) { app.backToLobby() }
-                .buttonStyle(.plain).font(.system(size: 12.5)).foregroundStyle(Theme.muted)
+        LobbyFrame(app: app) {
+            LanguageMenu()
+        } content: {
+            VStack(alignment: .leading, spacing: 20) {
+                Heading(title: t("You left the call.")).rise()
+                Button { Task { await app.join() } } label: {
+                    HStack {
+                        if app.busy {
+                            ProgressView().controlSize(.small).tint(Theme.background)
+                        } else {
+                            Text(t("Join again"))
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(LobbyButtonStyle(tall: true))
+                .rise(0.06)
+                BackButton { app.backToLobby() }.rise(0.12)
+            }
         }
     }
 }
