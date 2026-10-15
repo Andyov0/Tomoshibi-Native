@@ -163,7 +163,7 @@ struct HandControl: View {
                     .foregroundStyle(model.handUp ? Theme.tallyForeground : Theme.foreground)
                     .frame(width: 40, height: 44)
                     .background(UnevenRoundedRectangle(topLeadingRadius: 22, bottomLeadingRadius: 22)
-                        .fill(model.handUp ? Theme.tally : Theme.surface))
+                        .fill(model.handUp ? Theme.tally : Color.white.opacity(0.12)))
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -179,7 +179,7 @@ struct HandControl: View {
                     .rotationEffect(.degrees(open ? 180 : 0))
                     .frame(width: 20, height: 44)
                     .background(UnevenRoundedRectangle(bottomTrailingRadius: 22, topTrailingRadius: 22)
-                        .fill(open ? Theme.surfaceHigh : Theme.surface))
+                        .fill(open ? Color.white.opacity(0.2) : Color.white.opacity(0.12)))
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -216,9 +216,7 @@ struct HandControl: View {
             }
         }
         .padding(4)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surfaceHigh))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.border))
-        .shadow(color: .black.opacity(0.5), radius: 18, y: 6)
+        .glassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private struct ReactionChoice: View {

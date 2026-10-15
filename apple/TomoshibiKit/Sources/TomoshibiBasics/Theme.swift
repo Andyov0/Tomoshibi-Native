@@ -1,28 +1,30 @@
 import SwiftUI
 
-/// The web client's palette and motion (web/src/index.css), so the apps look
-/// like the same product.
+/// The apps' palette and motion.
 ///
 /// Dark in every system appearance, on purpose: a call is looked at for an
 /// hour at a stretch and the pictures are the only thing in it that should be
-/// bright. The neutrals lean warm, because a blue-grey ground turns skin
-/// green. There is one signal colour, the amber "tally" a studio camera lights
-/// when it is live — speaking, sharing, unread all wear it, so only one thing
-/// on screen is ever saying something. Red appears on leaving and on errors
-/// and nowhere else; green only on a connection light.
+/// bright. The neutrals are the system's own dark greys (the owner found the
+/// web's warm browns muddy under glass, 2026-10-15), so the glass over a
+/// picture reads as clear rather than tinted. There is one signal colour,
+/// the "tally" a studio camera lights when it is live — speaking, sharing,
+/// unread all wear it, so only one thing on screen is ever saying something —
+/// and the person chooses it (Appearance). Red appears on leaving and on
+/// errors and nowhere else; green only on a connection light.
 public enum Theme {
-    public static let background = Color(red: 0.0596, green: 0.0552, blue: 0.0508)
-    public static let surface = Color(red: 0.1012, green: 0.098, blue: 0.0949)
-    public static let surfaceHigh = Color(red: 0.141, green: 0.1329, blue: 0.1247)
-    public static let border = Color(red: 0.1804, green: 0.172, blue: 0.1634)
-    public static let foreground = Color(red: 0.9617, green: 0.953, blue: 0.9401)
-    public static let muted = Color(red: 0.5922, green: 0.572, blue: 0.5474)
-    /// The amber is a little outside sRGB; Display P3 holds it.
-    public static let tally = Color(.displayP3, red: 0.98, green: 0.64, blue: 0.25)
-    public static let tallyForeground = Color(red: 0.1236, green: 0.0743, blue: 0.0274)
-    public static let good = Color(red: 0.3736, green: 0.8422, blue: 0.5293)
-    public static let danger = Color(red: 0.8856, green: 0.3146, blue: 0.232)
-    public static let dangerForeground = Color(red: 0.9868, green: 0.9868, blue: 0.9868)
+    public static let background = Color(red: 0.043, green: 0.043, blue: 0.051)
+    public static let surface = Color(red: 0.110, green: 0.110, blue: 0.118)
+    public static let surfaceHigh = Color(red: 0.173, green: 0.173, blue: 0.180)
+    public static let border = Color.white.opacity(0.10)
+    public static let foreground = Color(red: 0.961, green: 0.961, blue: 0.969)
+    public static let muted = Color(red: 0.922, green: 0.922, blue: 0.961).opacity(0.6)
+    /// The colour the person chose, read where it is drawn so that a change
+    /// redraws everything wearing it at once.
+    @MainActor public static var tally: Color { Appearance.shared.accent.color }
+    @MainActor public static var tallyForeground: Color { Appearance.shared.accent.onColor }
+    public static let good = Color(red: 0.188, green: 0.820, blue: 0.345)
+    public static let danger = Color(red: 1.0, green: 0.271, blue: 0.227)
+    public static let dangerForeground = Color.white
 
     /// The tile's corner, 0.5rem.
     public static let tileRadius: CGFloat = 8

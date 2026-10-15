@@ -72,6 +72,10 @@ public final class AppModel {
     /// signing in could only fail.
     let rehearsal: Bool
 
+    /// The arranged meetings, recent rooms and measured relays the screens
+    /// before a call show.
+    @ObservationIgnored public private(set) lazy var lobby = LobbyModel(app: self)
+
     public init() {
         #if DEBUG
         rehearsal = ProcessInfo.processInfo.environment["TOMOSHIBI_BASE"] != nil
@@ -249,6 +253,18 @@ public final class AppModel {
         screen = .prejoin
     }
 
+    /// Straight into a room by name from the start and join sheet, which has
+    /// already shown the preview and taken the choices the join screen would.
+    public func enter(room: String) async {
+        guard account != nil || invite != nil || rehearsal else {
+            problem = t("Rooms here are by invitation. Open the link you were sent, or sign in.")
+            return
+        }
+        self.room = room.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        problem = nil
+        await join()
+    }
+
     public func join() async {
         guard let deployment else { return }
         busy = true
@@ -278,6 +294,7 @@ public final class AppModel {
             }
             call = model
             room = grant.room
+            lobby.remember(room: grant.room)
             // The invitation is kept for as long as this call is: a move to
             // another relay and "Join again" both join once more, and an
             // invitation spent on the first join left a guest refused at the

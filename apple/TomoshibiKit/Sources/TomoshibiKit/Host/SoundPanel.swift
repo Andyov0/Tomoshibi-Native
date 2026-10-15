@@ -32,9 +32,7 @@ struct SoundPanelView: View {
                     ScrollView { rows }
                 }
             }
-            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surface))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.border))
-            .shadow(color: .black.opacity(0.4), radius: 20, y: 8)
+            .glassPane(cornerRadius: 22)
         }
         .onAppear { feature.soundOpen = true }
         .onDisappear { feature.soundOpen = false }

@@ -79,8 +79,7 @@ struct DevicesPanel: View {
         }
         .font(.system(size: 13))
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surface))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.border))
+        .glassPane(cornerRadius: 22)
         .onAppear {
             original = model.audio.originalSound
             cameras = CameraCapture.cameras()

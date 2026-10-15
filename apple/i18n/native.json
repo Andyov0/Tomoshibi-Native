@@ -66,6 +66,180 @@
       "zh-Hans": "粘贴别人发给你的链接。",
       "zh-Hant": "貼上別人傳給你的連結。",
       "ja": "送られてきたリンクを貼り付けてください。"
+    },
+    "Same as the system": {
+      "en": "Same as the system",
+      "zh-Hans": "跟随系统",
+      "zh-Hant": "跟隨系統",
+      "ja": "システムと同じ"
+    },
+    "Accent colour": {
+      "en": "Accent colour",
+      "zh-Hans": "强调色",
+      "zh-Hant": "強調色",
+      "ja": "アクセントカラー"
+    },
+    "Appearance": {
+      "en": "Appearance",
+      "zh-Hans": "外观",
+      "zh-Hant": "外觀",
+      "ja": "外観"
+    },
+    "Lamplight": {
+      "en": "Lamplight",
+      "zh-Hans": "灯火",
+      "zh-Hant": "燈火",
+      "ja": "灯火"
+    },
+    "Orange": {
+      "en": "Orange",
+      "zh-Hans": "橙色",
+      "zh-Hant": "橙色",
+      "ja": "オレンジ"
+    },
+    "Pink": {
+      "en": "Pink",
+      "zh-Hans": "粉色",
+      "zh-Hant": "粉色",
+      "ja": "ピンク"
+    },
+    "Purple": {
+      "en": "Purple",
+      "zh-Hans": "紫色",
+      "zh-Hant": "紫色",
+      "ja": "パープル"
+    },
+    "Indigo": {
+      "en": "Indigo",
+      "zh-Hans": "靛蓝",
+      "zh-Hant": "靛藍",
+      "ja": "インディゴ"
+    },
+    "Blue": {
+      "en": "Blue",
+      "zh-Hans": "蓝色",
+      "zh-Hant": "藍色",
+      "ja": "ブルー"
+    },
+    "Teal": {
+      "en": "Teal",
+      "zh-Hans": "青色",
+      "zh-Hant": "青色",
+      "ja": "ティール"
+    },
+    "Green": {
+      "en": "Green",
+      "zh-Hans": "绿色",
+      "zh-Hant": "綠色",
+      "ja": "グリーン"
+    },
+    "Graphite": {
+      "en": "Graphite",
+      "zh-Hans": "石墨",
+      "zh-Hant": "石墨",
+      "ja": "グラファイト"
+    },
+    "Connection badge": {
+      "en": "Connection badge",
+      "zh-Hans": "连接角标",
+      "zh-Hant": "連線角標",
+      "ja": "接続バッジ"
+    },
+    "Signal only": {
+      "en": "Signal only",
+      "zh-Hans": "只显示信号",
+      "zh-Hant": "只顯示訊號",
+      "ja": "信号のみ"
+    },
+    "With details": {
+      "en": "With details",
+      "zh-Hans": "显示详细信息",
+      "zh-Hant": "顯示詳細資訊",
+      "ja": "詳細を表示"
+    },
+    "Hidden": {
+      "en": "Hidden",
+      "zh-Hans": "不显示",
+      "zh-Hant": "不顯示",
+      "ja": "表示しない"
+    },
+    "Recent": {
+      "en": "Recent",
+      "zh-Hans": "最近",
+      "zh-Hant": "最近",
+      "ja": "最近"
+    },
+    "Upcoming": {
+      "en": "Upcoming",
+      "zh-Hans": "即将开始",
+      "zh-Hant": "即將開始",
+      "ja": "まもなく"
+    },
+    "Home": {
+      "en": "Home",
+      "zh-Hans": "主页",
+      "zh-Hant": "主頁",
+      "ja": "ホーム"
+    },
+    "Scheduled meetings": {
+      "en": "Scheduled meetings",
+      "zh-Hans": "预定的会议",
+      "zh-Hant": "預定的會議",
+      "ja": "予定した会議"
+    },
+    "Change server": {
+      "en": "Change server",
+      "zh-Hans": "更换服务器",
+      "zh-Hant": "更換伺服器",
+      "ja": "サーバーを変更"
+    },
+    "Paste and open": {
+      "en": "Paste and open",
+      "zh-Hans": "粘贴并打开",
+      "zh-Hant": "貼上並打開",
+      "ja": "ペーストして開く"
+    },
+    "Were you sent a link?": {
+      "en": "Were you sent a link?",
+      "zh-Hans": "有人给了你邀请链接?",
+      "zh-Hant": "有人給了你邀請連結?",
+      "ja": "リンクを受け取りましたか?"
+    },
+    "Start new meeting": {
+      "en": "Start new meeting",
+      "zh-Hans": "开始新会议",
+      "zh-Hant": "開始新會議",
+      "ja": "新しい会議"
+    },
+    "Your camera": {
+      "en": "Your camera",
+      "zh-Hans": "你的摄像头画面",
+      "zh-Hant": "你的攝影機畫面",
+      "ja": "あなたのカメラ"
+    },
+    "Start one from the sidebar when you are ready.": {
+      "en": "Start one from the sidebar when you are ready.",
+      "zh-Hans": "准备好了就从左边开始一个会议。",
+      "zh-Hant": "準備好了就從左邊開始一個會議。",
+      "ja": "準備ができたらサイドバーから始めましょう。"
+    },
+    "Join as {name}": {
+      "en": "Join as {name}",
+      "zh-Hans": "以 {name} 的身份加入",
+      "zh-Hant": "以 {name} 的身分加入",
+      "ja": "{name} として参加"
+    },
+    "Flip camera": {
+      "en": "Flip camera",
+      "zh-Hans": "切换前后摄像头",
+      "zh-Hant": "切換前後鏡頭",
+      "ja": "カメラを切り替え"
+    },
+    "All of them": {
+      "en": "All of them",
+      "zh-Hans": "全部",
+      "zh-Hant": "全部",
+      "ja": "すべて"
     }
   }
 }

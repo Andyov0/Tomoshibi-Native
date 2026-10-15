@@ -1,4 +1,5 @@
 import SwiftUI
+import TomoshibiBasics
 import TomoshibiCore
 
 /// The call.
@@ -72,9 +73,19 @@ public struct RoomView: View {
 
                 pager(in: size)
 
-                RoomTitle(model: model)
-                    .padding(.leading, 14)
-                    .padding(.top, 12)
+                HStack(alignment: .top, spacing: 8) {
+                    RoomTitle(model: model)
+                    if Appearance.shared.connectionBadge != .hidden {
+                        SignalBadge(reading: model.connection ?? Self.unmeasured(model.localQuality),
+                                    detailed: Appearance.shared.connectionBadge == .detailed,
+                                    open: $model.connectionOpen,
+                                    server: model.region)
+                            .transition(Theme.arrive)
+                    }
+                }
+                .padding(.leading, 14)
+                .padding(.top, 12)
+                .animation(Theme.settle, value: Appearance.shared.connectionBadge)
 
                 if model.people.isEmpty {
                     EmptyRoomCard(model: model)
@@ -150,7 +161,7 @@ public struct RoomView: View {
                     }
                     }
                     .scrollIndicators(.hidden)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                     .frame(width: min(360, size.width - 32))
                     .frame(maxHeight: max(160, size.height - Plan.island - 24), alignment: .top)
                     .fixedSize(horizontal: false, vertical: true)
@@ -241,6 +252,17 @@ public struct RoomView: View {
             return Plan.close(size, filling: other, cards: [Self.me])
         }
         return Plan.grid(size, ids: Self.slice(ids, page: page, per: Plan.tilesPerPage))
+    }
+
+    /// Before the first sample, the server's own verdict is all there is.
+    static func unmeasured(_ quality: LinkQuality) -> ConnectionReading {
+        let grade: ConnectionGrade = switch quality {
+        case .excellent, .good: .good
+        case .poor: .poor
+        case .lost: .lost
+        }
+        return ConnectionReading(grade: grade, rttMs: nil, lossPercent: nil, upKbps: nil, downKbps: nil, jitterMs: nil,
+                                 share: nil, ownAddress: nil, holding: nil, measured: false)
     }
 
     static func slice(_ ids: [String], page: Int, per: Int) -> [String] {
@@ -383,7 +405,6 @@ struct Notice: View {
             .font(.system(size: 13, weight: .medium))
             .foregroundStyle(danger ? Theme.dangerForeground : Theme.foreground)
             .padding(.horizontal, 14).padding(.vertical, 8)
-            .background(Capsule().fill(danger ? Theme.danger : Theme.surfaceHigh))
-            .overlay(Capsule().strokeBorder(Theme.border))
+            .glassSurface(Capsule(), tint: danger ? Theme.danger : nil)
     }
 }

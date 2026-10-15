@@ -36,5 +36,11 @@ struct TomoshibiApp: App {
             }
         }
         #endif
+        #if os(macOS)
+        // The app's own Settings window, on ⌘, as every Mac app has it.
+        Settings {
+            SettingsView(app: app)
+        }
+        #endif
     }
 }

@@ -21,8 +21,7 @@ struct WatchersCard: View {
         }
         .padding(10)
         .frame(maxWidth: 200, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.surfaceHigh))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.border))
+        .glassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .animation(Theme.settle, value: watching.map(\.id))
     }
 }

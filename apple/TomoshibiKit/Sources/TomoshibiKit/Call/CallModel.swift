@@ -100,6 +100,13 @@ public final class CallModel {
 
     /// This participant's own connection, as the server grades it.
     public private(set) var localQuality: LinkQuality = .good
+    /// How the call is going from here, every two seconds (connection.ts):
+    /// nothing until the first sample, which the badge reads as unmeasured.
+    public private(set) var connection: ConnectionReading?
+    /// Whether the badge's figures are open, kept for the call.
+    public var connectionOpen = UserDefaults.standard.bool(forKey: "meet-live.signal-detail") {
+        didSet { UserDefaults.standard.set(connectionOpen, forKey: "meet-live.signal-detail") }
+    }
 
     public private(set) var microphoneOn = false
     public private(set) var cameraOn = false
@@ -417,6 +424,8 @@ public final class CallModel {
             update(identity) { $0.readable = readable }
         case let .strain(hint):
             strainHint = hint
+        case let .connection(reading):
+            connection = reading
         case .losslessGaveUp:
             notice = t("Your connection could not keep up. Everyone still hears the sound in real time.")
             Task { [weak self] in

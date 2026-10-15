@@ -21,8 +21,8 @@ struct RoomTitle: View {
                 .foregroundStyle(Theme.foreground)
                 .lineLimit(1)
         }
-        .padding(.horizontal, 10).padding(.vertical, 6)
-        .background(Capsule().fill(.black.opacity(0.45)))
+        .padding(.horizontal, 12).frame(height: 30)
+        .glassSurface(Capsule())
         .animation(Theme.settle, value: model.localQuality)
     }
 
@@ -72,9 +72,7 @@ struct EmptyRoomCard: View {
         }
         .padding(24)
         .frame(maxWidth: 360)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Theme.surface))
-        .shadow(color: .black.opacity(0.35), radius: 18, y: 6)
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.border))
+        .glassPane(cornerRadius: 26)
         .animation(Theme.settle, value: copied)
         .animation(Theme.settle, value: notHost)
     }

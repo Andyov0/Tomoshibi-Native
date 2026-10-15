@@ -62,8 +62,7 @@ struct MusicPanelView: View {
             .id(tab)
             .transition(.opacity.animation(Theme.settle))
         }
-        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surface))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.border))
+        .glassPane(cornerRadius: 22)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .animation(Theme.settle, value: tab)
         .animation(Theme.settle, value: desk.notice)

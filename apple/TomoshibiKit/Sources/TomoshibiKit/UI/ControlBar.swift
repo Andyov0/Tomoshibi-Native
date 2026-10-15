@@ -163,6 +163,8 @@ struct ControlBar: View {
                     .foregroundStyle(Theme.dangerForeground)
                     .frame(width: compact ? 52 : 56, height: size)
                     .background(Capsule().fill(Theme.danger))
+                    .overlay(Capsule().stroke(Color.white.opacity(0.25), lineWidth: 1))
+                    .contentShape(Capsule())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(t("Leave"))
@@ -171,10 +173,8 @@ struct ControlBar: View {
                 Button(t("Leave"), role: .destructive) { Task { await model.leave() } }
             }
         }
-        .padding(compact ? 4 : 6)
-        .background(Capsule().fill(Theme.surfaceHigh))
-        .overlay(Capsule().strokeBorder(Theme.border))
-        .shadow(color: .black.opacity(0.4), radius: 16, y: 6)
+        .padding(compact ? 5 : 7)
+        .glassSurface(Capsule())
         .fixedSize()
     }
 
@@ -204,7 +204,8 @@ struct ControlBar: View {
                 .font(.system(size: 16, weight: .bold))
                 .foregroundStyle(open ? Theme.tallyForeground : Theme.foreground)
                 .frame(width: size, height: size)
-                .background(Circle().fill(open ? Theme.tally : Theme.surface))
+                .background(Circle().fill(open ? Theme.tally : Color.white.opacity(0.12)))
+                .contentShape(Circle())
         }
         .menuStyle(.button)
         .buttonStyle(.plain)
@@ -263,7 +264,11 @@ struct ControlBar: View {
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(lit ? Theme.tallyForeground : (warn ? Theme.muted : Theme.foreground))
                     .frame(width: size, height: size)
-                    .background(Circle().fill(lit ? Theme.tally : Theme.surface))
+                    // Inside the bar's glass the buttons are lit plates rather
+                    // than glass of their own: glass on glass reads as smudge.
+                    .background(Circle().fill(lit ? Theme.tally : Color.white.opacity(0.12)))
+                    .overlay(Circle().stroke(Color.white.opacity(lit ? 0.3 : 0.08), lineWidth: 1))
+                    .contentShape(Circle())
                     .animation(Theme.settle, value: lit)
             }
             .buttonStyle(.plain)
@@ -340,8 +345,7 @@ struct ChatPanel: View {
                 .foregroundStyle(Theme.muted)
                 .padding(.bottom, 8)
         }
-        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surface))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.border))
+        .glassPane(cornerRadius: 22)
     }
 
     private func send() {
@@ -392,7 +396,8 @@ struct ShareMenu: View {
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(active ? Theme.tallyForeground : Theme.foreground)
                 .frame(width: 44, height: 44)
-                .background(Circle().fill(active ? Theme.tally : Theme.surface))
+                .background(Circle().fill(active ? Theme.tally : Color.white.opacity(0.12)))
+                .contentShape(Circle())
         }
         .menuStyle(.button)
         .buttonStyle(.plain)

@@ -43,6 +43,36 @@ public final class Localization: Observable, @unchecked Sendable {
         self.defaults = defaults
         let chosen = defaults.string(forKey: Self.storageKey).flatMap(Language.init(rawValue:))
         current = OSAllocatedUnfairLock(initialState: chosen ?? Language.detect(from: preferredLanguages))
+        // Somebody who has not chosen follows the system, including when the
+        // system's language changes while the app is open (the owner asked for
+        // the system's language to be read, 2026-10-15).
+        observer = NotificationCenter.default.addObserver(
+            forName: NSLocale.currentLocaleDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let self, self.followsSystem else { return }
+            self.adopt(Language.detect(from: Locale.preferredLanguages))
+        }
+    }
+
+    private var observer: NSObjectProtocol?
+
+    /// Whether no language has been chosen, so the system's decides.
+    public var followsSystem: Bool {
+        registrar.access(self, keyPath: \.language)
+        return defaults.string(forKey: Self.storageKey).flatMap(Language.init(rawValue:)) == nil
+    }
+
+    /// Forget a choice, and speak the system's language again.
+    public func followSystem() {
+        defaults.removeObject(forKey: Self.storageKey)
+        adopt(Language.detect(from: Locale.preferredLanguages), force: true)
+    }
+
+    private func adopt(_ language: Language, force: Bool = false) {
+        guard force || current.withLock({ $0 }) != language else { return }
+        registrar.withMutation(of: self, keyPath: \.language) {
+            current.withLock { $0 = language }
+        }
     }
 
     /// The language in use. Setting it is a person's choice, and is kept.

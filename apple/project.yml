@@ -33,6 +33,10 @@ targets:
       path: build/Info-macOS.plist
       properties:
         CFBundleDisplayName: Tomoshibi
+        # The four languages the interface is written in, declared so the
+        # system offers a per-app language for Tomoshibi in its settings.
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, zh-Hans, zh-Hant, ja]
         NSMicrophoneUsageDescription: Tomoshibi uses the microphone so that others in a call can hear you.
         NSCameraUsageDescription: Tomoshibi uses the camera so that others in a call can see you.
         CFBundleURLTypes:
@@ -54,6 +58,10 @@ targets:
       path: build/Info-iOS.plist
       properties:
         CFBundleDisplayName: Tomoshibi
+        # The four languages the interface is written in, declared so the
+        # system offers a per-app language for Tomoshibi in its settings.
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, zh-Hans, zh-Hant, ja]
         UILaunchScreen: {}
         NSMicrophoneUsageDescription: Tomoshibi uses the microphone so that others in a call can hear you.
         NSCameraUsageDescription: Tomoshibi uses the camera so that others in a call can see you.

@@ -57,8 +57,7 @@ struct WatchPanelView: View {
                 .frame(maxHeight: .infinity)
             }
         }
-        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surface))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.border))
+        .glassPane(cornerRadius: 22)
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .animation(Theme.settle, value: engine.servers.isEmpty)
         .animation(Theme.settle, value: tab)

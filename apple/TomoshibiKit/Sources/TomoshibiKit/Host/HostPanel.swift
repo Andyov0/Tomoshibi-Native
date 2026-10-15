@@ -51,9 +51,7 @@ struct HostPanelView: View {
                 ScrollView { content }
             }
         }
-        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surface))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.border))
-        .shadow(color: .black.opacity(0.4), radius: 20, y: 8)
+        .glassPane(cornerRadius: 22)
         .animation(Theme.settle, value: feature.standing.yours)
     }
 

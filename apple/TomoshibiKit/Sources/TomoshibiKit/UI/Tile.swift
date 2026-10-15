@@ -73,7 +73,7 @@ struct Tile: View {
             }
             .padding(.horizontal, 6)
             .padding(.vertical, 3)
-            .background(Capsule().fill(.black.opacity(0.55)))
+            .glassSurface(Capsule())
         }
     }
 }

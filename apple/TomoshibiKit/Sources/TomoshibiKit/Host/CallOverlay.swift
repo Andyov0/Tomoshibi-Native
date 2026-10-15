@@ -83,14 +83,12 @@ struct DoorNotice: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surfaceHigh)
         .overlay(alignment: .leading) {
             // The signal colour's rail: somebody is outside right now.
-            Rectangle().fill(Theme.tally).frame(width: 2)
+            Rectangle().fill(Theme.tally).frame(width: 3)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.border))
-        .shadow(color: .black.opacity(0.4), radius: 14, y: 4)
+        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .glassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .accessibilityElement(children: .contain)
     }
 }
@@ -162,14 +160,12 @@ struct NoticeLine: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.surfaceHigh)
         .overlay(alignment: .leading) {
             // notices.ts: the edge is the whole of the severity system.
-            Rectangle().fill(notice.danger ? Theme.danger : Theme.border).frame(width: 2)
+            Rectangle().fill(notice.danger ? Theme.danger : Color.clear).frame(width: 3)
         }
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.border))
-        .shadow(color: .black.opacity(0.35), radius: 10, y: 3)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .glassSurface(RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 
