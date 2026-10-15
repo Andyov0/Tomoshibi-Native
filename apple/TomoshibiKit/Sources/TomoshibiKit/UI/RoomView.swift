@@ -241,6 +241,12 @@ public struct RoomView: View {
         return Array(ids[start..<min(ids.count, start + per)])
     }
 
+    private var offers: Offers {
+        Offers(watch: watch.offered, watchPlaying: watch.playing,
+               music: music.available, musicPlaying: music.playing,
+               host: host.standing.yours, knocking: host.waiting.count)
+    }
+
     /// What is on the stage, if anything.
     private func stageID(in size: CGSize) -> String? {
         let ids = pictures.map(\.id) + (watch.onStage ? [Self.watchStage] : [])
@@ -311,9 +317,9 @@ public struct RoomView: View {
 
     @ViewBuilder private var controls: some View {
         #if os(macOS)
-        ControlBar(model: model, panel: $panel, problem: $problem, sharingActive: sharingActive, toggleShare: toggleShare, watchOffered: watch.offered, watchPlaying: watch.playing, sharing: sharing)
+        ControlBar(model: model, panel: $panel, problem: $problem, sharingActive: sharingActive, toggleShare: toggleShare, offers: offers, sharing: sharing)
         #else
-        ControlBar(model: model, panel: $panel, problem: $problem, sharingActive: sharingActive, toggleShare: toggleShare, watchOffered: watch.offered, watchPlaying: watch.playing)
+        ControlBar(model: model, panel: $panel, problem: $problem, sharingActive: sharingActive, toggleShare: toggleShare, offers: offers)
         #endif
     }
 
