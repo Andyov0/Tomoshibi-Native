@@ -24,7 +24,15 @@ path = "uniffi-bindgen.rs"
 [dependencies]
 tomoshibi-protocol = { path = "protocol" }
 uniffi = { version = "0.32", features = ["cli"] }
-livekit = { version = "=0.9.5", default-features = false, features = ["native", "rustls-tls-native-roots"] }
+# Both sets of roots. The native set is read by rustls-native-certs, which on
+# iOS takes its Linux path and looks for files under /etc/ssl that an iPhone
+# does not have: it finds nothing, tokio-tungstenite refuses to connect with no
+# roots at all, and every join on an iPhone failed at the media server after
+# the server had said yes. With the bundled Mozilla set beside it an empty
+# native set is not fatal (tokio-tungstenite tls.rs), so iOS trusts what the
+# web requests already trust (reqwest's rustls-tls is the same bundled set)
+# and the Mac keeps its keychain's roots as well.
+livekit = { version = "=0.9.5", default-features = false, features = ["native", "rustls-tls-native-roots", "rustls-tls-webpki-roots"] }
 tokio = { version = "1", features = ["full"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "cookies"] }
 serde = { version = "1", features = ["derive"] }
