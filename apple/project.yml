@@ -33,6 +33,11 @@ targets:
       path: build/Info-macOS.plist
       properties:
         CFBundleDisplayName: Tomoshibi
+        # From the build settings, so the version is said in one place: left
+        # out, XcodeGen wrote 1.0 (1) whatever MARKETING_VERSION said, and an
+        # extension whose version differs from its app's is refused upload.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         # The four languages the interface is written in, declared so the
         # system offers a per-app language for Tomoshibi in its settings.
         CFBundleDevelopmentRegion: en
@@ -58,6 +63,11 @@ targets:
       path: build/Info-iOS.plist
       properties:
         CFBundleDisplayName: Tomoshibi
+        # From the build settings, so the version is said in one place: left
+        # out, XcodeGen wrote 1.0 (1) whatever MARKETING_VERSION said, and an
+        # extension whose version differs from its app's is refused upload.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         # The four languages the interface is written in, declared so the
         # system offers a per-app language for Tomoshibi in its settings.
         CFBundleDevelopmentRegion: en
@@ -99,6 +109,11 @@ targets:
       path: build/Info-Broadcast.plist
       properties:
         CFBundleDisplayName: Tomoshibi
+        # From the build settings, so the version is said in one place: left
+        # out, XcodeGen wrote 1.0 (1) whatever MARKETING_VERSION said, and an
+        # extension whose version differs from its app's is refused upload.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.broadcast-services-upload
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SampleHandler
