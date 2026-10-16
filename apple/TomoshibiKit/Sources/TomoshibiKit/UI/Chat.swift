@@ -170,7 +170,7 @@ private struct Composer: View {
                 Button(action: send) {
                     ZStack {
                         if model.sending {
-                            ProgressView().controlSize(.small).tint(Theme.tallyForeground)
+                            MediaSpinner(size: 14, tint: Theme.tallyForeground)
                                 .transition(.opacity)
                         } else {
                             Image(systemName: "arrow.up")

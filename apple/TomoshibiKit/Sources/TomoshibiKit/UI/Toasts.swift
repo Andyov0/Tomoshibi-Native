@@ -25,6 +25,10 @@ struct ToastStack: View {
     /// meets the messages.
     @State private var leading: CGFloat = .infinity
     @State private var collapsing: Task<Void, Never>?
+    /// The pile closing after the pointer left it, a moment later, so that
+    /// crossing the gap between two spread cards does not close it under the
+    /// pointer on the way.
+    @State private var leaving: Task<Void, Never>?
 
     /// The widest a notice is drawn, which is the web's eighteen rems and a
     /// little: wide enough for two lines of a refusal, narrow enough to leave
@@ -66,13 +70,14 @@ struct ToastStack: View {
             }
         }
         .frame(height: NoticePile.height(measured, spread: open), alignment: .bottomTrailing)
+        // No shape of its own: only the cards take a press, as only sonner's
+        // toasts do on the web (its list has no height). The column used to
+        // be a rectangle the full width of the widest notice and the height
+        // of the pile, drawn over the filmstrip, and a press on a picture
+        // anywhere in it beside a short notice went to nothing.
         .frame(maxWidth: Self.width, alignment: .bottomTrailing)
-        .contentShape(Rectangle())
         #if os(macOS)
-        .onHover { inside in
-            withAnimation(Theme.settle) { spread = inside && !model.toasts.isEmpty }
-            model.holdToasts((inside && !model.toasts.isEmpty) || Self.forcedHold)
-        }
+        .onHover { inside in hovered(inside) }
         #else
         // No pointer to rest on a touch screen: a tap spreads the pile and
         // holds it a few seconds, as long as it takes to read three lines.
@@ -110,6 +115,23 @@ struct ToastStack: View {
         .onAppear { if Self.forcedHold { model.holdToasts(true) } }
         .accessibilityElement(children: .contain)
     }
+
+    #if os(macOS)
+    private func hovered(_ inside: Bool) {
+        leaving?.cancel()
+        guard !inside else {
+            withAnimation(Theme.settle) { spread = !model.toasts.isEmpty }
+            model.holdToasts(!model.toasts.isEmpty || Self.forcedHold)
+            return
+        }
+        leaving = Task {
+            try? await Task.sleep(for: .milliseconds(160))
+            guard !Task.isCancelled else { return }
+            withAnimation(Theme.settle) { spread = false }
+            model.holdToasts(Self.forcedHold)
+        }
+    }
+    #endif
 
     /// A finger on one card (dragging it away) holds the corner as reading
     /// it does.

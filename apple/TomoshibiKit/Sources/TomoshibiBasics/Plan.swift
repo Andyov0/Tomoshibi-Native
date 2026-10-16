@@ -145,11 +145,25 @@ public enum Plan {
     }
 
     /// How far above the bottom something drawn over the pictures must end to
-    /// leave these ones uncovered.
+    /// leave these ones uncovered (plan.ts `clearOf`).
     public static func clear(of plan: [String: CGRect], ids: [String], container: CGSize) -> CGFloat? {
         let tops = ids.compactMap { plan[$0]?.minY }
         guard let highest = tops.min() else { return nil }
         return container.height - highest + gap
+    }
+
+    /// How much further up a card stacked on what is below it in its corner
+    /// has to go to end `clear` above the bottom, where it now ends `ends`
+    /// above it: nothing where there is nothing to clear or it is already
+    /// clear.
+    ///
+    /// For the card telling somebody sharing that their line cannot carry
+    /// the share, which sat just above the controls, where the filmstrip
+    /// begins, and covered the pictures there: a press on one landed on the
+    /// card (Room.tsx `aboveStrip`).
+    public static func lift(toClear clear: CGFloat?, ends: CGFloat) -> CGFloat {
+        guard let clear else { return 0 }
+        return max(0, clear - ends)
     }
 
     // MARK: The whole room

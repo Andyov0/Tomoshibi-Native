@@ -26,7 +26,7 @@ struct WatchPanelView: View {
             MediaPanelHeader(title: t("Watch together"), symbol: "play.rectangle.fill",
                              closeLabel: t("Close watch together"), close: close)
 
-            if engine.call.sealed {
+            if engine.sealed {
                 // The control bar offers no button in a sealed call; should
                 // the panel be reached anyway, it says why there is nothing.
                 MediaEmpty(symbol: "lock.fill", text: t("Not available in an encrypted call"))

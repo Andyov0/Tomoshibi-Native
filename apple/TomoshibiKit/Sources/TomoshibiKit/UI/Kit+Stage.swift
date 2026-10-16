@@ -178,8 +178,14 @@ final class WindowFill {
     @ObservationIgnored private weak var window: NSWindow?
     @ObservationIgnored private var entered = false
     @ObservationIgnored private var observers: [NSObjectProtocol] = []
-    /// Called when the window leaves full screen by any way at all.
-    @ObservationIgnored var onLeft: (() -> Void)?
+    /// How many times the window has left full screen, by any way at all,
+    /// for the room to follow with `onChange`.
+    ///
+    /// A count rather than a closure handed in: the room's closure held the
+    /// room view, whose state holds this object, so the two kept each other
+    /// and with them the call's model and the core's call, every one of its
+    /// loops still running, for every call made since the app started.
+    private(set) var exits = 0
 
     func attach(_ window: NSWindow?) {
         guard window !== self.window else { return }
@@ -190,7 +196,7 @@ final class WindowFill {
         observers.append(NotificationCenter.default.addObserver(forName: NSWindow.didExitFullScreenNotification, object: window, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
                 self?.entered = false
-                self?.onLeft?()
+                self?.exits += 1
             }
         })
     }

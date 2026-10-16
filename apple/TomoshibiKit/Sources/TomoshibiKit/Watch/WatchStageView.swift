@@ -21,6 +21,11 @@ struct WatchStageView: View {
             ZStack {
                 Color.black
                 stage(engine, compact: compact)
+                    // The stage's own transitions only run inside a change
+                    // that is animated, and nothing here animated one: the
+                    // video, the spinner before it and "cannot be played"
+                    // replaced each other in a single frame.
+                    .animation(Theme.settle, value: Self.phase(engine))
                 if WatchDebug.panel, !compact {
                     HStack {
                         Spacer()
@@ -49,6 +54,17 @@ struct WatchStageView: View {
             .onChange(of: compact, initial: true) { engine.stageShowing = !compact }
         }
         .onDisappear { engine.stageShowing = false }
+    }
+
+    /// Which of its faces the stage shows, read without asking anything of
+    /// the server (`info` would ask), for animating from one to the next.
+    private static func phase(_ engine: WatchEngine) -> String {
+        guard let video = engine.show?.now else { return "nothing" }
+        switch engine.infos[video.ticket] {
+        case .known?: return engine.player?.video.key == video.key ? "playing " + video.key : "waiting"
+        case .unavailable?, .failed?: return "cannot " + video.key
+        case nil: return "waiting"
+        }
     }
 
     @ViewBuilder

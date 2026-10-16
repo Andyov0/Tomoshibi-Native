@@ -2,6 +2,9 @@ import Foundation
 import Observation
 import SwiftUI
 import TomoshibiCore
+#if os(macOS)
+import AppKit
+#endif
 
 /// Watching together, layered over a call (web/src/live/watch.ts,
 /// components/room/WatchScreen.tsx, WatchPanel.tsx, WatchTab.tsx).
@@ -56,8 +59,17 @@ public final class WatchFeature {
 final class WatchEngine {
     static let part = "watch"
 
-    @ObservationIgnored unowned let call: CallModel
+    /// Weak, and every use of it allowed to find nothing. The call's model
+    /// keeps this engine in its parts, but a task this engine started -- a
+    /// video's description still being fetched, a link still being read --
+    /// keeps it past the model, and through an unowned reference the first
+    /// thing such a task touched after the model went was a crash.
+    @ObservationIgnored private(set) weak var call: CallModel?
     @ObservationIgnored private let theatre: WatchTheatre
+    /// The deployment, held for the questions asked of it, which need no
+    /// call, and whether the call is sealed, which never changes.
+    @ObservationIgnored let deployment: Deployment
+    @ObservationIgnored let sealed: Bool
 
     /// The show as this participant knows it, and when it was heard (or for
     /// the holder, when this version of it was first read): what the timeline
@@ -103,6 +115,8 @@ final class WatchEngine {
 
     init(call: CallModel) {
         self.call = call
+        deployment = call.deployment
+        sealed = call.sealed
         defer {
             // The holder says the show closed before the call goes, as the web
             // does when the room unmounts; said after, it never arrived, and
@@ -133,12 +147,13 @@ final class WatchEngine {
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
 
-        Task { [weak self] in
-            guard let self else { return }
+        Task { [weak self, deployment] in
             if let signIn = WatchDebug.signIn {
-                _ = try? await call.deployment.signIn(name: signIn.name, passphrase: signIn.passphrase)
+                _ = try? await deployment.signIn(name: signIn.name, passphrase: signIn.passphrase)
             }
-            ready = WatchDebug.links ? true : ((try? await call.deployment.watchReady()) ?? false)
+            let ready = WatchDebug.links ? true : ((try? await deployment.watchReady()) ?? false)
+            guard let self, !self.over else { return }
+            self.ready = ready
         }
     }
 
@@ -163,7 +178,7 @@ final class WatchEngine {
             case .connected where reconnecting:
                 // A reconnect replaces the roster without saying who left.
                 reconnecting = false
-                handle(theatre.roster(identities: call.identities, nowMs: now))
+                handle(theatre.roster(identities: call?.identities ?? [], nowMs: now))
             case .disconnected:
                 end()
             default:
@@ -173,7 +188,7 @@ final class WatchEngine {
             // Only from a participant: the server says nothing on this topic,
             // and anything arriving without a sender is not a show's word.
             guard topic == "watch", let identity else { return }
-            let name = call.person(identity)?.name ?? ""
+            let name = call?.person(identity)?.name ?? ""
             handle(theatre.onMessage(sender: identity, senderName: name, payload: payload, nowMs: now))
         case .ended:
             end()
@@ -184,7 +199,11 @@ final class WatchEngine {
 
     /// The call is over: the player stops at once rather than when the call's
     /// model is let go, which would leave a film playing after the person
-    /// left the room.
+    /// left the room. For good: `over` is what every late answer looks at
+    /// first. Only a holder's close says anything (a viewer's does nothing),
+    /// so a video's description fetched after this, or a link read after it,
+    /// went on to read the show again, found the last one still there and
+    /// built it a player; the film started again on a call already left.
     private func end() {
         guard !over else { return }
         over = true
@@ -202,8 +221,12 @@ final class WatchEngine {
         let now = watchClock()
         handle(theatre.tick(nowMs: now))
         refresh(now)
+        // The clock read again: the tick or the refresh may have just built a
+        // player, whose source began after `now`. Measured against the older
+        // reading, that source's age came out below nothing, and working it
+        // out trapped (WatchStall).
         if let player, let show {
-            player.keep(now: now, show: show, heardAtMs: heardAtMs)
+            player.keep(now: watchClock(), show: show, heardAtMs: heardAtMs)
         }
         for press in WatchDebug.presses() { debugPress(press) }
     }
@@ -211,6 +234,7 @@ final class WatchEngine {
     /// Reads the show again and follows it: a new video gets a player of its
     /// own, and a show that ended takes its player with it.
     private func refresh(_ now: UInt64) {
+        guard !over, let call else { return }
         let snapshot = theatre.state(nowMs: now)
         if snapshot.show != show || snapshot.heardAtMs != heardAtMs {
             show = snapshot.show
@@ -230,13 +254,18 @@ final class WatchEngine {
         }
         guard let video else { return }
         if player == nil, case let .known(resolved) = info(video.ticket) {
-            player = WatchPlayer(video: video, info: resolved, engine: self, mainland: mainland(region: call.region))
+            player = WatchPlayer(video: video, info: resolved, engine: self, base: deployment.baseUrl(),
+                                 mainland: mainland(region: call.region))
         }
     }
 
     // MARK: What the theatre says
 
     private func handle(_ out: WatchOutput, answering: Bool = true) {
+        // Nothing the theatre says once the call is over is said: its words
+        // would go into a call already left, and its asks start the fetches
+        // that brought the show back.
+        guard !over else { return }
         for packet in out.packets { send(packet) }
         for why in out.refusals { say(WatchWords.refusal(why)) }
         if answering {
@@ -258,8 +287,8 @@ final class WatchEngine {
         let previous = sending
         sending = Task { [weak self] in
             await previous?.value
-            guard let self else { return }
-            try? await self.call.send(topic: packet.topic, payload: packet.payload, to: packet.destinations, reliable: packet.reliable)
+            guard let call = self?.call else { return }
+            try? await call.send(topic: packet.topic, payload: packet.payload, to: packet.destinations, reliable: packet.reliable)
         }
     }
 
@@ -299,13 +328,14 @@ final class WatchEngine {
     /// gives this app where the deployment has none (WatchDebug).
     private func resolveVideo(_ text: String, forOther: Bool) async throws -> ResolvedLink {
         if WatchDebug.links { return WatchDebug.resolve(text) }
-        return try await call.deployment.resolveVideo(pasted: text, forOther: forOther)
+        return try await deployment.resolveVideo(pasted: text, forOther: forOther)
     }
 
     private func readInfo(_ ticket: String) async -> WatchInfo {
+        if let slow = WatchDebug.slow { try? await Task.sleep(for: slow) }
         if let known = WatchDebug.info(ticket) { return known }
         do {
-            switch try await call.deployment.videoInfo(ticket: ticket) {
+            switch try await deployment.videoInfo(ticket: ticket) {
             case let .known(video): return .known(video)
             case .unavailable: return .unavailable
             case .failed: return .failed
@@ -318,7 +348,8 @@ final class WatchEngine {
     /// Said in the call's corner, as the web says a refusal (Room.tsx
     /// `hearShows`, `actionFailed`), wherever the panel is.
     func say(_ text: String) {
-        call.actionFailed(text)
+        guard !over else { return }
+        call?.actionFailed(text)
     }
 
     func dismissNotice() {
@@ -347,6 +378,9 @@ final class WatchEngine {
         }
     }
 
+    /// Whoever waits is always answered, even after the call is over, since
+    /// a continuation left waiting is a task that never ends; the show is
+    /// only read again while there is one (`refresh` looks at `over`).
     private func fetch(_ ticket: String) async {
         let found = await readInfo(ticket)
         infos[ticket] = found
@@ -389,7 +423,7 @@ final class WatchEngine {
     /// somebody else is said to be somebody else's and refused such a film.
     func add(_ pasted: String) async -> Bool {
         let text = pasted.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty, !call.sealed, !over else { return false }
+        guard !text.isEmpty, !sealed, !over else { return false }
         let now = watchClock()
 
         if !ready {
@@ -416,6 +450,8 @@ final class WatchEngine {
             say(WatchWords.refusal("failed"))
             return false
         }
+        // Left, or ended, while the link was being read: nothing more.
+        guard !over else { return false }
         switch found {
         case let .notPlayable(reason):
             say(WatchWords.refusal(WatchWords.code(reason)))
@@ -440,10 +476,11 @@ final class WatchEngine {
         var added = out.accepted && out.refusals.isEmpty
         for ask in out.asks {
             let answered = await answer(ask)
+            guard !over else { return false }
             handle(answered)
             if !answered.refusals.isEmpty { added = false }
         }
-        return added
+        return added && !over
     }
 
     /// Play or pause for everybody. Felt here at once: the player is told too,
@@ -505,11 +542,11 @@ final class WatchEngine {
     /// could start a show: browsing is for choosing, and choosing is theirs
     /// (WatchPanel.tsx). The web reads every refusal here as none.
     func loadServers() {
-        guard ready, !call.sealed else { return }
-        Task { [weak self] in
-            guard let self else { return }
-            let found = (try? await call.deployment.mediaServers()) ?? []
-            if found != servers { servers = found }
+        guard ready, !sealed, !over else { return }
+        Task { [weak self, deployment] in
+            let found = (try? await deployment.mediaServers()) ?? []
+            guard let self, !self.over else { return }
+            if found != self.servers { self.servers = found }
         }
     }
 
@@ -529,7 +566,33 @@ final class WatchEngine {
         case "remove": if let index = Int(rest), let queue = show?.queue, queue.indices.contains(index) { remove(queue[index].key) }
         case "stop": stop()
         case "pip": player?.togglePictureInPicture()
+        case "volume" where Rehearsal.running: if let level = Double(rest) { player?.volume = level }
+        #if DEBUG && os(macOS)
+        case "voiceover" where Rehearsal.running:
+            WatchDebug.log("voiceover \(rest): \(Self.adjust(t("Position in the video"), up: rest != "down") ? "stepped" : "no such control")")
+        #endif
         default: break
         }
     }
+
+    #if DEBUG && os(macOS)
+    /// Finds the control named `label` in this app's own window, through the
+    /// accessibility the system's screen reader reads, and steps it as the
+    /// screen reader's adjust does. In this process only.
+    private static func adjust(_ label: String, up: Bool) -> Bool {
+        guard let window = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil }) else { return false }
+        var queue: [AnyObject] = [window]
+        var looked = 0
+        while !queue.isEmpty, looked < 20_000 {
+            let element = queue.removeFirst()
+            looked += 1
+            if (element.accessibilityLabel?() ?? nil) == label {
+                return (up ? element.accessibilityPerformIncrement?() : element.accessibilityPerformDecrement?()) ?? false
+            }
+            let children = (element.accessibilityChildren?() ?? nil) ?? []
+            queue += children.map { $0 as AnyObject }
+        }
+        return false
+    }
+    #endif
 }

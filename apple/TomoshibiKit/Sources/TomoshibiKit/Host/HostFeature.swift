@@ -55,14 +55,27 @@ public final class HostFeature {
     /// cannot be undone, and its button sits beside three that can, so the
     /// press that matters is the second (HostPanel.tsx `ending`).
     var ending = false
-    /// Whether the list of relays to move to is open.
+    /// Whether the list of relays to move to is open (HostPanel.tsx
+    /// `Elsewhere`'s `open`).
     var choosingRelay = false
 
     /// Whether the host panel is on screen: the door's notice stands down
     /// while it is, because the panel lists the same people (HostPanel.tsx
     /// `Hosting`, which raises the notice only while the panel is shut).
+    ///
+    /// Closing it also puts both questions away. On the web they are the
+    /// panel's own state and go with it; kept here for the whole call, the
+    /// panel opened again on "Close the room" already armed, one press from
+    /// ending the meeting for everybody, or with the relays open, where one
+    /// press moves everybody.
     var panelOpen = false {
-        didSet { sayWhoIsWaiting() }
+        didSet {
+            if !panelOpen {
+                ending = false
+                choosingRelay = false
+            }
+            sayWhoIsWaiting()
+        }
     }
     /// How many people the door's notice last said were waiting; nought while
     /// it is not up. Said again only when that changes, so a notice swiped
@@ -441,17 +454,22 @@ public final class HostFeature {
 /// per call, as the web's is one per page: a call that is moved, or comes
 /// back after a drop, is joined again as the same identity, and its settings
 /// should be waiting for it.
+///
+/// Nowhere in a rehearsal (`Rehearsal.choices`): a test's `mute` or
+/// `volume30` is written against a proven identity like anybody's, and was
+/// saved into the owner's own book, where it would have silenced that person
+/// in the owner's next real call.
 @MainActor
 @Observable
 final class Hearing {
-    static let shared = Hearing()
+    static let shared = Hearing(defaults: Rehearsal.choices)
 
     private var book: HearingBook
-    private let defaults: UserDefaults
+    private let defaults: UserDefaults?
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults?) {
         self.defaults = defaults
-        book = HearingBook(stored: defaults.string(forKey: HearingBook.storageKey))
+        book = HearingBook(stored: defaults?.string(forKey: HearingBook.storageKey))
     }
 
     /// Filed under the signature for a proven identity, which is the same on
@@ -469,7 +487,7 @@ final class Hearing {
     }
 
     func set(_ identity: String, _ sound: Sound, _ setting: HearingSetting) {
-        if book.set(Self.filing(identity), sound, setting) {
+        if book.set(Self.filing(identity), sound, setting), let defaults {
             if let stored = book.stored {
                 defaults.set(stored, forKey: HearingBook.storageKey)
             } else {

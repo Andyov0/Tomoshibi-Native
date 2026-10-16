@@ -84,7 +84,7 @@ struct MovingOverlay: View {
             Theme.background.opacity(0.8).ignoresSafeArea()
             Rectangle().fill(.ultraThinMaterial).opacity(0.5).ignoresSafeArea()
             VStack(spacing: 12) {
-                ProgressView().controlSize(.small).tint(Theme.muted)
+                MediaSpinner(size: 18, tint: Theme.muted)
                 Text(named.isEmpty ? t("Moving this meeting") : t("Moving this meeting to {name}", ["name": named]))
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(Theme.foreground)

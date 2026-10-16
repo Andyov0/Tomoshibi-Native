@@ -211,6 +211,8 @@ private struct NowPlaying: View {
                     }
                     if let quality = state.quality {
                         MediaBadge(text: quality, symbol: "waveform", lit: true)
+                            .transition(Theme.arrive)
+                            .id(quality)
                     }
                 }
                 .transition(Theme.arrive)
@@ -306,6 +308,10 @@ private struct NowPlaying: View {
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.09)))
         .animation(Theme.settle, value: desk.mine)
         .animation(Theme.settle, value: state.paused)
+        // The badge saying what the file is arrives once the song is
+        // decoded, and changes with the next song: it popped in, alone of
+        // everything on this card.
+        .animation(Theme.settle, value: state.quality)
     }
 }
 
@@ -316,18 +322,25 @@ private struct Position: View {
 
     var body: some View {
         TimelineView(.periodic(from: .now, by: 0.5)) { _ in
-            if let progress = desk.progress, progress.of > 0 {
-                VStack(spacing: 4) {
-                    MediaProgress(fraction: progress.at / progress.of)
-                    HStack {
-                        Text(musicClock(seconds: progress.at))
-                        Spacer()
-                        Text(musicClock(seconds: progress.of))
+            let progress = desk.progress.flatMap { $0.of > 0 ? $0 : nil }
+            // Arrives when the song begins, and goes with it, animated: read
+            // afresh on every tick, it appeared and disappeared in one frame.
+            VStack(spacing: 0) {
+                if let progress {
+                    VStack(spacing: 4) {
+                        MediaProgress(fraction: progress.at / progress.of)
+                        HStack {
+                            Text(musicClock(seconds: progress.at))
+                            Spacer()
+                            Text(musicClock(seconds: progress.of))
+                        }
+                        .font(.system(size: 10, weight: .medium).monospacedDigit())
+                        .foregroundStyle(Theme.muted)
                     }
-                    .font(.system(size: 10, weight: .medium).monospacedDigit())
-                    .foregroundStyle(Theme.muted)
+                    .transition(Theme.arrive)
                 }
             }
+            .animation(Theme.settle, value: progress != nil)
         }
     }
 }

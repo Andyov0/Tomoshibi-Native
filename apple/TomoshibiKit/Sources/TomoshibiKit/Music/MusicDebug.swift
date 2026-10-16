@@ -8,7 +8,10 @@ import AppKit
 
 /// Switches for driving the song desk without a pointer, read from the
 /// environment, which is how the interop checks run the app. None of them is
-/// set in an ordinary launch, and then none of this does anything.
+/// set in an ordinary launch, and then none of this does anything; and none
+/// is read outside a rehearsal at all (`Rehearsal.running`, a debug build
+/// driven by a test), since the script's steps make the person's own choices
+/// for them.
 ///
 /// - `TOMOSHIBI_DEBUG_MUSIC_ACCOUNT=name:passphrase` signs the deployment in
 ///   before the libraries are asked for: the library is account-gated, and an
@@ -51,7 +54,7 @@ import AppKit
 ///   what is published changes; only where the song comes from.
 @MainActor
 final class MusicDebug {
-    private let environment = ProcessInfo.processInfo.environment
+    private let environment = Rehearsal.running ? ProcessInfo.processInfo.environment : [:]
 
     nonisolated static let filesSource = "files"
 
