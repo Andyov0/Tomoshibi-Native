@@ -14,6 +14,8 @@ import TomoshibiCore
 public struct RoomView: View {
     @Bindable var model: CallModel
     @State private var panel: Panel?
+    /// The alone-in-the-room capsule, once closed, stays closed for the call.
+    @State private var aloneDismissed = false
     @State private var pinned: String?
     /// Which page of the grid or the strip is showing (usePagination.ts):
     /// pictures on other pages are not drawn at all, so they cost nothing.
@@ -84,9 +86,10 @@ public struct RoomView: View {
                 .padding(.top, 12)
                 .animation(Theme.settle, value: Appearance.shared.connectionBadge)
 
-                if model.people.isEmpty {
-                    EmptyRoomCard(model: model)
-                        .frame(width: size.width, height: size.height - Plan.island)
+                if model.people.isEmpty && !aloneDismissed && !filled {
+                    EmptyRoomCard(model: model) { withAnimation(Theme.settle) { aloneDismissed = true } }
+                        .padding(.horizontal, 16)
+                        .frame(width: size.width, height: size.height - Plan.island - 2, alignment: .bottom)
                         .transition(Theme.arrive)
                 }
 
