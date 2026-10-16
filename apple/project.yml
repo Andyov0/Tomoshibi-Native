@@ -55,6 +55,8 @@ targets:
   Tomoshibi-iOS:
     type: application
     platform: iOS
+    scheme:
+      testTargets: [TomoshibiUITests]
     sources: [App]
     dependencies:
       - package: TomoshibiKit
@@ -148,3 +150,14 @@ targets:
         PRODUCT_NAME: TomoshibiBroadcast
         TARGETED_DEVICE_FAMILY: "1,2"
         SKIP_INSTALL: YES
+  TomoshibiUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [UITests]
+    dependencies:
+      - target: Tomoshibi-iOS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.tomoshibi.ios.uitests
+        TEST_TARGET_NAME: Tomoshibi-iOS
+        GENERATE_INFOPLIST_FILE: YES

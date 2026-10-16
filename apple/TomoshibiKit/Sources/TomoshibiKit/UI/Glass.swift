@@ -56,6 +56,27 @@ extension View {
         }
     }
 
+    /// Glass in `shape` drawn behind the view rather than around it, for a
+    /// surface whose children reach past its edge: the call's bar, whose
+    /// popovers hang above it.
+    ///
+    /// On iOS 26 a view inside `glassEffect` is touched only within the glass
+    /// shape. The bar's popovers are drawn above the capsule, and every one of
+    /// them, the More menu's items, the shares', the reactions and Leave's,
+    /// was drawn on an iPhone and did nothing when pressed: a real tap on the
+    /// More menu's Sound never reached its action (UITests/BarMenuTests), and
+    /// the same tap with the glass turned off did. The Mac's glass lets them
+    /// through. Behind the content, the glass is the same glass and touches
+    /// go to what is drawn over it.
+    @ViewBuilder
+    func glassBacking<S: Shape>(_ shape: S) -> some View {
+        if #available(macOS 26.0, iOS 26.0, *), !GlassSupport.forcedFallback {
+            background { Color.clear.glassEffect(Glass.regular, in: shape) }
+        } else {
+            glassSurface(shape)
+        }
+    }
+
     /// A larger pane of glass: a sidebar, a sheet, a panel beside a call.
     func glassPane(cornerRadius: CGFloat = 22) -> some View {
         glassSurface(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))

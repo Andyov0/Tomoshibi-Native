@@ -172,7 +172,10 @@ struct ControlBar: View {
             LeaveControl(model: model, host: offered.host || ControlDebug.hosting, popovers: popovers, axis: axis, compact: compact, size: size)
         }
         .padding(compact ? 5 : 7)
-        .glassSurface(Capsule())
+        // Behind the buttons, not around them: the popovers hang outside the
+        // capsule, and inside the glass an iPhone would not let them be
+        // touched (Glass.swift `glassBacking`).
+        .glassBacking(Capsule())
         .fixedSize()
         // On the whole bar rather than on one button: the buttons that come
         // and go with the features (watch, music, running the room, the
@@ -744,7 +747,7 @@ enum ControlDebug {
         if model.parts["rehearsal.arrived"] == nil {
             model.parts["rehearsal.arrived"] = NSNull()
             if let steps = environment["TOMOSHIBI_DEBUG_PRESS"] {
-                Task { await run(steps, model, press: press) }
+                Task { await run(steps, model, popovers: popovers, press: press) }
             }
         }
         #if os(macOS)
@@ -791,7 +794,7 @@ enum ControlDebug {
 
     #if DEBUG
     @MainActor
-    private static func run(_ steps: String, _ model: CallModel, press: @escaping @MainActor (String) -> Void) async {
+    private static func run(_ steps: String, _ model: CallModel, popovers: Popovers, press: @escaping @MainActor (String) -> Void) async {
         for step in steps.split(separator: ";") {
             let parts = step.split(separator: ":", maxSplits: 2).map(String.init)
             guard parts.count >= 2, let after = Double(parts[0]) else { continue }
@@ -817,6 +820,9 @@ enum ControlDebug {
             case "audiofail":
                 model.audio.failingStarts = Int(argument) ?? 1
             #if os(iOS)
+            case "popover":
+                // One of the bar's popovers opened, as its button opens it.
+                popovers.show(argument)
             case "interrupt":
                 // As the system does it: the engine stopped, then the notice.
                 model.audio.engine.stop()

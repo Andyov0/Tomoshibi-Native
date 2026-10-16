@@ -47,6 +47,17 @@ Never attribute a commit, or anything else, to an assistant.
   `cd apple/TomoshibiKit && swift test`). `xcodebuild test` timed out before
   the first test on this machine, on the Mac and in the simulator alike, for a
   bundle with nothing of the core in it.
+- Touches on an iPhone are tested with UI tests, which do run:
+  `xcodebuild test -scheme Tomoshibi-iOS -only-testing:TomoshibiUITests
+  -destination 'platform=iOS Simulator,id=<udid>'`, against the local
+  deployment on 127.0.0.1:8080. They are the only check that a control can be
+  pressed with a finger; the debug presses reach the model, not the hit
+  testing. A failed assertion then sits for minutes collecting the
+  accessibility hierarchy. Switches for the app go on the line as
+  `TEST_RUNNER_TOMOSHIBI_<name>=…`.
+- On iOS a view inside `glassEffect` can be touched only within the glass
+  shape. Anything that hangs outside its surface (a popover off a bar) needs
+  the glass behind it (`glassBacking`), or it is drawn and cannot be pressed.
 - A Debug build of the app launched from a shell may restore a window state
   left by an earlier build and open no window at all; pass
   `-ApplePersistenceIgnoreState YES`. `TOMOSHIBI_BASE` and
