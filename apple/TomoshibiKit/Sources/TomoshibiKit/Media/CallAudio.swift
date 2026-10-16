@@ -17,7 +17,7 @@ public final class CallAudio {
     private var players: [String: Player] = [:]
     private var microphone: AudioInput?
     private var converter: AVAudioConverter?
-    private var started = false
+    private(set) var started = false
 
     /// What the core takes from a microphone: 48 kHz, 16-bit, mono.
     private let voiceFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 48_000, channels: 1, interleaved: true)!
@@ -26,7 +26,88 @@ public final class CallAudio {
     /// gain control, for an instrument or a room that should be heard as it is.
     public private(set) var originalSound = false
 
-    public init() {}
+    /// The microphone and speakers picked in the devices panel, or restored
+    /// from the last call (`meet-live.device-choice`), by CoreAudio UID on a
+    /// Mac and port UID on a phone; nil is the system's own choice. Kept here
+    /// as well as on the unit because a unit built again (voice processing
+    /// turned on or off, the hardware changing under the engine) starts on
+    /// the system's defaults.
+    var chosenInput: String?
+    var chosenOutput: String?
+
+    /// How loud the microphone is as it is sent, while it is on: the devices
+    /// panel's meter. Written by the microphone's own tap, from the samples it
+    /// is about to send, so the meter shows what everybody else hears and
+    /// holds nothing open that the call does not already hold.
+    private(set) var microphoneLevel: SoundLevel?
+
+    nonisolated(unsafe) private var configurationWatch: NSObjectProtocol?
+
+    public init() {
+        // The engine stops itself when the hardware under it changes: a
+        // headset plugged in or taken out, a default device that changes its
+        // rate. Nothing started it again, so a call went silent both ways the
+        // moment somebody put their headphones on.
+        configurationWatch = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.hardwareChanged() }
+        }
+    }
+
+    deinit {
+        if let configurationWatch { NotificationCenter.default.removeObserver(configurationWatch) }
+    }
+
+    /// When the engine was last started again for a change of hardware.
+    private var restarts: [Date] = []
+
+    private func hardwareChanged() {
+        guard started, !engine.isRunning else { return }
+        // A start that itself changes the hardware (voice processing builds
+        // its own aggregate device) must not become a loop: three in ten
+        // seconds is a machine that will not settle, and the engine is left
+        // as the system left it.
+        restarts = restarts.filter { Date().timeIntervalSince($0) < 10 } + [Date()]
+        guard restarts.count <= 3 else {
+            Self.log.error("the audio hardware keeps changing; not starting the engine again")
+            return
+        }
+        Self.log.notice("the audio hardware changed under the engine; starting it again")
+        do {
+            try restart()
+        } catch {
+            Self.log.error("the engine would not start again: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// The devices and processing a call starts with. The engine may already
+    /// be running by then, for the sound of whoever was in the room first, so
+    /// it is started again where anything changed.
+    func prefer(input: String?, output: String?, original: Bool) {
+        let changed = input != chosenInput || output != chosenOutput || original != originalSound
+        chosenInput = input
+        chosenOutput = output
+        originalSound = original
+        guard changed, started else { return }
+        do {
+            try restart()
+        } catch {
+            Self.log.error("the engine would not start on the remembered devices: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// Stops the engine and starts it again, with the microphone if it was
+    /// on: for a change of device or of processing, which only takes on a
+    /// unit that is not running.
+    func restart() throws {
+        let input = microphone
+        stopMicrophone()
+        engine.stop()
+        started = false
+        try start()
+        if let input { try startMicrophone(into: input) }
+    }
 
     private final class Player {
         let node: AVAudioSourceNode
@@ -64,6 +145,7 @@ public final class CallAudio {
             // server once timed out and aborted the app.
             try engine.inputNode.setVoiceProcessingEnabled(!originalSound)
             muteForTests()
+            pointAtChosenDevices()
             engine.prepare()
             try engine.start()
             voiceProcessing = !originalSound
@@ -78,6 +160,7 @@ public final class CallAudio {
             engine.stop()
             try engine.inputNode.setVoiceProcessingEnabled(false)
             muteForTests()
+            pointAtChosenDevices()
             engine.prepare()
             try engine.start()
             voiceProcessing = false
@@ -148,6 +231,8 @@ public final class CallAudio {
         // than an error, and so did the conversion above, with nothing to say
         // which.
         let first = FirstReading()
+        let level = SoundLevel()
+        microphoneLevel = level
         node.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
             guard let data = buffer.floatChannelData, buffer.frameLength > 0,
                   let one = AVAudioPCMBuffer(pcmFormat: mono, frameCapacity: buffer.frameLength),
@@ -156,6 +241,7 @@ public final class CallAudio {
             let stride = buffer.stride
             one.frameLength = buffer.frameLength
             for i in 0..<frames { into[i] = data[0][i * stride] }
+            level.add(into, frames: frames, stride: 1, rate: mono.sampleRate)
             if !first.done {
                 for i in 0..<frames { first.peak = max(first.peak, abs(into[i])) }
             }
@@ -190,6 +276,7 @@ public final class CallAudio {
         engine.inputNode.removeTap(onBus: 0)
         microphone = nil
         converter = nil
+        microphoneLevel = nil
     }
 
     /// Turns the system's voice processing off or on. The engine has to be
@@ -198,12 +285,7 @@ public final class CallAudio {
         guard original != originalSound else { return }
         originalSound = original
         guard started else { return }
-        let input = microphone
-        stopMicrophone()
-        engine.stop()
-        started = false
-        try start()
-        if let input { try startMicrophone(into: input) }
+        try restart()
     }
 
     // MARK: Remote sound

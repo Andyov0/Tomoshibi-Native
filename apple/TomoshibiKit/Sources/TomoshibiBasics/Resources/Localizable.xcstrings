@@ -1801,6 +1801,66 @@
         }
       }
     },
+    "Allow Tomoshibi in Settings, then try again." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow Tomoshibi in Settings, then try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定で Tomoshibi を許可してから、もう一度お試しください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在设置里允许 Tomoshibi，然后再试一次。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在設定裡允許 Tomoshibi，然後再試一次。"
+          }
+        }
+      }
+    },
+    "Allow Tomoshibi in System Settings, then try again." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow Tomoshibi in System Settings, then try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "システム設定で Tomoshibi を許可してから、もう一度お試しください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在系统设置里允许 Tomoshibi，然后再试一次。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在系統設定裡允許 Tomoshibi，然後再試一次。"
+          }
+        }
+      }
+    },
     "Allow access from the icon in the address bar." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -10681,6 +10741,66 @@
         }
       }
     },
+    "Open Settings" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定を開く"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开设置"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打開設定"
+          }
+        }
+      }
+    },
+    "Open System Settings" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open System Settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "システム設定を開く"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开系统设置"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打開系統設定"
+          }
+        }
+      }
+    },
     "Open Tomoshibi and join a call first." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -11457,6 +11577,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "選擇正在播放的 App 或分頁"
+          }
+        }
+      }
+    },
+    "Pick the app that is playing" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pick the app that is playing"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "再生中のアプリを選びます"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择正在播放的 App"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選擇正在播放的 App"
           }
         }
       }
@@ -18601,6 +18751,36 @@
         }
       }
     },
+    "This Mac uses the microphone and speakers chosen in System Settings." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This Mac uses the microphone and speakers chosen in System Settings."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この Mac はシステム設定で選んだマイクとスピーカーを使います。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台 Mac 使用系统设置里选定的麦克风和扬声器。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這台 Mac 使用系統設定裡選定的麥克風和喇叭。"
+          }
+        }
+      }
+    },
     "This browser blocks camera and microphone access." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -19497,6 +19677,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "開啟攝影機"
+          }
+        }
+      }
+    },
+    "Turn off Original sound to choose another here." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Turn off Original sound to choose another here."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ここで別のデバイスを選ぶには、オリジナルサウンドをオフにしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭原声后才能在这里选择别的设备。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "關閉原聲後才能在這裡選擇別的裝置。"
           }
         }
       }
@@ -21061,6 +21271,36 @@
         }
       }
     },
+    "Without its sound, while sound is shared on its own" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Without its sound, while sound is shared on its own"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声を単独で共有中のため、画面は音声なしになります"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在单独共享声音，屏幕将不带声音"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在單獨分享聲音，螢幕將不帶聲音"
+          }
+        }
+      }
+    },
     "Works from" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -22017,6 +22257,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "登入已過期,請重新登入。"
+          }
+        }
+      }
+    },
+    "Your shared screen goes quiet while this plays" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your shared screen goes quiet while this plays"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有中の画面は、この間音声なしになります"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共享期间，你共享的屏幕不再带声音"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分享期間，你分享的螢幕不再帶聲音"
           }
         }
       }

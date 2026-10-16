@@ -220,6 +220,7 @@ public final class CallModel {
     #endif
     private var microphoneInput: AudioInput?
     private var cameraInput: VideoInput?
+    @ObservationIgnored private var cameraStarting = false
     private var bridge: Bridge?
 
     init(call: Call, deployment: Deployment, region: String?, sealed: Bool) {
@@ -281,14 +282,37 @@ public final class CallModel {
 
     // MARK: What the person does
 
+    /// Where this participant's device choices are kept: under the web's
+    /// names for a real call, nowhere for a rehearsal (AppModel sets it).
+    @ObservationIgnored public var memory: DeviceMemory = .standard {
+        didSet {
+            #if os(macOS)
+            sharing.remembers = memory.keeps
+            #endif
+        }
+    }
+
+    /// The microphone on or off. A microphone that will not start says so
+    /// itself (`deviceFailed`), wherever it was asked from: the bar, the
+    /// menu's shortcut, the join. The bar used to say "That could not be
+    /// done" for four seconds and the join said nothing at all.
     public func setMicrophone(_ on: Bool) async throws {
         if on {
-            if microphoneInput == nil {
-                let input = try await call.publishAudio(kind: .voice(original: audio.originalSound))
-                microphoneInput = input
+            do {
+                try await DeviceAccess.ensure(.microphone)
+                if microphoneInput == nil {
+                    let input = try await call.publishAudio(kind: .voice(original: audio.originalSound))
+                    microphoneInput = input
+                }
+                try audio.startMicrophone(into: microphoneInput!)
+                microphoneInput?.setMuted(muted: false)
+            } catch {
+                // Muted at the track, so that nobody sees a microphone on
+                // that sends nothing.
+                microphoneInput?.setMuted(muted: true)
+                deviceFailed(.microphone, error)
+                throw error
             }
-            try audio.startMicrophone(into: microphoneInput!)
-            microphoneInput?.setMuted(muted: false)
         } else {
             microphoneInput?.setMuted(muted: true)
             audio.stopMicrophone()
@@ -298,32 +322,101 @@ public final class CallModel {
 
     /// The web's "original sound" (sound.ts `applyOriginalSound`): the
     /// system's voice processing off and the voice republished at the higher
-    /// rate, because nothing is taken out of it any more.
+    /// rate, because nothing is taken out of it any more. Remembered once it
+    /// took, as the web remembers it.
     public func setOriginalSound(_ original: Bool) async throws {
         guard original != audio.originalSound else { return }
-        try audio.setOriginalSound(original)
-        guard let old = microphoneInput else { return }
-        let fresh = try await call.publishAudio(kind: .voice(original: original))
-        microphoneInput = fresh
-        try? await old.unpublish()
-        if microphoneOn {
-            try audio.startMicrophone(into: fresh)
-        } else {
-            fresh.setMuted(muted: true)
+        do {
+            try audio.setOriginalSound(original)
+            if let old = microphoneInput {
+                let fresh = try await call.publishAudio(kind: .voice(original: original))
+                microphoneInput = fresh
+                try? await old.unpublish()
+                if microphoneOn {
+                    try audio.startMicrophone(into: fresh)
+                } else {
+                    fresh.setMuted(muted: true)
+                }
+            }
+        } catch {
+            deviceFailed(.microphone, error)
+            throw error
         }
+        memory.remember(originalSound: original)
     }
 
-    /// Sends another camera instead, keeping the same track.
+    /// Sends another camera instead, keeping the same track; with the camera
+    /// off, the one it turns on with. Remembered once it took.
     public func useCamera(_ device: AVCaptureDevice) throws {
-        guard let input = cameraInput else { return }
-        try camera.start(device: device, into: input)
+        if let input = cameraInput {
+            do {
+                try camera.start(device: device, into: input)
+            } catch {
+                deviceFailed(.camera, error)
+                throw error
+            }
+        } else {
+            camera.preferred = device.uniqueID
+        }
+        memory.remember(.camera, id: device.uniqueID)
+    }
+
+    /// Another microphone or speakers, remembered once they took. A pair of
+    /// speakers that will not take says nothing, as on the web: the sound
+    /// stays where it was, which is where it was going anyway.
+    public func useAudio(_ device: AudioDevice, input: Bool) throws {
+        do {
+            try audio.use(device, input: input)
+        } catch {
+            if input { deviceFailed(.microphone, error) }
+            throw error
+        }
+        memory.remember(input ? .microphone : .speakers, id: device.id)
+    }
+
+    /// The devices last picked, where they are still there, and the voice as
+    /// it was last sent (preferences.ts `restoreDevices`, sound.ts
+    /// `rememberedOriginal`). Before the microphone and camera start, so the
+    /// first track is from the right device rather than the default for a
+    /// moment and then a switch. It cannot fail the join: a device that is
+    /// gone leaves the system's default, where everybody was before the
+    /// choice was remembered at all.
+    public func restoreDevices() {
+        if let id = memory.restorable(.camera, present: CameraCapture.cameras().map(\.uniqueID)) {
+            camera.preferred = id
+        }
+        let microphone = memory.restorable(.microphone, present: CallAudio.devices(input: true).map(\.id))
+        #if os(macOS)
+        let speakers = memory.restorable(.speakers, present: CallAudio.devices(input: false).map(\.id))
+        #else
+        let speakers: String? = nil
+        #endif
+        audio.prefer(input: microphone, output: speakers, original: memory.originalSound)
     }
 
     public func setCamera(_ on: Bool) async throws {
         if on {
-            let input = try await call.publishVideo(kind: .camera, width: CameraCapture.width, height: CameraCapture.height)
-            cameraInput = input
-            try camera.start(into: input)
+            // Once: a second press (the bar, or the menu's shortcut) while the
+            // first was still asking would publish a second camera.
+            guard cameraInput == nil, !cameraStarting else { return }
+            cameraStarting = true
+            defer { cameraStarting = false }
+            do {
+                try await DeviceAccess.ensure(.camera)
+                let input = try await call.publishVideo(kind: .camera, width: CameraCapture.width, height: CameraCapture.height)
+                do {
+                    try camera.start(into: input)
+                } catch {
+                    // A camera published and never fed is a black tile for
+                    // everybody else.
+                    try? await input.unpublish()
+                    throw error
+                }
+                cameraInput = input
+            } catch {
+                deviceFailed(.camera, error)
+                throw error
+            }
         } else {
             camera.stop()
             if let input = cameraInput {

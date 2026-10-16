@@ -127,6 +127,39 @@ struct SelfView: View {
     }
 }
 
+/// Keeps a preview mirrored only while the camera feeding it faces its owner
+/// (CameraCapture.facesUser, live/facing.ts, hooks/useMirrored.ts). It was
+/// mirrored always, so Desk View, which films the desk from above, showed
+/// every page and every word on it backwards. Read again whenever a camera
+/// starts feeding the session, because a switch of camera keeps the same
+/// session running and nothing about the session says the camera changed.
+private final class MirrorFollower {
+    private weak var layer: AVCaptureVideoPreviewLayer?
+    private var observers: [NSObjectProtocol] = []
+
+    init(layer: AVCaptureVideoPreviewLayer, session: AVCaptureSession) {
+        self.layer = layer
+        let center = NotificationCenter.default
+        for name in [CameraCapture.changedCamera, AVCaptureSession.didStartRunningNotification] {
+            observers.append(center.addObserver(forName: name, object: session, queue: .main) { [weak self] _ in
+                self?.apply()
+            })
+        }
+        apply()
+    }
+
+    deinit {
+        for observer in observers { NotificationCenter.default.removeObserver(observer) }
+    }
+
+    func apply() {
+        guard let layer, let session = layer.session, let connection = layer.connection,
+              connection.isVideoMirroringSupported else { return }
+        connection.automaticallyAdjustsVideoMirroring = false
+        connection.isVideoMirrored = CameraCapture.mirrors(session)
+    }
+}
+
 #if os(macOS)
 private struct PreviewRepresentable: NSViewRepresentable {
     let session: AVCaptureSession
@@ -134,15 +167,21 @@ private struct PreviewRepresentable: NSViewRepresentable {
         let view = NSView()
         let layer = AVCaptureVideoPreviewLayer(session: session)
         layer.videoGravity = .resizeAspectFill
-        // Mirrored, as every camera preview is: a person expects to see what a
-        // mirror shows them. What is sent is not mirrored.
-        layer.connection?.automaticallyAdjustsVideoMirroring = false
-        layer.connection?.isVideoMirrored = true
+        // Mirrored where the camera faces its owner, as every camera preview
+        // is: a person expects to see what a mirror shows them. What is sent
+        // is not mirrored.
+        context.coordinator.follower = MirrorFollower(layer: layer, session: session)
         view.layer = layer
         view.wantsLayer = true
         return view
     }
-    func updateNSView(_ view: NSView, context: Context) {}
+    func updateNSView(_ view: NSView, context: Context) {
+        context.coordinator.follower?.apply()
+    }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    final class Coordinator {
+        var follower: MirrorFollower?
+    }
 }
 #else
 private struct PreviewRepresentable: UIViewRepresentable {
@@ -151,9 +190,16 @@ private struct PreviewRepresentable: UIViewRepresentable {
         let view = PreviewView()
         view.preview.session = session
         view.preview.videoGravity = .resizeAspectFill
+        context.coordinator.follower = MirrorFollower(layer: view.preview, session: session)
         return view
     }
-    func updateUIView(_ view: PreviewView, context: Context) {}
+    func updateUIView(_ view: PreviewView, context: Context) {
+        context.coordinator.follower?.apply()
+    }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    final class Coordinator {
+        var follower: MirrorFollower?
+    }
 
     final class PreviewView: UIView {
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }

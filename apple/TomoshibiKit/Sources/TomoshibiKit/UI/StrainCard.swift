@@ -12,36 +12,42 @@ struct StrainCard: View {
     @State private var busy = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .top, spacing: 8) {
-                Image(systemName: "gauge.with.dots.needle.33percent").foregroundStyle(Theme.tally)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "gauge.with.dots.needle.33percent")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.tally)
+                    .frame(width: 20)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(t("Your connection is sending about {have} Mbps, and this share needs about {need} Mbps, so it stutters.",
                            ["have": strainMegabits(bits: hint.have), "need": strainMegabits(bits: hint.need)]))
                         .foregroundStyle(Theme.foreground)
+                        .fixedSize(horizontal: false, vertical: true)
                     Text(t("Switch to {size} at {rate} frames a second?",
                            ["size": t(Self.label(hint.to.quality)), "rate": String(hint.to.frameRate)]))
                         .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .font(.system(size: 12.5))
             }
             HStack(spacing: 8) {
                 Spacer()
                 Button(t("Not now")) { model.call.strainDecline() }
-                    .buttonStyle(.plain).font(.system(size: 12.5, weight: .medium)).foregroundStyle(Theme.foreground)
-                    .padding(.horizontal, 10).padding(.vertical, 6)
-                    .overlay(Capsule().strokeBorder(Theme.border))
-                Button(t("Switch"), action: take)
-                    .buttonStyle(.plain).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(Theme.background)
-                    .padding(.horizontal, 12).padding(.vertical, 6)
-                    .background(Capsule().fill(Theme.foreground))
+                    .buttonStyle(.glassCapsule(30))
+                Button(action: take) {
+                    HStack(spacing: 6) {
+                        if busy { ProgressView().controlSize(.mini).transition(Theme.arrive) }
+                        Text(t("Switch"))
+                    }
+                }
+                .buttonStyle(.glassCapsule(30, prominent: true))
+                .animation(Theme.settle, value: busy)
             }
             .disabled(busy)
         }
         .padding(14)
         .frame(maxWidth: 340)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.surfaceHigh))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.border))
+        .glassPane(cornerRadius: 16)
     }
 
     static func label(_ quality: ShareQuality) -> String {

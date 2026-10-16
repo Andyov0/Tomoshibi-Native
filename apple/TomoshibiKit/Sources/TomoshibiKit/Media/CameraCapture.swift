@@ -54,26 +54,80 @@ public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         return AVCaptureDevice.DiscoverySession(deviceTypes: types, mediaType: .video, position: .unspecified).devices
     }
 
-    /// Starts sending `device` (or the default camera) to `input`.
+    /// The camera picked for the next time the camera goes on, by its unique
+    /// ID: one chosen from the devices panel while the camera was off, or
+    /// remembered from an earlier call (`meet-live.device-choice`). Choosing
+    /// a camera with the camera off used to do nothing at all, so the camera
+    /// came up as the default and had to be chosen again once it was on.
+    public var preferred: String?
+
+    /// The camera that is sending, or that would be sent if the camera went
+    /// on now: what the devices panel ticks.
+    public var current: String? {
+        if let device, session.isRunning { return device.uniqueID }
+        let present = Self.cameras().map(\.uniqueID)
+        if let preferred, present.contains(preferred) { return preferred }
+        return Self.fallback()?.uniqueID
+    }
+
+    /// The camera used when nothing was picked: the front one on a phone or
+    /// a tablet, the system's default on a Mac.
+    private static func fallback() -> AVCaptureDevice? {
+        #if os(iOS)
+        return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) ?? AVCaptureDevice.default(for: .video)
+        #else
+        return AVCaptureDevice.default(for: .video)
+        #endif
+    }
+
+    /// Whether one's own picture from this camera is shown mirrored
+    /// (live/facing.ts): a camera that films its owner is, because an
+    /// unmirrored view of yourself makes reaching for anything feel backwards;
+    /// one pointed at the world is not, because flipping the world puts every
+    /// sign and every page the wrong way round. A phone's back camera faces
+    /// away, and so does Desk View, which films the desk from above: drawn
+    /// mirrored, what was written on it read backwards. A Mac's cameras say
+    /// nothing about their position, and like a laptop webcam in the browser,
+    /// they face their owner.
+    public static func facesUser(_ device: AVCaptureDevice) -> Bool {
+        #if os(macOS)
+        if device.deviceType == .deskViewCamera { return false }
+        #endif
+        return device.position != .back
+    }
+
+    /// Whether the picture `session` is showing should be mirrored, by the
+    /// camera feeding it; mirrored where nothing feeds it yet, as before.
+    public static func mirrors(_ session: AVCaptureSession) -> Bool {
+        guard let device = session.inputs.lazy.compactMap({ ($0 as? AVCaptureDeviceInput)?.device }).first else { return true }
+        return facesUser(device)
+    }
+
+    /// Posted, with the session as its object, when a camera starts feeding
+    /// it: a picture drawn from the session reads `mirrors` again then. A
+    /// switch of camera keeps the same session running, so nothing about the
+    /// session itself says the camera underneath has changed (useMirrored.ts
+    /// has the same problem with a restarted track).
+    public static let changedCamera = Notification.Name("tomoshibi.camera.changed")
+
+    /// Starts sending `device` (or the preferred camera, or the default) to
+    /// `input`.
     public func start(device chosen: AVCaptureDevice? = nil, into input: VideoInput) throws {
-        let device: AVCaptureDevice
-        if let chosen {
-            device = chosen
-        } else {
-            #if os(iOS)
-            guard let front = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) ?? AVCaptureDevice.default(for: .video) else {
-                throw CocoaError(.featureUnsupported)
-            }
-            device = front
-            #else
-            guard let any = AVCaptureDevice.default(for: .video) else { throw CocoaError(.featureUnsupported) }
-            device = any
-            #endif
+        let present = Self.cameras()
+        guard let device = chosen
+            ?? preferred.flatMap({ id in present.first { $0.uniqueID == id } })
+            ?? Self.fallback() else {
+            throw CocoaError(.featureUnsupported)
         }
+        // Opened before the session is touched: a camera that will not open
+        // (held by another app, refused) used to throw between beginning the
+        // configuration and committing it, with the old camera already taken
+        // out, which left a session that showed nothing and could not be
+        // configured again.
+        let capture = try AVCaptureDeviceInput(device: device)
         session.beginConfiguration()
         for existing in session.inputs { session.removeInput(existing) }
         if session.canSetSessionPreset(.hd1280x720) { session.sessionPreset = .hd1280x720 }
-        let capture = try AVCaptureDeviceInput(device: device)
         if session.canAddInput(capture) { session.addInput(capture) }
         if !session.outputs.contains(output), session.canAddOutput(output) { session.addOutput(output) }
         #if os(iOS)
@@ -93,9 +147,11 @@ public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         #endif
         session.commitConfiguration()
         self.device = device
+        preferred = device.uniqueID
         queue.sync { self.input = input }
         let session = self.session
         queue.async { session.startRunning() }
+        NotificationCenter.default.post(name: Self.changedCamera, object: session)
     }
 
     public func stop() {

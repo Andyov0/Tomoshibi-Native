@@ -44,8 +44,18 @@ public final class AppModel {
     public var sealingWord = ""
     /// Nil picks whichever relay answers fastest.
     public var relayChoice: String?
+    /// Whether the microphone and camera go on when joining, as they were
+    /// left on the join screen last time (`meet-live.devices`, kept on the
+    /// press of join as the web keeps it, PreJoin.tsx `submit`).
     public var startWithMicrophone = true
     public var startWithCamera = false
+    /// Where the device choices are kept (DeviceMemory): nowhere in a
+    /// rehearsal, so a test that turns the camera on or picks a microphone
+    /// does not leave the owner's next call starting that way.
+    /// TOMOSHIBI_DEBUG_DEVICE_MEMORY names a defaults suite to keep them in
+    /// instead, so a test can see a choice carried from one launch to the
+    /// next without touching the real one.
+    let deviceMemory: DeviceMemory
     public private(set) var invite: String?
     public private(set) var invitation: InviteInfo?
     private var knockTask: Task<Void, Never>?
@@ -84,6 +94,15 @@ public final class AppModel {
         #endif
         serverAddress = UserDefaults.standard.string(forKey: Self.serverKey) ?? Self.home
         name = UserDefaults.standard.string(forKey: "meet-live.name") ?? ""
+        #if DEBUG
+        let suite = ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_DEVICE_MEMORY"].flatMap { UserDefaults(suiteName: $0) }
+        #else
+        let suite: UserDefaults? = nil
+        #endif
+        deviceMemory = rehearsal ? DeviceMemory(defaults: suite) : .standard
+        let joining = deviceMemory.joining
+        startWithMicrophone = joining.microphone
+        startWithCamera = joining.camera
     }
 
     private var passphraseKey: String { "passphrase:" + (deployment?.baseUrl() ?? serverAddress) }
@@ -107,6 +126,13 @@ public final class AppModel {
             // speakers; asking for it means the permission prompt may show.
             startWithMicrophone = environment["TOMOSHIBI_MIC"] != nil
             startWithCamera = false
+            // TOMOSHIBI_DEBUG_DEVICE_MEMORY: joins as the suite it names
+            // remembers, to check that the join screen's choice is carried.
+            if environment["TOMOSHIBI_DEBUG_DEVICE_MEMORY"] != nil, environment["TOMOSHIBI_MIC"] == nil {
+                let joining = deviceMemory.joining
+                startWithMicrophone = joining.microphone
+                startWithCamera = joining.camera
+            }
             await connect()
             // TOMOSHIBI_SIGNIN=<name>:<file holding the passphrase> signs in
             // first, so a test can see what somebody signed in sees; the
@@ -274,6 +300,7 @@ public final class AppModel {
         guard let deployment else { return }
         busy = true
         defer { busy = false }
+        deviceMemory.remember(DeviceMemory.Joining(camera: startWithCamera, microphone: startWithMicrophone))
         do {
             // Signed in, the web sends the account's name and no passphrase:
             // the session is the proof (api.ts). A guest on an invitation with
@@ -306,8 +333,21 @@ public final class AppModel {
             // door of the room they had just been in.
             problem = nil
             screen = .call
-            if startWithMicrophone { try? await model.setMicrophone(true) }
-            if startWithCamera { try? await model.setCamera(true) }
+            // After joining rather than before, so somebody is in the room the
+            // moment they join and their devices come up a beat later, and each
+            // on its own, never through the catch below (App.tsx `onJoin`): a
+            // refused microphone or a camera another app holds is one person's
+            // problem with their own machine, not a room that would not open.
+            // A device that will not start says so in the call (deviceFailed)
+            // and the call goes on with that button off.
+            model.memory = deviceMemory
+            model.restoreDevices()
+            if startWithMicrophone {
+                do { try await model.setMicrophone(true) } catch {}
+            }
+            if startWithCamera {
+                do { try await model.setCamera(true) } catch {}
+            }
         } catch let error as ProtocolError {
             if case let .Refused(_, code) = error, code == "not_invited" || code == "not_in_scope" {
                 problem = explain(error)

@@ -240,6 +240,60 @@
       "zh-Hans": "全部",
       "zh-Hant": "全部",
       "ja": "すべて"
+    },
+    "Pick the app that is playing": {
+      "en": "Pick the app that is playing",
+      "zh-Hans": "选择正在播放的 App",
+      "zh-Hant": "選擇正在播放的 App",
+      "ja": "再生中のアプリを選びます"
+    },
+    "Your shared screen goes quiet while this plays": {
+      "en": "Your shared screen goes quiet while this plays",
+      "zh-Hans": "共享期间，你共享的屏幕不再带声音",
+      "zh-Hant": "分享期間，你分享的螢幕不再帶聲音",
+      "ja": "共有中の画面は、この間音声なしになります"
+    },
+    "Without its sound, while sound is shared on its own": {
+      "en": "Without its sound, while sound is shared on its own",
+      "zh-Hans": "正在单独共享声音，屏幕将不带声音",
+      "zh-Hant": "正在單獨分享聲音，螢幕將不帶聲音",
+      "ja": "音声を単独で共有中のため、画面は音声なしになります"
+    },
+    "Allow Tomoshibi in System Settings, then try again.": {
+      "en": "Allow Tomoshibi in System Settings, then try again.",
+      "zh-Hans": "在系统设置里允许 Tomoshibi，然后再试一次。",
+      "zh-Hant": "在系統設定裡允許 Tomoshibi，然後再試一次。",
+      "ja": "システム設定で Tomoshibi を許可してから、もう一度お試しください。"
+    },
+    "Allow Tomoshibi in Settings, then try again.": {
+      "en": "Allow Tomoshibi in Settings, then try again.",
+      "zh-Hans": "在设置里允许 Tomoshibi，然后再试一次。",
+      "zh-Hant": "在設定裡允許 Tomoshibi，然後再試一次。",
+      "ja": "設定で Tomoshibi を許可してから、もう一度お試しください。"
+    },
+    "Open System Settings": {
+      "en": "Open System Settings",
+      "zh-Hans": "打开系统设置",
+      "zh-Hant": "打開系統設定",
+      "ja": "システム設定を開く"
+    },
+    "Open Settings": {
+      "en": "Open Settings",
+      "zh-Hans": "打开设置",
+      "zh-Hant": "打開設定",
+      "ja": "設定を開く"
+    },
+    "Turn off Original sound to choose another here.": {
+      "en": "Turn off Original sound to choose another here.",
+      "zh-Hans": "关闭原声后才能在这里选择别的设备。",
+      "zh-Hant": "關閉原聲後才能在這裡選擇別的裝置。",
+      "ja": "ここで別のデバイスを選ぶには、オリジナルサウンドをオフにしてください。"
+    },
+    "This Mac uses the microphone and speakers chosen in System Settings.": {
+      "en": "This Mac uses the microphone and speakers chosen in System Settings.",
+      "zh-Hans": "这台 Mac 使用系统设置里选定的麦克风和扬声器。",
+      "zh-Hant": "這台 Mac 使用系統設定裡選定的麥克風和喇叭。",
+      "ja": "この Mac はシステム設定で選んだマイクとスピーカーを使います。"
     }
   }
 }
