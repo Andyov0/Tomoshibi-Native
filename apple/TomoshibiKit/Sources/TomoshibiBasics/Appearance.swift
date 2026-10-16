@@ -20,15 +20,24 @@ public final class Appearance {
     /// Where the choice is kept.
     public static let storageKey = "tomoshibi.accent"
 
+    /// Whether a choice is written down; a test driving the app
+    /// (AppModel.rehearsal) shows its choices for as long as it runs and
+    /// keeps none of them, because the defaults it would write are the
+    /// owner's.
+    @ObservationIgnored public var keeps = true
+
+    /// Where the choices are kept; a test's own suite in the tests.
+    @ObservationIgnored private let defaults: UserDefaults
+
     public var accent: Accent {
-        didSet { UserDefaults.standard.set(accent.rawValue, forKey: Self.storageKey) }
+        didSet { keep(accent.rawValue, forKey: Self.storageKey) }
     }
 
     /// How the connection is shown in a call: the bars alone unless the
     /// person asks for the figures, or nothing at all (the owner's rule,
     /// 2026-10-15: simple by default, details and hiding in the settings).
     public var connectionBadge: ConnectionBadge {
-        didSet { UserDefaults.standard.set(connectionBadge.rawValue, forKey: Self.badgeKey) }
+        didSet { keep(connectionBadge.rawValue, forKey: Self.badgeKey) }
     }
 
     public static let badgeKey = "tomoshibi.connection-badge"
@@ -36,17 +45,21 @@ public final class Appearance {
     /// Where the call's controls sit (web/src/live/controls.ts), under the
     /// web's own storage name; "always" is kept as nothing, as the web does.
     public var controlsPlacement: ControlsPlacement {
-        didSet {
-            UserDefaults.standard.set(controlsPlacement == .always ? nil : controlsPlacement.rawValue, forKey: Self.controlsKey)
-        }
+        didSet { keep(controlsPlacement == .always ? nil : controlsPlacement.rawValue, forKey: Self.controlsKey) }
     }
 
     public static let controlsKey = "meet-live.controls"
 
-    private init() {
-        accent = UserDefaults.standard.string(forKey: Self.storageKey).flatMap(Accent.init(rawValue:)) ?? .amber
-        connectionBadge = UserDefaults.standard.string(forKey: Self.badgeKey).flatMap(ConnectionBadge.init(rawValue:)) ?? .signal
-        controlsPlacement = UserDefaults.standard.string(forKey: Self.controlsKey).flatMap(ControlsPlacement.init(rawValue:)) ?? .always
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        accent = defaults.string(forKey: Self.storageKey).flatMap(Accent.init(rawValue:)) ?? .amber
+        connectionBadge = defaults.string(forKey: Self.badgeKey).flatMap(ConnectionBadge.init(rawValue:)) ?? .signal
+        controlsPlacement = defaults.string(forKey: Self.controlsKey).flatMap(ControlsPlacement.init(rawValue:)) ?? .always
+    }
+
+    private func keep(_ value: String?, forKey key: String) {
+        guard keeps else { return }
+        if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
     }
 }
 

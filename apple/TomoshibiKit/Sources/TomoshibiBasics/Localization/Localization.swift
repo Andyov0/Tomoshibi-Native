@@ -31,8 +31,19 @@ public final class Localization: Observable, @unchecked Sendable {
     public static let storageKey = "meet-live.locale"
 
     private let registrar = ObservationRegistrar()
-    private let current: OSAllocatedUnfairLock<Language>
+    private let current: OSAllocatedUnfairLock<State>
     private let defaults: UserDefaults
+
+    /// The language showing, and whether somebody chose it, held here as
+    /// well as in the defaults: a test driving the app (`keeps` false) shows
+    /// a choice and writes none, and whether the system's language is
+    /// followed is then what was chosen in this run rather than what the
+    /// owner chose before it.
+    private struct State {
+        var language: Language
+        var chosen: Bool
+        var keeps = true
+    }
 
     /// Settle on a language before anything is drawn in the wrong one.
     ///
@@ -42,7 +53,8 @@ public final class Localization: Observable, @unchecked Sendable {
     public init(defaults: UserDefaults = .standard, preferredLanguages: [String] = Locale.preferredLanguages) {
         self.defaults = defaults
         let chosen = defaults.string(forKey: Self.storageKey).flatMap(Language.init(rawValue:))
-        current = OSAllocatedUnfairLock(initialState: chosen ?? Language.detect(from: preferredLanguages))
+        current = OSAllocatedUnfairLock(initialState: State(language: chosen ?? Language.detect(from: preferredLanguages),
+                                                            chosen: chosen != nil))
         // Somebody who has not chosen follows the system, including when the
         // system's language changes while the app is open (the owner asked for
         // the system's language to be read, 2026-10-15).
@@ -56,22 +68,31 @@ public final class Localization: Observable, @unchecked Sendable {
 
     private var observer: NSObjectProtocol?
 
+    /// Whether a choice is written down. A test driving the app
+    /// (AppModel.rehearsal) runs the very app somebody uses, and a language
+    /// tile it pressed was the language that person's app opened in next.
+    public var keeps: Bool {
+        get { current.withLock { $0.keeps } }
+        set { current.withLock { $0.keeps = newValue } }
+    }
+
     /// Whether no language has been chosen, so the system's decides.
     public var followsSystem: Bool {
         registrar.access(self, keyPath: \.language)
-        return defaults.string(forKey: Self.storageKey).flatMap(Language.init(rawValue:)) == nil
+        return !current.withLock { $0.chosen }
     }
 
     /// Forget a choice, and speak the system's language again.
     public func followSystem() {
-        defaults.removeObject(forKey: Self.storageKey)
+        if keeps { defaults.removeObject(forKey: Self.storageKey) }
+        current.withLock { $0.chosen = false }
         adopt(Language.detect(from: Locale.preferredLanguages), force: true)
     }
 
     private func adopt(_ language: Language, force: Bool = false) {
-        guard force || current.withLock({ $0 }) != language else { return }
+        guard force || current.withLock({ $0.language }) != language else { return }
         registrar.withMutation(of: self, keyPath: \.language) {
-            current.withLock { $0 = language }
+            current.withLock { $0.language = language }
         }
     }
 
@@ -85,13 +106,20 @@ public final class Localization: Observable, @unchecked Sendable {
     public var language: Language {
         get {
             registrar.access(self, keyPath: \.language)
-            return current.withLock { $0 }
+            return current.withLock { $0.language }
         }
         set {
-            defaults.set(newValue.rawValue, forKey: Self.storageKey)
-            guard current.withLock({ $0 }) != newValue else { return }
+            if keeps { defaults.set(newValue.rawValue, forKey: Self.storageKey) }
+            let (unchanged, wasChosen) = current.withLock { state in
+                defer { state.chosen = true }
+                return (state.language == newValue, state.chosen)
+            }
+            // The language already showing, chosen for the first time, is
+            // still a change to watch: the tick moves from "Same as the
+            // system" to it.
+            guard !unchanged || !wasChosen else { return }
             registrar.withMutation(of: self, keyPath: \.language) {
-                current.withLock { $0 = newValue }
+                current.withLock { $0.language = newValue }
             }
         }
     }
