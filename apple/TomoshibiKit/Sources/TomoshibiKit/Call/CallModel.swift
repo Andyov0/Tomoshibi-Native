@@ -36,6 +36,33 @@ public struct Surface: Identifiable, Equatable, Sendable {
     public let sid: String?
 }
 
+/// One thing said in the corner of a call.
+public struct CallToast: Identifiable, Equatable, Sendable {
+    public enum Kind: Sendable { case info, warning, failure }
+
+    public let id = UUID()
+    public var title: String
+    public var detail: String?
+    public var kind: Kind
+    /// Seconds before it goes by itself, or nil to stay until dismissed.
+    public var lasts: Double?
+    /// The words on its button, when it has one.
+    public var actionTitle: String?
+    /// A second toast with the same key replaces the first: one "Reconnecting"
+    /// rather than three.
+    public var key: String?
+
+    public init(_ title: String, detail: String? = nil, kind: Kind = .info, lasts: Double? = 4,
+                actionTitle: String? = nil, key: String? = nil) {
+        self.title = title
+        self.detail = detail
+        self.kind = kind
+        self.lasts = lasts
+        self.actionTitle = actionTitle
+        self.key = key
+    }
+}
+
 public struct ChatLine: Identifiable, Equatable, Sendable {
     public let id: String
     public let identity: String
@@ -93,6 +120,43 @@ public final class CallModel {
 
     /// Something that happened and is over, said for a moment over the call.
     public var notice: String?
+
+    /// What the call says in the corner, newest last (the web's toasts,
+    /// notices.ts): somebody arriving, a device that would not start, a song
+    /// that could not be played. At most three are shown.
+    public private(set) var toasts: [CallToast] = []
+    @ObservationIgnored private var toastActions: [UUID: @MainActor () -> Void] = [:]
+
+    /// Says `toast`; one with an action calls it when its button is pressed.
+    /// A toast that lasts for ever is one somebody has to act on, as the web
+    /// keeps a refused device until it is dismissed; anything else goes.
+    public func announce(_ toast: CallToast, action: (@MainActor () -> Void)? = nil) {
+        if let key = toast.key, let index = toasts.firstIndex(where: { $0.key == key }) {
+            toastActions[toasts[index].id] = nil
+            toasts.remove(at: index)
+        }
+        toasts.append(toast)
+        if let action { toastActions[toast.id] = action }
+        while toasts.count > 3 { dismiss(toasts[0].id) }
+        if let lasts = toast.lasts {
+            let id = toast.id
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(lasts))
+                self?.dismiss(id)
+            }
+        }
+    }
+
+    public func dismiss(_ id: UUID) {
+        toasts.removeAll { $0.id == id }
+        toastActions[id] = nil
+    }
+
+    func act(on id: UUID) {
+        let action = toastActions[id]
+        dismiss(id)
+        action?()
+    }
 
     /// The uplink card for this participant's own share, while it stands
     /// (strain.ts): what the line carries, what the share needs, what fits.

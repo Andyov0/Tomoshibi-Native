@@ -33,9 +33,40 @@ public final class Appearance {
 
     public static let badgeKey = "tomoshibi.connection-badge"
 
+    /// Where the call's controls sit (web/src/live/controls.ts), under the
+    /// web's own storage name; "always" is kept as nothing, as the web does.
+    public var controlsPlacement: ControlsPlacement {
+        didSet {
+            UserDefaults.standard.set(controlsPlacement == .always ? nil : controlsPlacement.rawValue, forKey: Self.controlsKey)
+        }
+    }
+
+    public static let controlsKey = "meet-live.controls"
+
     private init() {
         accent = UserDefaults.standard.string(forKey: Self.storageKey).flatMap(Accent.init(rawValue:)) ?? .amber
         connectionBadge = UserDefaults.standard.string(forKey: Self.badgeKey).flatMap(ConnectionBadge.init(rawValue:)) ?? .signal
+        controlsPlacement = UserDefaults.standard.string(forKey: Self.controlsKey).flatMap(ControlsPlacement.init(rawValue:)) ?? .always
+    }
+}
+
+/// The three places the web lets the controls sit (controls.ts).
+public enum ControlsPlacement: String, CaseIterable, Identifiable, Sendable {
+    /// Over the pictures at the foot, always shown.
+    case always
+    /// Over the pictures, gone after a few still seconds, back on a move.
+    case idle
+    /// Down the side, where they cost width instead of height.
+    case side
+
+    public var id: String { rawValue }
+
+    public var name: String {
+        switch self {
+        case .always: t("Always shown")
+        case .idle: t("Hide when nothing is happening")
+        case .side: t("At the side")
+        }
     }
 }
 

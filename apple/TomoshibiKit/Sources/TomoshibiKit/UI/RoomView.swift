@@ -14,6 +14,8 @@ import TomoshibiCore
 public struct RoomView: View {
     @Bindable var model: CallModel
     @State private var panel: Panel?
+    /// The control bar's popovers (Kit.swift): one open at a time.
+    @State private var popovers = Popovers()
     /// The alone-in-the-room capsule, once closed, stays closed for the call.
     @State private var aloneDismissed = false
     @State private var pinned: String?
@@ -107,6 +109,14 @@ public struct RoomView: View {
                         .transition(Theme.arrive)
                 }
             }
+            .overlay(alignment: .bottomTrailing) {
+                ToastStack(model: model)
+                    .padding(.trailing, 16)
+                    .padding(.bottom, Plan.island + 8)
+            }
+            // A click outside an open popover closes it; drawn under the
+            // controls, which is where the popovers hang from.
+            .overlay { PopoverCatcher(popovers: popovers) }
             .overlay(alignment: .bottom) {
                 if !filled {
                     controls
@@ -216,11 +226,14 @@ public struct RoomView: View {
                 case "devices": panel = .devices
                 default: break
                 }
+                // TOMOSHIBI_DEBUG_POPOVER=<id> opens one of the bar's popovers.
+                if let id = ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_POPOVER"] { popovers.show(id) }
             }
             .onChange(of: stageOwner(in: size)) { _, owner in watching(owner) }
             .animation(Theme.settle, value: problem)
             .animation(Theme.settle, value: model.state)
         }
+        .environment(\.popovers, popovers)
         .preferredColorScheme(.dark)
     }
 
