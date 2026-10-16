@@ -211,9 +211,17 @@ public final class LobbyModel {
     }
 
     /// The fastest relay that answered, which is what "automatic" settles on.
+    ///
+    /// Never one kept for administrators, and never one out of service
+    /// (relays.ts `fastest`): the join measures without them, so naming one
+    /// beside "Automatic" told an administrator the call would go somewhere it
+    /// never would, and the measured winner on a fleet with an admin-only
+    /// relay was often exactly that one.
     public var fastest: (name: String, millis: Double)? {
         guard let measured else { return nil }
-        return measured.compactMap { name, millis in millis.map { (name, $0) } }.min { $0.1 < $1.1 }
+        let usable = Set((app?.relays?.relays ?? []).filter { !$0.adminOnly && !$0.maintenance }.map(\.name))
+        return measured.compactMap { name, millis in usable.contains(name) ? millis.map { (name, $0) } : nil }
+            .min { $0.1 < $1.1 }
     }
 
     public func label(_ name: String) -> String {

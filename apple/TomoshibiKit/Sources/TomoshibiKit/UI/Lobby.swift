@@ -31,6 +31,16 @@ enum LobbyDebug {
         #endif
     }()
 
+    /// TOMOSHIBI_DEBUG_ROOM: what is typed into the start and join sheet's
+    /// room field when it opens, which takes the keyboard.
+    static let room: String? = {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_ROOM"]
+        #else
+        nil
+        #endif
+    }()
+
     static var sheet: MeetingSheet.Mode? {
         switch open {
         case "start": .start
@@ -134,28 +144,57 @@ struct FleetLine: View {
     }
 }
 
-/// Something that happened and is over, at the foot of the screen for a few
-/// seconds (Notices.tsx).
+/// Something to tell the person, at the foot of the screen (Notices.tsx).
+///
+/// Two kinds, as the web has them. Something that happened and is over fades
+/// on its own (`actionFailed`, ten seconds). Something about why they are not
+/// in a meeting stays, with a way to close it, until they do (`joinFailed`):
+/// an invitation that opens tomorrow said when and was gone in five seconds,
+/// while the person was still reading it.
 struct ToastModifier: ViewModifier {
     @Bindable var app: AppModel
+
+    /// Above the phone's join bar; on the Mac nothing sits at the foot.
+    private static var clearance: CGFloat {
+        #if os(iOS)
+        92
+        #else
+        28
+        #endif
+    }
 
     func body(content: Content) -> some View {
         content.overlay(alignment: .bottom) {
             ZStack {
                 if let text = app.problem {
-                    Text(text)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.foreground)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 16).padding(.vertical, 11)
-                        .glassSurface(Capsule())
-                        .padding(.horizontal, 20).padding(.bottom, 92)
-                        .onTapGesture { app.problem = nil }
-                        .task(id: text) {
-                            try? await Task.sleep(for: .seconds(5))
-                            if app.problem == text { app.problem = nil }
+                    HStack(spacing: 10) {
+                        Image(systemName: app.problemStays ? "exclamationmark.circle.fill" : "info.circle")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(app.problemStays ? Theme.tally : Theme.muted)
+                        Text(text)
+                            .font(.system(size: 13))
+                            .foregroundStyle(Theme.foreground)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                        if app.problemStays {
+                            Button { app.problem = nil } label: {
+                                Image(systemName: "xmark").font(.system(size: 10, weight: .bold))
+                            }
+                            .buttonStyle(.glassCircle(24))
+                            .accessibilityLabel(t("Close"))
                         }
-                        .transition(Theme.slideUp)
+                    }
+                    .padding(.leading, 14).padding(.trailing, app.problemStays ? 7 : 16).padding(.vertical, 9)
+                    .glassSurface(Capsule())
+                    .frame(maxWidth: 560)
+                    .padding(.horizontal, 20).padding(.bottom, Self.clearance)
+                    .onTapGesture { if !app.problemStays { app.problem = nil } }
+                    .task(id: text) {
+                        guard !app.problemStays else { return }
+                        try? await Task.sleep(for: .seconds(10))
+                        if app.problem == text, !app.problemStays { app.problem = nil }
+                    }
+                    .transition(Theme.slideUp)
                 }
             }
             .animation(Theme.settle, value: app.problem)
@@ -238,6 +277,7 @@ struct SignInView: View {
     @State private var passphrase = ""
     @State private var shown = false
     @State private var link = ""
+    @State private var popovers = Popovers()
 
     var body: some View {
         ZStack {
@@ -321,6 +361,8 @@ struct SignInView: View {
             LanguageMenu().padding(16)
         }
         .toast(app)
+        .floatingPopoverLayer(popovers)
+        .onAppear { popovers.openFromDebug() }
     }
 
     /// One box holding two fields, as the web holds them: they are one answer.
@@ -412,41 +454,34 @@ struct ServerLine: View {
 }
 
 /// The language, before a call as on every web page; following the system
-/// until somebody chooses.
+/// until somebody chooses. A popover of the screen's (`floatingPopoverLayer`).
 struct LanguageMenu: View {
-    var body: some View {
-        Menu {
-            LanguageChoices()
-        } label: {
-            Image(systemName: "globe").font(.system(size: 14, weight: .medium))
-        }
-        .menuStyle(.button)
-        .buttonStyle(.glassCircle(36))
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .accessibilityLabel(t("Language"))
-    }
-}
-
-/// The languages as menu items, the system's first.
-struct LanguageChoices: View {
+    @Environment(\.popovers) private var popovers
     @State private var localization = Localization.shared
 
     var body: some View {
-        Button {
-            localization.followSystem()
-        } label: {
-            if localization.followsSystem { Label(t("Same as the system"), systemImage: "checkmark") } else { Text(t("Same as the system")) }
-        }
-        Divider()
-        ForEach(Language.allCases) { one in
-            Button {
-                localization.language = one
-            } label: {
-                if !localization.followsSystem && localization.language == one {
-                    Label(one.name, systemImage: "checkmark")
-                } else {
-                    Text(one.name)
+        if let popovers {
+            Button { popovers.toggle("language") } label: {
+                Image(systemName: "globe").font(.system(size: 14, weight: .medium))
+            }
+            .buttonStyle(.glassCircle(36))
+            .accessibilityLabel(t("Language"))
+            .help(t("Language"))
+            .floatingPopover("language", in: popovers, width: 230) {
+                MenuCard {
+                    MenuItem(title: t("Same as the system"), symbol: "globe",
+                             detail: Language.detect(from: Locale.preferredLanguages).name,
+                             checked: localization.followsSystem) {
+                        localization.followSystem()
+                        popovers.close()
+                    }
+                    MenuRule()
+                    ForEach(Language.allCases) { one in
+                        MenuItem(title: one.name, checked: !localization.followsSystem && localization.language == one) {
+                            localization.language = one
+                            popovers.close()
+                        }
+                    }
                 }
             }
         }
@@ -463,6 +498,9 @@ struct MacLobby: View {
     let account: Account
     @State private var section: Section? = LobbyDebug.open == "scheduled" ? .scheduled : LobbyDebug.open == "servers" ? .servers : .home
     @State private var sheet: MeetingSheet.Mode? = LobbyDebug.sheet
+    /// One set of popovers for both columns: each column draws its own, and
+    /// a click in either closes whichever is open.
+    @State private var popovers = Popovers()
 
     enum Section: Hashable { case home, scheduled, servers }
 
@@ -470,6 +508,7 @@ struct MacLobby: View {
         NavigationSplitView {
             MacSidebar(app: app, account: account, section: $section, sheet: $sheet)
                 .navigationSplitViewColumnWidth(min: 240, ideal: 284, max: 340)
+                .floatingPopoverLayer(popovers)
         } detail: {
             Group {
                 switch section ?? .home {
@@ -479,11 +518,17 @@ struct MacLobby: View {
                 }
             }
             .transition(.opacity.animation(Theme.settle))
+            .floatingPopoverLayer(popovers)
         }
         .sheet(item: $sheet) { mode in
             MeetingSheet(app: app, mode: mode)
         }
         .toast(app)
+        .onChange(of: section) { popovers.close() }
+        .onAppear { popovers.openFromDebug() }
+        // The server section is for choosing a machine; where there is none to
+        // choose it has nothing to offer, and it goes.
+        .onChange(of: app.offersRelayChoice) { if !app.offersRelayChoice, section == .servers { section = .home } }
     }
 }
 
@@ -500,7 +545,9 @@ private struct MacSidebar: View {
                 item(t("Scheduled meetings"), "calendar")
                     .badge(app.lobby.upcoming.count)
                     .tag(MacLobby.Section.scheduled)
-                item(t("Server"), "server.rack").tag(MacLobby.Section.servers)
+                if app.offersRelayChoice {
+                    item(t("Server"), "server.rack").tag(MacLobby.Section.servers)
+                }
             }
             if !app.lobby.upcoming.isEmpty {
                 Section(t("Upcoming")) {
@@ -574,39 +621,52 @@ extension MacSidebar {
     }
 }
 
-/// The account, the server and everything that is not a meeting.
+/// The account, the server and everything that is not a meeting, as the
+/// app's own popover over the sidebar's foot.
 struct AccountMenu: View {
     @Bindable var app: AppModel
     let account: Account
     @Environment(\.openSettings) private var openSettings
+    @Environment(\.openURL) private var openURL
+    @Environment(\.popovers) private var popovers
 
     var body: some View {
-        Menu {
-            if let url = page("/account") { Link(t("User console"), destination: url) }
-            if account.admin, let url = page("/admin") { Link(t("Admin console"), destination: url) }
-            Divider()
-            Button(t("Settings")) { openSettings() }
-            Button(t("Change server")) { app.forgetServer() }
-            Divider()
-            Button(t("Sign out")) { Task { await app.signOut() } }
-        } label: {
-            HStack(spacing: 10) {
-                Initial(name: account.name, size: 30)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(account.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                    Text(app.deployment.flatMap { URL(string: $0.baseUrl())?.host() } ?? "")
-                        .font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1)
+        if let popovers {
+            Button { popovers.toggle("account") } label: {
+                HStack(spacing: 10) {
+                    AccountAvatar(name: account.name, address: app.avatarAddress, size: 30)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(account.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                        Text(app.deployment.flatMap { URL(string: $0.baseUrl())?.host() } ?? "")
+                            .font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1)
+                    }
+                    Spacer(minLength: 4)
+                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.muted)
                 }
-                Spacer(minLength: 4)
-                Image(systemName: "chevron.up.chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.muted)
+                .padding(.horizontal, 10).padding(.vertical, 8)
+                .contentShape(Rectangle())
             }
-            .padding(.horizontal, 10).padding(.vertical, 8)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .glassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .floatingPopover("account", in: popovers, edge: .top, alignment: .leading, width: 262) {
+                MenuCard {
+                    if let url = page("/account") {
+                        MenuItem(title: t("User console"), symbol: "person.text.rectangle") { popovers.close(); openURL(url) }
+                    }
+                    if account.admin, let url = page("/admin") {
+                        MenuItem(title: t("Admin console"), symbol: "shield.lefthalf.filled") { popovers.close(); openURL(url) }
+                    }
+                    MenuRule()
+                    MenuItem(title: t("Settings"), symbol: "gearshape") { popovers.close(); openSettings() }
+                    MenuItem(title: t("Change server"), symbol: "server.rack") { popovers.close(); app.forgetServer() }
+                    MenuRule()
+                    MenuItem(title: t("Sign out"), symbol: "rectangle.portrait.and.arrow.right", role: .destructive) {
+                        popovers.close()
+                        Task { await app.signOut() }
+                    }
+                }
+            }
         }
-        .menuStyle(.button)
-        .buttonStyle(.plain)
-        .menuIndicator(.hidden)
-        .glassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private func page(_ path: String) -> URL? {
@@ -641,11 +701,17 @@ private struct HomeStage: View {
                 .padding(.bottom, 28)
                 .rise(0.08)
         }
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+        // In the stage's corner rather than the toolbar: a toolbar item is
+        // drawn apart from the window's content, and the app's popover could
+        // not reach out of it. Only where there is a machine to choose.
+        .overlay(alignment: .topTrailing) {
+            if app.offersRelayChoice {
                 ServerMenu(app: app)
+                    .padding(.top, 12).padding(.trailing, 16)
+                    .transition(Theme.arrive)
             }
         }
+        .animation(Theme.settle, value: app.offersRelayChoice)
     }
 }
 
@@ -676,6 +742,7 @@ struct PhoneLobby: View {
     @State private var settings = LobbyDebug.open == "settings"
     @State private var scheduling = LobbyDebug.open == "scheduled"
     @State private var typed = ""
+    @State private var popovers = Popovers()
 
     var body: some View {
         NavigationStack {
@@ -731,6 +798,7 @@ struct PhoneLobby: View {
                         }
                         .rise(0.1)
                     }
+                    if app.offersRelayChoice {
                     NavigationLink {
                         ServersView(app: app)
                     } label: {
@@ -751,16 +819,19 @@ struct PhoneLobby: View {
                     }
                     .buttonStyle(.plain)
                     .rise(0.14)
+                    .transition(Theme.arrive)
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)
+                .animation(Theme.settle, value: app.offersRelayChoice)
             }
             .scrollIndicators(.never)
             .background(Color.black.ignoresSafeArea())
             .navigationTitle("Tomoshibi")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { settings = true } label: { Initial(name: account.name, size: 30) }
+                    Button { settings = true } label: { AccountAvatar(name: account.name, address: app.avatarAddress, size: 30) }
                         .accessibilityLabel(t("Settings"))
                 }
             }
@@ -770,12 +841,14 @@ struct PhoneLobby: View {
             MeetingSheet(app: app, mode: mode)
         }
         .sheet(isPresented: $settings) {
-            NavigationStack { SettingsView(app: app) }
+            SettingsView(app: app)
         }
         .sheet(isPresented: $scheduling) {
             NavigationStack { ScheduleView(app: app, account: account) }
         }
         .toast(app)
+        .floatingPopoverLayer(popovers)
+        .onAppear { popovers.openFromDebug() }
     }
 
     private var hero: some View {
@@ -808,18 +881,9 @@ struct PhoneLobby: View {
     /// Joining by the name you were given, from the foot of the screen where a
     /// thumb already is.
     private var joinBar: some View {
-        HStack(spacing: 10) {
-            HStack(spacing: 10) {
-                Image(systemName: "link").foregroundStyle(Theme.muted)
-                TextField("", text: $typed, prompt: Text(t("The name you were given.")).foregroundStyle(Theme.muted))
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .submitLabel(.join)
-                    .onSubmit(joinTyped)
-            }
-            .font(.system(size: 16))
-            .padding(.horizontal, 18).frame(height: 54)
-            .glassSurface(Capsule())
+        HStack(alignment: .bottom, spacing: 10) {
+            ScopedRoomField(prompt: t("The name you were given."), text: $typed, scopes: account.scopes, admin: account.admin,
+                            capsule: true, onSubmit: joinTyped)
             Button(action: joinTyped) {
                 Image(systemName: "arrow.right").font(.system(size: 20, weight: .bold))
             }
@@ -863,48 +927,56 @@ struct MeetingSheet: View {
     @State private var room = ""
     @State private var sealing = false
     @State private var working = false
+    @State private var popovers = Popovers()
     @Environment(\.dismiss) private var dismiss
 
     init(app: AppModel, mode: Mode) {
         self.app = app
         _mode = State(initialValue: mode)
         if case let .join(name) = mode { _room = State(initialValue: name) }
+        if let typed = LobbyDebug.room { _room = State(initialValue: typed) }
+        // A word already typed for this sitting is shown, and the switch on.
+        _sealing = State(initialValue: !app.sealingWord.isEmpty)
     }
 
     private var starting: Bool { if case .start = mode { return true } else { return false } }
 
     var body: some View {
-        #if os(macOS)
-        VStack(spacing: 16) {
-            header
-            CameraStage(app: app, cornerRadius: 20)
-                .aspectRatio(16 / 9, contentMode: .fit)
-                .overlay(alignment: .bottom) {
-                    DeviceSwitches(app: app, size: 38).padding(6).glassSurface(Capsule()).padding(.bottom, 12)
-                }
-            form
-            footer
-        }
-        .padding(20)
-        .frame(width: 560)
-        .animation(Theme.settle, value: sealing)
-        .animation(Theme.settle, value: app.problem)
-        #else
-        ZStack(alignment: .bottom) {
-            CameraStage(app: app).ignoresSafeArea()
+        Group {
+            #if os(macOS)
             VStack(spacing: 16) {
                 header
-                DeviceSwitches(app: app, size: 52)
+                CameraStage(app: app, cornerRadius: 20)
+                    .aspectRatio(16 / 9, contentMode: .fit)
+                    .overlay(alignment: .bottom) {
+                        DeviceSwitches(app: app, size: 38).padding(6).glassSurface(Capsule()).padding(.bottom, 12)
+                    }
                 form
                 footer
             }
-            .padding(18)
-            .glassPane(cornerRadius: 34)
-            .padding(10)
+            .padding(20)
+            .frame(width: 560)
+            .background(Backdrop().opacity(0.55))
+            #else
+            ZStack(alignment: .bottom) {
+                CameraStage(app: app).ignoresSafeArea()
+                VStack(spacing: 16) {
+                    header
+                    DeviceSwitches(app: app, size: 52)
+                    form
+                    footer
+                }
+                .padding(18)
+                .glassPane(cornerRadius: 34)
+                .padding(10)
+            }
+            #endif
         }
         .animation(Theme.settle, value: sealing)
         .animation(Theme.settle, value: app.problem)
-        #endif
+        .animation(Theme.settle, value: starting)
+        .floatingPopoverLayer(popovers)
+        .onAppear { popovers.openFromDebug() }
     }
 
     private var header: some View {
@@ -912,58 +984,49 @@ struct MeetingSheet: View {
             Button { dismiss() } label: { Image(systemName: "xmark").font(.system(size: 13, weight: .bold)) }
                 .buttonStyle(.glassCircle(32))
                 .accessibilityLabel(t("Cancel"))
+            #if os(macOS)
             Spacer()
-            Picker("", selection: Binding(get: { starting }, set: { mode = $0 ? .start : .join(room) })) {
-                Text(t("Start new meeting")).tag(true)
-                Text(t("Join a meeting")).tag(false)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 280)
+            choice.frame(maxWidth: 300)
             Spacer()
             Color.clear.frame(width: 32, height: 32)
+            #else
+            // The whole width beside the close button: centred between two
+            // buttons' worth of space it cut "Start new meeting" short on a
+            // phone held upright.
+            choice
+            #endif
         }
+    }
+
+    private var choice: some View {
+        SegmentedChoice(options: [(true, t("Start new meeting")), (false, t("Join a meeting"))],
+                        selection: Binding(get: { starting }, set: { mode = $0 ? .start : .join(room) }), height: 32)
     }
 
     private var form: some View {
-        VStack(spacing: 0) {
-            row(t("Room name")) {
-                TextField("", text: $room, prompt: Text(starting ? t("Name it yourself, or leave it blank for one nobody has used.") : t("The name you were given.")).foregroundStyle(Theme.muted))
-                    .textFieldStyle(.plain)
-                    .multilineTextAlignment(.trailing)
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    #endif
-                    .onSubmit(go)
-            }
-            Divider().overlay(Color.white.opacity(0.06))
-            row(t("Server")) { ServerMenu(app: app, compact: true) }
-            Divider().overlay(Color.white.opacity(0.06))
-            row(t("Seal this call")) {
-                Toggle("", isOn: $sealing).labelsHidden().toggleStyle(.switch).tint(Theme.tally)
-            }
-            if sealing {
-                Divider().overlay(Color.white.opacity(0.06))
-                row(t("Sealing word")) {
-                    SecureField("", text: $app.sealingWord).textFieldStyle(.plain).multilineTextAlignment(.trailing)
+        VStack(alignment: .leading, spacing: 10) {
+            // The scope half of a name completes from the account's own
+            // (ScopedRoomInput.tsx), in both directions as on the web.
+            ScopedRoomField(prompt: starting ? t("Name it yourself, or leave it blank for one nobody has used.") : t("The name you were given."),
+                            text: $room, scopes: app.account?.scopes ?? [], admin: app.account?.admin ?? false,
+                            focusOnAppear: LobbyDebug.room != nil, onSubmit: go)
+            VStack(spacing: 0) {
+                if app.offersRelayChoice {
+                    HStack(spacing: 12) {
+                        Image(systemName: "server.rack").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.muted).frame(width: 18)
+                        Text(t("Server")).font(.system(size: 14))
+                        Spacer(minLength: 8)
+                        ServerMenu(app: app, compact: true, id: "sheet.server")
+                    }
+                    .padding(.horizontal, 14).frame(minHeight: 48)
+                    Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
                 }
-                .transition(Theme.arrive)
+                SealControl(on: $sealing, word: $app.sealingWord)
+                    .padding(.horizontal, 14).padding(.vertical, 12)
             }
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.22)))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.08)))
         }
-        .font(.system(size: 14))
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.22)))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.08)))
-    }
-
-    private func row<Control: View>(_ label: String, @ViewBuilder control: () -> Control) -> some View {
-        HStack(spacing: 12) {
-            Text(label).foregroundStyle(Theme.foreground).fixedSize()
-            Spacer(minLength: 8)
-            control()
-        }
-        .padding(.horizontal, 14)
-        .frame(minHeight: 46)
     }
 
     private var footer: some View {
@@ -1033,43 +1096,219 @@ struct MeetingSheet: View {
     }
 }
 
-/// Where the call is held, as a menu: automatic or one relay, each with how
-/// quickly it answered from here.
+/// A room name, with the part after `@` filled in from the account's own
+/// scopes (ScopedRoomInput.tsx). The scope is the half nobody should have to
+/// type, and a slip in it is not another room but a refusal at the door, so
+/// typing `@` offers the list, a single scope is simply written in, and a
+/// scope the account is not in is said under the field before anything is
+/// pressed. Only completed, never rewritten; an administrator belongs to every
+/// scope and is never warned.
+struct ScopedRoomField: View {
+    let prompt: String
+    @Binding var text: String
+    let scopes: [String]
+    var admin = false
+    /// The phone's join bar, a capsule of glass rather than a field in a card.
+    var capsule = false
+    /// Takes the keyboard when it appears; a test's way to see the list.
+    var focusOnAppear = false
+    var onSubmit: () -> Void = {}
+    @State private var dismissed = false
+    @State private var active = 0
+    @FocusState private var focused: Bool
+
+    private var at: String.Index? { text.lastIndex(of: "@") }
+    private var typedScope: String { at.map { String(text[text.index(after: $0)...]).lowercased() } ?? "" }
+    private var matches: [String] { at == nil ? [] : scopes.filter { $0.hasPrefix(typedScope) } }
+    private var open: Bool {
+        focused && !dismissed && !matches.isEmpty && !(matches.count == 1 && matches[0] == typedScope)
+    }
+    private var strange: Bool {
+        at != nil && !typedScope.isEmpty && !admin && !scopes.contains(typedScope) && !open
+    }
+    private var chosen: Int { min(active, max(0, matches.count - 1)) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if open && capsule { suggestions.transition(Theme.slideUp) }
+            field
+            if open && !capsule { suggestions.transition(Theme.arrive) }
+            if strange {
+                Text(t("You are not in {scope}, so this room will not let you in.", ["scope": typedScope]))
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.danger)
+                    .padding(.horizontal, 6)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .transition(Theme.arrive)
+            }
+        }
+        .animation(Theme.settle, value: open)
+        .animation(Theme.settle, value: strange)
+        .onAppear {
+            guard focusOnAppear else { return }
+            Task {
+                try? await Task.sleep(for: .seconds(0.8))
+                focused = true
+            }
+        }
+    }
+
+    private var field: some View {
+        HStack(spacing: 10) {
+            Image(systemName: capsule ? "link" : "number")
+                .font(.system(size: capsule ? 16 : 14, weight: .medium))
+                .foregroundStyle(Theme.muted)
+                .frame(width: 18)
+            TextField("", text: $text, prompt: Text(prompt).foregroundStyle(Theme.muted))
+                .textFieldStyle(.plain)
+                .font(.system(size: capsule ? 16 : 14.5, design: text.isEmpty ? .default : .monospaced))
+                .foregroundStyle(Theme.foreground)
+                .focused($focused)
+                #if os(iOS)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .submitLabel(.join)
+                #endif
+                .onSubmit {
+                    if open { accept(matches[chosen]) } else { onSubmit() }
+                }
+                .onChange(of: text) { old, new in
+                    dismissed = false
+                    active = 0
+                    // The @ just typed, at the end, by somebody with one
+                    // scope: there is nothing to choose, so it is written in.
+                    if new == old + "@", scopes.count == 1, !old.contains("@") {
+                        text = new + scopes[0]
+                        dismissed = true
+                    }
+                }
+                .onKeyPress(.downArrow) { move(1) }
+                .onKeyPress(.upArrow) { move(-1) }
+                .onKeyPress(.tab) {
+                    guard open else { return .ignored }
+                    accept(matches[chosen])
+                    return .handled
+                }
+                .onKeyPress(.escape) {
+                    guard open else { return .ignored }
+                    dismissed = true
+                    return .handled
+                }
+        }
+        .padding(.horizontal, capsule ? 18 : 14)
+        .frame(height: capsule ? 54 : 46)
+        .modifier(FieldGround(capsule: capsule))
+    }
+
+    private var suggestions: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(matches.indices, id: \.self) { index in
+                let scope = matches[index]
+                Button { accept(scope) } label: {
+                    HStack(spacing: 2) {
+                        Text(verbatim: "@").foregroundStyle(Theme.muted)
+                        Text(scope).foregroundStyle(Theme.foreground)
+                        Spacer()
+                        if index == chosen {
+                            Image(systemName: "return").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.muted)
+                        }
+                    }
+                    .font(.system(size: 13.5, design: .monospaced))
+                    .padding(.horizontal, 10).frame(minHeight: 32)
+                    .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(Color.white.opacity(index == chosen ? 0.10 : 0)))
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .onHover { if $0 { active = index } }
+            }
+        }
+        .padding(5)
+        .glassPane(cornerRadius: 14)
+        .accessibilityLabel(t("Your scopes"))
+    }
+
+    private func move(_ step: Int) -> KeyPress.Result {
+        guard open else { return .ignored }
+        active = (chosen + step + matches.count) % matches.count
+        return .handled
+    }
+
+    private func accept(_ scope: String) {
+        guard let at else { return }
+        text = String(text[...at]) + scope
+        active = 0
+        dismissed = true
+    }
+}
+
+private struct FieldGround: ViewModifier {
+    let capsule: Bool
+
+    func body(content: Content) -> some View {
+        if capsule {
+            content.glassSurface(Capsule())
+        } else {
+            content
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.black.opacity(0.24)))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.10)))
+        }
+    }
+}
+
+/// Where the call is held, as the app's own popover: automatic or one relay,
+/// each with how quickly it answered from here. Drawn only where there is a
+/// choice to make (`AppModel.offersRelayChoice`).
 struct ServerMenu: View {
     @Bindable var app: AppModel
     var compact = false
+    var id = "server"
+    @Environment(\.popovers) private var popovers
 
     var body: some View {
-        Menu {
-            Button { app.relayChoice = nil } label: {
-                choice(t("Automatic"), detail: app.lobby.fastest.map { "\(app.lobby.label($0.name)) · \(Int($0.millis)) ms" }, chosen: app.relayChoice == nil)
+        if let popovers {
+            Button { popovers.toggle(id) } label: {
+                HStack(spacing: 6) {
+                    if !compact { Image(systemName: "server.rack").font(.system(size: 12)) }
+                    Text(app.relayChoice.map { app.lobby.label($0) } ?? t("Automatic")).lineLimit(1)
+                    if let ms = current {
+                        Text("\(Int(ms)) ms").monospacedDigit().foregroundStyle(latencyColour(ms))
+                    }
+                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Theme.muted)
+                }
+                .font(.system(size: 12.5))
             }
-            ForEach(app.lobby.grouped(), id: \.region) { group in
-                Section(group.region) {
-                    ForEach(group.relays, id: \.name) { relay in
-                        Button { app.relayChoice = relay.name } label: {
-                            choice(say(relay.label ?? relay.name), detail: millis(relay.name), chosen: app.relayChoice == relay.name)
+            .buttonStyle(.glassCapsule(compact ? 30 : 34))
+            .fixedSize()
+            .floatingPopover(id, in: popovers, width: 290) {
+                ScrollView {
+                    MenuCard {
+                        MenuItem(title: t("Automatic"), symbol: "wand.and.stars",
+                                 detail: app.lobby.fastest.map { "\(t("Whichever answers fastest")) · \(app.lobby.label($0.name))" }
+                                    ?? t("Whichever answers fastest"),
+                                 checked: app.relayChoice == nil) {
+                            app.relayChoice = nil
+                            popovers.close()
                         }
-                        .disabled(relay.maintenance)
+                        ForEach(app.lobby.grouped(), id: \.region) { group in
+                            if !group.region.isEmpty { MenuHeading(title: group.region) }
+                            ForEach(group.relays, id: \.name) { relay in
+                                MenuItem(title: relay.adminOnly ? "\(say(relay.label ?? relay.name)) [Admin]" : say(relay.label ?? relay.name),
+                                         detail: relay.maintenance ? t("Not taking calls") : millis(relay.name),
+                                         checked: app.relayChoice == relay.name) {
+                                    app.relayChoice = relay.name
+                                    popovers.close()
+                                }
+                                .disabled(relay.maintenance)
+                            }
+                        }
                     }
                 }
+                .frame(maxHeight: 420)
+                .fixedSize(horizontal: false, vertical: true)
             }
-        } label: {
-            HStack(spacing: 6) {
-                if !compact { Image(systemName: "server.rack").font(.system(size: 12)) }
-                Text(app.relayChoice.map { app.lobby.label($0) } ?? t("Automatic"))
-                if let ms = current {
-                    Text("\(Int(ms)) ms").monospacedDigit().foregroundStyle(latencyColour(ms))
-                }
-                Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Theme.muted)
-            }
-            .font(.system(size: 12.5))
+            .task { if app.lobby.measured == nil { await app.lobby.measure() } }
         }
-        .menuStyle(.button)
-        .buttonStyle(.glassCapsule(compact ? 30 : 34))
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .task { if app.lobby.measured == nil { await app.lobby.measure() } }
     }
 
     private var current: Double? {
@@ -1081,12 +1320,6 @@ struct ServerMenu: View {
         guard let measured = app.lobby.measured else { return nil }
         guard let value = measured[name] ?? nil else { return t("Timeout") }
         return "\(Int(value)) ms"
-    }
-
-    @ViewBuilder
-    private func choice(_ title: String, detail: String?, chosen: Bool) -> some View {
-        let text = detail.map { "\(title)  ·  \($0)" } ?? title
-        if chosen { Label(text, systemImage: "checkmark") } else { Text(text) }
     }
 }
 
@@ -1145,6 +1378,7 @@ struct ScheduleView: View {
     @State private var arranging = false
     @State private var copied: String?
     @State private var now = Date()
+    @State private var popovers = Popovers()
 
     private static let ahead: TimeInterval = 60 * 24 * 60 * 60
 
@@ -1197,6 +1431,8 @@ struct ScheduleView: View {
         #endif
         .task { await app.lobby.refreshArrangements() }
         .animation(Theme.settle, value: app.lobby.arrangements.map(\.id))
+        .floatingPopoverLayer(popovers)
+        .onAppear { popovers.openFromDebug() }
     }
 
     @ViewBuilder
@@ -1205,29 +1441,21 @@ struct ScheduleView: View {
             if !canArrange {
                 Text(t("Arranging meetings has not been opened to you.")).font(.system(size: 13)).foregroundStyle(Theme.muted)
             } else {
-                TextField("", text: $planning, prompt: Text(t("Room name")).foregroundStyle(Theme.muted))
-                    .textFieldStyle(.plain)
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    #endif
-                    .padding(.horizontal, 14).frame(height: 38)
-                    .background(Capsule().fill(Color.white.opacity(0.07)))
-                    .overlay(Capsule().stroke(Color.white.opacity(0.12)))
+                GlassField(prompt: t("Room name"), text: $planning, symbol: "number", mono: !planning.isEmpty, height: 40)
                 Text(t("Name it yourself, or leave it blank for one nobody has used.")).font(.system(size: 11.5)).foregroundStyle(Theme.muted)
-                DatePicker("", selection: $day, in: Calendar.current.startOfDay(for: Date())...Date().addingTimeInterval(Self.ahead),
-                           displayedComponents: .date)
-                    .datePickerStyle(.graphical)
-                    .labelsHidden()
-                    .tint(Theme.tally)
-                    .frame(maxWidth: .infinity)
+                // The app's own month rather than the system's calendar: the
+                // chosen day in the person's colour, the days past and beyond
+                // sixty dimmed (Schedule.tsx offers no further ahead).
+                MonthCalendar(day: $day, earliest: Date(), latest: Date().addingTimeInterval(Self.ahead))
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.black.opacity(0.18)))
                 HStack(spacing: 8) {
                     Text(t("Time")).font(.system(size: 12)).foregroundStyle(Theme.muted)
-                    clock(t("Hour"), value: $hour, values: Array(0..<24))
-                    Text(":")
-                    clock(t("Minute"), value: $minute, values: [0, 15, 30, 45])
+                    ClockChoice(id: "schedule.clock", hour: $hour, minute: $minute)
                     Spacer()
-                    ServerMenu(app: app, compact: true)
+                    if app.offersRelayChoice {
+                        ServerMenu(app: app, compact: true, id: "schedule.server")
+                    }
                 }
                 HStack(spacing: 10) {
                     Text(verdict).font(.system(size: 12)).foregroundStyle(problem ? Theme.danger : Theme.muted)
@@ -1243,16 +1471,6 @@ struct ScheduleView: View {
         }
         .padding(18)
         .glassPane(cornerRadius: 24)
-    }
-
-    private func clock(_ label: String, value: Binding<Int>, values: [Int]) -> some View {
-        Picker(label, selection: value) {
-            ForEach(values, id: \.self) { Text(String(format: "%02d", $0)).tag($0) }
-        }
-        .labelsHidden()
-        .pickerStyle(.menu)
-        .fixedSize()
-        .accessibilityLabel(label)
     }
 
     private var verdict: String {
@@ -1368,54 +1586,80 @@ struct ScheduleView: View {
 // MARK: - The relays
 
 /// Every relay grouped by region with its round trip from here, and the
-/// automatic choice above them (ServerPicker.tsx `Rows`).
+/// automatic choice above them (ServerPicker.tsx `Rows`), as the app's own
+/// cards rather than the system's grouped list.
 struct ServersView: View {
     @Bindable var app: AppModel
 
     var body: some View {
-        List {
-            Section {
-                row(title: t("Automatic"), detail: automaticDetail, symbol: "wand.and.stars", chosen: app.relayChoice == nil, ms: nil, off: false) {
-                    app.relayChoice = nil
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                HStack(alignment: .center) {
+                    #if os(macOS)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(t("Server")).font(.system(size: 26, weight: .bold))
+                        FleetLine(app: app)
+                    }
+                    #else
+                    FleetLine(app: app)
+                    #endif
+                    Spacer()
+                    Button {
+                        Task { await app.lobby.measure() }
+                    } label: {
+                        Label(t("Measure again"), systemImage: "arrow.clockwise")
+                            .labelStyle(.titleAndIcon)
+                            .font(.system(size: 12.5, weight: .semibold))
+                    }
+                    .buttonStyle(.glassCapsule(32))
+                    .disabled(app.lobby.measuring)
                 }
-            }
-            ForEach(app.lobby.grouped(), id: \.region) { group in
-                Section(group.region) {
-                    ForEach(group.relays, id: \.name) { relay in
-                        row(title: relay.adminOnly ? "\(say(relay.label ?? relay.name)) [Admin]" : say(relay.label ?? relay.name),
-                            detail: relay.maintenance ? t("Not taking calls") : relay.fallback ? "[Fallback]" : nil,
-                            symbol: nil, chosen: app.relayChoice == relay.name,
-                            ms: app.lobby.measured.map { $0[relay.name] ?? nil }, off: relay.maintenance) {
-                            app.relayChoice = relay.name
-                        }
+                .rise()
+                SettingsSection(title: t("Automatic")) {
+                    row(title: t("Automatic"), detail: automaticDetail, symbol: "wand.and.stars", chosen: app.relayChoice == nil,
+                        ms: nil, off: false, last: true) {
+                        app.relayChoice = nil
                     }
                 }
+                .rise(0.04)
+                ForEach(app.lobby.grouped(), id: \.region) { group in
+                    SettingsSection(title: group.region.isEmpty ? t("Server") : group.region) {
+                        ForEach(group.relays, id: \.name) { relay in
+                            row(title: relay.adminOnly ? "\(say(relay.label ?? relay.name)) [Admin]" : say(relay.label ?? relay.name),
+                                detail: relay.maintenance ? t("Not taking calls") : relay.fallback ? "[Fallback]" : nil,
+                                symbol: nil, chosen: app.relayChoice == relay.name,
+                                ms: app.lobby.measured.map { $0[relay.name] ?? nil }, off: relay.maintenance,
+                                last: relay.name == group.relays.last?.name) {
+                                app.relayChoice = relay.name
+                            }
+                        }
+                    }
+                    .rise(0.08)
+                }
             }
-            Section {
-                FleetLine(app: app)
-            }
+            .padding(.horizontal, platformPadding)
+            .padding(.vertical, platformPadding)
+            .frame(maxWidth: 680, alignment: .leading)
+            .frame(maxWidth: .infinity)
         }
+        .scrollIndicators(.never)
         #if os(iOS)
-        .listStyle(.insetGrouped)
         .navigationTitle(t("Server"))
         .navigationBarTitleDisplayMode(.inline)
+        .background(Backdrop())
         #else
-        .listStyle(.inset)
-        .scrollContentBackground(.hidden)
         .background(Backdrop().opacity(0.6))
         #endif
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    Task { await app.lobby.measure() }
-                } label: {
-                    Label(t("Measure again"), systemImage: "arrow.clockwise")
-                }
-                .disabled(app.lobby.measuring)
-            }
-        }
         .task { if app.lobby.measured == nil { await app.lobby.measure() } }
         .animation(Theme.settle, value: app.relayChoice)
+    }
+
+    private var platformPadding: CGFloat {
+        #if os(iOS)
+        16
+        #else
+        28
+        #endif
     }
 
     private var automaticDetail: String {
@@ -1425,34 +1669,31 @@ struct ServersView: View {
 
     /// `ms` is nil when nothing has been measured yet, .some(nil) for a relay
     /// that did not answer, and the round trip otherwise.
-    private func row(title: String, detail: String?, symbol: String?, chosen: Bool, ms: Double??, off: Bool,
+    private func row(title: String, detail: String?, symbol: String?, chosen: Bool, ms: Double??, off: Bool, last: Bool,
                      pick: @escaping () -> Void) -> some View {
         Button(action: pick) {
-            HStack(spacing: 12) {
-                if let symbol {
-                    Image(systemName: symbol).foregroundStyle(Theme.tally).frame(width: 22)
-                }
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).foregroundStyle(Theme.foreground)
-                    if let detail { Text(detail).font(.system(size: 12)).foregroundStyle(Theme.muted) }
-                }
-                Spacer()
-                if symbol == nil {
-                    if ms == nil {
-                        if app.lobby.measuring { ProgressView().controlSize(.mini) }
-                    } else if let value = ms ?? nil {
-                        Text("\(Int(value.rounded())) ms").monospacedDigit().font(.system(size: 13)).foregroundStyle(latencyColour(value))
-                    } else if !off {
-                        Text(t("Timeout")).font(.system(size: 12)).foregroundStyle(Theme.danger)
+            SettingsRow(title: title, detail: detail, symbol: symbol ?? "server.rack", last: last) {
+                HStack(spacing: 10) {
+                    if symbol == nil {
+                        if ms == nil {
+                            if app.lobby.measuring { ProgressView().controlSize(.mini) }
+                        } else if let value = ms ?? nil {
+                            Text("\(Int(value.rounded())) ms").monospacedDigit().font(.system(size: 13)).foregroundStyle(latencyColour(value))
+                        } else if !off {
+                            Text(t("Timeout")).font(.system(size: 12)).foregroundStyle(Theme.danger)
+                        }
                     }
+                    Image(systemName: "checkmark.circle.fill").font(.system(size: 15)).foregroundStyle(Theme.tally)
+                        .opacity(chosen ? 1 : 0).scaleEffect(chosen ? 1 : 0.6)
                 }
-                Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.tally).opacity(chosen ? 1 : 0)
             }
+            .background(chosen ? Theme.tally.opacity(0.08) : Color.clear)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(off)
         .opacity(off ? 0.45 : 1)
+        .animation(Theme.settle, value: chosen)
     }
 }
 

@@ -240,6 +240,78 @@
       "zh-Hans": "全部",
       "zh-Hant": "全部",
       "ja": "すべて"
+    },
+    "About": {
+      "en": "About",
+      "zh-Hans": "关于",
+      "zh-Hant": "關於",
+      "ja": "情報"
+    },
+    "Account": {
+      "en": "Account",
+      "zh-Hans": "账号",
+      "zh-Hant": "帳號",
+      "ja": "アカウント"
+    },
+    "Audio & video": {
+      "en": "Audio & video",
+      "zh-Hans": "音频与视频",
+      "zh-Hant": "音訊與視訊",
+      "ja": "オーディオとビデオ"
+    },
+    "General": {
+      "en": "General",
+      "zh-Hans": "通用",
+      "zh-Hant": "一般",
+      "ja": "一般"
+    },
+    "How music sounds in a call.": {
+      "en": "How music sounds in a call.",
+      "zh-Hans": "通话里的音乐听起来怎样。",
+      "zh-Hant": "通話裡的音樂聽起來怎樣。",
+      "ja": "通話中の音楽の聞こえ方。"
+    },
+    "How sharp a video watched together may get here.": {
+      "en": "How sharp a video watched together may get here.",
+      "zh-Hans": "一起看的视频在这里最清晰能到多少。",
+      "zh-Hant": "一起看的影片在這裡最清晰能到多少。",
+      "ja": "一緒に見る動画を、ここでどこまで鮮明にするか。"
+    },
+    "Language, colour, and how a call is laid out.": {
+      "en": "Language, colour, and how a call is laid out.",
+      "zh-Hans": "语言、颜色，以及通话的布局。",
+      "zh-Hant": "語言、顏色，以及通話的版面。",
+      "ja": "言語、色、通話の画面の並べ方。"
+    },
+    "Media core": {
+      "en": "Media core",
+      "zh-Hans": "媒体内核",
+      "zh-Hant": "媒體核心",
+      "ja": "メディアコア"
+    },
+    "The app, and where its code can be read.": {
+      "en": "The app, and where its code can be read.",
+      "zh-Hans": "这个应用，以及在哪里能读到它的代码。",
+      "zh-Hant": "這個應用程式，以及在哪裡能讀到它的程式碼。",
+      "ja": "このアプリと、そのコードを読める場所。"
+    },
+    "Version": {
+      "en": "Version",
+      "zh-Hans": "版本",
+      "zh-Hant": "版本",
+      "ja": "バージョン"
+    },
+    "What starts on when you join, and which devices.": {
+      "en": "What starts on when you join, and which devices.",
+      "zh-Hans": "加入时打开什么，以及用哪些设备。",
+      "zh-Hant": "加入時開啟什麼，以及用哪些裝置。",
+      "ja": "参加したときに何をオンにするか、どのデバイスを使うか。"
+    },
+    "Who you are here, and what you can use.": {
+      "en": "Who you are here, and what you can use.",
+      "zh-Hans": "你在这里是谁，以及能用什么。",
+      "zh-Hant": "你在這裡是誰，以及能用什麼。",
+      "ja": "ここでのあなたと、使えるもの。"
     }
   }
 }

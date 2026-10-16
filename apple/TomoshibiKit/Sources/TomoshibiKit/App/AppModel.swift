@@ -20,20 +20,64 @@ public final class AppModel {
         case server, lobby, prejoin, knocking, waiting, call, ended
     }
 
+    /// Why the last call ended (App.tsx, the `ended` handler): three endings
+    /// that look alike from the inside, a call that simply stopped, and want
+    /// three different sentences. Somebody told only "You left the call."
+    /// after the host closed the room reads the call as having broken.
+    public enum Ending: Equatable, Sendable {
+        /// They pressed leave.
+        case left
+        /// The room was closed for everybody (ROOM_DELETED, which the web
+        /// calls DISCONNECT_ROOM_CLOSED).
+        case closed
+        /// They alone were taken out (PARTICIPANT_REMOVED).
+        case removed
+        /// Anything else: the connection failed and the client gave up.
+        case lost
+    }
+
     public private(set) var screen: Screen = .starting
     public private(set) var deployment: Deployment?
     public private(set) var info: DeploymentInfo?
     public private(set) var account: Account?
     public private(set) var call: CallModel?
-    public private(set) var relays: RelayList?
+    public private(set) var relays: RelayList? {
+        didSet { dropRelayNotOffered() }
+    }
     public private(set) var busy = false
-    public var problem: String?
+    public private(set) var ending: Ending = .left
+
+    /// Something to tell the person before a call, at the foot of the screen.
+    /// Most of them fade (notices.ts `actionFailed`: a press that did not take
+    /// is over, and pressing again is the remedy); `problemStays` marks the
+    /// ones about why they are not in a meeting, which stay until dismissed
+    /// (notices.ts `joinFailed`: "a message about why they are not in the
+    /// meeting should not disappear while they are reading it"). The lobby's
+    /// toast cleared everything after five seconds, so an invitation that
+    /// opens tomorrow said when, and was gone before it had been read.
+    public var problem: String? {
+        didSet { if !telling { problemStays = false } }
+    }
+    public private(set) var problemStays = false
+    @ObservationIgnored private var telling = false
+
+    /// Says something that stays until the person closes it.
+    public func tell(_ sentence: String) {
+        telling = true
+        problem = sentence
+        problemStays = true
+        telling = false
+    }
 
     public var serverAddress: String {
         didSet { if !rehearsal { UserDefaults.standard.set(serverAddress, forKey: Self.serverKey) } }
     }
     public var room = ""
-    /// The web's own storage name, so the habit carries over.
+    /// The web's own storage name, so the habit carries over. Only ever what
+    /// the person typed: an invitation's name is `invitedName` and is never
+    /// written here (PreJoin.tsx: "Not a name somebody else chose for them.
+    /// It is this link's, and keeping it would greet them by it on every visit
+    /// after"). Opening such a link used to write it over the saved name.
     public var name: String {
         didSet { if !rehearsal { UserDefaults.standard.set(name, forKey: "meet-live.name") } }
     }
@@ -42,20 +86,47 @@ public final class AppModel {
     }
     /// Never stored, as the web never stores it (secrecy.ts).
     public var sealingWord = ""
-    /// Nil picks whichever relay answers fastest.
-    public var relayChoice: String?
-    public var startWithMicrophone = true
-    public var startWithCamera = false
+    /// Nil picks whichever relay answers fastest. Kept under the web's own
+    /// name (api.ts `rememberRelay`), so that a machine somebody picked is
+    /// the one the next screen and the next launch say, rather than coming
+    /// back as "Automatic". The web keeps it for the tab's sitting; an app
+    /// has no tab, and on a phone the system ends the process whenever it
+    /// likes, so it is kept, and dropped again whenever the deployment stops
+    /// offering that relay (`dropRelayNotOffered`).
+    public var relayChoice: String? {
+        didSet {
+            guard !rehearsal, relayChoice != oldValue else { return }
+            UserDefaults.standard.set(relayChoice, forKey: Self.relayKey)
+        }
+    }
+    /// What starts on when somebody joins (preferences.ts `meet-live.devices`):
+    /// the microphone on and the camera off unless somebody chose otherwise,
+    /// "the cheaper of the two mistakes". Written as it is switched, as the
+    /// web's account page writes it, so the settings and the join screen are
+    /// one choice and not two that disagree.
+    public var startWithMicrophone: Bool {
+        didSet { rememberDevices() }
+    }
+    public var startWithCamera: Bool {
+        didSet { rememberDevices() }
+    }
     public private(set) var invite: String?
     public private(set) var invitation: InviteInfo?
     private var knockTask: Task<Void, Never>?
     /// The arranged meeting a `?meeting=` link points at, while it is waited
     /// for (meeting.ts, components/room/Waiting.tsx).
     public private(set) var arrangement: Arrangement?
-    public private(set) var waitingSays: String?
+    public private(set) var waiting = Waiting()
+    private var meetingToken: String?
     private var waitTask: Task<Void, Never>?
+    /// Moved on by every new picture, so the old one is not shown from the
+    /// image cache under the same address (`avatarAddress`).
+    public private(set) var pictureVersion = 0
 
     private static let serverKey = "tomoshibi.server"
+    static let relayKey = "meet-live.relay"
+    static let devicesKey = "meet-live.devices"
+    static let originalKey = "meet-live.original-sound"
 
     /// The deployment this app is made for, which it opens on until somebody
     /// chooses another: the one whose web client it stands beside. Left empty,
@@ -84,11 +155,43 @@ public final class AppModel {
         #endif
         serverAddress = UserDefaults.standard.string(forKey: Self.serverKey) ?? Self.home
         name = UserDefaults.standard.string(forKey: "meet-live.name") ?? ""
+        let joining = Self.rememberedDevices()
+        startWithMicrophone = joining.microphone
+        startWithCamera = joining.camera
+        // A rehearsal joins wherever the test says, and a relay the person
+        // picked on their own deployment means nothing on a test's.
+        relayChoice = rehearsal ? nil : UserDefaults.standard.string(forKey: Self.relayKey)
     }
 
     private var passphraseKey: String { "passphrase:" + (deployment?.baseUrl() ?? serverAddress) }
     private var cookieKey: String { "account:" + (deployment?.baseUrl() ?? serverAddress) }
     private var identityKey: String { "tomoshibi.identity." + (deployment?.baseUrl() ?? serverAddress) }
+
+    // MARK: What is switched on when somebody joins
+
+    /// preferences.ts `rememberedDevices`: each half on its own, so a record
+    /// that lost one keeps the other, and anything unreadable is the default.
+    static func rememberedDevices() -> (microphone: Bool, camera: Bool) {
+        guard let stored = UserDefaults.standard.string(forKey: devicesKey),
+              let parsed = try? JSONSerialization.jsonObject(with: Data(stored.utf8)) as? [String: Any] else {
+            return (true, false)
+        }
+        return (parsed["microphone"] as? Bool ?? true, parsed["camera"] as? Bool ?? false)
+    }
+
+    private func rememberDevices() {
+        guard !rehearsal else { return }
+        // The web's JSON exactly, `{"camera":…,"microphone":…}`.
+        let text = "{\"camera\":\(startWithCamera),\"microphone\":\(startWithMicrophone)}"
+        UserDefaults.standard.set(text, forKey: Self.devicesKey)
+    }
+
+    /// sound.ts `rememberedOriginal`: whether the voice goes out as it is.
+    /// Never the owner's choice in a rehearsal, whose echo measurements say
+    /// for themselves which voice they want (TOMOSHIBI_ORIGINAL).
+    var originalSoundWanted: Bool {
+        !rehearsal && UserDefaults.standard.string(forKey: Self.originalKey) == "on"
+    }
 
     // MARK: Reaching a deployment
 
@@ -118,6 +221,9 @@ public final class AppModel {
             // A passphrase to join with, so a test can join as the host of the
             // room it opens.
             if let typed = environment["TOMOSHIBI_PASSPHRASE"] { passphrase = typed }
+            // TOMOSHIBI_DEBUG_SEAL=<word>: a sealing word already typed, so a
+            // test can see the screens that say the call is sealed.
+            if let word = environment["TOMOSHIBI_DEBUG_SEAL"] { sealingWord = word }
             if let room = environment["TOMOSHIBI_AUTOJOIN"] {
                 prepare(room: room)
                 await join()
@@ -126,6 +232,22 @@ public final class AppModel {
             } else if let room = environment["TOMOSHIBI_PREPARE"] {
                 // Stops before the call, for a test to look at that screen.
                 prepare(room: room)
+            } else if let link = environment["TOMOSHIBI_OPEN"], let url = URL(string: link) {
+                // TOMOSHIBI_OPEN=<link>: an invitation or meeting link opened
+                // as the system would hand it over, for a test to see what a
+                // guest sees, a bad link included.
+                await open(url)
+            } else if let ended = environment["TOMOSHIBI_DEBUG_ENDED"] {
+                // TOMOSHIBI_DEBUG_ENDED=left|closed|removed|lost: the screen
+                // after a call, for each of the ways one ends.
+                if let room = environment["TOMOSHIBI_ROOM"] { self.room = room }
+                ending = switch ended {
+                case "closed": .closed
+                case "removed": .removed
+                case "lost": .lost
+                default: .left
+                }
+                screen = .ended
             }
             return
         }
@@ -156,7 +278,7 @@ public final class AppModel {
             screen = room.isEmpty ? .lobby : .prejoin
             Task { relays = try? await deployment.relays() }
         } catch {
-            problem = explain(error)
+            tell(explain(error))
             // Opening on a deployment that will not answer leaves somebody
             // where they can choose another, rather than on the mark.
             if screen == .starting { screen = .server }
@@ -170,10 +292,29 @@ public final class AppModel {
         if let fresh = try? await deployment.relays() { relays = fresh }
     }
 
+    /// Whether there is a machine to choose at all (PreJoin.tsx
+    /// `offerChoice`): more than one relay, on a deployment that acts on the
+    /// choice. One relay is not a choice, and a picker on a deployment that
+    /// ignores it is a control that does nothing.
+    public var offersRelayChoice: Bool {
+        guard let relays else { return false }
+        return relays.measure && relays.relays.count > 1
+    }
+
+    /// A relay remembered from before that this deployment does not offer,
+    /// or no longer takes calls on, would be sent with every join and
+    /// refused, or honoured for a machine nobody can see in the picker.
+    private func dropRelayNotOffered() {
+        guard let choice = relayChoice, let relays else { return }
+        if !relays.relays.contains(where: { $0.name == choice && !$0.maintenance }) { relayChoice = nil }
+    }
+
     public func forgetServer() {
         deployment = nil
         info = nil
         account = nil
+        relays = nil
+        relayChoice = nil
         screen = .server
     }
 
@@ -192,7 +333,13 @@ public final class AppModel {
         components.fragment = nil
         components.path = ""
         if components.scheme == "tomoshibi" { components.scheme = "https" }
-        if let origin = components.url?.absoluteString, origin != deployment?.baseUrl() {
+        // Compared without the trailing slash the deployment's address always
+        // has and a link's origin never does: compared as they were, every
+        // link to the deployment already open counted as another one, and
+        // connecting to it again left a session the Keychain did not hold
+        // (a rehearsal's, which keeps none) signed out.
+        let here = deployment.map { $0.baseUrl().trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
+        if let origin = components.url?.absoluteString, origin.trimmingCharacters(in: CharacterSet(charactersIn: "/")) != here {
             serverAddress = origin
             await connect()
         }
@@ -203,21 +350,59 @@ public final class AppModel {
             return
         }
         if let token {
+            let said = try? await deployment.inviteInfo(token: token)
+            // An invitation that is no good is still somebody sent here on
+            // purpose, and they are told which of three things it is, because
+            // they are three different next moves (App.tsx): come back later,
+            // the meeting is over, or ask for another link. Thrown away, the
+            // link opened a join screen that could only be refused.
+            if let error = said?.error ?? (said == nil ? "no_such_invite" : nil) {
+                invite = nil
+                invitation = nil
+                if error == "invite_not_yet", let from = said?.from, let at = Self.instant(from) {
+                    tell(t("That invitation opens {when}. Come back then.", ["when": LobbyModel.said(at)]))
+                } else if error == "invite_expired" {
+                    tell(t("That meeting has ended."))
+                } else if error == "rate_limited" {
+                    tell(t("Too many attempts. Try again in a moment."))
+                } else {
+                    tell(t("That invitation is no longer good. Ask for another."))
+                }
+                screen = .lobby
+                return
+            }
             invite = token
-            invitation = try? await deployment.inviteInfo(token: token)
-            if let name = invitation?.name, !name.isEmpty { self.name = name }
-            room = invitation?.room ?? linkRoom
+            invitation = said
+            room = said?.room ?? linkRoom
         } else if !linkRoom.isEmpty {
             // A link with a room and nothing else is a room name, and only
             // somebody signed in is taken anywhere by one of those.
             guard account != nil else {
-                problem = t("{room} is by invitation. Ask the organiser for a link.", ["room": linkRoom])
+                tell(t("{room} is by invitation. Ask the organiser for a link.", ["room": linkRoom]))
                 screen = .lobby
                 return
             }
             room = linkRoom
         }
         if !room.isEmpty { screen = .prejoin }
+    }
+
+    /// The name an invitation was made for, which is the name the guest will
+    /// wear whatever is typed: the server signs it into the token
+    /// (PreJoin.tsx `locked`).
+    public var invitedName: String? {
+        guard let name = invitation?.name, !name.isEmpty else { return nil }
+        return name
+    }
+
+    /// Somebody who arrived on an invitation link, who has a name to choose and
+    /// nothing else to answer (PreJoin.tsx `guest`).
+    public var arrivedInvited: Bool { invitation != nil }
+
+    /// The name this person will be called in the room: the account's, the
+    /// invitation's, or what they typed, in that order.
+    public var joiningName: String {
+        account?.name ?? invitedName ?? name.trimmingCharacters(in: .whitespaces)
     }
 
     // MARK: Account
@@ -242,6 +427,96 @@ public final class AppModel {
         account = nil
     }
 
+    /// Account.tsx `Picture`: the picture as a data URL the account page would
+    /// send, already scaled; the sentence to say if it did not take.
+    public func setPicture(_ dataURL: String) async -> String? {
+        guard let deployment else { return nil }
+        do {
+            account = try await deployment.setAvatar(image: dataURL)
+            pictureVersion += 1
+            return nil
+        } catch {
+            return t("That picture could not be used.")
+        }
+    }
+
+    public func removePicture() async -> String? {
+        guard let deployment else { return nil }
+        do {
+            account = try await deployment.removeAvatar()
+            pictureVersion += 1
+            return nil
+        } catch {
+            return t("That picture could not be used.")
+        }
+    }
+
+    /// Account.tsx `Passphrase`, with its `explain`.
+    public func changePassphrase(current: String, next: String) async -> String? {
+        guard let deployment else { return nil }
+        do {
+            account = try await deployment.changePassphrase(current: current, next: next)
+            return nil
+        } catch let ProtocolError.Refused(_, code) {
+            switch code {
+            case "not_yours": return t("That is not your current passphrase.")
+            case "passphrase_too_short": return t("At least eight characters.")
+            case "passphrase_unchanged": return t("That is the passphrase you already have.")
+            case "passphrase_in_use": return t("Somebody else already uses that passphrase. Choose another.")
+            default: return t("That could not be changed. Try again.")
+            }
+        } catch {
+            return t("That could not be changed. Try again.")
+        }
+    }
+
+    /// Account.tsx `GuestLinks`: a standing link into a scope's room.
+    public func makeGuestLink(room: String, name: String, from: Date?, until: Date?) async -> Result<MadeInvite, GuestLinkRefusal> {
+        guard let deployment else { return .failure(GuestLinkRefusal(t("That link could not be made. Try again."))) }
+        do {
+            let made = try await deployment.createStandingInvite(
+                room: room, name: name.trimmingCharacters(in: .whitespaces),
+                fromMs: from.map { Int64($0.timeIntervalSince1970 * 1000) },
+                untilMs: until.map { Int64($0.timeIntervalSince1970 * 1000) })
+            return .success(made)
+        } catch {
+            return .failure(GuestLinkRefusal(Self.explainLink(error)))
+        }
+    }
+
+    /// Stops every link into a room, returning how many stopped.
+    public func stopGuestLinks(room: String) async -> Result<UInt32, GuestLinkRefusal> {
+        guard let deployment else { return .failure(GuestLinkRefusal(t("That link could not be made. Try again."))) }
+        do {
+            return .success(try await deployment.revokeInvites(room: room, bearer: nil))
+        } catch {
+            return .failure(GuestLinkRefusal(Self.explainLink(error)))
+        }
+    }
+
+    /// Account.tsx `explainLink`.
+    static func explainLink(_ error: Error) -> String {
+        guard case let ProtocolError.Refused(_, code) = error else { return t("That link could not be made. Try again.") }
+        switch code {
+        case "not_yours": return t("You can make links only into rooms of your own scopes.")
+        case "name_too_long": return t("That name is too long.")
+        case "bad_time": return t("That window cannot be used. It has to end after it starts, and after now.")
+        case "invalid_room": return t("Room names can only use lowercase letters, numbers and dashes.")
+        case "rate_limited": return t("Too many attempts. Try again in a moment.")
+        case "not_allowed": return t("Guest links have not been opened to you.")
+        default: return t("That link could not be made. Try again.")
+        }
+    }
+
+    /// Whether the account holds a permission, by what the server said; a
+    /// server older than permissions said nothing, which reads as the
+    /// defaults (manage/grants.ts `DEFAULTS`: everything but Emby).
+    public func holds(_ permission: String) -> Bool {
+        guard let account else { return false }
+        if let can = account.can { return can.contains(permission) }
+        return permission != "emby"
+    }
+
     // MARK: Joining
 
     /// Only somebody signed in, or holding an invitation, is taken to a room
@@ -250,7 +525,7 @@ public final class AppModel {
     /// somebody nobody knows is neither (the owner's rule, 2026-10-15).
     public func prepare(room: String) {
         guard account != nil || invite != nil || rehearsal else {
-            problem = t("Rooms here are by invitation. Open the link you were sent, or sign in.")
+            tell(t("Rooms here are by invitation. Open the link you were sent, or sign in."))
             return
         }
         self.room = room.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -262,7 +537,7 @@ public final class AppModel {
     /// already shown the preview and taken the choices the join screen would.
     public func enter(room: String) async {
         guard account != nil || invite != nil || rehearsal else {
-            problem = t("Rooms here are by invitation. Open the link you were sent, or sign in.")
+            tell(t("Rooms here are by invitation. Open the link you were sent, or sign in."))
             return
         }
         self.room = room.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -277,12 +552,16 @@ public final class AppModel {
         do {
             // Signed in, the web sends the account's name and no passphrase:
             // the session is the proof (api.ts). A guest on an invitation with
-            // a name takes that name.
+            // a name takes that name. A guest of a room held under a scope is
+            // minted a mark of their own and a passphrase is ignored, so none
+            // is sent and the one kept here is left alone (PreJoin.tsx
+            // `scopedGuest`).
             let signed = account != nil
+            let scopedGuest = arrivedInvited && !scopeOf(name: room).isEmpty
             let grant = try await deployment.join(
                 room: room,
-                name: signed ? account!.name : name,
-                passphrase: signed ? "" : passphrase,
+                name: joiningName,
+                passphrase: signed || scopedGuest ? "" : passphrase,
                 identity: UserDefaults.standard.string(forKey: identityKey),
                 relay: relayChoice ?? "",
                 invite: invite)
@@ -294,6 +573,9 @@ public final class AppModel {
                 sealingWord: sealingWord.isEmpty ? nil : sealingWord,
                 forward: grant.forward.map { IceServer(url: $0.url, username: $0.username, credential: $0.credential) })
             let model = try await CallModel.join(options, deployment: deployment, region: grant.region)
+            // Before the microphone is published, so it goes out the way it
+            // was asked for the first time rather than being republished.
+            if originalSoundWanted { try? await model.setOriginalSound(true) }
             model.onMoved = { [weak self] relay in
                 Task { await self?.rejoin(to: relay) }
             }
@@ -309,13 +591,10 @@ public final class AppModel {
             if startWithMicrophone { try? await model.setMicrophone(true) }
             if startWithCamera { try? await model.setCamera(true) }
         } catch let error as ProtocolError {
-            if case let .Refused(_, code) = error, code == "not_invited" || code == "not_in_scope" {
-                problem = explain(error)
-            } else {
-                problem = explain(error)
-            }
+            // Why they are not in the meeting, which stays until read.
+            tell(explain(error))
         } catch {
-            problem = t("Could not join {room}.", ["room": room])
+            tell(t("Could not join {room}.", ["room": room]))
         }
     }
 
@@ -329,6 +608,10 @@ public final class AppModel {
         await old?.leave()
         relayChoice = nil
         await join()
+        // A join that failed left the screen on the call with no call in it,
+        // which drew nothing at all: a black window. Back to the join screen,
+        // with the reason, and the Join button that tries again.
+        if call == nil { screen = .prejoin }
     }
 
     /// Where a move is taking the meeting while there is no call to show it
@@ -338,9 +621,32 @@ public final class AppModel {
     public private(set) var movingTo: String?
 
     public func leave() async {
+        await end(.left)
+    }
+
+    /// The call ended without anybody here pressing leave: the reason is the
+    /// core's, the media server's disconnect reason by name.
+    public func ended(because reason: String) async {
+        let ending: Ending = if reason.contains("RoomDeleted") || reason.contains("RoomClosed") {
+            .closed
+        } else if reason.contains("ParticipantRemoved") {
+            .removed
+        } else if reason.contains("ClientInitiated") {
+            .left
+        } else {
+            .lost
+        }
+        await end(ending)
+    }
+
+    private func end(_ how: Ending) async {
+        ending = how
         await call?.leave()
         call = nil
         screen = .ended
+        // A relay that has just dropped a call is the one thing known about
+        // the fleet; without forgetting the measurement it would go on being
+        // named the fastest for minutes (App.tsx, the lost connection).
         forgetRelayMeasurement()
     }
 
@@ -349,66 +655,154 @@ public final class AppModel {
         problem = nil
         invite = nil
         invitation = nil
+        stopWaitingTasks()
+        arrangement = nil
     }
 
     // MARK: An arranged meeting
 
-    /// Asks after the meeting at the web's pace until it has begun (then
-    /// joins with the invitation the server gives) or cannot any more.
+    /// Waiting.tsx, which is a join screen whose button waits.
+    ///
+    /// Nothing is asked of the meeting but what it is until somebody presses:
+    /// the web's first draft joined the moment the host arrived, and somebody
+    /// still typing their name was joined with none, and somebody arriving
+    /// late was put in the call before they had looked at their own camera.
+    /// This used to do the same, polling from the moment the link opened.
+    public struct Waiting: Equatable, Sendable {
+        public enum Gone: Equatable, Sendable { case cancelled, ended, notComing }
+        /// The button has been pressed and the door is being asked.
+        public var asking = false
+        public var gone: Gone?
+        /// The last read failed; said, and tried again.
+        public var unreachable = false
+    }
+
     private func wait(for token: String, on deployment: Deployment) {
-        waitTask?.cancel()
+        stopWaitingTasks()
+        meetingToken = token
+        arrangement = nil
+        waiting = Waiting()
+        problem = nil
         screen = .waiting
-        waitingSays = nil
+        // Read on arrival so the screen can say what it is for, and again,
+        // slowly, until it can (Waiting.tsx `RETRY_EVERY`).
         waitTask = Task { [weak self] in
-            var firstSeen: Date?
             while !Task.isCancelled {
                 guard let self else { return }
-                do {
-                    let arrangement = try await deployment.arranged(token: token)
-                    self.arrangement = arrangement
-                    self.room = arrangement.room
-                    if arrangement.ended {
-                        self.waitingSays = t("That meeting has ended.")
-                        return
+                if await self.look() != nil {
+                    // TOMOSHIBI_DEBUG_WAIT=press: the button pressed once the
+                    // meeting is known, for a test of the whole wait.
+                    if self.rehearsal, ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_WAIT"] == "press" {
+                        Task { await self.goArranged() }
                     }
-                    if let invite = arrangement.invite {
-                        self.invite = invite
-                        await self.join()
-                        return
-                    }
-                    self.waitingSays = nil
-                    let at = Self.instant(arrangement.at)
-                    if let at, Date().timeIntervalSince(at) * 1000 > Double(hostNotComingAfterMs()) {
-                        self.waitingSays = t("The host has not started this meeting.")
-                        return
-                    }
-                    firstSeen = firstSeen ?? Date()
-                    let pause = meetingAskEveryMs(at: arrangement.at, nowMs: Int64(Date().timeIntervalSince1970 * 1000))
-                    try? await Task.sleep(for: .milliseconds(Int(pause)))
-                } catch let error as ProtocolError {
-                    if case let .Refused(_, code) = error, code == "no_such_meeting" {
-                        self.waitingSays = t("That invitation is no longer good. Ask for another.")
-                        return
-                    }
-                    self.waitingSays = t("Could not reach the meeting. Trying again.")
-                    try? await Task.sleep(for: .seconds(5))
-                } catch {
-                    try? await Task.sleep(for: .seconds(5))
+                    return
                 }
+                if self.waiting.gone != nil { return }
+                try? await Task.sleep(for: .seconds(30))
             }
         }
     }
 
-    /// The host of an arranged meeting starts it by joining.
-    public func startArranged() async {
+    /// Reads the meeting once.
+    private func look() async -> Arrangement? {
+        guard let deployment, let meetingToken else { return nil }
+        do {
+            let said = try await deployment.arranged(token: meetingToken)
+            arrangement = said
+            room = said.room
+            waiting.unreachable = false
+            if said.ended { waiting.gone = .ended }
+            return said
+        } catch let ProtocolError.Refused(_, code) where code == "no_such_meeting" {
+            waiting.gone = .cancelled
+            return nil
+        } catch {
+            waiting.unreachable = true
+            return nil
+        }
+    }
+
+    /// Whether the meeting has begun and carries the way in, so the button is
+    /// the ordinary Join.
+    public var arrangedReady: Bool {
+        guard let arrangement else { return false }
+        return arrangement.started && arrangement.invite != nil
+    }
+
+    /// When the host may begin it: the server begins a meeting only from
+    /// `from`, and a Start pressed earlier joins and begins nothing.
+    public var arrangedOpens: Date? {
+        guard let arrangement else { return nil }
+        return Self.instant(arrangement.from ?? arrangement.at)
+    }
+
+    /// The one button: join where it has begun, begin it where it is the
+    /// host's, otherwise wait for the host.
+    public func goArranged() async {
+        guard let arrangement else { return }
+        if arrangedReady, let invite = arrangement.invite {
+            self.invite = invite
+            await join()
+            return
+        }
+        // The host does not wait for the host.
+        if arrangement.mine {
+            await join()
+            return
+        }
+        askForArranged()
+    }
+
+    /// Asks at the web's pace until the meeting begins (then joins with the
+    /// invitation it carries), ends, or the host is two hours late.
+    private func askForArranged() {
         waitTask?.cancel()
-        await join()
+        waiting.asking = true
+        waiting.gone = nil
+        waitTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                let said = await self.look()
+                if Task.isCancelled { return }
+                if said?.ended == true || self.waiting.gone != nil {
+                    self.waiting.asking = false
+                    return
+                }
+                if let said, said.started, let invite = said.invite {
+                    self.waiting.asking = false
+                    self.invite = invite
+                    await self.join()
+                    return
+                }
+                if let said, let at = Self.instant(said.at), Date().timeIntervalSince(at) * 1000 > Double(hostNotComingAfterMs()) {
+                    self.waiting.asking = false
+                    self.waiting.gone = .notComing
+                    return
+                }
+                // A read that failed is not a reason to ask faster.
+                let pause = said.map { meetingAskEveryMs(at: $0.at, nowMs: Int64(Date().timeIntervalSince1970 * 1000)) } ?? 30_000
+                try? await Task.sleep(for: .milliseconds(Int(pause)))
+            }
+        }
+    }
+
+    /// "Ask again", after the host was said not to be coming.
+    public func askAgain() {
+        askForArranged()
     }
 
     public func stopWaiting() {
-        waitTask?.cancel()
+        stopWaitingTasks()
         arrangement = nil
+        meetingToken = nil
+        waiting = Waiting()
         screen = .lobby
+    }
+
+    private func stopWaitingTasks() {
+        waitTask?.cancel()
+        waitTask = nil
+        waiting.asking = false
     }
 
     static func instant(_ text: String) -> Date? {
@@ -419,11 +813,13 @@ public final class AppModel {
 
     // MARK: The door
 
-    /// Asks the room's host to let this person in, then waits.
+    /// Asks the room's host to let this person in, then waits. Under the name
+    /// the room will know them by: somebody signed in knocked as the guest
+    /// name this device last typed, and was let in as somebody else.
     public func knock() async {
         guard let deployment else { return }
         do {
-            let ticket = try await deployment.knock(room: room, name: name)
+            let ticket = try await deployment.knock(room: room, name: joiningName)
             screen = .knocking
             knockTask?.cancel()
             knockTask = Task { [weak self] in
@@ -437,12 +833,12 @@ public final class AppModel {
                         await self.join()
                         return
                     case .refused:
-                        self.problem = t("Nobody let you in. Ask for a link.")
+                        self.tell(t("Nobody let you in. Ask for a link."))
                         self.screen = .prejoin
                         return
                     case .knocking:
                         if Date().timeIntervalSince(started) * 1000 > Double(knockGiveUpAfterMs()) {
-                            self.problem = t("Nobody let you in. Ask for a link.")
+                            self.tell(t("Nobody let you in. Ask for a link."))
                             self.screen = .prejoin
                             return
                         }
@@ -450,7 +846,7 @@ public final class AppModel {
                 }
             }
         } catch {
-            problem = explain(error)
+            problem = t("That could not be sent.")
         }
     }
 
@@ -474,7 +870,7 @@ public final class AppModel {
             case "invalid_room": return t("Room names can only use lowercase letters, numbers and dashes.")
             case "room_not_open": return t("{room} isn't open. Ask the organiser for the link.", ["room": room])
             case "not_invited": return t("{room} is by invitation. Ask the organiser for a link.", ["room": room])
-            case "not_in_scope": return t("Only members of {scope} can join {room}.", ["room": room, "scope": scopeOf(name: room) ?? ""])
+            case "not_in_scope": return t("Only members of {scope} can join {room}.", ["room": room, "scope": scopeOf(name: room)])
             case "relay_not_allowed": return t("Access denied. That server is for administrators.")
             case "blocked": return t("This passphrase cannot join. Ask the organiser.")
             case "not_yours": return t("That name and passphrase do not go together.")
@@ -489,6 +885,12 @@ public final class AppModel {
     /// Whether the person could ask to be let in instead (PreJoin.tsx ~521).
     public var canKnock: Bool {
         problem == t("{room} is by invitation. Ask the organiser for a link.", ["room": room])
-            || problem == t("Only members of {scope} can join {room}.", ["room": room, "scope": scopeOf(name: room) ?? ""])
+            || problem == t("Only members of {scope} can join {room}.", ["room": room, "scope": scopeOf(name: room)])
     }
+}
+
+/// A guest link refused, as a sentence.
+public struct GuestLinkRefusal: Error {
+    public let sentence: String
+    init(_ sentence: String) { self.sentence = sentence }
 }

@@ -37,10 +37,13 @@ struct TomoshibiApp: App {
         }
         #endif
         #if os(macOS)
-        // The app's own Settings window, on ⌘, as every Mac app has it.
+        // The app's own Settings window, on ⌘, as every Mac app has it, drawn
+        // as the app's own: a glass sidebar of sections over the evening
+        // room, resizable down to what its two columns need.
         Settings {
             SettingsView(app: app)
         }
+        .windowResizability(.contentMinSize)
         #endif
     }
 }
