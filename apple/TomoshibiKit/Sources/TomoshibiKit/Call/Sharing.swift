@@ -1,6 +1,7 @@
 #if os(macOS)
 import Foundation
 import Observation
+import os
 import ScreenCaptureKit
 import TomoshibiCore
 
@@ -34,10 +35,16 @@ public final class Sharing {
     private var video: VideoInput?
     private var sound: AudioInput?
 
+    static let log = Logger(subsystem: "app.tomoshibi", category: "share")
+
     public init() {
         quality = ScreenCapture.Quality(rawValue: UserDefaults.standard.integer(forKey: "meet.share.quality")) ?? .auto
         let remembered = UserDefaults.standard.integer(forKey: "meet-live.share-frame-rate")
         fps = remembered > 0 ? remembered : 60
+        capture.onStopped = { [weak self] error in
+            Self.log.notice("the system ended the share: \(error.localizedDescription, privacy: .public)")
+            Task { await self?.stop() }
+        }
     }
 
     /// The frame rates each size allows (room.ts ~59-63).
@@ -52,8 +59,17 @@ public final class Sharing {
 
     /// Asks the person what to share and starts sending it.
     public func start(on call: Call) async throws {
-        guard let filter = await capture.pick() else { return }
-        try await begin(filter, on: call)
+        guard let filter = await capture.pick() else {
+            Self.log.notice("nothing picked")
+            return
+        }
+        do {
+            try await begin(filter, on: call)
+            Self.log.notice("sharing the screen")
+        } catch {
+            Self.log.error("the share would not start: \(String(describing: error), privacy: .public)")
+            throw error
+        }
     }
 
     /// The same thing shared again at another setting: the uplink card's
@@ -94,7 +110,10 @@ public final class Sharing {
     public private(set) var listening = false
 
     public func startSoundOnly(on call: Call, sealed: Bool) async throws {
-        guard let filter = await capture.pick() else { return }
+        guard let filter = await capture.pick() else {
+            Self.log.notice("nothing picked")
+            return
+        }
         // Never in a sealed call: the stream is data, which crosses the relay
         // in the clear, in a call whose promise is that the relay hears nothing.
         let offered = soundLosslessOffered(wanted: lossless, encrypted: sealed, able: true)
@@ -102,12 +121,14 @@ public final class Sharing {
         do {
             try await capture.start(filter: filter, width: 2, height: 2, fps: 1, video: nil, sound: sound)
         } catch {
+            Self.log.error("the sound share would not start: \(String(describing: error), privacy: .public)")
             try? await sound.unpublish()
             throw error
         }
         self.sound = sound
         listening = true
         active = true
+        Self.log.notice("sharing sound, lossless offered \(offered, privacy: .public)")
     }
 
     public func stop() async {

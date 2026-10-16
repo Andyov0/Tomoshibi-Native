@@ -13,9 +13,6 @@ import TomoshibiCore
 /// three or more are a grid of up to nine.
 public struct RoomView: View {
     @Bindable var model: CallModel
-    #if os(macOS)
-    @State private var sharing = Sharing()
-    #endif
     @State private var panel: Panel?
     @State private var pinned: String?
     /// Which page of the grid or the strip is showing (usePagination.ts):
@@ -373,6 +370,10 @@ public struct RoomView: View {
     }
 
     // MARK: Sharing
+
+    #if os(macOS)
+    private var sharing: Sharing { model.sharing }
+    #endif
 
     private var sharingActive: Bool {
         #if os(macOS)

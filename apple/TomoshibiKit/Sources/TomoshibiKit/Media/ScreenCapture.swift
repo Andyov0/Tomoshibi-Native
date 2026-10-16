@@ -38,6 +38,12 @@ public final class ScreenCapture: NSObject {
 
     public var isSharing: Bool { stream != nil }
 
+    /// Told, on the main actor, when the system ends a share on its own: the
+    /// Stop in the menu bar's video menu, the shared window closing, the
+    /// display going away. Without it the tracks stayed published with
+    /// nothing feeding them and the button kept saying "Stop sharing".
+    public var onStopped: ((Error) -> Void)?
+
     public override init() {
         super.init()
     }
@@ -45,13 +51,23 @@ public final class ScreenCapture: NSObject {
     /// Shows the system's picker and resolves with what the person chose, or
     /// nil when they cancelled.
     public func pick() async -> SCContentFilter? {
-        await withCheckedContinuation { continuation in
+        // A picker the system declined to show never answers at all, so a
+        // second press would otherwise leave the first one waiting for ever.
+        finish(nil)
+        return await withCheckedContinuation { continuation in
             picked = { continuation.resume(returning: $0) }
             let picker = SCContentSharingPicker.shared
             var configuration = SCContentSharingPickerConfiguration()
             configuration.allowedPickerModes = [.singleDisplay, .singleWindow, .singleApplication]
             configuration.excludedBundleIDs = [Bundle.main.bundleIdentifier ?? ""].filter { !$0.isEmpty }
             picker.defaultConfiguration = configuration
+            // Control Center allows one stream per app unless told otherwise,
+            // and it counts a stream whose app died as still running: after
+            // one crash mid-share (2026-10-15, macOS 27) it refused every
+            // later picker with "Maximum stream count has been reached",
+            // silently, until it was itself restarted. One share at a time is
+            // this app's own rule (Sharing), so the system's count is lifted.
+            picker.maximumStreamCount = nil
             picker.add(self)
             picker.isActive = true
             picker.present()
@@ -99,7 +115,7 @@ public final class ScreenCapture: NSObject {
             configuration.height = 2
             configuration.minimumFrameInterval = CMTime(value: 1, timescale: 1)
         }
-        let stream = SCStream(filter: filter, configuration: configuration, delegate: nil)
+        let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
         try stream.addStreamOutput(output, type: .screen, sampleHandlerQueue: output.queue)
         if sound != nil {
             try stream.addStreamOutput(output, type: .audio, sampleHandlerQueue: output.queue)
@@ -166,11 +182,27 @@ extension ScreenCapture: SCContentSharingPickerObserver {
     }
 
     private func finish(_ filter: SCContentFilter?) {
-        let done = picked
+        guard let done = picked else { return }
         picked = nil
         SCContentSharingPicker.shared.remove(self)
         SCContentSharingPicker.shared.isActive = false
-        done?(filter)
+        done(filter)
+    }
+}
+
+extension ScreenCapture: SCStreamDelegate {
+    nonisolated public func stream(_ stream: SCStream, didStopWithError error: any Error) {
+        Task { @MainActor in self.ended(stream, error) }
+    }
+
+    private func ended(_ ended: SCStream, _ error: Error) {
+        // Only the stream still running: one this app stopped itself, or
+        // replaced with another, has nothing left to tell.
+        guard ended === stream else { return }
+        stream = nil
+        output.video = nil
+        output.sound = nil
+        onStopped?(error)
     }
 }
 #endif

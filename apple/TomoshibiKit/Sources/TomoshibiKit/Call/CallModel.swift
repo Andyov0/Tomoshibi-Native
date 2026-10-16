@@ -147,6 +147,13 @@ public final class CallModel {
     public let audio = CallAudio()
     @ObservationIgnored let lossless = LosslessPlayback()
     public let camera = CameraCapture()
+    #if os(macOS)
+    /// The share from this Mac. Kept with the call rather than in the view so
+    /// that leaving, or being ended, always stops it: a capture dropped
+    /// without being stopped stays counted by Control Center, which then
+    /// declines to show the picker again (see `ScreenCapture.pick`).
+    public let sharing = Sharing()
+    #endif
     private var microphoneInput: AudioInput?
     private var cameraInput: VideoInput?
     private var bridge: Bridge?
@@ -338,6 +345,8 @@ public final class CallModel {
         lossless.closeAll()
         #if os(iOS)
         broadcast?.stop()
+        #else
+        await sharing.stop()
         #endif
         audio.stop()
         camera.stop()
@@ -354,6 +363,9 @@ public final class CallModel {
             endedReason = reason
             audio.stop()
             camera.stop()
+            #if os(macOS)
+            Task { await sharing.stop() }
+            #endif
             // The server deleting the room is `RoomDeleted` in the Rust SDK
             // (the protocol's ROOM_DELETED, 5, which the web's SDK reads as
             // its room-closed reason); waiting only for `RoomClosed` left the
