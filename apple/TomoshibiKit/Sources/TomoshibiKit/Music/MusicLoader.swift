@@ -6,23 +6,145 @@ import TomoshibiCore
 ///
 /// Two forms of the same sound. `samples` is 48 kHz, 16-bit, two channels
 /// interleaved: what the core's Opus source takes, and what the holder's own
-/// speakers play. `original` is the file as it decoded, at its own rate, two
-/// channels of floats interleaved, for the lossless stream beside the Opus
-/// track: the web plays the decoded file through a context at the file's own
-/// rate and its lossless sender reads it there (sound.ts `fetchLibraryTrack`,
-/// `playDecoded`), so a listener hears the file's samples and not a
-/// resampling of them. Only kept where a lossless stream is offered; a
-/// five-minute song is a hundred megabytes of floats.
+/// speakers play. `original` is the file as it decodes, at its own rate, for
+/// the lossless stream beside the Opus track: the web plays the decoded file
+/// through a context at the file's own rate and its lossless sender reads it
+/// there (sound.ts `fetchLibraryTrack`, `playDecoded`), so a listener hears
+/// the file's samples and not a resampling of them. Only where a lossless
+/// stream is offered.
 struct DecodedSong: Sendable {
     let samples: [Int16]
-    let original: [Float]?
+    let original: OriginalStream?
     /// The file's own samples a second, which the lossless stream runs at.
     let rate: UInt32
     /// What the file is, as the panel says it: "FLAC · 24-bit · 44.1 kHz".
     let quality: String?
 
     var frames: Int { samples.count / 2 }
-    var originalFrames: Int { (original?.count ?? 0) / 2 }
+}
+
+/// The file's own samples for the lossless stream, two channels of floats
+/// interleaved, read from the file a few seconds ahead of where the stream
+/// is rather than held whole.
+///
+/// They were held whole: the length of the song in floats at the file's own
+/// rate, a hundred megabytes for five minutes of CD audio and over two
+/// hundred at 96 kHz, for the song playing and again for the next one
+/// prepared beside it. On a phone that is the memory the system ends an app
+/// for. Now the fetched file is read from for as long as the song is
+/// wanted, the reading happens on a queue of its own, and the music's clock
+/// takes each 10 ms of it from what was read, never waiting on the disk or
+/// the decoder. The samples are the decoder's floats exactly as they were.
+///
+/// The file's name is removed as soon as it is open, and what is read is
+/// read through the open file: kept by name until the song was let go, every
+/// song of a call that ended without that -- the app quit, or killed --
+/// stayed behind in the temporary folder, tens of megabytes each.
+final class OriginalStream: @unchecked Sendable {
+    let rate: UInt32
+    /// How much is read ahead, and how much at a time, in seconds.
+    static let ahead = 4.0
+    static let piece: AVAudioFrameCount = 16_384
+
+    private let file: AVAudioFile
+    private let input: AVAudioPCMBuffer
+    /// More than two channels folded to two, as the web's two-channel
+    /// destination folds them.
+    private let folding: (AVAudioConverter, AVAudioPCMBuffer)?
+    private let queue = DispatchQueue(label: "app.tomoshibi.music.original", qos: .userInitiated)
+    private let lock = NSLock()
+    /// What has been read, as a ring: frames `taken..<read` of the file.
+    private var ring: [Float]
+    private let capacity: Int
+    private var taken = 0
+    private var read = 0
+    private var reading = false
+    private var finished = false
+
+    /// Takes over `url`, whose name is removed once it is open, and reads
+    /// the first seconds at once, so the stream begins with the song.
+    init(url: URL) throws {
+        let file = try AVAudioFile(forReading: url)
+        try? FileManager.default.removeItem(at: url)
+        let source = file.processingFormat
+        guard source.sampleRate > 0, source.channelCount > 0,
+              let input = AVAudioPCMBuffer(pcmFormat: source, frameCapacity: Self.piece)
+        else { throw CocoaError(.fileReadCorruptFile) }
+        if source.channelCount > 2,
+           let stereo = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: source.sampleRate, channels: 2, interleaved: false),
+           let fold = AVAudioConverter(from: source, to: stereo),
+           let into = AVAudioPCMBuffer(pcmFormat: stereo, frameCapacity: Self.piece) {
+            fold.downmix = true
+            folding = (fold, into)
+        } else {
+            folding = nil
+        }
+        self.file = file
+        self.input = input
+        rate = UInt32(source.sampleRate.rounded())
+        capacity = max(Int(Self.piece) * 2, Int(source.sampleRate * Self.ahead))
+        ring = [Float](repeating: 0, count: capacity * 2)
+        fill()
+    }
+
+    /// Up to `count` frames from where the stream is, into `into`, and how
+    /// many there were: fewer only at the end of the file, or if the reading
+    /// fell behind, which a decoder many times faster than playing does not.
+    /// Asks for more to be read once less than half the ring is left.
+    func take(_ count: Int, into: UnsafeMutableBufferPointer<Float>) -> Int {
+        lock.withLock {
+            let have = min(count, read - taken, into.count / 2)
+            ring.withUnsafeBufferPointer { all in
+                for frame in 0..<max(0, have) {
+                    let at = ((taken + frame) % capacity) * 2
+                    into[frame * 2] = all[at]
+                    into[frame * 2 + 1] = all[at + 1]
+                }
+            }
+            taken += max(0, have)
+            if !reading, !finished, read - taken < capacity / 2 {
+                reading = true
+                queue.async { [weak self] in self?.fill() }
+            }
+            return max(0, have)
+        }
+    }
+
+    /// Reads until the ring is full or the file ends. On the queue, or from
+    /// the initialiser before anything else can touch the file.
+    private func fill() {
+        while true {
+            let room = lock.withLock { capacity - (read - taken) }
+            guard room >= Int(Self.piece) else { break }
+            do {
+                try file.read(into: input, frameCount: Self.piece)
+            } catch {
+                input.frameLength = 0
+            }
+            var from = input
+            if let (fold, into) = folding, input.frameLength > 0 {
+                if (try? fold.convert(to: into, from: input)) != nil { from = into } else { input.frameLength = 0 }
+            }
+            let frames = Int(from.frameLength)
+            guard frames > 0, let planes = from.floatChannelData else {
+                lock.withLock { finished = true }
+                break
+            }
+            let left = planes[0]
+            let right = from.format.channelCount > 1 ? planes[1] : planes[0]
+            lock.withLock {
+                ring.withUnsafeMutableBufferPointer { all in
+                    for frame in 0..<frames {
+                        let at = ((read + frame) % capacity) * 2
+                        all[at] = left[frame]
+                        all[at + 1] = right[frame]
+                    }
+                }
+                read += frames
+            }
+        }
+        lock.withLock { reading = false }
+    }
 }
 
 /// Fetching and decoding a library track (sound.ts `fetchLibraryTrack`,
@@ -73,7 +195,7 @@ enum MusicLoader {
 
     struct Decoded {
         let samples: [Int16]
-        let original: [Float]?
+        let original: OriginalStream?
         let rate: UInt32
         /// What the file turned out to be, by its first bytes.
         let kind: String
@@ -99,11 +221,13 @@ enum MusicLoader {
             .appendingPathComponent("tomoshibi-music-\(UUID().uuidString)")
             .appendingPathExtension(kind)
         // Moved, not copied: whoever handed it over removes what is left at
-        // the old name, which is then nothing.
+        // the old name, which is then nothing. The lossless stream opens its
+        // own reading of it before the name goes.
         try FileManager.default.moveItem(at: downloaded, to: file)
         defer { try? FileManager.default.removeItem(at: file) }
         let opened = try AVAudioFile(forReading: file)
-        let (samples, original) = try decode(opened, keepOriginal: keepOriginal)
+        let original = try keepOriginal ? OriginalStream(url: file) : nil
+        let samples = try decode(opened)
         return Decoded(samples: samples, original: original, rate: UInt32(opened.processingFormat.sampleRate.rounded()),
                        kind: kind, file: opened.fileFormat)
     }
@@ -156,24 +280,22 @@ enum MusicLoader {
         }
     }
 
-    /// The whole file at 48 kHz in two channels, and, asked for, the file's
-    /// own samples in two channels at its own rate.
+    /// The whole file at 48 kHz in two channels.
     ///
     /// Read at the file's own rate and converted once, here, with the best
     /// converter the system has. The web decodes at the file's rate and lets
     /// the browser bring it to 48 kHz on the way into Opus, which runs at 48
     /// kHz whatever it is given; the core takes 48 kHz and nothing else, so
     /// the same step happens before the samples are handed over instead.
-    /// Converted in pieces, so a long file is never in memory twice over as
-    /// floats.
+    /// Converted in pieces, so a long file is never in memory as floats.
     ///
-    /// The original is the decoder's floats as they came. Core Audio scales
-    /// both signs of a 16- or 24-bit sample by the same power of two, so the
-    /// core's one-scale `to_int24` recovers every integer of the file
-    /// exactly; Chrome's asymmetric scale is why the web needs its own
-    /// recovery for a 16-bit file (lossless.ts `decodedToInt24`), and why
-    /// this does not.
-    static func decode(_ file: AVAudioFile, keepOriginal: Bool) throws -> ([Int16], [Float]?) {
+    /// The lossless stream's samples (`OriginalStream`) are the decoder's
+    /// floats as they came. Core Audio scales both signs of a 16- or 24-bit
+    /// sample by the same power of two, so the core's one-scale `to_int24`
+    /// recovers every integer of the file exactly; Chrome's asymmetric scale
+    /// is why the web needs its own recovery for a 16-bit file (lossless.ts
+    /// `decodedToInt24`), and why this does not.
+    static func decode(_ file: AVAudioFile) throws -> [Int16] {
         let source = file.processingFormat
         guard source.sampleRate > 0, source.channelCount > 0,
               let target = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 48_000, channels: 2, interleaved: true),
@@ -194,40 +316,6 @@ enum MusicLoader {
               let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: AVAudioFrameCount(Double(chunk) * ratio) + 4096)
         else { throw CocoaError(.fileReadCorruptFile) }
 
-        // The original in two channels: a mono file in both, as the web's
-        // two-channel destination upmixes it, and more than two folded down
-        // as its speakers' rules fold them.
-        var original: [Float] = []
-        if keepOriginal { original.reserveCapacity(Int(file.length) * 2) }
-        var folding: (AVAudioConverter, AVAudioPCMBuffer)?
-        if keepOriginal, source.channelCount > 2,
-           let stereo = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: source.sampleRate, channels: 2, interleaved: false),
-           let fold = AVAudioConverter(from: source, to: stereo),
-           let into = AVAudioPCMBuffer(pcmFormat: stereo, frameCapacity: chunk) {
-            fold.downmix = true
-            folding = (fold, into)
-        }
-        func keep(_ buffer: AVAudioPCMBuffer) {
-            guard keepOriginal else { return }
-            var read = buffer
-            if let (fold, into) = folding {
-                guard (try? fold.convert(to: into, from: buffer)) != nil else { return }
-                read = into
-            }
-            guard let planes = read.floatChannelData else { return }
-            let frames = Int(read.frameLength)
-            let left = planes[0]
-            let right = read.format.channelCount > 1 ? planes[1] : planes[0]
-            let start = original.count
-            original.append(contentsOf: repeatElement(0, count: frames * 2))
-            original.withUnsafeMutableBufferPointer { all in
-                for frame in 0..<frames {
-                    all[start + frame * 2] = left[frame]
-                    all[start + frame * 2 + 1] = right[frame]
-                }
-            }
-        }
-
         var samples: [Int16] = []
         samples.reserveCapacity((Int(Double(file.length) * ratio) + 4096) * 2)
         var finished = false
@@ -243,7 +331,6 @@ enum MusicLoader {
                         input.frameLength = 0
                     }
                     if input.frameLength > 0 {
-                        keep(input)
                         said.pointee = .haveData
                         return input
                     }
@@ -259,7 +346,7 @@ enum MusicLoader {
             if status == .endOfStream { break }
         }
         guard !samples.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
-        return (samples, keepOriginal ? original : nil)
+        return samples
     }
 
     /// How a file is said in the panel when no library described it: the

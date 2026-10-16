@@ -39,11 +39,11 @@ final class MusicOutput: @unchecked Sendable {
     private let lock = NSLock()
     private var song: DecodedSong?
     private var key: String?
-    /// Where the song is, in 48 kHz frames for Opus and in the file's own for
-    /// the lossless stream. Kept apart rather than one worked out from the
-    /// other, so neither stream ever repeats or skips a sample to round.
+    /// Where the song is, in 48 kHz frames for Opus; the lossless stream's
+    /// place in the file's own frames is its reader's. Kept apart rather
+    /// than one worked out from the other, so neither stream ever repeats or
+    /// skips a sample to round.
     private var position = 0
-    private var originalPosition = 0
     private var paused = false
     private var told = false
     private var running = true
@@ -101,7 +101,6 @@ final class MusicOutput: @unchecked Sendable {
             self.song = song
             self.key = key
             position = 0
-            originalPosition = 0
             paused = false
             told = false
             if lossless, song.original != nil, song.rate != losslessRate {
@@ -210,14 +209,8 @@ final class MusicOutput: @unchecked Sendable {
         let count = Int(due - losslessSent)
         guard count > 0 else { return nil }
         var samples = [Float](repeating: 0, count: count * 2)
-        if playing, let song, let file = song.original, song.rate == losslessRate, originalPosition < song.originalFrames {
-            let take = min(count, song.originalFrames - originalPosition)
-            file.withUnsafeBufferPointer { all in
-                samples.withUnsafeMutableBufferPointer { into in
-                    for index in 0..<(take * 2) { into[index] = all[originalPosition * 2 + index] }
-                }
-            }
-            originalPosition += take
+        if playing, let song, let file = song.original, song.rate == losslessRate {
+            _ = samples.withUnsafeMutableBufferPointer { into in file.take(count, into: into) }
         }
         let at = losslessSent * 1_000_000 / Int64(losslessRate)
         losslessSent = due
