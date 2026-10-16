@@ -118,6 +118,9 @@ public final class AppModel {
             // A passphrase to join with, so a test can join as the host of the
             // room it opens.
             if let typed = environment["TOMOSHIBI_PASSPHRASE"] { passphrase = typed }
+            // TOMOSHIBI_SEALING_WORD seals the call with that word, so a test
+            // can see what the features layered over a sealed call do.
+            if let word = environment["TOMOSHIBI_SEALING_WORD"] { sealingWord = word }
             if let room = environment["TOMOSHIBI_AUTOJOIN"] {
                 prepare(room: room)
                 await join()
