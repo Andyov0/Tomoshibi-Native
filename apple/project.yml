@@ -73,6 +73,13 @@ targets:
         CFBundleDevelopmentRegion: en
         CFBundleLocalizations: [en, zh-Hans, zh-Hant, ja]
         UILaunchScreen: {}
+        # The export compliance answer, given once in App Store Connect for
+        # build 1: standard algorithms only (TLS, DTLS-SRTP, AES-GCM for sealed
+        # calls), and not distributed in France. Apple recorded that as needing
+        # no documentation and as this key's NO, and says to put it here so
+        # that each upload is not asked again. Revisit it if the app is ever
+        # offered in France or carries cryptography of its own.
+        ITSAppUsesNonExemptEncryption: false
         # Said outright, as the defaults iOS used while they were left out: an
         # upload that runs on the iPad is refused without every orientation
         # (error 90474), because iPad multitasking may give it any of them.
