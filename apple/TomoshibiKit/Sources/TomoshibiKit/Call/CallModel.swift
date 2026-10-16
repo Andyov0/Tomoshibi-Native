@@ -646,15 +646,21 @@ public final class CallModel {
     /// The listener's setting for one of a person's sounds (hearing.ts): the
     /// level on the Opus track's node and on any lossless stream standing in
     /// for it, and a block that the core applies at the server to both.
+    ///
+    /// A blocked sound is also turned to nothing here, on both: the core can
+    /// only stop a track it is subscribed to, and the packets already on
+    /// their way, or a lossless stream still draining its buffer, would
+    /// otherwise play at the old level until the block took (Audible.tsx).
     public func hear(_ identity: String, sound: MediaSource, level: Float, blocked: Bool) async {
+        let audible = blocked ? 0 : level
         if let sid = person(identity)?.tracks.values.first(where: { track in
             sound == .unknown ? (track.source == .unknown && track.name.hasPrefix("music")) : track.source == sound
         })?.sid {
-            audio.setVolume(sid: sid, level)
+            audio.setVolume(sid: sid, audible)
         }
         guard sound == .screenShareAudio || sound == .unknown else { return }
         let music = sound == .unknown
-        lossless.setLevel(identity, music: music, level)
+        lossless.setLevel(identity, music: music, audible)
         await call.setHearing(identity: identity, music: music, level: level, blocked: blocked)
     }
 

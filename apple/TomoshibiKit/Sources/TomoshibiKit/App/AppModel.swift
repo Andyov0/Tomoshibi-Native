@@ -231,6 +231,9 @@ public final class AppModel {
             // TOMOSHIBI_DEBUG_SEAL=<word>: a sealing word already typed, so a
             // test can see the screens that say the call is sealed.
             if let word = environment["TOMOSHIBI_DEBUG_SEAL"] { sealingWord = word }
+            // TOMOSHIBI_SEALING_WORD seals the call with that word, so a test
+            // can see what the features layered over a sealed call do.
+            if let word = environment["TOMOSHIBI_SEALING_WORD"] { sealingWord = word }
             if let room = environment["TOMOSHIBI_AUTOJOIN"] {
                 prepare(room: room)
                 await join()

@@ -87,6 +87,10 @@ final class WatchEngine {
     /// The panel is on screen, where a refusal is said rather than on the
     /// stage.
     var panelOpen = false
+    /// The stage is on screen at a size that says things over the video: not
+    /// a tile in the strip, and not gone because nothing is being watched.
+    /// Set by the stage.
+    var stageShowing = false
 
     /// Released from deinit, which runs outside the main actor's isolation;
     /// only ever touched on the main thread, where the call's model is let go.
@@ -134,7 +138,7 @@ final class WatchEngine {
             if let signIn = WatchDebug.signIn {
                 _ = try? await call.deployment.signIn(name: signIn.name, passphrase: signIn.passphrase)
             }
-            ready = (try? await call.deployment.watchReady()) ?? false
+            ready = WatchDebug.links ? true : ((try? await call.deployment.watchReady()) ?? false)
         }
     }
 
@@ -265,7 +269,7 @@ final class WatchEngine {
         case let .resolve(request, text, forOther):
             let answer: WatchAnswer
             do {
-                switch try await call.deployment.resolveVideo(pasted: text, forOther: forOther) {
+                switch try await resolveVideo(text, forOther: forOther) {
                 case let .playable(video):
                     remember(video)
                     answer = .found(ticket: video.ticket, duration: video.duration, live: video.live, grantor: video.grantor)
@@ -288,6 +292,26 @@ final class WatchEngine {
                 answer = .refused(why: "failed")
             }
             return theatre.answer(request: request, answer: answer, nowMs: watchClock())
+        }
+    }
+
+    /// A link read through the deployment's gateway, or the stand-in a test
+    /// gives this app where the deployment has none (WatchDebug).
+    private func resolveVideo(_ text: String, forOther: Bool) async throws -> ResolvedLink {
+        if WatchDebug.links { return WatchDebug.resolve(text) }
+        return try await call.deployment.resolveVideo(pasted: text, forOther: forOther)
+    }
+
+    private func readInfo(_ ticket: String) async -> WatchInfo {
+        if let known = WatchDebug.info(ticket) { return known }
+        do {
+            switch try await call.deployment.videoInfo(ticket: ticket) {
+            case let .known(video): return .known(video)
+            case .unavailable: return .unavailable
+            case .failed: return .failed
+            }
+        } catch {
+            return .failed
         }
     }
 
@@ -324,16 +348,7 @@ final class WatchEngine {
     }
 
     private func fetch(_ ticket: String) async {
-        let found: WatchInfo
-        do {
-            switch try await call.deployment.videoInfo(ticket: ticket) {
-            case let .known(video): found = .known(video)
-            case .unavailable: found = .unavailable
-            case .failed: found = .failed
-            }
-        } catch {
-            found = .failed
-        }
+        let found = await readInfo(ticket)
         infos[ticket] = found
         let waiting = asking.removeValue(forKey: ticket) ?? []
         for one in waiting { one.resume(returning: found) }
@@ -347,16 +362,7 @@ final class WatchEngine {
     /// again, and one that could not be read this time is no reason to
     /// unlearn a video that was playing.
     func askAgain(_ ticket: String) async -> WatchInfo {
-        let found: WatchInfo
-        do {
-            switch try await call.deployment.videoInfo(ticket: ticket) {
-            case let .known(video): found = .known(video)
-            case .unavailable: found = .unavailable
-            case .failed: found = .failed
-            }
-        } catch {
-            found = .failed
-        }
+        let found = await readInfo(ticket)
         if found == .unavailable {
             infos[ticket] = .unavailable
             refresh(watchClock())
@@ -405,7 +411,7 @@ final class WatchEngine {
 
         let found: ResolvedLink
         do {
-            found = try await call.deployment.resolveVideo(pasted: WatchWords.cut(text, 2000), forOther: false)
+            found = try await resolveVideo(WatchWords.cut(text, 2000), forOther: false)
         } catch {
             say(WatchWords.refusal("failed"))
             return false

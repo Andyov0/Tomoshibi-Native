@@ -372,6 +372,12 @@
       "zh-Hans": "你在这里是谁，以及能用什么。",
       "zh-Hant": "你在這裡是誰，以及能用什麼。",
       "ja": "ここでのあなたと、使えるもの。"
+    },
+    "This app cannot play this kind of video. Everybody else goes on watching.": {
+      "en": "This app cannot play this kind of video. Everybody else goes on watching.",
+      "zh-Hans": "这个应用放不了这种格式的视频,其他人照常在看。",
+      "zh-Hant": "這個應用程式放不了這種格式的影片,其他人照常在看。",
+      "ja": "このアプリではこの形式の動画を再生できません。ほかの人はそのまま視聴を続けます。"
     }
   }
 }

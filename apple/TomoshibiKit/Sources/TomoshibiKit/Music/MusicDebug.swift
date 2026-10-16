@@ -1,4 +1,6 @@
+import AVFoundation
 import Foundation
+import TomoshibiBasics
 import TomoshibiCore
 #if os(macOS)
 import AppKit
@@ -24,7 +26,9 @@ import AppKit
 /// - `TOMOSHIBI_DEBUG_MUSIC_SCRIPT=6:pause;9:play;12:skip` presses the
 ///   holder's controls, or a listener's vote, at so many seconds after the
 ///   asks (pause, play, skip, vote, close, top, drop, dropnext, monitor50,
-///   noduck, duck, original, processed).
+///   noduck, duck, original, processed; and a listener's volume30,
+///   volume100, mute, unmute for the holder's music, and soundpanel50, the
+///   same setting written as the sound panel writes it).
 /// - `TOMOSHIBI_DEBUG_MUSIC_NO_VOICE_PROCESSING=1` and
 ///   `TOMOSHIBI_DEBUG_MUSIC_METER_MONITOR=1`: see `prepareEngine` and
 ///   `meterMonitor` below.
@@ -33,9 +37,115 @@ import AppKit
 /// - `TOMOSHIBI_DEBUG_MUSIC_METER_MIC=1` listens to the microphone for the
 ///   duck whenever there is music, on or off, to prove the input can be
 ///   listened to and let go of while the engine runs.
+/// - `TOMOSHIBI_DEBUG_MUSIC_FAKE_LOSSLESS=1` feeds the lossless player, for
+///   whoever's music arrives, a tone of its own (1 kHz, half scale, 44.1 kHz)
+///   as if the core had handed it over, and logs how loud it comes out ten
+///   times a second for its first three seconds and once a second after: the
+///   listener's volume, the duck and the fade-in measured on the sound itself,
+///   whatever becomes of the real stream on the way.
+/// - `TOMOSHIBI_DEBUG_MUSIC_FILES=<directory>` stands a library in for the
+///   deployment's, for a deployment that has none: one library called
+///   "Files", whose search finds the files there by name (a `*` finds them
+///   all) and whose songs are those files, decoded as a fetched track is,
+///   first bytes and all. Nothing about what the desk says to the room or
+///   what is published changes; only where the song comes from.
 @MainActor
 final class MusicDebug {
     private let environment = ProcessInfo.processInfo.environment
+
+    nonisolated static let filesSource = "files"
+
+    /// The directory a test's library is read from, if one is.
+    var files: URL? {
+        environment["TOMOSHIBI_DEBUG_MUSIC_FILES"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+    }
+
+    /// The stand-in library, where there is one.
+    var fileLibraries: [MusicLibrary]? {
+        files.map { _ in [MusicLibrary(id: Self.filesSource, name: "Files", signedIn: true)] }
+    }
+
+    /// The files whose names hold the words, as a library's hits.
+    nonisolated static func search(_ query: String, in directory: URL) -> [TomoshibiCore.MusicTrack] {
+        let names = ((try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []).sorted()
+        let words = query.trimmingCharacters(in: .whitespaces).lowercased()
+        return names.filter { !$0.hasPrefix(".") && (words == "*" || $0.lowercased().contains(words)) }.map { name in
+            let length = (try? AVAudioFile(forReading: directory.appendingPathComponent(name)))
+                .map { Double($0.length) / $0.processingFormat.sampleRate } ?? 0
+            return TomoshibiCore.MusicTrack(id: name, title: (name as NSString).deletingPathExtension, artists: ["Test files"],
+                              album: (name as NSString).pathExtension.uppercased(), cover: "", duration: length)
+        }
+    }
+
+    /// One of them, as a fetched song is decoded: copied to a name that says
+    /// nothing of what it is, as a download arrives, and named by its bytes.
+    nonisolated static func load(_ name: String, in directory: URL, keepOriginal: Bool) async throws -> MusicLoader.Outcome {
+        let source = directory.appendingPathComponent(name)
+        let fetched = FileManager.default.temporaryDirectory.appendingPathComponent("tomoshibi-fetched-\(UUID().uuidString).tmp")
+        try FileManager.default.copyItem(at: source, to: fetched)
+        defer { try? FileManager.default.removeItem(at: fetched) }
+        let decoded = try MusicLoader.decodeFile(at: fetched, said: nil, mime: nil, keepOriginal: keepOriginal)
+        return .ready(DecodedSong(samples: decoded.samples, original: decoded.original, rate: decoded.rate,
+                                  quality: MusicLoader.describe(decoded)))
+    }
+
+    var fakeLossless: Bool { environment["TOMOSHIBI_DEBUG_MUSIC_FAKE_LOSSLESS"] != nil }
+    private var feeding: Set<String> = []
+
+    func feedLossless(_ call: CallModel, from identity: String) {
+        guard fakeLossless, !feeding.contains(identity) else { return }
+        feeding.insert(identity)
+        let sink = call.lossless
+        let thread = Thread {
+            let rate = 44_100.0
+            var phase = 0.0
+            var next = DispatchTime.now().uptimeNanoseconds
+            while true {
+                var block = [Float](repeating: 0, count: 441 * 2)
+                for frame in 0..<441 {
+                    let sample = Float(0.5 * sin(phase))
+                    block[frame * 2] = sample
+                    block[frame * 2 + 1] = sample
+                    phase += 2 * .pi * 1000 / rate
+                }
+                sink.onLossless(identity: identity, music: true, samples: block, rate: 44_100, channels: 2)
+                next += 10_000_000
+                let wait = Int64(next) - Int64(DispatchTime.now().uptimeNanoseconds)
+                if wait > 0 { Thread.sleep(forTimeInterval: Double(wait) / 1e9) }
+            }
+        }
+        thread.name = "Tomoshibi fake lossless"
+        thread.start()
+        Task { @MainActor [weak self] in
+            var meter: SoundLevel?
+            var metered: ObjectIdentifier?
+            for step in 0..<400 {
+                try? await Task.sleep(for: .milliseconds(step < 30 ? 100 : 1000))
+                let now = call.lossless.stream(identity, music: true)
+                if now != metered {
+                    metered = now
+                    meter = call.lossless.meter(identity, music: true)
+                }
+                self?.log(String(format: "fake lossless from %@ at %.1f s: rms %.4f", identity, step < 30 ? Double(step) / 10 : 3 + Double(step - 30),
+                                 meter?.rms ?? -1))
+            }
+        }
+    }
+
+    /// Every lossless music stream playing here, and how loud it comes out of
+    /// its node, after the listener's volume, the duck and the fade-in.
+    private var losslessMeters: [String: SoundLevel] = [:]
+
+    func logLossless(_ call: CallModel) {
+        guard logging else { return }
+        for person in call.people where person.musicTrack != nil {
+            let playing = call.lossless.playing(person.id, music: true)
+            if playing, !fakeLossless, losslessMeters[person.id] == nil { losslessMeters[person.id] = call.lossless.meter(person.id, music: true) }
+            if !playing { losslessMeters[person.id] = nil }
+            let level = losslessMeters[person.id].map { String(format: "%.4f", $0.rms) } ?? "-"
+            log("lossless from \(person.id): core handed over \(call.lossless.delivered), playing \(playing), level \(call.lossless.intended(person.id, music: true)), rms \(level), opus node \(person.musicTrack.flatMap { call.audio.volume(sid: $0.sid) }.map { String($0) } ?? "-")")
+        }
+    }
 
     var logging: Bool { environment["TOMOSHIBI_DEBUG_MUSIC_LOG"] != nil }
     var meterMicrophone: Bool { environment["TOMOSHIBI_DEBUG_MUSIC_METER_MIC"] != nil }
@@ -137,6 +247,18 @@ final class MusicDebug {
             case "drop": if let first = desk.state?.queue.first { desk.remove(first.key) }
             case "dropnext": if let next = desk.state?.next { desk.remove(next.key) }
             case "monitor50": desk.monitorVolume = 0.5
+            // A listener's own setting for the holder's music, as the panel's
+            // row sets it.
+            case "volume30": if let holder = desk.state?.holder ?? desk.player?.id { desk.setVolume(of: holder, 0.3) }
+            case "volume100": if let holder = desk.state?.holder ?? desk.player?.id { desk.setVolume(of: holder, 1) }
+            // Written straight into the book, as the sound panel's music row
+            // writes it, to show the song desk follows a change made there.
+            case "soundpanel50":
+                if let holder = desk.state?.holder ?? desk.player?.id {
+                    Hearing.shared.set(holder, .music, HearingSetting(volume: 0.5, blocked: false))
+                }
+            case "mute": if let holder = desk.state?.holder ?? desk.player?.id { desk.setBlocked(of: holder, true) }
+            case "unmute": if let holder = desk.state?.holder ?? desk.player?.id { desk.setBlocked(of: holder, false) }
             case "noduck": desk.ducks = false
             case "duck": desk.ducks = true
             // The engine restarted under the microphone's meter, as the

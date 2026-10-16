@@ -1,6 +1,7 @@
 import AVFoundation
 import AVKit
 import Foundation
+import TomoshibiBasics
 import WebKit
 
 /// A file or an HLS playlist, from where it is or relayed: AVPlayer, which
@@ -25,6 +26,10 @@ final class AVBackend: NSObject, WatchBackend {
     /// picture window from its own doing.
     private var asked: Bool?
     private var largest: CGSize = .zero
+    /// The viewer's own ceiling, read when the video is opened, as the web
+    /// reads it (WatchScreen.tsx: "read when the video is opened, so a change
+    /// on the account page applies from the next").
+    private let ceiling = WatchCeiling.stored()
 
     init(url: URL, hls: Bool, capped: Bool, owner: WatchPlayer) {
         self.url = url
@@ -57,9 +62,13 @@ final class AVBackend: NSObject, WatchBackend {
         // is `/api/watch/media?t=...`, with nothing in it that names HLS.
         var options: [String: Any] = [:]
         if hls { options[AVURLAssetOverrideMIMETypeKey] = "application/vnd.apple.mpegurl" }
-        let item = AVPlayerItem(asset: AVURLAsset(url: url, options: options))
+        let asset = AVURLAsset(url: url, options: options)
+        let item = AVPlayerItem(asset: asset)
         if capped, largest != .zero { item.preferredMaximumResolution = largest }
         self.item = item
+        if hls, ceiling != .auto {
+            Task { [weak self] in await self?.hold(item, to: asset) }
+        }
 
         itemWatch.append(item.observe(\.status, options: [.new]) { [weak self] item, _ in
             let status = item.status
@@ -68,7 +77,7 @@ final class AVBackend: NSObject, WatchBackend {
                 MainActor.assumeIsolated {
                     guard let self, self.item === item else { return }
                     if status == .readyToPlay { self.owner?.backendPlayable(self) }
-                    if status == .failed { self.owner?.backendFailed(self, "error \(error)") }
+                    if status == .failed { self.owner?.backendFailed(self, "error \(error)", format: Self.unopenable(item.error)) }
                 }
             }
         })
@@ -77,8 +86,10 @@ final class AVBackend: NSObject, WatchBackend {
             MainActor.assumeIsolated { if let self { self.owner?.backendEnded(self) } }
         })
         itemTokens.append(center.addObserver(forName: AVPlayerItem.failedToPlayToEndTimeNotification, object: item, queue: .main) { [weak self] note in
-            let error = (note.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey]).map { String(describing: $0) } ?? ""
-            MainActor.assumeIsolated { if let self { self.owner?.backendFailed(self, "stopped \(error)") } }
+            let failure = note.userInfo?[AVPlayerItemFailedToPlayToEndTimeErrorKey] as? Error
+            let error = failure.map { String(describing: $0) } ?? ""
+            let format = Self.unopenable(failure)
+            MainActor.assumeIsolated { if let self { self.owner?.backendFailed(self, "stopped \(error)", format: format) } }
         })
 
         player.replaceCurrentItem(with: item)
@@ -86,6 +97,51 @@ final class AVBackend: NSObject, WatchBackend {
             player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
             if asked == true { player.play() }
         }
+    }
+
+    /// The errors AVPlayer gives for a file it cannot open or decode, rather
+    /// than one it could not fetch: WebM, Matroska and Ogg answer
+    /// "Cannot Open" (-11828, under -12847, measured on macOS 27), and a codec
+    /// the system has no decoder for answers one of the others. Looked for
+    /// down the chain of underlying errors, where AVFoundation puts the
+    /// specific one.
+    nonisolated static func unopenable(_ error: Error?) -> Bool {
+        let codes: Set<Int> = [AVError.Code.fileFormatNotRecognized, .fileFailedToParse, .failedToParse, .decoderNotFound,
+                               .decodeFailed, .formatUnsupported, .operationNotSupportedForAsset, .incompatibleAsset].map(\.rawValue)
+            .reduce(into: []) { $0.insert($1) }
+        var next = error as NSError?
+        while let one = next {
+            if one.domain == AVFoundationErrorDomain, codes.contains(one.code) { return true }
+            next = one.userInfo[NSUnderlyingErrorKey] as? NSError
+        }
+        return false
+    }
+
+    /// Holds a playlist to the viewer's ceiling (WatchScreen.tsx, `capping`
+    /// on hls.js's `autoLevelCapping`): the highest rung the ceiling allows,
+    /// ranked by bitrate as hls.js ranks its levels, becomes the most this
+    /// item may fetch. A peak bitrate rather than a resolution, because that
+    /// is what an index into a bitrate-ordered ladder is, and because the
+    /// resolution is already the size cap's to set (`shown(pixels:)`), which
+    /// this must only ever lower: AVPlayer honours both, so the lower wins.
+    private func hold(_ item: AVPlayerItem, to asset: AVURLAsset) async {
+        guard let variants = try? await asset.load(.variants), !variants.isEmpty, self.item === item else { return }
+        func rate(_ variant: AVAssetVariant) -> Double { variant.peakBitRate ?? variant.averageBitRate ?? 0 }
+        let ranked = variants.sorted { rate($0) < rate($1) }
+        let levels = ranked.map { variant -> WatchCeiling.Level in
+            let size = variant.videoAttributes?.presentationSize ?? .zero
+            return WatchCeiling.Level(width: Double(size.width), height: Double(size.height))
+        }
+        guard let cap = ceiling.cap(levels), rate(ranked[cap]) > 0 else { return }
+        // Half way to the rung above rather than the allowed rung's own
+        // bitrate: AVPlayer keeps a margin under the limit it is given, and
+        // handed exactly the 720p rung's bitrate it played 360p for the
+        // whole of a three-minute film on a loopback line (measured). The
+        // rung above is never allowed this way, which is the point.
+        let allowed = rate(ranked[cap])
+        let above = ranked.dropFirst(cap + 1).map(rate).first { $0 > allowed } ?? allowed * 2
+        item.preferredPeakBitRate = (allowed + above) / 2
+        WatchDebug.log("ceiling \(ceiling.rawValue): at most \(Int(item.preferredPeakBitRate)) b/s, up to \(ranked[cap].videoAttributes?.presentationSize ?? .zero)")
     }
 
     /// Loads the same address again from where it stood: what hls.js's

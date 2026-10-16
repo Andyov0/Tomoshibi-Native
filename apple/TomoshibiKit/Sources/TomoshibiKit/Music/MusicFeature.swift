@@ -25,9 +25,22 @@ public final class MusicFeature {
         self.desk = SongDesk.of(call)
     }
 
-    /// Whether the panel is offered at all: not in a sealed call, where the
-    /// desk would tell the relay what is being listened to (jukebox.ts).
-    public var available: Bool { !call.sealed }
+    /// Whether the control bar offers the panel (Room.tsx ~280): to somebody
+    /// who can reach the library, before there is any music; to everybody
+    /// once there is a desk or music to turn down or ask for; and while the
+    /// panel is open, so the button that opened it is there to close it after
+    /// the music has stopped.
+    ///
+    /// A sealed call is no exception. The desk there plays for its holder
+    /// alone, saying nothing to the room (the desk's state and the asks are
+    /// data, which the call does not seal); the music itself is a sealed
+    /// track like any other, and everybody else gets a volume for it. The
+    /// panel used to be withheld in a sealed call altogether, which the web
+    /// never did.
+    public var available: Bool {
+        desk.libraries != nil || desk.state != nil || desk.playingHere || desk.panelOpen
+            || call.people.contains { $0.musicTrack != nil }
+    }
 
     /// Whether music is playing from anybody, for a control that wants to
     /// light up (Room.tsx `playing`).
@@ -71,9 +84,10 @@ final class SongDesk {
     private(set) var asking = false
     /// The music published from here, playing or paused or between songs.
     private(set) var playingHere = false
-    /// The listener's own volume for each person's music, kept for the call
-    /// so that a song desk opened again is as loud as it was left.
-    private(set) var listening: [String: Float] = [:]
+    /// The panel is on screen, where something that did not work is said in
+    /// it; while it is closed, the same words are a call toast, as the web
+    /// says every one of them (notices.ts `actionFailed`). Set by the panel.
+    var panelOpen = false
 
     /// The library's quality, this participant's own (preferences.ts
     /// `meet-live.music-quality`): lossless unless the highest was chosen.
@@ -135,14 +149,32 @@ final class SongDesk {
     @ObservationIgnored private var microphone: MicrophoneMeter?
     @ObservationIgnored private var ducking: Task<Void, Never>?
     @ObservationIgnored private var lastDuck = 0.0
+    @ObservationIgnored private var wasFading = false
     @ObservationIgnored private var asked: UInt64?
     @ObservationIgnored private var over = false
+    /// What was last handed to the call for each person's music, so the book
+    /// is only put back on the call where it changed.
+    @ObservationIgnored private var heard: [String: HearingSetting] = [:]
     @ObservationIgnored let debug = MusicDebug()
 
     static let qualityKey = "meet-live.music-quality"
     static let duckKey = "meet-live.music-duck"
     static let monitorKey = "meet-live.music-monitor"
+    /// Shared with the share menu's switch (Sharing.swift): the web keeps one
+    /// choice for both, sound shared on its own and the desk's music
+    /// (sound.ts `rememberedLossless`, on unless turned off).
+    static let losslessKey = "meet-live.lossless"
     private static let part = "music"
+
+    /// Whether the music goes out with a lossless stream beside it, as the
+    /// web's `playDecoded(room, decoded, rememberedLossless())` decides: where
+    /// it is wanted, and never in a sealed call, whose data is not sealed and
+    /// would carry the file's samples across the relay in the clear. Any
+    /// participant here can send it, which in the web only Chromium can.
+    var losslessOffered: Bool {
+        soundLosslessOffered(wanted: UserDefaults.standard.string(forKey: Self.losslessKey) != "off",
+                             encrypted: call.sealed, able: true)
+    }
 
     /// The call's desk, made the first time anybody asks for it.
     static func of(_ call: CallModel) -> SongDesk {
@@ -196,6 +228,7 @@ final class SongDesk {
             if person.musicTrack != nil { arrived(person.id) }
         }
         refresh()
+        followTheBook()
 
         // The holder's word every fifteen seconds, and a desk heard of that
         // has gone quiet: the desk wants the time at least once a second.
@@ -211,11 +244,15 @@ final class SongDesk {
 
     /// The libraries, asked once, as Room.tsx asks: a deployment without one,
     /// or somebody not signed in, is no library and no tabs to search it.
-    /// Not asked in a sealed call, where the desk is not offered.
+    /// Asked in a sealed call too, where the desk plays for its holder alone.
     private func findLibraries() async {
-        guard !call.sealed else { return }
         await debug.signIn(call.deployment)
-        let found = (try? await call.deployment.musicSources()) ?? []
+        let found: [MusicLibrary]
+        if let files = debug.fileLibraries {
+            found = files
+        } else {
+            found = (try? await call.deployment.musicSources()) ?? []
+        }
         libraries = found.isEmpty ? nil : found
         if searchSource.isEmpty {
             searchSource = (found.first { $0.signedIn } ?? found.first)?.id ?? ""
@@ -229,6 +266,13 @@ final class SongDesk {
     private func on(_ event: CallEvent) {
         guard !over else { return }
         let now = Self.now()
+        if debug.logging {
+            switch event {
+            case .trackPublished, .trackSubscribed, .trackUnpublished, .trackUnsubscribed, .participantJoined:
+                debug.log("event \(String(describing: event).prefix(160))")
+            default: break
+            }
+        }
         switch event {
         case let .participantJoined(participant):
             apply(desk.participantConnected(identity: participant.identity, nowMs: now))
@@ -251,7 +295,10 @@ final class SongDesk {
             subscribed(identity, track)
         case let .trackUnpublished(identity, sid), let .trackUnsubscribed(identity, sid):
             meters[sid] = nil
-            if call.person(identity)?.musicTrack == nil { duck.left(identity) }
+            if call.person(identity)?.musicTrack == nil {
+                duck.left(identity)
+                heard[identity] = nil
+            }
         case .ended:
             end()
         default:
@@ -271,8 +318,15 @@ final class SongDesk {
         }
         if Self.isMusic(track) {
             arrived(identity)
-            if let volume = listening[identity] { call.audio.setVolume(sid: track.sid, volume) }
-            call.audio.setDuck(sid: track.sid, Float(duck.factor(identity, now: Self.clock())))
+            // The player was made at full volume: the listener's setting goes
+            // back on it, and on the core, which decides from it whether to
+            // ask for the lossless stream at all.
+            heard[identity] = nil
+            hear(identity)
+            debug.feedLossless(call, from: identity)
+            let factor = Float(duck.factor(identity, now: Self.clock()))
+            call.audio.setDuck(sid: track.sid, factor)
+            call.lossless.setDuck(identity, factor)
         }
     }
 
@@ -348,11 +402,22 @@ final class SongDesk {
     private func prepare(_ request: UInt64, _ entry: DeskEntry) {
         let quality = quality
         let deployment = call.deployment
+        // The file's own samples are kept only where a lossless stream will
+        // carry them: the track already out says, or else whether the next
+        // one would be offered.
+        let keepOriginal = output?.lossless ?? losslessOffered
+        let files = debug.files
         loads[request] = Task { [weak self] in
             let outcome: DeskPrepared
             var song: DecodedSong?
             do {
-                switch try await MusicLoader.load(source: entry.source, id: entry.id, quality: quality, from: deployment) {
+                let loaded = if let files, entry.source == MusicDebug.filesSource {
+                    try await MusicDebug.load(entry.id, in: files, keepOriginal: keepOriginal)
+                } else {
+                    try await MusicLoader.load(source: entry.source, id: entry.id, quality: quality,
+                                               keepOriginal: keepOriginal, from: deployment)
+                }
+                switch loaded {
                 case let .ready(decoded):
                     song = decoded
                     outcome = .ready(quality: decoded.quality)
@@ -391,8 +456,8 @@ final class SongDesk {
         if let opening { return try await opening.value }
         let started = generation
         let task = Task<MusicOutput, Error> { [weak self] in
-            guard let call = self?.call else { throw CancellationError() }
-            let input = try await call.call.publishAudio(kind: .libraryMusic(losslessOffered: false))
+            guard let call = self?.call, let offered = self?.losslessOffered else { throw CancellationError() }
+            let input = try await call.call.publishAudio(kind: .libraryMusic(losslessOffered: offered))
             // Stopped while it was being published: taken down again rather
             // than left playing silence into the room (sound.ts, "a stop that
             // arrives in between used to be outrun").
@@ -408,9 +473,10 @@ final class SongDesk {
                 // go without it.
                 self.debug.log("no monitor: \(error)")
             }
-            let output = MusicOutput(input: input, monitor: ring) { [weak self] key in
+            let output = MusicOutput(input: input, lossless: offered, monitor: ring) { [weak self] key in
                 MainActor.assumeIsolated { self?.songEnded(key) }
             }
+            self.debug.log("published music, lossless offered \(offered)")
             if self.debug.meterMonitor, let level = call.audio.meter(sid: MusicDuck.local) {
                 self.meters[MusicDuck.local] = (call.localIdentity, level)
             }
@@ -458,7 +524,7 @@ final class SongDesk {
             var failed = false
             if let library {
                 do {
-                    songs = try await self.call.deployment.musicSearch(source: library, query: query, page: 1).map { Self.song($0, from: library) }
+                    songs = try await self.searched(library, query).map { Self.song($0, from: library) }
                 } catch {
                     failed = true
                 }
@@ -550,14 +616,76 @@ final class SongDesk {
     func toTop(_ key: String) { apply(desk.toTop(key: key, nowMs: Self.now())) }
     func close() { apply(desk.close(nowMs: Self.now())) }
 
-    /// The listener's own volume for somebody's music.
-    func volume(of identity: String) -> Float {
-        listening[identity] ?? call.person(identity)?.musicTrack.flatMap { call.audio.volume(sid: $0.sid) } ?? 1
+    /// A library's answer to a search: the deployment's, or the files a test
+    /// stands in for one with.
+    private func searched(_ library: String, _ query: String) async throws -> [MusicTrack] {
+        if let files = debug.files, library == MusicDebug.filesSource { return MusicDebug.search(query, in: files) }
+        return try await call.deployment.musicSearch(source: library, query: query, page: 1)
     }
 
-    func setVolume(of identity: String, _ volume: Float) {
-        listening[identity] = volume
-        if let sid = call.person(identity)?.musicTrack?.sid { call.audio.setVolume(sid: sid, volume) }
+    // MARK: How loud somebody's music is here
+
+    /// The listener's own setting for somebody's music: the one the sound
+    /// panel keeps for that person's music, so a change in either is the
+    /// other's too (MusicPanel.tsx uses the sound panel's own row for it).
+    func hearing(of identity: String) -> HearingSetting {
+        Hearing.shared.setting(identity, .music)
+    }
+
+    func setVolume(of identity: String, _ volume: Double) {
+        var setting = hearing(of: identity)
+        setting.volume = volume
+        Hearing.shared.set(identity, .music, setting)
+        hear(identity)
+    }
+
+    /// Muting is a block at the media server, not a volume of nought: a muted
+    /// song is not downloaded at all, and its lossless stream not even asked
+    /// for (MusicPanel.tsx, hearing.ts `setBlocked`).
+    func setBlocked(of identity: String, _ blocked: Bool) {
+        var setting = hearing(of: identity)
+        setting.blocked = blocked
+        Hearing.shared.set(identity, .music, setting)
+        hear(identity)
+    }
+
+    /// Puts the book's setting for this person's music on the call, where it
+    /// changed: the Opus track's node, the lossless stream standing in for
+    /// it, and the core, which blocks both at the server and decides whether
+    /// the lossless stream is asked for. Through `CallModel.hear`, as the
+    /// web's sound panel row goes through hearing.ts and Audible.tsx; before
+    /// this, the panel's volume moved only the Opus node, so a lossless
+    /// stream played on at full level and a muted song went on downloading.
+    private func hear(_ identity: String) {
+        guard call.person(identity)?.musicTrack != nil else { return }
+        let setting = hearing(of: identity)
+        guard heard[identity] != setting else { return }
+        heard[identity] = setting
+        // Silenced, not only blocked, is what keeps the lossless stream from
+        // being asked for: hearing.ts `silenced` counts a volume of nought,
+        // which the core's own record does not, and a stream asked for and
+        // played at nothing is upload the sender spends on nobody.
+        let silenced = setting.silenced
+        debug.log("hearing \(identity): volume \(setting.volume), blocked \(setting.blocked)")
+        Task { await call.hear(identity, sound: .unknown, level: Float(setting.volume), blocked: silenced) }
+    }
+
+    /// Follows the book wherever it is written: the sound panel's music row
+    /// writes the same setting, and the lossless stream and the core must
+    /// hear of it as they do from here.
+    private func followTheBook() {
+        guard !over else { return }
+        // The book alone is watched, through any one of its settings: the
+        // people in the call change many times a second as they speak.
+        withObservationTracking {
+            _ = Hearing.shared.setting("", .music)
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self, !self.over else { return }
+                for person in self.call.people where person.musicTrack != nil { self.hear(person.id) }
+                self.followTheBook()
+            }
+        }
     }
 
     /// Searches the library chosen in the panel's search tab.
@@ -567,7 +695,7 @@ final class SongDesk {
         searching = true
         searchProblem = nil
         do {
-            searchResults = try await call.deployment.musicSearch(source: searchSource, query: asked, page: 1)
+            searchResults = try await searched(searchSource, asked)
         } catch {
             searchProblem = t("The library did not answer. Try again.")
         }
@@ -643,11 +771,21 @@ final class SongDesk {
         if let microphone { levels.append(microphone.level.rms) }
 
         let before = duck.level
-        if duck.tick(levels: levels, now: now, elapsed: now - lastDuck) { applyDuck(now) }
+        // Once more on the first tick after a fade-in ends: the duck says it
+        // moved only while a stream is inside its fade, and a tick that came
+        // late -- the main thread busy, as it is while a call opens -- left
+        // the music, Opus and lossless alike, at whatever the last tick
+        // inside the fade had made it. Measured at 0.56 for good, a stream
+        // that faded in for 840 ms and then stopped.
+        let fadedIn = wasFading && !duck.fading(at: now)
+        if duck.tick(levels: levels, now: now, elapsed: now - lastDuck) || fadedIn { applyDuck(now) }
+        wasFading = duck.fading(at: now)
         lastDuck = now
         if duck.level != before || debug.every(25) {
             let chunks = meters.values.map(\.level.lastChunk) + (microphone.map { [$0.level.lastChunk] } ?? [])
             debug.log(String(format: "duck %.3f, %d microphones, loudest %.4f, chunks %@", duck.level, levels.count, levels.max() ?? 0, "\(chunks)"))
+            debug.logLossless(call)
+            if let output { debug.log(String(format: "music clock woke at worst %.1f ms late", output.takeWorstLate())) }
         }
         return music || !duck.settled(at: now)
     }
@@ -655,7 +793,11 @@ final class SongDesk {
     private func applyDuck(_ now: Double) {
         for person in call.people {
             if let sid = person.musicTrack?.sid {
-                call.audio.setDuck(sid: sid, Float(duck.factor(person.id, now: now)))
+                let factor = Float(duck.factor(person.id, now: now))
+                call.audio.setDuck(sid: sid, factor)
+                // And the lossless stream standing in for it, which is played
+                // at the same level (lossless-receiver.ts `levelOf`).
+                call.lossless.setDuck(person.id, factor)
             }
         }
         if output != nil {
@@ -665,6 +807,10 @@ final class SongDesk {
 
     /// How far the music is turned down now, for the log and the panel.
     var duckLevel: Double { duck.level }
+
+    /// Where the song playing from here is and how long it is, for the
+    /// holder's own panel; nobody else knows, since the desk does not say.
+    var progress: (at: Double, of: Double)? { output?.progress }
 
     // MARK: Clocks
 
