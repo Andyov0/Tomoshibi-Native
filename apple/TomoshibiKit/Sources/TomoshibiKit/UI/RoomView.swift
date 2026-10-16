@@ -155,12 +155,12 @@ public struct RoomView: View {
         }
         #if os(macOS)
         .background(WindowReader { window.attach($0) })
-        .onAppear {
-            idle.listen()
-            // The green button, the View menu or the system's shortcut leave
-            // the full screen without passing through here; the stage follows
-            // the window out rather than staying filled inside it.
-            window.onLeft = { if filled { withAnimation(Theme.settle) { filled = false } } }
+        .onAppear { idle.listen() }
+        // The green button, the View menu or the system's shortcut leave the
+        // full screen without passing through here; the stage follows the
+        // window out rather than staying filled inside it.
+        .onChange(of: window.exits) {
+            if filled { withAnimation(Theme.settle) { filled = false } }
         }
         .onDisappear {
             idle.stopListening()
@@ -899,6 +899,7 @@ public struct RoomView: View {
                     host.setBlocked(person, .voice, true)
                 }
             case "hand": try? await model.setHand(true)
+            case "leave": await model.leave()
             #if os(macOS)
             case "wiggle", "escape":
                 // The pointer moving, or Escape, as the system delivers them:
