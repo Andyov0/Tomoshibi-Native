@@ -72,12 +72,20 @@ public enum Plan {
     }
 
     /// A grid, centred, each row centred on its own.
-    public static func grid(_ container: CGSize, ids: [String], island: CGFloat = island) -> [String: CGRect] {
+    ///
+    /// Two departures from plan.ts, both about the edges. The grid keeps
+    /// `sides` clear at the left and right, the gap by default, which the
+    /// stage and the strip always kept and the grid did not: six people in a
+    /// wide window were drawn edge to edge, against the window's frame. And
+    /// it is centred in the window but never lower than the controls allow:
+    /// centred on the whole height, a full grid's last row ran a third of the
+    /// way under the bar, which plan.test.ts tolerates and the eye does not.
+    public static func grid(_ container: CGSize, ids: [String], island: CGFloat = island, sides: CGFloat = gap) -> [String: CGRect] {
         var plan: [String: CGRect] = [:]
-        guard let layout = arrange(CGSize(width: container.width, height: max(0, container.height - island)),
+        guard let layout = arrange(CGSize(width: max(0, container.width - 2 * sides), height: max(0, container.height - island)),
                                    count: ids.count, aspect: aspect(container)) else { return plan }
         let gridHeight = CGFloat(layout.rows) * layout.height + CGFloat(layout.rows - 1) * gap
-        let top = (container.height - gridHeight) / 2
+        let top = max(0, min((container.height - gridHeight) / 2, container.height - island - gridHeight))
         for (index, id) in ids.enumerated() {
             let row = index / layout.columns
             let column = index % layout.columns
@@ -142,5 +150,173 @@ public enum Plan {
         let tops = ids.compactMap { plan[$0]?.minY }
         guard let highest = tops.min() else { return nil }
         return container.height - highest + gap
+    }
+
+    // MARK: The whole room
+
+    /// How tall a window has to be before the controls fit down its side
+    /// (hooks/useRoomFor.ts): the column is a little under four hundred
+    /// points, and at a phone's landscape height both of its ends, mute and
+    /// leave, were off the screen.
+    public static let sideNeeds: CGFloat = 480
+    /// The lane the controls take down the side when nothing has been
+    /// measured: the web's `mr-[5.75rem]`.
+    public static let sideLane: CGFloat = 92
+    /// How long a room is left alone before controls that may step aside do
+    /// (hooks/useIdle.ts `AFTER`).
+    public static let idleAfter: Double = 3
+    /// What a room that pages keeps clear either side for its arrows, so that
+    /// they sit beside the pictures they turn rather than over the first and
+    /// the last of them (Plane.tsx draws them over the pictures).
+    public static let pagerReserve: CGFloat = 52
+
+    /// Everything the room view needs from one arrangement: where each
+    /// picture is, and which page of how many is showing.
+    public struct Room: Equatable {
+        public var spots: [String: CGRect]
+        /// The page showing, already brought back inside the pages there are.
+        public var page: Int
+        public var pages: Int
+        /// The pictures drawn below or around the stage, in order: the strip,
+        /// the grid, or the card in a call of two.
+        public var shown: [String]
+    }
+
+    /// Where every picture goes, as Room.tsx's `Stage` works it out
+    /// (~408-437).
+    ///
+    /// `pictures` is everybody, in the order they are drawn; `mine` is this
+    /// participant's own camera, which never pages away: losing sight of
+    /// yourself because the room got busy is disorienting, and it costs
+    /// nothing, since it is drawn from the local capture. It takes one of the
+    /// page's places rather than being added beyond them, so a page is never
+    /// more than nine. `stage` is whatever is pinned.
+    public static func room(_ container: CGSize, pictures: [String], mine: String?, stage: String?,
+                            fullscreen: Bool = false, page: Int = 0, island: CGFloat = island) -> Room {
+        let stage = stage.flatMap { pictures.contains($0) ? $0 : nil }
+        let me = mine.flatMap { pictures.contains($0) ? $0 : nil }
+        let kept = me.flatMap { $0 == stage ? nil : [$0] } ?? []
+        let rest = pictures.filter { $0 != me && $0 != stage }
+        func places(_ width: CGFloat) -> Int {
+            max(1, (stage != nil ? stripCapacity(CGSize(width: width, height: container.height)) : tilesPerPage) - kept.count)
+        }
+        // A room that will page gives its arrows room, and the strip holds
+        // what fits beside them.
+        let paged = rest.count > places(container.width)
+        let per = places(paged ? container.width - 2 * pagerReserve : container.width)
+        let pages = max(1, (rest.count + per - 1) / per)
+        let showing = min(max(0, page), pages - 1)
+        let start = showing * per
+        let shown = kept + Array(rest[min(start, rest.count)..<min(rest.count, start + per)])
+        let spots: [String: CGRect]
+        if let stage {
+            spots = focus(container, stage: stage, strip: fullscreen ? [] : shown, fullscreen: fullscreen, island: island)
+        } else if pictures.count <= aloneTogether, let other = rest.first {
+            // Two people is one filling the screen and the other a card, the
+            // way a telephone has always drawn it.
+            spots = close(container, filling: other, cards: me.map { [$0] } ?? [], island: island)
+        } else {
+            spots = grid(container, ids: shown, island: island, sides: paged ? pagerReserve : gap)
+        }
+        return Room(spots: spots, page: showing, pages: pages, shown: shown)
+    }
+}
+
+// MARK: - Who has the stage
+
+/// Which picture owns the stage (hooks/usePin.ts).
+///
+/// A share takes the stage when it starts and gives it back when it stops,
+/// and the rule the web names as the one easy to miss: only a pin made
+/// automatically is taken away automatically. Somebody who put a person on
+/// the stage by hand keeps them there when a share starts or stops.
+///
+/// One rule is the web's intent rather than its code. The web claims the
+/// stage for a share whenever nothing is pinned, so pressing the share on the
+/// stage, whose label says "Show everybody", put it straight back: the grid
+/// could not be reached for as long as anybody shared. Here a share claims
+/// the stage when it starts, or when the stage is emptied by something other
+/// than the person looking (the picture on it went away); choosing the grid
+/// is a choice, and it holds until a new share starts.
+public struct StagePin: Equatable, Sendable {
+    public private(set) var pinned: String?
+    /// The pin this made itself, which is the only one it may take back.
+    private var auto: String?
+    /// The shares that were already running at the last look, so that only a
+    /// new one claims a stage somebody emptied on purpose.
+    private var seen: Set<String> = []
+
+    public init() {}
+
+    /// A choice by hand: a picture, or nil for everybody.
+    public mutating func pin(_ id: String?) {
+        auto = nil
+        pinned = id
+    }
+
+    /// What a press on a picture does: on to the stage, or back off it.
+    public mutating func toggle(_ id: String) {
+        auto = nil
+        pinned = pinned == id ? nil : id
+    }
+
+    /// Brings the pin up to date with the room: `pictures` is every picture
+    /// there is, `shares` those that take the stage by themselves (a shared
+    /// screen, the video watched together), first first.
+    public mutating func update(pictures: [String], shares: [String]) {
+        var emptied = false
+        if let auto, !shares.contains(auto) {
+            self.auto = nil
+            if pinned == auto { pinned = nil }
+            emptied = true
+        }
+        // A pinned participant who leaves must not take the stage with them.
+        if let pinned, !pictures.contains(pinned) {
+            self.pinned = nil
+            auto = nil
+            emptied = true
+        }
+        if pinned == nil, let claim = emptied ? shares.first : shares.first(where: { !seen.contains($0) }) {
+            pinned = claim
+            auto = claim
+        }
+        seen = Set(shares)
+    }
+}
+
+// MARK: - Who spoke last
+
+/// When each person was last heard, for bringing speakers forward in a room
+/// that runs to more than one page (hooks/useSpeakingOrder.ts).
+///
+/// By when they were last heard rather than by whether they are speaking now:
+/// speech is full of gaps, and sorting on the moment would drop somebody down
+/// the grid between two words of a sentence. Written down in the same pass as
+/// the speaking flag arrives, because the web's first version wrote it after
+/// the render that sorted by it, and moved somebody forward only once they had
+/// stopped talking.
+public struct SpeakingRecord: Equatable, Sendable {
+    private var heard: [String: Double] = [:]
+
+    public init() {}
+
+    /// Notes who is speaking at `now`, and forgets whoever is not `present`:
+    /// somebody who left should not keep a place they would take on coming
+    /// back under the same identity.
+    public mutating func hear(speaking: [String], present: [String], at now: Double) {
+        for identity in speaking { heard[identity] = now }
+        let here = Set(present)
+        heard = heard.filter { here.contains($0.key) }
+    }
+
+    /// `ids` with the most recently heard first. Ties keep the order they
+    /// arrived in, so a room where nobody has spoken looks as it did.
+    public func order(_ ids: [String]) -> [String] {
+        ids.enumerated()
+            .sorted { a, b in
+                let (left, right) = (heard[a.element] ?? 0, heard[b.element] ?? 0)
+                return left != right ? left > right : a.offset < b.offset
+            }
+            .map(\.element)
     }
 }
