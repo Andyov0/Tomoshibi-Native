@@ -525,7 +525,7 @@ public struct SettingsView: View {
                 case .media: MediaSettings(app: app, preferences: preferences)
                 case .watching: WatchingSettings(preferences: preferences)
                 case .music: MusicSettings(app: app, preferences: preferences)
-                case .account: AccountSettings(app: app, close: { dismiss() })
+                case .account: AccountSettings(app: app)
                 case .about: AboutSettings(app: app)
                 }
             }
@@ -1404,7 +1404,6 @@ private struct DuckPreview: View {
 
 private struct AccountSettings: View {
     @Bindable var app: AppModel
-    let close: () -> Void
     @State private var current = ""
     @State private var next = ""
     @State private var changing = false
@@ -1420,7 +1419,7 @@ private struct AccountSettings: View {
             if let account = app.account {
                 profile(account)
                 abilities(account)
-                places(account)
+                places
                 passphrase
                 if app.holds("invite"), account.admin || !account.scopes.isEmpty || debugGuestLinks {
                     GuestLinksCard(app: app, account: account)
@@ -1640,43 +1639,23 @@ private struct AccountSettings: View {
 
     // MARK: Where
 
-    private func places(_ account: Account) -> some View {
+    /// Which server this is, said and nothing more. The user console and the
+    /// administrators' pages of the web were linked here, and a "Change
+    /// server" beside them: an app that sends people out to a website is one
+    /// App Review questions, and the app is for this one server (AppModel
+    /// `home`).
+    private var places: some View {
         SettingsSection(title: t("Server")) {
-            if let url = page("/account") {
-                LinkRow(title: t("User console"), symbol: "person.text.rectangle", url: url)
-            }
-            if account.admin, let url = page("/admin") {
-                LinkRow(title: t("Admin console"), symbol: "shield.lefthalf.filled", url: url)
-            }
             serverRow(last: true)
         }
     }
 
-    /// Not during a call: the Mac's Settings window stands beside one, and
-    /// changing server from it put the address form over a call that went
-    /// on publishing underneath (AppModel `canChangeServer`).
     private func serverRow(last: Bool) -> some View {
-        SettingsRow(title: host, detail: app.canChangeServer ? t("The server address") : t("Leave the call to change server."),
-                    symbol: "server.rack", last: last) {
-            Button(t("Change server")) {
-                app.forgetServer()
-                #if os(iOS)
-                close()
-                #endif
-            }
-            .buttonStyle(.glassCapsule(30))
-            .disabled(!app.canChangeServer)
-            .opacity(app.canChangeServer ? 1 : 0.45)
-        }
-        .animation(Theme.settle, value: app.canChangeServer)
+        SettingsRow(title: host, symbol: "server.rack", last: last) { EmptyView() }
     }
 
     private var host: String {
         app.deployment.flatMap { URL(string: $0.baseUrl())?.host() } ?? app.serverAddress
-    }
-
-    private func page(_ path: String) -> URL? {
-        app.deployment.flatMap { URL(string: $0.baseUrl().trimmingCharacters(in: CharacterSet(charactersIn: "/")) + path) }
     }
 
     // MARK: The passphrase

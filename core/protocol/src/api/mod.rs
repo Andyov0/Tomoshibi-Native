@@ -75,6 +75,30 @@ use text::encode_uri_component;
 /// The cookie an account's session travels in (internal/app/account.go).
 const ACCOUNT_COOKIE: &str = "meet-live.account";
 
+/// The one deployment these apps are for.
+///
+/// Fixed here rather than in each app so that every client built on the core,
+/// the Mac and the iPhone now and Windows and Android later, is held to it
+/// alike: the apps are this deployment's, and a copy of one pointed at a server
+/// of somebody else's own is exactly what is not wanted. Until now the address
+/// was a field anybody could type into, and a link to another server took the
+/// app there.
+pub const HOME: &str = "https://meet.example.com/";
+
+/// [`HOME`], for an app to open on.
+#[uniffi::export]
+pub fn home_deployment() -> String {
+    HOME.to_owned()
+}
+
+/// Whether a build may talk to the deployment at `origin`: a release build
+/// only to [`HOME`]. A debug build talks to the one it is given, because the
+/// tests run deployments of their own on loopback and would otherwise have
+/// nothing to drive.
+fn admitted(origin: &Url, release: bool) -> bool {
+    !release || origin.as_str() == HOME
+}
+
 /// One deployment, and the conversation with it.
 #[derive(uniffi::Object)]
 pub struct Deployment {
@@ -106,6 +130,10 @@ impl Deployment {
 
         let origin = Url::parse(&format!("{}/", parsed.origin().ascii_serialization()))
             .map_err(|fault| invalid(format!("{base} has no usable origin: {fault}")))?;
+
+        if !admitted(&origin, !cfg!(debug_assertions)) {
+            return Err(invalid(format!("{base} is not the server this app is for")));
+        }
 
         let jar = Arc::new(Jar::default());
 
@@ -518,5 +546,30 @@ pub(crate) mod read {
     /// number; negative and fractional parts are things no gateway sends.
     pub(crate) fn whole(value: Option<&Value>) -> u32 {
         positive(value).min(f64::from(u32::MAX)) as u32
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn origin(of: &str) -> Url {
+        let parsed = Url::parse(of).unwrap();
+        Url::parse(&format!("{}/", parsed.origin().ascii_serialization())).unwrap()
+    }
+
+    #[test]
+    fn a_release_build_talks_to_home_alone() {
+        assert!(admitted(&origin("https://meet.example.com"), true));
+        assert!(admitted(&origin("https://LIVE.example.com:443/#/room"), true));
+        assert!(!admitted(&origin("https://meet.example.org"), true));
+        assert!(!admitted(&origin("http://meet.example.com"), true));
+        assert!(!admitted(&origin("https://meet.example.com:8443"), true));
+        assert!(!admitted(&origin("https://meet.example.com.example.org"), true));
+    }
+
+    #[test]
+    fn a_debug_build_talks_to_the_one_it_is_given() {
+        assert!(admitted(&origin("http://127.0.0.1:8080"), false));
     }
 }

@@ -892,24 +892,3 @@ struct SectionTile: View {
             .animation(Theme.settle, value: lit)
     }
 }
-
-/// A row that leads somewhere: an address on the deployment, opened in the
-/// browser.
-struct LinkRow: View {
-    let title: String
-    let symbol: String
-    let url: URL
-    var detail: String?
-    var last = false
-    @Environment(\.openURL) private var openURL
-
-    var body: some View {
-        Button { openURL(url) } label: {
-            SettingsRow(title: title, detail: detail, symbol: symbol, last: last) {
-                Image(systemName: "arrow.up.right").font(.system(size: 11.5, weight: .bold)).foregroundStyle(Theme.muted)
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}

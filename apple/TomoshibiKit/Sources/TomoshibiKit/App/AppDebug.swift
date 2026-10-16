@@ -123,9 +123,6 @@ enum AppDebug {
             guard let text = rest.first, let url = URL(string: text) else { return "open <url>" }
             Task { await app.open(url) }
             return "opening"
-        case "forget-server":
-            app.forgetServer()
-            return "forgot: \(app.screen)"
         case "mic":
             Task { await app.toggleMicrophone() }
             return "pressed"

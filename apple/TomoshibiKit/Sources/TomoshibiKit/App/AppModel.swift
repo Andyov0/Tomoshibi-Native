@@ -17,7 +17,7 @@ public final class AppModel {
         /// The deployment the app opens on is being asked about; nothing to
         /// fill in yet.
         case starting
-        case server, lobby, prejoin, knocking, waiting, call, ended
+        case unreachable, lobby, prejoin, knocking, waiting, call, ended
     }
 
     /// Why the last call ended (App.tsx, the `ended` handler): three endings
@@ -76,9 +76,12 @@ public final class AppModel {
         telling = false
     }
 
-    public var serverAddress: String {
-        didSet { if !rehearsal { UserDefaults.standard.set(serverAddress, forKey: Self.serverKey) } }
-    }
+    /// The deployment this app talks to: always `home`, except to a test that
+    /// names its own. Nobody can choose it: the address field, "Change server"
+    /// and links that took the app to another server are gone, because the
+    /// apps are for this deployment and not for anybody's own (the core holds
+    /// a release build to the same address, `home_deployment`).
+    public private(set) var serverAddress: String
     public var room = ""
     /// The web's own storage name, so the habit carries over. Only ever what
     /// the person typed: an invitation's name is `invitedName` and is never
@@ -139,14 +142,14 @@ public final class AppModel {
     /// image cache under the same address (`avatarAddress`).
     public private(set) var pictureVersion = 0
 
+    /// Where the address somebody had typed used to be kept; read no more,
+    /// and cleared, so that no copy of another server lingers.
     private static let serverKey = "tomoshibi.server"
     static let relayKey = "meet-live.relay"
 
-    /// The deployment this app is made for, which it opens on until somebody
-    /// chooses another: the one whose web client it stands beside. Left empty,
-    /// the app opened on a blank address field, and after the tests had run
-    /// it opened on theirs.
-    public static let home = "https://meet.example.com"
+    /// The deployment this app is made for, from the core, which keeps the
+    /// one address every client is held to.
+    public static let home = homeDeployment()
 
     /// A test is driving the app (TOMOSHIBI_BASE, honoured only in a debug
     /// build), and nothing it does is kept: not the server, the name, the
@@ -171,7 +174,8 @@ public final class AppModel {
         #else
         rehearsal = false
         #endif
-        serverAddress = UserDefaults.standard.string(forKey: Self.serverKey) ?? Self.home
+        serverAddress = Self.home
+        if !rehearsal { UserDefaults.standard.removeObject(forKey: Self.serverKey) }
         name = UserDefaults.standard.string(forKey: "meet-live.name") ?? ""
         #if DEBUG
         let suite = ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_DEVICE_MEMORY"].flatMap { UserDefaults(suiteName: $0) }
@@ -300,11 +304,7 @@ public final class AppModel {
             }
             return
         }
-        if serverAddress.isEmpty {
-            screen = .server
-        } else {
-            await connect()
-        }
+        await connect()
     }
 
     @ObservationIgnored private var started = false
@@ -334,8 +334,8 @@ public final class AppModel {
         } catch {
             tell(explain(error))
             // Opening on a deployment that will not answer leaves somebody
-            // where they can choose another, rather than on the mark.
-            if screen == .starting { screen = .server }
+            // where they can try again, rather than on the mark.
+            if screen == .starting { screen = .unreachable }
         }
     }
 
@@ -361,25 +361,6 @@ public final class AppModel {
     private func dropRelayNotOffered() {
         guard let choice = relayChoice, let relays else { return }
         if !relays.relays.contains(where: { $0.name == choice && !$0.maintenance }) { relayChoice = nil }
-    }
-
-    /// Whether "Change server" can be done now: never during a call. The
-    /// Settings window is open beside a call on the Mac, and changing server
-    /// from it took the screen to the address form while the call went on
-    /// publishing the microphone underneath, reachable only from the menu.
-    public var canChangeServer: Bool { call == nil && movingTo == nil }
-
-    public func forgetServer() {
-        guard canChangeServer else { return }
-        // A join still out would otherwise land on the deployment just
-        // forgotten, in a call with no screen to show it.
-        cancelJoin()
-        deployment = nil
-        info = nil
-        account = nil
-        relays = nil
-        relayChoice = nil
-        screen = .server
     }
 
     // MARK: Links
@@ -413,17 +394,19 @@ public final class AppModel {
         components.fragment = nil
         components.path = ""
         if components.scheme == "tomoshibi" { components.scheme = "https" }
-        // Compared without the trailing slash the deployment's address always
-        // has and a link's origin never does: compared as they were, every
-        // link to the deployment already open counted as another one, and
-        // connecting to it again left a session the Keychain did not hold
-        // (a rehearsal's, which keeps none) signed out.
-        let here = deployment.map { $0.baseUrl().trimmingCharacters(in: CharacterSet(charactersIn: "/")) }
-        if let origin = components.url?.absoluteString, origin.trimmingCharacters(in: CharacterSet(charactersIn: "/")) != here {
-            serverAddress = origin
-            await connect()
-        }
+        // A link opened at launch can arrive before the deployment has
+        // answered; it is this deployment's or nobody's.
+        if deployment == nil { await connect() }
         guard let deployment else { return }
+        // A link to another server is refused rather than followed: following
+        // one took the app there, and the app is for this deployment alone.
+        // Compared without the trailing slash the deployment's address always
+        // has and a link's origin never does.
+        let here = deployment.baseUrl().trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard components.url?.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) == here else {
+            tell(t("That link is for another server."))
+            return
+        }
         if let meeting {
             if !linkRoom.isEmpty { room = linkRoom }
             wait(for: meeting, on: deployment)

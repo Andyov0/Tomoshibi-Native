@@ -1,12 +1,6 @@
 {
   "comment": "Phrases only the native apps say: menu items, window titles and anything else a browser never shows. The web client's own dictionaries are read directly by generate.mjs and are not copied here; a phrase the web already has belongs there, and the generator refuses one that appears in both. Each entry is keyed by its English, exactly as t() is called, and gives all four languages: \"en\" (normally the key itself), \"zh-Hans\", \"zh-Hant\" and \"ja\". Placeholders are written {likeThis} and must appear unchanged in every language. After editing, run: node apple/i18n/generate.mjs",
   "phrases": {
-    "Connect": {
-      "en": "Connect",
-      "zh-Hans": "连接",
-      "zh-Hant": "連線",
-      "ja": "接続"
-    },
     "Could not reach the server.": {
       "en": "Could not reach the server.",
       "zh-Hans": "连不上服务器。",
@@ -24,12 +18,6 @@
       "zh-Hans": "重新加入",
       "zh-Hant": "重新加入",
       "ja": "もう一度参加"
-    },
-    "The server address": {
-      "en": "The server address",
-      "zh-Hans": "服务器地址",
-      "zh-Hant": "伺服器位址",
-      "ja": "サーバーのアドレス"
     },
     "Open Tomoshibi and join a call first.": {
       "en": "Open Tomoshibi and join a call first.",
@@ -186,12 +174,6 @@
       "zh-Hans": "预定的会议",
       "zh-Hant": "預定的會議",
       "ja": "予定した会議"
-    },
-    "Change server": {
-      "en": "Change server",
-      "zh-Hans": "更换服务器",
-      "zh-Hant": "更換伺服器",
-      "ja": "サーバーを変更"
     },
     "Paste and open": {
       "en": "Paste and open",
@@ -397,11 +379,11 @@
       "zh-Hant": "離開這個通話後，再打開那個連結。",
       "ja": "そのリンクを開くには、この通話から退出してください。"
     },
-    "Leave the call to change server.": {
-      "en": "Leave the call to change server.",
-      "zh-Hans": "离开通话后才能更换服务器。",
-      "zh-Hant": "離開通話後才能更換伺服器。",
-      "ja": "サーバーを変更するには、通話から退出してください。"
+    "That link is for another server.": {
+      "en": "That link is for another server.",
+      "zh-Hans": "这个链接属于别的服务器。",
+      "zh-Hant": "這個連結屬於別的伺服器。",
+      "ja": "このリンクは別のサーバーのものです。"
     }
   }
 }

@@ -27,8 +27,8 @@ public struct AppRoot: View {
             switch app.screen {
             case .starting:
                 StartingScreen().transition(Theme.arrive)
-            case .server:
-                ServerScreen(app: app).transition(Theme.arrive)
+            case .unreachable:
+                UnreachableScreen(app: app).transition(Theme.arrive)
             case .lobby:
                 LobbyView(app: app).transition(Theme.arrive)
             case .prejoin:
@@ -213,28 +213,26 @@ private struct Note: View {
     }
 }
 
-// MARK: - Which deployment
+// MARK: - The deployment not answering
 
-struct ServerScreen: View {
+/// What opening on a deployment that will not answer shows: the one way on,
+/// which is to ask again. It was an address field, which let the app be
+/// pointed at any server at all; the app is for one (AppModel `home`).
+struct UnreachableScreen: View {
     @Bindable var app: AppModel
 
     var body: some View {
         CardScreen {
             Mark(size: 56)
-            Heading(title: t("Server"), detail: t("The server address"))
-            GlassField(prompt: AppModel.home.replacingOccurrences(of: "https://", with: ""), text: $app.serverAddress,
-                       symbol: "server.rack", height: 46) { Task { await app.connect() } }
-                #if os(iOS)
-                .keyboardType(.URL)
-                #endif
+            Heading(title: t("Could not reach the server."), detail: URL(string: AppModel.home)?.host() ?? "")
             Button { Task { await app.connect() } } label: {
                 Group {
-                    if app.busy { ProgressView().controlSize(.small).tint(Theme.tallyForeground) } else { Text(t("Connect")) }
+                    if app.busy { ProgressView().controlSize(.small).tint(Theme.tallyForeground) } else { Text(t("Try again")) }
                 }
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.glassCapsule(48, prominent: true))
-            .disabled(app.busy || app.serverAddress.trimmingCharacters(in: .whitespaces).isEmpty)
+            .disabled(app.busy)
         }
         .toast(app)
     }

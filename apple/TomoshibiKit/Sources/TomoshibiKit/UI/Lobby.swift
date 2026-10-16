@@ -463,7 +463,8 @@ struct SignInView: View {
     }
 }
 
-/// Which deployment this is, with the way to another.
+/// Which deployment this is. There is no way to another: the app is for this
+/// one (AppModel `home`).
 struct ServerLine: View {
     @Bindable var app: AppModel
 
@@ -472,9 +473,6 @@ struct ServerLine: View {
             HStack(spacing: 6) {
                 Circle().fill(Theme.good).frame(width: 6, height: 6)
                 Text(URL(string: base)?.host() ?? base)
-                Button(t("Change server")) { app.forgetServer() }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Theme.tally)
             }
             .font(.system(size: 12))
             .foregroundStyle(Theme.muted)
@@ -656,7 +654,6 @@ struct AccountMenu: View {
     @Bindable var app: AppModel
     let account: Account
     @Environment(\.openSettings) private var openSettings
-    @Environment(\.openURL) private var openURL
     @Environment(\.popovers) private var popovers
 
     var body: some View {
@@ -678,16 +675,12 @@ struct AccountMenu: View {
             .buttonStyle(.plain)
             .glassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .floatingPopover("account", in: popovers, edge: .top, alignment: .leading, width: 262) {
+                // No pages of the web's here, the user console and the
+                // administrators' among them: an app that sends people out to
+                // a website for its own settings is one App Review questions,
+                // and the account's own settings are in Settings.
                 MenuCard {
-                    if let url = page("/account") {
-                        MenuItem(title: t("User console"), symbol: "person.text.rectangle") { popovers.close(); openURL(url) }
-                    }
-                    if account.admin, let url = page("/admin") {
-                        MenuItem(title: t("Admin console"), symbol: "shield.lefthalf.filled") { popovers.close(); openURL(url) }
-                    }
-                    MenuRule()
                     MenuItem(title: t("Settings"), symbol: "gearshape") { popovers.close(); openSettings() }
-                    MenuItem(title: t("Change server"), symbol: "server.rack") { popovers.close(); app.forgetServer() }
                     MenuRule()
                     MenuItem(title: t("Sign out"), symbol: "rectangle.portrait.and.arrow.right", role: .destructive) {
                         popovers.close()
@@ -696,10 +689,6 @@ struct AccountMenu: View {
                 }
             }
         }
-    }
-
-    private func page(_ path: String) -> URL? {
-        app.deployment.flatMap { URL(string: $0.baseUrl().trimmingCharacters(in: CharacterSet(charactersIn: "/")) + path) }
     }
 }
 
