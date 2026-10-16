@@ -5,12 +5,16 @@ import TomoshibiCore
 ///
 /// A link somebody can be sent, who is at the door, where the meeting is held,
 /// and the people in it, each of whom can be quietened, made host or removed;
-/// then ending it for everybody, asked twice. Deliberately less than the
-/// management pages can do: this reaches nobody outside this room.
+/// then ending it for everybody, asked twice, in the panel itself rather than
+/// in a dialog over the call. Deliberately less than the management pages can
+/// do: this reaches nobody outside this room.
 ///
-/// The web shows the crown that opens this only to whoever runs the room. The
-/// bar here always has the button, so somebody who does not run the room is
-/// told so rather than shown controls that would all answer "not yours".
+/// The bar shows the crown that opens this only to whoever runs the room, as
+/// the web does (ControlBar.swift, `Offers.host`). The room can still change
+/// hands while the panel is open, by a handover from here or by the server
+/// after the host left and came back, and then the panel says that somebody
+/// else runs the room rather than keeping controls that would all answer
+/// "not yours".
 struct HostPanelView: View {
     let feature: HostFeature
     let close: () -> Void
@@ -30,25 +34,12 @@ struct HostPanelView: View {
 
     private var panel: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                Image(systemName: "crown.fill")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.tally)
-                Text(t("Running this room"))
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(Theme.foreground)
-                Spacer()
-                Button(action: close) {
-                    Image(systemName: "xmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.muted)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(t("Close"))
-            }
-            .padding(12)
-            Divider().overlay(Theme.border)
+            PanelHeading(title: t("Running this room"), symbol: "crown.fill", symbolTint: Theme.tally,
+                         closeLabel: t("Close"), close: close)
+            PanelRule()
             ViewThatFits(in: .vertical) {
                 content
-                ScrollView { content }
+                ScrollView { content }.scrollIndicators(.hidden)
             }
         }
         .glassPane(cornerRadius: 22)
@@ -57,141 +48,144 @@ struct HostPanelView: View {
 
     @ViewBuilder
     private var content: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             if feature.standing.yours {
                 inviting
-                Rule()
+                if !feature.waiting.isEmpty {
+                    door
+                        .transition(Theme.arrive)
+                }
                 if feature.usableRelays.count >= 2 {
                     moving
                         .transition(Theme.arrive)
-                    Rule()
                 }
                 people
-                Rule()
                 endingIt
                 Text(feature.standing.admin
                     ? t("You can do this because you administer this server. Removing somebody ends their call; it does not stop them rejoining.")
                     : t("Removing somebody ends their call. It does not stop them rejoining with the same name."))
-                    .font(.system(size: 10.5))
+                    .font(.system(size: 11))
                     .foregroundStyle(Theme.muted.opacity(0.85))
                     .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 6)
             } else {
-                Text(t("Somebody else runs this room."))
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.muted)
-                    .transition(Theme.arrive)
+                HStack(spacing: 10) {
+                    Image(systemName: "crown")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.muted)
+                    Text(t("Somebody else runs this room."))
+                        .font(.system(size: 12.5))
+                        .foregroundStyle(Theme.muted)
+                }
+                .padding(.vertical, 18)
+                .frame(maxWidth: .infinity)
+                .transition(Theme.arrive)
             }
         }
         .padding(12)
         .animation(Theme.settle, value: feature.link)
         .animation(Theme.settle, value: feature.usableRelays.count)
+        .animation(Theme.settle, value: feature.waiting.isEmpty)
         .animation(Theme.settle, value: ending)
         .animation(Theme.settle, value: elsewhere)
     }
 
     // MARK: A link, and the door
 
-    @ViewBuilder
     private var inviting: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            PanelButton(
-                symbol: feature.copied ? "checkmark" : "link",
-                tint: feature.copied ? Theme.tally : Theme.foreground,
-                busy: feature.busy == "invite",
-                title: feature.copied ? t("Link copied") : t("Invite somebody")
-            ) {
+        VStack(alignment: .leading, spacing: 0) {
+            MenuItem(title: feature.copied ? t("Link copied") : t("Invite somebody"),
+                     symbol: feature.copied ? "checkmark" : "link",
+                     role: .prominent,
+                     busy: feature.busy == "invite") {
                 Task { await feature.invite() }
             }
-
-            // Who is outside, under the control for letting people in: the two
-            // are the same thought (HostPanel.tsx).
-            if !feature.waiting.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Rule()
-                    Text(t("Waiting to be let in"))
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.muted)
-                    DoorList(feature: feature)
-                }
-                .transition(Theme.arrive)
-            }
+            .disabled(feature.busy == "invite")
+            .animation(Theme.settle, value: feature.copied)
 
             if let link = feature.link {
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 8) {
                     Text(link)
                         .font(.system(size: 10.5, design: .monospaced))
-                        .foregroundStyle(Theme.muted)
+                        .foregroundStyle(Theme.foreground.opacity(0.8))
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 8).padding(.vertical, 6)
+                        .padding(.horizontal, 10).padding(.vertical, 8)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.surfaceHigh))
+                        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.black.opacity(0.25)))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.white.opacity(0.07)))
                     Text(t("Anybody with this link can join, until you end the meeting. No passphrase needed.") + " " + t("It stops working after a day either way."))
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(Theme.muted.opacity(0.85))
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.muted)
                         .fixedSize(horizontal: false, vertical: true)
                     // A link goes out and cannot be taken back; this stops it
                     // without ending the meeting. Under a scope it also stops
                     // the standing links members made, so it says every link.
-                    Button {
+                    QuietButton(title: feature.scoped ? t("Stop every link to this room working") : t("Stop this link working"),
+                                busy: feature.busy == "revoke") {
                         Task { await feature.revoke() }
-                    } label: {
-                        HStack(spacing: 6) {
-                            if feature.busy == "revoke" {
-                                ProgressView().controlSize(.mini)
-                            } else {
-                                // A link struck through; there is no such symbol.
-                                Image(systemName: "link")
-                                    .font(.system(size: 10))
-                                    .overlay(Rectangle().frame(width: 1.2, height: 14).rotationEffect(.degrees(-45)))
-                            }
-                            Text(feature.scoped ? t("Stop every link to this room working") : t("Stop this link working"))
-                                .font(.system(size: 11))
-                        }
-                        .foregroundStyle(Theme.muted)
-                        .padding(.horizontal, 6).padding(.vertical, 4)
-                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
                     .disabled(feature.busy == "revoke")
                 }
+                .padding(.horizontal, 8)
+                .padding(.top, 4)
+                .padding(.bottom, 8)
                 .transition(Theme.arrive)
             }
         }
-        .animation(Theme.settle, value: feature.waiting.isEmpty)
+        .padding(4)
+        .panelCard()
+    }
+
+    /// Who is outside, under the control for letting people in: the two are
+    /// the same thought (HostPanel.tsx).
+    private var door: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            MenuHeading(title: t("Waiting to be let in"))
+            DoorList(feature: feature)
+                .padding(.horizontal, 10)
+                .padding(.bottom, 10)
+                .padding(.top, 4)
+        }
+        .panelCard(tint: Theme.tally)
     }
 
     // MARK: Where it is held
 
     private var moving: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            PanelButton(symbol: "server.rack", busy: feature.busy == "move", title: t("Hold this call somewhere else")) {
-                feature.choosingRelay.toggle()
+        VStack(alignment: .leading, spacing: 2) {
+            MenuItem(title: t("Hold this call somewhere else"), symbol: "server.rack", busy: feature.busy == "move") {
+                withAnimation(Theme.settle) { feature.choosingRelay.toggle() }
+            }
+            .overlay(alignment: .trailing) {
+                if feature.busy != "move" {
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Theme.muted)
+                        .rotationEffect(.degrees(elsewhere ? 180 : 0))
+                        .padding(.trailing, 12)
+                        .allowsHitTesting(false)
+                }
             }
             if elsewhere {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(t("Everybody is reconnected. Nobody has to do anything."))
-                        .font(.system(size: 10.5))
+                        .font(.system(size: 11))
                         .foregroundStyle(Theme.muted)
                         .fixedSize(horizontal: false, vertical: true)
-                        .padding(.horizontal, 8).padding(.vertical, 4)
+                        .padding(.horizontal, 10).padding(.top, 2).padding(.bottom, 4)
                     ForEach(feature.usableRelays, id: \.name) { relay in
-                        HoverRow {
+                        MenuItem(title: say(relay.label?.isEmpty == false ? relay.label! : relay.name), symbol: "arrow.right") {
                             feature.choosingRelay = false
                             Task { await feature.move(to: relay) }
-                        } label: {
-                            Text(say(relay.label?.isEmpty == false ? relay.label! : relay.name))
-                                .font(.system(size: 12))
-                                .foregroundStyle(Theme.foreground)
-                                .frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
                 }
-                .padding(4)
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.border))
                 .transition(Theme.arrive)
             }
         }
+        .padding(4)
+        .panelCard()
     }
 
     // MARK: The people
@@ -199,20 +193,24 @@ struct HostPanelView: View {
     @ViewBuilder
     private var people: some View {
         let others = feature.call.people
-        if others.isEmpty {
-            Text(t("Nobody else is here."))
-                .font(.system(size: 11.5))
-                .foregroundStyle(Theme.muted)
-                .transition(Theme.arrive)
-        } else {
-            VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 0) {
+            if others.isEmpty {
+                Text(t("Nobody else is here."))
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.muted)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .transition(Theme.arrive)
+            } else {
                 ForEach(others) { person in
                     PersonRow(feature: feature, person: person)
                         .transition(Theme.arrive)
                 }
             }
-            .animation(Theme.settle, value: others.map(\.id))
         }
+        .padding(4)
+        .panelCard()
+        .animation(Theme.settle, value: others.map(\.id))
     }
 
     // MARK: Ending it
@@ -220,50 +218,46 @@ struct HostPanelView: View {
     @ViewBuilder
     private var endingIt: some View {
         if ending {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(feature.scoped
-                    ? t("Everybody will be disconnected and told the room has closed. Links made in the call stop working; links made on an account page do not.")
-                    : t("Everybody will be disconnected and told the room has closed. Links to it stop working."))
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(Theme.foreground)
-                    .fixedSize(horizontal: false, vertical: true)
+            // The question names what will happen rather than asking whether
+            // they are sure, which nobody has ever answered no to by reading
+            // it (HostPanel.tsx `ending`).
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "door.left.hand.closed")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.danger)
+                        .frame(width: 18)
+                    Text(feature.scoped
+                        ? t("Everybody will be disconnected and told the room has closed. Links made in the call stop working; links made on an account page do not.")
+                        : t("Everybody will be disconnected and told the room has closed. Links to it stop working."))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.foreground)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 HStack(spacing: 8) {
+                    PillButton(title: t("Cancel"), height: 30) {
+                        withAnimation(Theme.settle) { feature.ending = false }
+                    }
                     // Red: ending it for everybody is leaving, for everybody.
-                    Button {
+                    PillButton(title: t("Close the room"), role: .destructive, busy: feature.busy == "close", height: 30, wide: true) {
                         Task { await feature.dissolve() }
-                    } label: {
-                        HStack(spacing: 6) {
-                            if feature.busy == "close" { ProgressView().controlSize(.mini).tint(Theme.dangerForeground) }
-                            Text(t("Close the room")).font(.system(size: 12, weight: .medium))
-                        }
-                        .foregroundStyle(Theme.dangerForeground)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.danger))
                     }
-                    .buttonStyle(.plain)
                     .disabled(feature.busy == "close")
-                    Button {
-                        feature.ending = false
-                    } label: {
-                        Text(t("Cancel"))
-                            .font(.system(size: 12))
-                            .foregroundStyle(Theme.muted)
-                            .padding(.horizontal, 10).padding(.vertical, 6)
-                            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Theme.border))
-                    }
-                    .buttonStyle(.plain)
                 }
             }
-            .padding(10)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.danger.opacity(0.1)))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.danger.opacity(0.4)))
-            .transition(Theme.arrive)
+            .padding(12)
+            .panelCard(tint: Theme.danger)
+            .transition(.asymmetric(
+                insertion: .opacity.combined(with: .scale(scale: 0.96, anchor: .top)).animation(Theme.settle),
+                removal: .opacity.animation(Theme.leave)
+            ))
         } else {
-            PanelButton(symbol: "door.left.hand.closed", tint: Theme.muted, title: t("End this meeting")) {
-                feature.ending = true
+            MenuItem(title: t("End this meeting"), symbol: "door.left.hand.closed") {
+                withAnimation(Theme.settle) { feature.ending = true }
             }
-            .transition(Theme.arrive)
+            .padding(4)
+            .panelCard()
+            .transition(.opacity.animation(Theme.settle))
         }
     }
 }
@@ -276,139 +270,85 @@ private struct PersonRow: View {
 
     var body: some View {
         let busy = feature.busy != nil
+        let name = person.name.isEmpty ? person.id : person.name
         // `isMicrophoneEnabled`: a microphone there and not already muted.
         let microphoneOn = person.track(.microphone).map { !$0.muted } ?? false
-        HStack(spacing: 4) {
-            Text(person.name.isEmpty ? person.id : person.name)
-                .font(.system(size: 12.5))
+        HStack(spacing: 8) {
+            Monogram(name: name, identity: person.id, size: 26)
+            Text(name)
+                .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Theme.foreground)
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if feature.busy == person.id {
-                ProgressView().controlSize(.mini)
+                ProgressView().controlSize(.small)
                     .transition(.opacity.animation(Theme.settle))
             }
-            Small(symbol: "mic.slash", label: t("Mute"), disabled: busy || !microphoneOn) {
+            RoundButton(symbol: "mic.slash.fill", label: t("Mute")) {
                 Task { await feature.silence(person) }
             }
+            .disabled(busy || !microphoneOn)
             // A room held under a scope has no host to hand over, and the
-            // server refuses it outright; the button goes rather than answering
-            // with a refusal.
+            // server refuses it outright; the button goes rather than
+            // answering with a refusal.
             if !feature.scoped {
-                // Dimmed beside a guest rather than taken away, and pressable,
+                // Faint beside a guest rather than taken away, and pressable,
                 // so the reason can be said on a phone, where nobody hovers.
                 let guest = feature.isGuest(person)
-                Small(symbol: "crown", label: t("Make host"), disabled: busy, dim: guest) {
+                RoundButton(symbol: "crown", label: t("Make host"), faint: guest) {
                     if guest {
                         feature.refuseHandOver()
                     } else {
                         Task { await feature.handOver(to: person) }
                     }
                 }
+                .disabled(busy)
                 .help(guest ? t("They joined without a passphrase, so they cannot run the room. Ask them to rejoin with one.") : t("Make host"))
             }
-            Small(symbol: "person.badge.minus", label: t("Remove from room"), disabled: busy) {
+            RoundButton(symbol: "person.badge.minus", label: t("Remove from room"), role: .destructive) {
                 Task { await feature.turnOut(person) }
             }
+            .disabled(busy)
         }
-        .padding(.horizontal, 4)
-        .padding(.vertical, 4)
-        .background(RoundedRectangle(cornerRadius: 6).fill(hovering ? Theme.surfaceHigh : .clear))
+        .padding(.leading, 8)
+        .padding(.trailing, 6)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(hovering ? 0.06 : 0)))
         .onHover { hovering = $0 }
-        .animation(Theme.settle, value: hovering)
+        .animation(.easeOut(duration: 0.12), value: hovering)
         .animation(Theme.settle, value: feature.busy)
     }
-
-    private struct Small: View {
-        let symbol: String
-        let label: String
-        var disabled = false
-        var dim = false
-        let action: () -> Void
-
-        var body: some View {
-            Button(action: action) {
-                Image(systemName: symbol)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.muted)
-                    .frame(width: 24, height: 24)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(disabled)
-            .opacity(disabled || dim ? 0.3 : 1)
-            .accessibilityLabel(label)
-            .help(label)
-        }
-    }
 }
 
-/// A bordered row-wide button with a symbol, the panel's one kind of button.
-private struct PanelButton: View {
-    let symbol: String
-    var tint: Color = Theme.foreground
-    var busy = false
+/// A small, quiet press for something that undoes rather than does: stopping
+/// the link. It warms to red under the pointer, where it is about to happen.
+private struct QuietButton: View {
     let title: String
+    var busy = false
     let action: () -> Void
     @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                ZStack {
-                    if busy {
-                        ProgressView().controlSize(.mini)
-                    } else {
-                        Image(systemName: symbol)
-                            .font(.system(size: 12))
-                            .foregroundStyle(tint)
-                            .contentTransition(.symbolEffect(.replace))
-                    }
+            HStack(spacing: 6) {
+                if busy {
+                    ProgressView().controlSize(.mini)
+                } else {
+                    // A link struck through; there is no such symbol.
+                    Image(systemName: "link")
+                        .font(.system(size: 10, weight: .semibold))
+                        .overlay(Capsule().frame(width: 1.4, height: 14).rotationEffect(.degrees(-45)))
                 }
-                .frame(width: 16)
                 Text(title)
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(Theme.foreground)
-                    .contentTransition(.opacity)
-                Spacer(minLength: 0)
+                    .font(.system(size: 11.5, weight: .medium))
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background(RoundedRectangle(cornerRadius: 8).fill(hovering ? Theme.surfaceHigh : .clear))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.border))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(busy)
-        .onHover { hovering = $0 }
-        .animation(Theme.settle, value: hovering)
-        .animation(Theme.settle, value: title)
-        .animation(Theme.settle, value: busy)
-    }
-}
-
-/// A plain row that lights on hover, for a list of choices.
-private struct HoverRow<Label: View>: View {
-    let action: () -> Void
-    @ViewBuilder let label: Label
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            label
-                .padding(.horizontal, 8).padding(.vertical, 5)
-                .background(RoundedRectangle(cornerRadius: 5).fill(hovering ? Theme.surfaceHigh : .clear))
-                .contentShape(Rectangle())
+            .foregroundStyle(hovering ? Theme.foreground : Theme.muted)
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(Capsule().fill(hovering ? Theme.danger.opacity(0.14) : Color.white.opacity(0.05)))
+            .contentShape(Capsule())
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
-        .animation(Theme.settle, value: hovering)
-    }
-}
-
-/// A hairline between the panel's sections.
-private struct Rule: View {
-    var body: some View {
-        Rectangle().fill(Theme.border).frame(height: 1)
+        .animation(.easeOut(duration: 0.12), value: hovering)
     }
 }

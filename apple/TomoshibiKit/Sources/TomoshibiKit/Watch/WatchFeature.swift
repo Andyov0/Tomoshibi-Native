@@ -291,14 +291,10 @@ final class WatchEngine {
         }
     }
 
+    /// Said in the call's corner, as the web says a refusal (Room.tsx
+    /// `hearShows`, `actionFailed`), wherever the panel is.
     func say(_ text: String) {
-        notice = text
-        noticeTask?.cancel()
-        noticeTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(10))
-            guard !Task.isCancelled else { return }
-            self?.notice = nil
-        }
+        call.actionFailed(text)
     }
 
     func dismissNotice() {
