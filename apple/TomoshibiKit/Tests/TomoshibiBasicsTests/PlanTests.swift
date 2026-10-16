@@ -30,14 +30,33 @@ final class PlanTests: XCTestCase {
         }
     }
 
+    /// Clear of the controls whole, and of the window's edges by the gap:
+    /// the web lets a full grid's last row run half under the bar, and six
+    /// people in a wide window touch both sides of it.
     func testGridKeepsClearOfTheControlsAndInsideTheWindow() {
-        for count in 1...9 {
-            for spot in Plan.grid(window, ids: ids(count)).values {
-                XCTAssertLessThanOrEqual(spot.maxY, window.height - Plan.island / 2)
-                XCTAssertGreaterThanOrEqual(spot.minX, 0)
-                XCTAssertGreaterThanOrEqual(spot.minY, 0)
-                XCTAssertLessThanOrEqual(spot.maxX, window.width)
+        for size in [window, CGSize(width: 1280, height: 772), phone] {
+            for count in 1...9 {
+                for spot in Plan.grid(size, ids: ids(count)).values {
+                    XCTAssertLessThanOrEqual(spot.maxY, size.height - Plan.island + 0.5, "\(count) in \(size)")
+                    XCTAssertGreaterThanOrEqual(spot.minX, Plan.gap - 0.5, "\(count) in \(size)")
+                    XCTAssertGreaterThanOrEqual(spot.minY, 0)
+                    XCTAssertLessThanOrEqual(spot.maxX, size.width - Plan.gap + 0.5, "\(count) in \(size)")
+                }
             }
+        }
+    }
+
+    /// The paging arrows sit beside the pictures, not over the first and last.
+    func testARoomThatPagesLeavesItsArrowsRoom() {
+        let grid = Plan.room(window, pictures: ["me"] + ids(20), mine: "me", stage: nil)
+        for spot in grid.spots.values {
+            XCTAssertGreaterThanOrEqual(spot.minX, Plan.pagerReserve - 0.5)
+            XCTAssertLessThanOrEqual(spot.maxX, window.width - Plan.pagerReserve + 0.5)
+        }
+        let strip = Plan.room(window, pictures: ["me", "stage"] + ids(20), mine: "me", stage: "stage")
+        for id in strip.shown {
+            XCTAssertGreaterThanOrEqual(strip.spots[id]!.minX, Plan.pagerReserve - 0.5)
+            XCTAssertLessThanOrEqual(strip.spots[id]!.maxX, window.width - Plan.pagerReserve + 0.5)
         }
     }
 
@@ -104,5 +123,144 @@ final class PlanTests: XCTestCase {
         for (id, spot) in plan where id != "them" {
             XCTAssertLessThanOrEqual(spot.maxY, short.height - Plan.island)
         }
+    }
+
+    // MARK: The whole room (Room.tsx)
+
+    /// Room.tsx `mine`: whichever page is showing, your own picture is on it,
+    /// and it takes one of the nine places rather than making a tenth.
+    func testYourOwnPictureNeverPagesAway() {
+        let everybody = ["me"] + ids(20)
+        var seen: Set<String> = []
+        let first = Plan.room(window, pictures: everybody, mine: "me", stage: nil)
+        XCTAssertEqual(first.pages, 3)
+        for page in 0..<first.pages {
+            let room = Plan.room(window, pictures: everybody, mine: "me", stage: nil, page: page)
+            XCTAssertNotNil(room.spots["me"], "page \(page)")
+            XCTAssertEqual(room.shown.first, "me")
+            XCTAssertLessThanOrEqual(room.spots.count, Plan.tilesPerPage)
+            seen.formUnion(room.shown)
+        }
+        XCTAssertEqual(seen, Set(everybody), "every picture is on some page")
+    }
+
+    func testYourOwnPictureStaysInTheStripToo() {
+        let everybody = ["me", "stage"] + ids(30)
+        let room = Plan.room(window, pictures: everybody, mine: "me", stage: "stage", page: 2)
+        XCTAssertNotNil(room.spots["me"])
+        XCTAssertNotNil(room.spots["stage"])
+        let places = Plan.stripCapacity(CGSize(width: window.width - 2 * Plan.pagerReserve, height: window.height))
+        XCTAssertEqual(room.spots.count, places + 1)
+    }
+
+    func testAPageThatNoLongerExistsShowsTheLastOne() {
+        let room = Plan.room(window, pictures: ["me"] + ids(10), mine: "me", stage: nil, page: 7)
+        XCTAssertEqual(room.page, room.pages - 1)
+        XCTAssertFalse(room.shown.isEmpty)
+    }
+
+    func testTwoPeopleAreDrawnAsACallOfTwo() {
+        let room = Plan.room(phone, pictures: ["me", "them"], mine: "me", stage: nil)
+        XCTAssertEqual(room.spots["them"], CGRect(origin: .zero, size: phone))
+        XCTAssertLessThan(room.spots["me"]!.width, phone.width / 2)
+    }
+
+    func testFillingTheScreenDrawsTheStageAlone() {
+        let room = Plan.room(window, pictures: ["me", "stage"] + ids(4), mine: "me", stage: "stage", fullscreen: true)
+        XCTAssertEqual(room.spots, ["stage": CGRect(origin: .zero, size: window)])
+    }
+
+    func testAStageThatIsNotInTheRoomIsTheGrid() {
+        let room = Plan.room(window, pictures: ["me"] + ids(4), mine: "me", stage: "gone")
+        XCTAssertEqual(room.spots.count, 5)
+        XCTAssertNil(room.spots["gone"])
+    }
+
+    // MARK: Who has the stage (usePin.test.tsx)
+
+    func testAShareTakesTheStageWhenItStartsAndGivesItBack() {
+        var pin = StagePin()
+        pin.update(pictures: ["a", "b"], shares: [])
+        XCTAssertNil(pin.pinned)
+        pin.update(pictures: ["a", "b", "a/screen"], shares: ["a/screen"])
+        XCTAssertEqual(pin.pinned, "a/screen")
+        pin.update(pictures: ["a", "b"], shares: [])
+        XCTAssertNil(pin.pinned)
+    }
+
+    func testAShareAlreadyRunningOnArrivalTakesTheStage() {
+        var pin = StagePin()
+        pin.update(pictures: ["a", "a/screen"], shares: ["a/screen"])
+        XCTAssertEqual(pin.pinned, "a/screen")
+    }
+
+    /// The way back to the grid: pressing the share on the stage shows
+    /// everybody, and the share does not climb straight back on.
+    func testTheGridCanBeChosenWhileSomebodyShares() {
+        var pin = StagePin()
+        pin.update(pictures: ["a", "b", "a/screen"], shares: ["a/screen"])
+        pin.toggle("a/screen")
+        pin.update(pictures: ["a", "b", "a/screen"], shares: ["a/screen"])
+        XCTAssertNil(pin.pinned)
+        // Until a share that is new starts.
+        pin.update(pictures: ["a", "b", "a/screen", "b/screen"], shares: ["a/screen", "b/screen"])
+        XCTAssertEqual(pin.pinned, "b/screen")
+    }
+
+    func testAShareDoesNotTakeAStagePinnedByHand() {
+        var pin = StagePin()
+        pin.update(pictures: ["a", "b"], shares: [])
+        pin.pin("b")
+        pin.update(pictures: ["a", "b", "a/screen"], shares: ["a/screen"])
+        XCTAssertEqual(pin.pinned, "b")
+        pin.update(pictures: ["a", "b"], shares: [])
+        XCTAssertEqual(pin.pinned, "b", "an unrelated share ending keeps a pin made by hand")
+    }
+
+    func testAPinnedPersonLeavingEmptiesTheStage() {
+        var pin = StagePin()
+        pin.update(pictures: ["a", "b"], shares: [])
+        pin.pin("b")
+        pin.update(pictures: ["a"], shares: [])
+        XCTAssertNil(pin.pinned)
+    }
+
+    func testTheSameTileTwiceTogglesOff() {
+        var pin = StagePin()
+        pin.toggle("a")
+        XCTAssertEqual(pin.pinned, "a")
+        pin.toggle("a")
+        XCTAssertNil(pin.pinned)
+    }
+
+    func testTheFirstShareKeepsTheStageAndHandsItOn() {
+        var pin = StagePin()
+        pin.update(pictures: ["a", "b", "a/screen"], shares: ["a/screen"])
+        pin.update(pictures: ["a", "b", "a/screen", "b/screen"], shares: ["a/screen", "b/screen"])
+        XCTAssertEqual(pin.pinned, "a/screen", "a second share does not fight the first for the stage")
+        pin.update(pictures: ["a", "b", "b/screen"], shares: ["b/screen"])
+        XCTAssertEqual(pin.pinned, "b/screen", "the remaining share takes over rather than the grid")
+    }
+
+    // MARK: Who spoke last (useSpeakingOrder.test.tsx)
+
+    func testSomebodyTalkingComesForwardAndStaysThroughAPause() {
+        var record = SpeakingRecord()
+        let room = ["a", "b", "c"]
+        record.hear(speaking: [], present: room, at: 1)
+        XCTAssertEqual(record.order(room), ["a", "b", "c"])
+        record.hear(speaking: ["c"], present: room, at: 2)
+        XCTAssertEqual(record.order(room), ["c", "a", "b"])
+        record.hear(speaking: [], present: room, at: 3)
+        XCTAssertEqual(record.order(room), ["c", "a", "b"])
+        record.hear(speaking: ["b"], present: room, at: 4)
+        XCTAssertEqual(record.order(room), ["b", "c", "a"])
+    }
+
+    func testSomebodyWhoLeftIsForgotten() {
+        var record = SpeakingRecord()
+        record.hear(speaking: ["c"], present: ["a", "c"], at: 1)
+        record.hear(speaking: [], present: ["a"], at: 2)
+        XCTAssertEqual(record.order(["a", "c"]), ["a", "c"])
     }
 }

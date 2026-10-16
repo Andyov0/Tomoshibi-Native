@@ -294,6 +294,12 @@
       "zh-Hans": "这台 Mac 使用系统设置里选定的麦克风和扬声器。",
       "zh-Hant": "這台 Mac 使用系統設定裡選定的麥克風和喇叭。",
       "ja": "この Mac はシステム設定で選んだマイクとスピーカーを使います。"
+    },
+    "You are sharing your screen": {
+      "en": "You are sharing your screen",
+      "zh-Hans": "你正在共享屏幕",
+      "zh-Hant": "你正在分享螢幕",
+      "ja": "画面を共有しています"
     }
   }
 }

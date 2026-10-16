@@ -321,6 +321,8 @@ public final class AppModel {
                 sealingWord: sealingWord.isEmpty ? nil : sealingWord,
                 forward: grant.forward.map { IceServer(url: $0.url, username: $0.username, credential: $0.credential) })
             let model = try await CallModel.join(options, deployment: deployment, region: grant.region)
+            model.relay = grant.relay
+            model.holding = grant.holding
             model.onMoved = { [weak self] relay in
                 Task { await self?.rejoin(to: relay) }
             }

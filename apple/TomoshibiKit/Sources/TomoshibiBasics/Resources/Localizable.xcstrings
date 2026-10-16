@@ -21391,6 +21391,36 @@
         }
       }
     },
+    "You are sharing your screen" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You are sharing your screen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面を共有しています"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你正在共享屏幕"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你正在分享螢幕"
+          }
+        }
+      }
+    },
     "You can do this because you administer this server. Removing somebody ends their call; it does not stop them rejoining." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
