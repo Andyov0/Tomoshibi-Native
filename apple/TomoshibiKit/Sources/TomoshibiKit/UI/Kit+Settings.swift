@@ -649,11 +649,11 @@ struct ClockChoice: View {
         if let popovers {
             HStack(spacing: 4) {
                 part(id + ".hour", value: hour, label: t("Hour"), popovers: popovers) {
-                    grid(Array(0..<24), columns: 6, chosen: hour) { hour = $0 }
+                    ClockGrid(values: Array(0..<24), columns: 6, chosen: hour) { hour = $0; popovers.close() }
                 }
                 Text(":").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.muted)
                 part(id + ".minute", value: minute, label: t("Minute"), popovers: popovers) {
-                    grid(minutes, columns: 4, chosen: minute) { minute = $0 }
+                    ClockGrid(values: minutes, columns: 4, chosen: minute) { minute = $0; popovers.close() }
                 }
             }
         }
@@ -661,27 +661,49 @@ struct ClockChoice: View {
 
     private func part<Panel: View>(_ id: String, value: Int, label: String, popovers: Popovers,
                                    @ViewBuilder panel: @escaping () -> Panel) -> some View {
-        Button { popovers.toggle(id) } label: {
+        ClockCapsule(value: value, label: label) { popovers.toggle(id) }
+            .floatingPopover(id, in: popovers, alignment: .center, width: 236) {
+                VStack(alignment: .leading, spacing: 6) {
+                    MenuHeading(title: label)
+                    panel()
+                }
+                .padding(8)
+            }
+    }
+}
+
+/// One half of a time, as the capsule that opens its grid.
+private struct ClockCapsule: View {
+    let value: Int
+    let label: String
+    var lit = false
+    let press: () -> Void
+
+    var body: some View {
+        Button(action: press) {
             Text(String(format: "%02d", value)).font(.system(size: 14, weight: .semibold).monospacedDigit())
+                .foregroundStyle(lit ? Theme.tally : Theme.foreground)
                 .frame(minWidth: 26)
         }
         .buttonStyle(.glassCapsule(32))
         .accessibilityLabel(label)
-        .floatingPopover(id, in: popovers, alignment: .center, width: 236) {
-            VStack(alignment: .leading, spacing: 6) {
-                MenuHeading(title: label)
-                panel()
-            }
-            .padding(8)
-        }
+        .accessibilityAddTraits(lit ? .isSelected : [])
+        .animation(Theme.settle, value: lit)
     }
+}
 
-    private func grid(_ values: [Int], columns: Int, chosen: Int, pick: @escaping (Int) -> Void) -> some View {
+/// The hours or the quarters to choose one from.
+private struct ClockGrid: View {
+    let values: [Int]
+    let columns: Int
+    let chosen: Int
+    let pick: (Int) -> Void
+
+    var body: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: columns), spacing: 4) {
             ForEach(values, id: \.self) { value in
                 Button {
                     withAnimation(Theme.settle) { pick(value) }
-                    popovers?.close()
                 } label: {
                     Text(String(format: "%02d", value))
                         .font(.system(size: 13, weight: value == chosen ? .bold : .regular).monospacedDigit())
@@ -731,7 +753,11 @@ struct MomentChoice: View {
                 }
             }
             .animation(Theme.settle, value: moment == nil)
-            .floatingPopover(id, in: popovers, width: 290) {
+            // Hung from the leading edge: the capsule grows from a dash to a
+            // whole date the moment a time is chosen, and a panel hung from
+            // its trailing edge jumped sideways under the pointer midway
+            // through choosing the time.
+            .floatingPopover(id, in: popovers, alignment: .leading, width: 290) {
                 MomentPanel(id: id, moment: $moment, earliest: earliest)
                     .environment(\.locale, locale)
                     .environment(\.popovers, popovers)
@@ -740,30 +766,79 @@ struct MomentChoice: View {
     }
 }
 
+/// The calendar, and under it the time, whose hour and quarter are chosen in
+/// the panel itself, in the calendar's place while they are.
+///
+/// Not in popovers of their own, as the clock beside a schedule is: the app
+/// keeps one popover open at a time, so pressing the hour inside this one
+/// closed it, took the hour's anchor with it, and left nothing on screen but
+/// the invisible catcher a popover lays over the page. The time of a guest
+/// link could not be set at all, and every link opened on the next hour.
 private struct MomentPanel: View {
     let id: String
     @Binding var moment: Date?
     let earliest: Date?
+    @State private var part: Part?
+
+    enum Part { case hour, minute }
 
     var body: some View {
         let day = Binding<Date>(get: { moment ?? Self.nextHour }, set: { moment = $0 })
         let calendar = Calendar.current
+        let hour = calendar.component(.hour, from: day.wrappedValue)
+        let minute = calendar.component(.minute, from: day.wrappedValue) / 15 * 15
         VStack(spacing: 12) {
-            MonthCalendar(day: day, earliest: earliest)
+            // The calendar keeps its room while a grid is over it, so the
+            // panel does not change size under the pointer.
+            ZStack(alignment: .top) {
+                MonthCalendar(day: day, earliest: earliest)
+                    .opacity(part == nil ? 1 : 0)
+                    .allowsHitTesting(part == nil)
+                    .accessibilityHidden(part != nil)
+                if let part {
+                    VStack(alignment: .leading, spacing: 6) {
+                        MenuHeading(title: part == .hour ? t("Hour") : t("Minute"))
+                        if part == .hour {
+                            ClockGrid(values: Array(0..<24), columns: 6, chosen: hour) { picked in
+                                day.wrappedValue = calendar.date(bySettingHour: picked, minute: minute, second: 0, of: day.wrappedValue) ?? day.wrappedValue
+                                self.part = nil
+                            }
+                        } else {
+                            ClockGrid(values: [0, 15, 30, 45], columns: 4, chosen: minute) { picked in
+                                day.wrappedValue = calendar.date(bySettingHour: hour, minute: picked, second: 0, of: day.wrappedValue) ?? day.wrappedValue
+                                self.part = nil
+                            }
+                        }
+                    }
+                    .transition(Theme.arrive)
+                }
+            }
             HStack {
                 Text(t("Time")).font(.system(size: 12)).foregroundStyle(Theme.muted)
                 Spacer()
-                ClockChoice(id: id + ".clock",
-                            hour: Binding(get: { calendar.component(.hour, from: day.wrappedValue) },
-                                          set: { day.wrappedValue = calendar.date(bySettingHour: $0, minute: calendar.component(.minute, from: day.wrappedValue), second: 0, of: day.wrappedValue) ?? day.wrappedValue }),
-                            minute: Binding(get: { calendar.component(.minute, from: day.wrappedValue) / 15 * 15 },
-                                            set: { day.wrappedValue = calendar.date(bySettingHour: calendar.component(.hour, from: day.wrappedValue), minute: $0, second: 0, of: day.wrappedValue) ?? day.wrappedValue }))
+                HStack(spacing: 4) {
+                    ClockCapsule(value: hour, label: t("Hour"), lit: part == .hour) { part = part == .hour ? nil : .hour }
+                    Text(":").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.muted)
+                    ClockCapsule(value: minute, label: t("Minute"), lit: part == .minute) { part = part == .minute ? nil : .minute }
+                }
             }
         }
         // Nothing is set by opening it: an end left open is a link that works
         // until it is stopped, and a moment written merely by looking would
         // be a link that stops when nobody asked it to.
         .padding(14)
+        .animation(Theme.settle, value: part)
+        .onAppear {
+            #if DEBUG
+            // TOMOSHIBI_DEBUG_MOMENT=hour|minute: that half's grid already
+            // showing, for a test to see it without a pointer.
+            switch ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_MOMENT"] {
+            case "hour": part = .hour
+            case "minute": part = .minute
+            default: break
+            }
+            #endif
+        }
     }
 
     static var nextHour: Date {

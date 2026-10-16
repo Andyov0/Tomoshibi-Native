@@ -89,14 +89,25 @@ public enum SettingsTopic: String, CaseIterable, Identifiable, Sendable {
 /// under the web's storage names and with its values. Nothing is written in a
 /// rehearsal: a test drives the very app somebody uses, and its settings are
 /// that person's.
+///
+/// One for the app (AppModel `preferences`) rather than one per Settings
+/// window, and read again from storage whenever storage changes: a call
+/// writes some of these too, and a copy read once when the window opened
+/// went on saying, and writing back, what had been true then.
 @MainActor
 @Observable
 final class CallPreferences {
     @ObservationIgnored let keeps: Bool
+    /// Where the choices about one's own devices are kept: the same store as
+    /// the app's DeviceMemory, which the call reads and the devices panel in
+    /// a call writes; nil in a rehearsal that keeps nothing.
+    @ObservationIgnored private let deviceDefaults: UserDefaults?
+    @ObservationIgnored private var refreshing = false
+    @ObservationIgnored private var observer: NSObjectProtocol?
 
     /// sound.ts `meet-live.original-sound`: "on", or nothing.
     var originalSound: Bool {
-        didSet { keep("meet-live.original-sound", originalSound ? "on" : nil) }
+        didSet { put(DeviceMemory.originalKey, originalSound ? "on" : nil, in: deviceDefaults) }
     }
 
     /// preferences.ts `meet-live.watch-quality`: a ceiling, "auto" kept as
@@ -120,39 +131,90 @@ final class CallPreferences {
     /// each kind, under the web's kind names. A device's identifier here is
     /// the system's own (a CoreAudio UID, a capture device's unique ID), which
     /// means nothing on another machine, as the web says of its own.
-    var devices: [String: String] {
-        didSet {
-            guard keeps else { return }
-            if devices.isEmpty {
-                UserDefaults.standard.removeObject(forKey: Self.choiceKey)
-            } else if let data = try? JSONSerialization.data(withJSONObject: devices, options: [.sortedKeys]),
-                      let text = String(data: data, encoding: .utf8) {
-                UserDefaults.standard.set(text, forKey: Self.choiceKey)
-            }
+    ///
+    /// Changed one kind at a time (`choose`), over what is stored at that
+    /// moment. The whole object used to be written from the copy read when
+    /// the window opened, so a camera picked here erased the headset picked
+    /// in the call a minute before.
+    private(set) var devices: [String: String]
+
+    static let choiceKey = DeviceMemory.choiceKey
+    static let watchQualities = ["auto", "1080p", "720p"]
+
+    init(keeps: Bool, deviceDefaults: UserDefaults?) {
+        self.keeps = keeps
+        self.deviceDefaults = deviceDefaults
+        originalSound = false
+        watchQuality = "auto"
+        musicQuality = "lossless"
+        musicDucks = true
+        devices = [:]
+        refresh()
+        observer = NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil,
+                                                          queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refresh() }
         }
     }
 
-    static let choiceKey = "meet-live.device-choice"
-    static let watchQualities = ["auto", "1080p", "720p"]
-
-    init(keeps: Bool) {
-        self.keeps = keeps
+    /// Reads everything again, assigning only what changed, and writing
+    /// nothing back.
+    func refresh() {
+        refreshing = true
+        defer { refreshing = false }
         let defaults = UserDefaults.standard
-        originalSound = defaults.string(forKey: "meet-live.original-sound") == "on"
-        let watch = defaults.string(forKey: "meet-live.watch-quality") ?? "auto"
-        watchQuality = Self.watchQualities.contains(watch) ? watch : "auto"
-        musicQuality = defaults.string(forKey: "meet-live.music-quality") == "best" ? "best" : "lossless"
-        musicDucks = defaults.string(forKey: "meet-live.music-duck") != "off"
-        devices = Self.readDevices()
+        let original = deviceDefaults?.string(forKey: DeviceMemory.originalKey) == "on"
+        if original != originalSound { originalSound = original }
+        let stored = defaults.string(forKey: "meet-live.watch-quality") ?? "auto"
+        let watch = Self.watchQualities.contains(stored) ? stored : "auto"
+        if watch != watchQuality { watchQuality = watch }
+        let music = defaults.string(forKey: "meet-live.music-quality") == "best" ? "best" : "lossless"
+        if music != musicQuality { musicQuality = music }
+        let ducks = defaults.string(forKey: "meet-live.music-duck") != "off"
+        if ducks != musicDucks { musicDucks = ducks }
+        // A rehearsal that keeps nothing has nothing stored to read, and
+        // shows what it chose in this run.
+        if let deviceDefaults {
+            let fresh = Self.readDevices(deviceDefaults)
+            if fresh != devices { devices = fresh }
+        }
+    }
+
+    /// One kind's device, or the system's (nil), written over what is stored
+    /// now rather than over what this showed.
+    func choose(_ kind: String, _ id: String?) {
+        guard let deviceDefaults else {
+            devices[kind] = id
+            return
+        }
+        var next = Self.readDevices(deviceDefaults)
+        next[kind] = id
+        devices = next
+        write(next, to: deviceDefaults)
+    }
+
+    /// Forgets every device choice.
+    func forgetDevices() {
+        devices = [:]
+        deviceDefaults?.removeObject(forKey: Self.choiceKey)
+    }
+
+    private func write(_ choice: [String: String], to defaults: UserDefaults) {
+        if choice.isEmpty {
+            defaults.removeObject(forKey: Self.choiceKey)
+        } else if let data = try? JSONSerialization.data(withJSONObject: choice, options: [.sortedKeys]),
+                  let text = String(data: data, encoding: .utf8) {
+            defaults.set(text, forKey: Self.choiceKey)
+        }
     }
 
     /// The web's reading: an object of strings no longer than any device's
-    /// identifier, and nothing for anything else.
-    private static func readDevices() -> [String: String] {
-        guard let text = UserDefaults.standard.string(forKey: choiceKey),
+    /// identifier, and nothing for anything else (DeviceMemory reads it the
+    /// same way).
+    private static func readDevices(_ defaults: UserDefaults) -> [String: String] {
+        guard let text = defaults.string(forKey: choiceKey),
               let parsed = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] else { return [:] }
         var out: [String: String] = [:]
-        for kind in ["audioinput", "videoinput", "audiooutput"] {
+        for kind in DeviceMemory.Kind.allCases.map(\.rawValue) {
             if let id = parsed[kind] as? String, !id.isEmpty, id.count <= 256 { out[kind] = id }
         }
         return out
@@ -160,7 +222,12 @@ final class CallPreferences {
 
     private func keep(_ key: String, _ value: String?) {
         guard keeps else { return }
-        if let value { UserDefaults.standard.set(value, forKey: key) } else { UserDefaults.standard.removeObject(forKey: key) }
+        put(key, value, in: .standard)
+    }
+
+    private func put(_ key: String, _ value: String?, in defaults: UserDefaults?) {
+        guard !refreshing, let defaults else { return }
+        if let value { defaults.set(value, forKey: key) } else { defaults.removeObject(forKey: key) }
     }
 }
 
@@ -183,7 +250,7 @@ public struct SettingsView: View {
         self.app = app
         _section = State(initialValue: SettingsTopic.debug ?? .general)
         _open = State(initialValue: SettingsTopic.debug)
-        _preferences = State(initialValue: CallPreferences(keeps: !app.rehearsal))
+        _preferences = State(initialValue: app.preferences)
     }
 
     public var body: some View {
@@ -892,6 +959,7 @@ private struct MediaSettings: View {
     @State private var speakers: [AudioDevice] = []
     @State private var cameras: [AVCaptureDevice] = []
     @State private var check = DeviceCheck()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
@@ -941,7 +1009,7 @@ private struct MediaSettings: View {
                     HStack {
                         Spacer()
                         Button(t("Forget")) {
-                            withAnimation(Theme.settle) { preferences.devices = [:] }
+                            withAnimation(Theme.settle) { preferences.forgetDevices() }
                         }
                         .buttonStyle(.glassCapsule(30))
                     }
@@ -955,12 +1023,29 @@ private struct MediaSettings: View {
             cameras = CameraCapture.cameras()
             microphones = CallAudio.devices(input: true)
             speakers = CallAudio.devices(input: false)
-            check.start(camera: preferences.devices["videoinput"], microphone: preferences.devices["audioinput"])
+            preferences.refresh()
+            checkDevices()
         }
         .onDisappear { check.stop() }
-        .onChange(of: preferences.devices) {
-            check.start(camera: preferences.devices["videoinput"], microphone: preferences.devices["audioinput"])
+        .onChange(of: preferences.devices) { checkDevices() }
+        // Stopped when the app goes to the background, not only when the page
+        // goes: on the phone Home leaves the sheet where it was, so the page
+        // never disappears, and with the background audio mode nothing else
+        // stops the meter's engine, which went on recording, the microphone
+        // light on, for as long as the app was away. Back in front, the page
+        // is still showing, and the devices open again.
+        .onChange(of: scenePhase) {
+            if scenePhase == .background {
+                check.stop()
+            } else if scenePhase == .active, !check.started {
+                checkDevices()
+            }
         }
+    }
+
+    private func checkDevices() {
+        guard scenePhase != .background else { return }
+        check.start(camera: preferences.devices["videoinput"], microphone: preferences.devices["audioinput"])
     }
 
     /// The camera as the room will see it, with how loudly the microphone
@@ -1006,9 +1091,7 @@ private struct MediaSettings: View {
 
     private func binding(_ kind: String) -> Binding<String> {
         Binding(get: { preferences.devices[kind] ?? "" }, set: { chosen in
-            var next = preferences.devices
-            next[kind] = chosen.isEmpty ? nil : chosen
-            preferences.devices = next
+            preferences.choose(kind, chosen.isEmpty ? nil : chosen)
         })
     }
 }
@@ -1028,8 +1111,12 @@ final class DeviceCheck {
     @ObservationIgnored private let reading = SoundLevel()
     @ObservationIgnored private var ticking: Task<Void, Never>?
     @ObservationIgnored private var generation = 0
+    /// Whether the devices are meant to be open: between `start` and `stop`.
+    @ObservationIgnored private(set) var started = false
 
     func start(camera: String?, microphone: String?) {
+        started = true
+        Self.debugLog("started")
         generation += 1
         let mine = generation
         startCamera(camera, generation: mine)
@@ -1037,11 +1124,23 @@ final class DeviceCheck {
     }
 
     func stop() {
+        started = false
+        Self.debugLog("stopped")
         generation += 1
         let session = session
         DispatchQueue.global(qos: .userInitiated).async { session.stopRunning() }
         cameraRunning = false
         stopMicrophone()
+    }
+
+    /// TOMOSHIBI_DEBUG_DEVICE_CHECK=log, in a debug build: says in the
+    /// system log when the devices open and close, for a test of when they
+    /// do on a phone it cannot look inside.
+    private static func debugLog(_ what: String) {
+        #if DEBUG
+        guard ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_DEVICE_CHECK"] == "log" else { return }
+        NSLog("tomoshibi device check: %@", what)
+        #endif
     }
 
     // MARK: Camera
@@ -1323,7 +1422,7 @@ private struct AccountSettings: View {
                 abilities(account)
                 places(account)
                 passphrase
-                if app.holds("invite"), account.admin || !account.scopes.isEmpty {
+                if app.holds("invite"), account.admin || !account.scopes.isEmpty || debugGuestLinks {
                     GuestLinksCard(app: app, account: account)
                 }
             } else {
@@ -1339,6 +1438,17 @@ private struct AccountSettings: View {
         }
         .animation(Theme.settle, value: said)
         .animation(Theme.settle, value: app.account?.avatar)
+    }
+
+    /// TOMOSHIBI_DEBUG_GUEST_LINKS, in a rehearsal: the guest links card for
+    /// an account with no scope of its own, for a test to work its controls.
+    private var debugGuestLinks: Bool { Self.debugGuestLinks && app.rehearsal }
+    private static var debugGuestLinks: Bool {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_GUEST_LINKS"] != nil
+        #else
+        false
+        #endif
     }
 
     // MARK: Who
@@ -1542,8 +1652,12 @@ private struct AccountSettings: View {
         }
     }
 
+    /// Not during a call: the Mac's Settings window stands beside one, and
+    /// changing server from it put the address form over a call that went
+    /// on publishing underneath (AppModel `canChangeServer`).
     private func serverRow(last: Bool) -> some View {
-        SettingsRow(title: host, detail: t("The server address"), symbol: "server.rack", last: last) {
+        SettingsRow(title: host, detail: app.canChangeServer ? t("The server address") : t("Leave the call to change server."),
+                    symbol: "server.rack", last: last) {
             Button(t("Change server")) {
                 app.forgetServer()
                 #if os(iOS)
@@ -1551,7 +1665,10 @@ private struct AccountSettings: View {
                 #endif
             }
             .buttonStyle(.glassCapsule(30))
+            .disabled(!app.canChangeServer)
+            .opacity(app.canChangeServer ? 1 : 0.45)
         }
+        .animation(Theme.settle, value: app.canChangeServer)
     }
 
     private var host: String {

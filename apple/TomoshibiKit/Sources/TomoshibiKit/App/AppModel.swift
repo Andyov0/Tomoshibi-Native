@@ -44,7 +44,14 @@ public final class AppModel {
     public private(set) var relays: RelayList? {
         didSet { dropRelayNotOffered() }
     }
-    public private(set) var busy = false
+    /// Something is being asked of the deployment on the person's behalf, and
+    /// the buttons that would ask it again wait. Counted rather than set and
+    /// cleared, because the asking overlaps: a join that was called off is
+    /// still out until it comes back (`cancelJoin`), and a flag cleared by a
+    /// sign-in or a connect finishing in the meantime would offer a second
+    /// join while the first could still land.
+    public var busy: Bool { asking > 0 }
+    private var asking = 0
     public private(set) var ending: Ending = .left
 
     /// Something to tell the person before a call, at the foot of the screen.
@@ -116,6 +123,9 @@ public final class AppModel {
     /// instead, so a test can see a choice carried from one launch to the
     /// next without touching the real one.
     let deviceMemory: DeviceMemory
+    /// The store DeviceMemory keeps them in, which the settings write their
+    /// device choices into as well, so that both read one record.
+    let deviceDefaults: UserDefaults?
     public private(set) var invite: String?
     public private(set) var invitation: InviteInfo?
     private var knockTask: Task<Void, Never>?
@@ -151,6 +161,10 @@ public final class AppModel {
     /// before a call show.
     @ObservationIgnored public private(set) lazy var lobby = LobbyModel(app: self)
 
+    /// What the settings show and write, one for the app however many times
+    /// the settings are opened.
+    @ObservationIgnored private(set) lazy var preferences = CallPreferences(keeps: !rehearsal, deviceDefaults: deviceDefaults)
+
     public init() {
         #if DEBUG
         rehearsal = ProcessInfo.processInfo.environment["TOMOSHIBI_BASE"] != nil
@@ -164,13 +178,19 @@ public final class AppModel {
         #else
         let suite: UserDefaults? = nil
         #endif
-        deviceMemory = rehearsal ? DeviceMemory(defaults: suite) : .standard
+        deviceDefaults = rehearsal ? suite : .standard
+        deviceMemory = DeviceMemory(defaults: deviceDefaults)
         let joining = deviceMemory.joining
         startWithMicrophone = joining.microphone
         startWithCamera = joining.camera
         // A rehearsal joins wherever the test says, and a relay the person
         // picked on their own deployment means nothing on a test's.
         relayChoice = rehearsal ? nil : UserDefaults.standard.string(forKey: Self.relayKey)
+        // The language and the look are the owner's too: a test that pressed
+        // a language tile or a colour would leave the app opening in them the
+        // next time it was opened by hand.
+        Appearance.shared.keeps = !rehearsal
+        Localization.shared.keeps = !rehearsal
     }
 
     private var passphraseKey: String { "passphrase:" + (deployment?.baseUrl() ?? serverAddress) }
@@ -207,8 +227,20 @@ public final class AppModel {
     /// TOMOSHIBI_BASE and TOMOSHIBI_AUTOJOIN (a room) take the app straight
     /// into a call without a pointer, microphone and camera off so that no
     /// permission is asked for: what the interop scripts drive.
+    ///
+    /// Once for the life of the model, however many windows ask. Every window
+    /// the Mac opens runs its root's task, and one opened from the Dock after
+    /// the last was closed asked the deployment about itself all over again
+    /// and put the join screen up over a call that was still live: the
+    /// microphone stayed on, with no way back to the call but the menu's
+    /// Leave. A second window is shown whatever screen the model is on.
     public func start() async {
+        guard !started else { return }
+        started = true
         let environment = ProcessInfo.processInfo.environment
+        #if DEBUG
+        if rehearsal { AppDebug.start(self) }
+        #endif
         if rehearsal, let base = environment["TOMOSHIBI_BASE"] {
             serverAddress = base
             name = environment["TOMOSHIBI_NAME"] ?? "Native App"
@@ -275,9 +307,14 @@ public final class AppModel {
         }
     }
 
+    @ObservationIgnored private var started = false
+
     public func connect() async {
-        busy = true
-        defer { busy = false }
+        // Nothing here may take the screen off a call that is live; the
+        // only way from a call to another deployment is to leave it first.
+        guard call == nil, movingTo == nil else { return }
+        asking += 1
+        defer { asking -= 1 }
         do {
             var address = serverAddress.trimmingCharacters(in: .whitespacesAndNewlines)
             if !address.contains("://") { address = "https://" + address }
@@ -326,7 +363,17 @@ public final class AppModel {
         if !relays.relays.contains(where: { $0.name == choice && !$0.maintenance }) { relayChoice = nil }
     }
 
+    /// Whether "Change server" can be done now: never during a call. The
+    /// Settings window is open beside a call on the Mac, and changing server
+    /// from it took the screen to the address form while the call went on
+    /// publishing the microphone underneath, reachable only from the menu.
+    public var canChangeServer: Bool { call == nil && movingTo == nil }
+
     public func forgetServer() {
+        guard canChangeServer else { return }
+        // A join still out would otherwise land on the deployment just
+        // forgotten, in a call with no screen to show it.
+        cancelJoin()
         deployment = nil
         info = nil
         account = nil
@@ -340,7 +387,23 @@ public final class AppModel {
     /// An invitation, an arranged meeting or a room, from a link opened with
     /// the app (`https://<deployment>/?invite=T#/room` and its kin, or the same
     /// under the `tomoshibi:` scheme).
+    ///
+    /// Not over a call. A link opened while one was live took the screen to
+    /// the link's join screen and left the call publishing underneath, and
+    /// joining from there put the first call out of sight for good. The call
+    /// stays, and says how to get to the link; there is one call at a time,
+    /// and leaving it is the person's decision rather than a link's. A join
+    /// still out is called off instead: the link is where they now mean to
+    /// go.
     public func open(_ url: URL) async {
+        if let call {
+            call.announce(CallToast(t("Leave this call to open that link."), lasts: NoticeTimes.atMost))
+            return
+        }
+        // Between the two rooms of a move there is no call to say it in, and
+        // the move is that call coming back.
+        guard movingTo == nil else { return }
+        cancelJoin()
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return }
         let fragment = components.fragment ?? ""
         let linkRoom = fragment.hasPrefix("/") ? String(fragment.dropFirst()) : fragment
@@ -426,8 +489,8 @@ public final class AppModel {
 
     public func signIn(name: String, passphrase: String) async {
         guard let deployment else { return }
-        busy = true
-        defer { busy = false }
+        asking += 1
+        defer { asking -= 1 }
         do {
             account = try await deployment.signIn(name: name, passphrase: passphrase)
             if !rehearsal { Keychain.write(cookieKey, deployment.accountCookie()) }
@@ -440,7 +503,9 @@ public final class AppModel {
     public func signOut() async {
         guard let deployment else { return }
         try? await deployment.signOut()
-        Keychain.write(cookieKey, nil)
+        // A rehearsal never wrote the session it signs out of, and a test
+        // that signed out deleted the one this machine had kept.
+        if !rehearsal { Keychain.write(cookieKey, nil) }
         account = nil
     }
 
@@ -541,6 +606,8 @@ public final class AppModel {
     /// deployment and for the people they send links to, and a name typed by
     /// somebody nobody knows is neither (the owner's rule, 2026-10-15).
     public func prepare(room: String) {
+        // Never over a call that is live (`open`).
+        guard call == nil, movingTo == nil else { return }
         guard account != nil || invite != nil || rehearsal else {
             tell(t("Rooms here are by invitation. Open the link you were sent, or sign in."))
             return
@@ -562,10 +629,54 @@ public final class AppModel {
         await join()
     }
 
+    /// A join is out and has not yet landed in its call, or was called off
+    /// and has not yet come back.
+    ///
+    /// One at a time. "Join again" pressed twice ran two joins as the same
+    /// participant; the server put out whichever arrived first, and the
+    /// ended screen it then raised could end the one that survived. A join
+    /// called off stays out until it returns, rather than letting the next
+    /// one go beside it: two connections under one identity, the later
+    /// replacing the earlier, would put the wanted call out in favour of the
+    /// one that was called off.
+    public private(set) var joining = false
+
+    /// Moved on by `cancelJoin`; a join compares the value it started with
+    /// after every wait, and one that no longer stands lands nowhere.
+    @ObservationIgnored private var joinAttempt = 0
+
+    /// Calls off a join that has not yet landed: Back on the join screen,
+    /// Cancel on the start and join sheet, leaving the door or the wait.
+    /// Those buttons stayed live and did nothing to the join, and somebody who
+    /// pressed Cancel was put in the call a moment later with the microphone
+    /// on. Nothing once the call is showing: that is left with Leave.
+    public func cancelJoin() {
+        guard joining else { return }
+        joinAttempt += 1
+    }
+
     public func join() async {
-        guard let deployment else { return }
-        busy = true
-        defer { busy = false }
+        await join(relay: nil)
+    }
+
+    /// `relay` is the relay to ask for on this join alone, in place of the
+    /// one chosen; a move sends "" (App.tsx ~620).
+    private func join(relay: String?) async {
+        guard let deployment, !joining else { return }
+        joining = true
+        asking += 1
+        let attempt = joinAttempt
+        var landed = false
+        defer {
+            if !landed { joining = false }
+            asking -= 1
+        }
+        // A join while a call is live replaces it; the call it replaces is
+        // left first, rather than going on publishing out of sight.
+        if let old = call {
+            call = nil
+            await old.leave()
+        }
         deviceMemory.remember(DeviceMemory.Joining(camera: startWithCamera, microphone: startWithMicrophone))
         do {
             // Signed in, the web sends the account's name and no passphrase:
@@ -581,25 +692,55 @@ public final class AppModel {
                 name: joiningName,
                 passphrase: signed || scopedGuest ? "" : passphrase,
                 identity: rehearsal ? rehearsalIdentity : UserDefaults.standard.string(forKey: identityKey),
-                relay: relayChoice ?? "",
+                relay: relay ?? relayChoice ?? "",
                 invite: invite)
+            #if DEBUG
+            lastJoinRelay = relay ?? relayChoice ?? ""
+            joinsAnswered += 1
+            #endif
             // Every join's identity is kept: signing in or out makes the server
             // issue a new one, and a stale one sent back would be refused.
             if rehearsal { rehearsalIdentity = grant.identity } else { UserDefaults.standard.set(grant.identity, forKey: identityKey) }
+            guard attempt == joinAttempt else { return }
             let options = CallOptions(
                 url: grant.url, token: grant.token, room: grant.room,
                 sealingWord: sealingWord.isEmpty ? nil : sealingWord,
                 forward: grant.forward.map { IceServer(url: $0.url, username: $0.username, credential: $0.credential) })
             let model = try await CallModel.join(options, deployment: deployment, region: grant.region)
+            #if DEBUG
+            // TOMOSHIBI_DEBUG_JOIN_SLOW=<ms>: a room that takes that much
+            // longer to enter, for a test to call the join off while it is.
+            if rehearsal, let slow = ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_JOIN_SLOW"].flatMap(Int.init) {
+                try? await Task.sleep(for: .milliseconds(slow))
+            }
+            #endif
+            // Called off while the room was being entered: the room was
+            // entered all the same, and is left at once.
+            guard attempt == joinAttempt else {
+                await model.leave()
+                return
+            }
             model.relay = grant.relay
             model.holding = grant.holding
+            // Where the choices are kept, before anything is chosen: the
+            // original sound below remembers itself, and remembered it into
+            // the owner's settings from a rehearsal that keeps nothing,
+            // because the call's memory was still the standard one.
+            model.memory = deviceMemory
             // Before the microphone is published, so it goes out the way it
             // was asked for the first time rather than being republished.
             if originalSoundWanted { try? await model.setOriginalSound(true) }
-            model.onMoved = { [weak self] relay in
-                Task { await self?.rejoin(to: relay) }
+            guard attempt == joinAttempt else {
+                await model.leave()
+                return
+            }
+            model.onMoved = { [weak self, weak model] relay in
+                guard let model else { return }
+                Task { await self?.rejoin(from: model, to: relay) }
             }
             call = model
+            landed = true
+            joining = false
             room = grant.room
             lobby.remember(room: grant.room)
             // The invitation is kept for as long as this call is: a move to
@@ -614,37 +755,83 @@ public final class AppModel {
             // refused microphone or a camera another app holds is one person's
             // problem with their own machine, not a room that would not open.
             // A device that will not start says so in the call (deviceFailed)
-            // and the call goes on with that button off.
-            model.memory = deviceMemory
+            // and the call goes on with that button off. Each only while this
+            // is still the call: one left, or moved, while the microphone was
+            // coming up was sent a camera afterwards all the same.
             model.restoreDevices()
-            if startWithMicrophone {
-                do { try await model.setMicrophone(true) } catch {}
+            if startWithMicrophone, call === model {
+                await switchMicrophone(on: true)
             }
-            if startWithCamera {
+            if startWithCamera, call === model {
                 do { try await model.setCamera(true) } catch {}
             }
         } catch let error as ProtocolError {
-            // Why they are not in the meeting, which stays until read.
+            // Why they are not in the meeting, which stays until read; a
+            // join that was called off has nothing to say.
+            guard attempt == joinAttempt else { return }
             tell(explain(error))
         } catch {
+            guard attempt == joinAttempt else { return }
             tell(t("Could not join {room}.", ["room": room]))
         }
     }
 
+    #if DEBUG
+    /// The relay the last join asked for, for a test of the move, and how
+    /// many joins the deployment has answered, for a test that a press made
+    /// twice asks once.
+    @ObservationIgnored private(set) var lastJoinRelay: String?
+    @ObservationIgnored private(set) var joinsAnswered = 0
+    #endif
+
     /// The server moved the call to another relay; the web rejoins at once
     /// with the same passphrase and word, and lets the server choose.
-    private func rejoin(to relay: String) async {
-        let old = call
+    ///
+    /// For this join only. The choice was set to nothing here, and once the
+    /// choice was kept between launches that meant a move forgot for good the
+    /// machine somebody had picked; the web asks for "" on the rejoin and
+    /// says outright that a machine chosen by hand stays chosen (App.tsx
+    /// ~620 and ~676).
+    ///
+    /// Only for the call that is showing: a call already replaced or left
+    /// that is told of a move afterwards has nothing to come back to, and
+    /// answering it left the current call to rejoin the old one's room.
+    private func rejoin(from moved: CallModel, to relay: String) async {
+        guard call === moved else { return }
         movingTo = relay
         defer { movingTo = nil }
         call = nil
-        await old?.leave()
-        relayChoice = nil
-        await join()
+        await moved.leave()
+        await join(relay: "")
         // A join that failed left the screen on the call with no call in it,
         // which drew nothing at all: a black window. Back to the join screen,
         // with the reason, and the Join button that tries again.
-        if call == nil { screen = .prejoin }
+        if call == nil, screen == .call { screen = .prejoin }
+    }
+
+    // MARK: The switches outside the call's own bar
+
+    /// The microphone being switched by the join or by the menu's ⌘D, while
+    /// it is: the menu item waits. The join's microphone came up without the
+    /// bar's knowing, and ⌘D pressed while it (or the first-run permission
+    /// prompt) was pending asked for the microphone a second time; the call
+    /// publishes a track whenever it holds none yet, so that could be a
+    /// second microphone, and in a test it left the switch saying off over a
+    /// microphone that was sending.
+    public private(set) var switchingMicrophone = false
+
+    /// What ⌘D does.
+    public func toggleMicrophone() async {
+        guard let call, !switchingMicrophone else { return }
+        await switchMicrophone(on: !call.microphoneOn)
+    }
+
+    private func switchMicrophone(on: Bool) async {
+        guard let call, !switchingMicrophone else { return }
+        switchingMicrophone = true
+        defer { switchingMicrophone = false }
+        // A refusal says so itself, in the call (CallModel `deviceFailed`).
+        try? await call.setMicrophone(on)
     }
 
     /// Where a move is taking the meeting while there is no call to show it
@@ -659,7 +846,13 @@ public final class AppModel {
 
     /// The call ended without anybody here pressing leave: the reason is the
     /// core's, the media server's disconnect reason by name.
-    public func ended(because reason: String) async {
+    ///
+    /// `model` is the call that ended, which ends the screen only while it is
+    /// the call showing. One that has already been replaced (put out as a
+    /// duplicate by the join that replaced it) ended the call that replaced
+    /// it, which was the one still working.
+    public func ended(because reason: String, in model: CallModel? = nil) async {
+        if let model, model !== call { return }
         let ending: Ending = if reason.contains("RoomDeleted") || reason.contains("RoomClosed") {
             .closed
         } else if reason.contains("ParticipantRemoved") {
@@ -684,6 +877,8 @@ public final class AppModel {
     }
 
     public func backToLobby() {
+        guard call == nil else { return }
+        cancelJoin()
         screen = .lobby
         problem = nil
         invite = nil
@@ -825,6 +1020,8 @@ public final class AppModel {
     }
 
     public func stopWaiting() {
+        // The button that waits may already have turned into a join.
+        cancelJoin()
         stopWaitingTasks()
         arrangement = nil
         meetingToken = nil
@@ -851,41 +1048,78 @@ public final class AppModel {
     /// name this device last typed, and was let in as somebody else.
     public func knock() async {
         guard let deployment else { return }
+        let from = screen
         do {
             let ticket = try await deployment.knock(room: room, name: joiningName)
+            // Somebody who went back while the knock was being sent is not
+            // put at the door afterwards.
+            guard screen == from else { return }
             screen = .knocking
             knockTask?.cancel()
+            let giveUpAfter = knockGiveUp
             knockTask = Task { [weak self] in
                 let started = Date()
                 while !Task.isCancelled {
                     try? await Task.sleep(for: .milliseconds(Int(knockAskEveryMs())))
-                    guard let self, let answer = try? await deployment.atTheDoor(room: self.room, token: ticket.token) else { continue }
-                    switch answer.state {
-                    case .admitted:
-                        self.invite = answer.invite
-                        await self.join()
-                        return
-                    case .refused:
-                        self.tell(t("Nobody let you in. Ask for a link."))
-                        self.screen = .prejoin
-                        return
-                    case .knocking:
-                        if Date().timeIntervalSince(started) * 1000 > Double(knockGiveUpAfterMs()) {
+                    guard let self, !Task.isCancelled else { return }
+                    // A round that did not answer is not the end of the
+                    // waiting: the person inside has not gone anywhere.
+                    if let answer = try? await deployment.atTheDoor(room: self.room, token: ticket.token), !Task.isCancelled {
+                        switch answer.state {
+                        case .admitted:
+                            self.invite = answer.invite
+                            await self.join()
+                            // Let in and then refused at the join: the reason
+                            // is on the join screen, with its button, rather
+                            // than under a door nobody is answering any more.
+                            if self.call == nil, self.screen == .knocking { self.screen = .prejoin }
+                            return
+                        case .refused:
                             self.tell(t("Nobody let you in. Ask for a link."))
                             self.screen = .prejoin
                             return
+                        case .knocking:
+                            break
                         }
+                    }
+                    if Task.isCancelled { return }
+                    // knock.ts `GIVE_UP_AFTER`, counted whatever the rounds
+                    // said. It was counted only on an answer of "still
+                    // knocking", so a server that never answered at all,
+                    // which is the one case the door cannot end, left the
+                    // person waiting with a spinner for as long as the app
+                    // was open (Knocking.tsx: "this one is only for a server
+                    // that never answers").
+                    if Date().timeIntervalSince(started) > giveUpAfter {
+                        self.tell(t("Nobody let you in. Ask for a link."))
+                        self.screen = .prejoin
+                        return
                     }
                 }
             }
         } catch {
+            guard screen == from else { return }
             problem = t("That could not be sent.")
         }
+    }
+
+    /// How long the door is asked, in seconds: knock.ts `GIVE_UP_AFTER`, or
+    /// what TOMOSHIBI_DEBUG_KNOCK_GIVE_UP says in a rehearsal, so a test can
+    /// see the end of a wait that otherwise takes ten minutes.
+    private var knockGiveUp: TimeInterval {
+        #if DEBUG
+        if rehearsal, let seconds = ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_KNOCK_GIVE_UP"].flatMap(Double.init) {
+            return seconds
+        }
+        #endif
+        return Double(knockGiveUpAfterMs()) / 1000
     }
 
     public func stopKnocking() {
         knockTask?.cancel()
         knockTask = nil
+        // Let in a moment ago, and already joining.
+        cancelJoin()
         screen = .prejoin
     }
 

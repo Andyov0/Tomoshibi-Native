@@ -48,7 +48,7 @@ public struct AppRoot: View {
                             // end of this call, and says which end it was.
                             let gone = ["RoomDeleted", "RoomClosed", "ParticipantRemoved"].contains { reason.contains($0) }
                             if let moving = call.moving, Date().timeIntervalSince(moving.at) < 15, gone { return }
-                            Task { await app.ended(because: reason) }
+                            Task { await app.ended(because: reason, in: call) }
                         }
                 } else if let to = app.movingTo {
                     MovingOverlay(to: to).transition(Theme.arrive)
@@ -256,10 +256,22 @@ struct PreJoinScreen: View {
 
     var body: some View {
         #if os(macOS)
-        CardScreen(width: 560) { content }
+        CardScreen(width: 560) { animated }
         #else
-        PaneScreen(app: app) { content }
+        PaneScreen(app: app) { animated }
         #endif
+    }
+
+    /// The line saying why the last press did not take, and the knock it may
+    /// offer, come and go with the curves they declare. With nothing here
+    /// animating the change, the line faded in on its own transition but was
+    /// gone between one frame and the next when closed, the form jumping up
+    /// under it.
+    private var animated: some View {
+        Group { content }
+            .animation(Theme.settle, value: app.problem)
+            .animation(Theme.settle, value: app.problemStays)
+            .animation(Theme.settle, value: app.canKnock)
     }
 
     @ViewBuilder
@@ -327,9 +339,10 @@ struct PreJoinScreen: View {
         if app.canKnock {
             Button { Task { await app.knock() } } label: { Text(t("Ask to be let in")).frame(maxWidth: .infinity) }
                 .buttonStyle(.glassCapsule(44))
-                .disabled(app.joiningName.isEmpty)
+                .disabled(app.busy || app.joiningName.isEmpty)
                 .transition(Theme.arrive)
         }
+        // Calls off a join that is out (AppModel `cancelJoin`).
         BackButton { app.backToLobby() }
     }
 
@@ -564,10 +577,21 @@ struct WaitingScreen: View {
 
     var body: some View {
         #if os(macOS)
-        CardScreen(width: 560) { content }
+        CardScreen(width: 560) { animated }
         #else
-        PaneScreen(app: app) { content }
+        PaneScreen(app: app) { animated }
         #endif
+    }
+
+    /// What the meeting is waiting for, said in turn as it changes, and the
+    /// line about the last press: each leaves with its curve as well as
+    /// arriving with it, rather than being gone between two frames.
+    private var animated: some View {
+        Group { content }
+            .animation(Theme.settle, value: app.problem)
+            .animation(Theme.settle, value: app.waiting)
+            .animation(Theme.settle, value: app.arrangement == nil)
+            .animation(Theme.settle, value: app.arrangedReady)
     }
 
     @ViewBuilder
@@ -633,7 +657,7 @@ struct WaitingScreen: View {
                 if waiting.unreachable {
                     Note(text: t("Could not reach the meeting. Trying again.")).transition(Theme.arrive)
                 } else {
-                    ProgressView().controlSize(.small)
+                    ProgressView().controlSize(.small).transition(Theme.arrive)
                 }
             }
             Button { Task { await app.goArranged() } } label: {
@@ -674,6 +698,8 @@ struct EndedScreen: View {
             // devices already chosen (App.tsx). Not into a room the host
             // closed, or one somebody was put out of.
             if app.ending == .left || app.ending == .lost {
+                // Once: pressed twice it ran two joins as the same
+                // participant, and the server put one of them out.
                 Button { Task { await app.join() } } label: {
                     Group {
                         if app.busy { ProgressView().controlSize(.small).tint(Theme.tallyForeground) } else { Text(t("Join again")) }
@@ -681,12 +707,15 @@ struct EndedScreen: View {
                     .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassCapsule(48, prominent: true))
+                .disabled(app.busy)
             }
             if let problem = app.problem {
                 ProblemLine(app: app, text: problem)
             }
             BackButton { app.backToLobby() }
         }
+        .animation(Theme.settle, value: app.problem)
+        .animation(Theme.settle, value: app.problemStays)
     }
 
     /// App.tsx's three endings, and the one somebody chose.

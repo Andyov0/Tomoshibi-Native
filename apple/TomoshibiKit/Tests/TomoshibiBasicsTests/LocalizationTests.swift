@@ -214,6 +214,43 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(Localization(defaults: defaults, preferredLanguages: ["ja-JP"]).language, .en)
     }
 
+    func testARunThatKeepsNothingShowsItsChoiceAndWritesNone() {
+        // What a test driving the app gets (AppModel.rehearsal): the tile it
+        // presses is the language it sees, and the owner's choice is still
+        // the one written down when it has gone.
+        defaults.set("en", forKey: "meet-live.locale")
+        let localization = Localization(defaults: defaults, preferredLanguages: ["ja-JP"])
+        localization.keeps = false
+
+        localization.language = .zhHant
+        XCTAssertEqual(localization.language, .zhHant)
+        XCTAssertFalse(localization.followsSystem)
+        XCTAssertEqual(defaults.string(forKey: "meet-live.locale"), "en")
+
+        localization.followSystem()
+        XCTAssertTrue(localization.followsSystem, "following the system is what this run chose, whatever is stored")
+        XCTAssertEqual(defaults.string(forKey: "meet-live.locale"), "en")
+        XCTAssertEqual(Localization(defaults: defaults, preferredLanguages: ["ja-JP"]).language, .en)
+    }
+
+    func testChoosingTheDetectedLanguageMovesTheTickAndIsWatched() {
+        // Nothing chosen, English detected, English picked: the language
+        // showing is the same, and the list's tick still has to move off
+        // "Same as the system".
+        let localization = Localization(defaults: defaults, preferredLanguages: ["en-US"])
+        XCTAssertTrue(localization.followsSystem)
+        let changed = OSAllocatedUnfairLock(initialState: 0)
+        withObservationTracking {
+            _ = localization.followsSystem
+        } onChange: {
+            changed.withLock { $0 += 1 }
+        }
+
+        localization.language = .en
+        XCTAssertFalse(localization.followsSystem)
+        XCTAssertEqual(changed.withLock { $0 }, 1)
+    }
+
     func testAStoredValueThatIsNotExactlyACodeIsNoChoice() {
         for stored in ["fr", "zh-hans", "ZH-HANT", "japanese", ""] {
             defaults.set(stored, forKey: "meet-live.locale")

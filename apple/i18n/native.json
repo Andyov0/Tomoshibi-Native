@@ -390,6 +390,18 @@
       "zh-Hans": "麦克风或扬声器一直在切换。打开麦克风再试一次。",
       "zh-Hant": "麥克風或揚聲器一直在切換。打開麥克風再試一次。",
       "ja": "マイクかスピーカーが切り替わり続けました。マイクをオンにしてもう一度お試しください。"
+    },
+    "Leave this call to open that link.": {
+      "en": "Leave this call to open that link.",
+      "zh-Hans": "离开这个通话后，再打开那个链接。",
+      "zh-Hant": "離開這個通話後，再打開那個連結。",
+      "ja": "そのリンクを開くには、この通話から退出してください。"
+    },
+    "Leave the call to change server.": {
+      "en": "Leave the call to change server.",
+      "zh-Hans": "离开通话后才能更换服务器。",
+      "zh-Hant": "離開通話後才能更換伺服器。",
+      "ja": "サーバーを変更するには、通話から退出してください。"
     }
   }
 }
