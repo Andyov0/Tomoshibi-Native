@@ -829,20 +829,27 @@ public struct RoomView: View {
         #endif
     }
 
-    /// This participant is sharing a picture, rather than nothing or sound
-    /// alone, which is no picture (surface.ts lists a screen only for a
-    /// screen's track).
+    /// This participant is sharing a screen: the web lists a screen surface
+    /// whenever the screen's track is there (surface.ts ~91), whatever else
+    /// is being shared beside it. `active` is the screen alone and
+    /// `listening` sound shared on its own, and the two run at once; read as
+    /// "a screen and not sound as well", starting "Share only sound" during
+    /// a screen share took away the share's card and its Stop, the list of
+    /// who was watching and the stage's switch to it.
     private var mySharePicture: Bool {
         #if os(macOS)
-        (sharing.active && !sharing.listening) || StageDebug.myShare
+        sharing.active || StageDebug.myShare
         #else
         model.phoneSharing || StageDebug.myShare
         #endif
     }
 
+    /// The share card's Stop, which is the screen's: sound shared on its own
+    /// goes on until its own control stops it, as the web's menu stops only
+    /// the screen (ShareButton.tsx "Stop sharing", room.ts `stop`).
     private var stopSharing: (() -> Void)? {
         #if os(macOS)
-        return { Task { await sharing.stop() } }
+        return { Task { await sharing.stopScreen() } }
         #else
         // A phone's broadcast is the system's to stop, from its own sheet.
         return nil
@@ -853,7 +860,7 @@ public struct RoomView: View {
         #if os(macOS)
         Task {
             do {
-                if sharing.active { await sharing.stop() } else { try await sharing.start(on: model.call) }
+                if sharing.active { await sharing.stopScreen() } else { try await sharing.start(on: model.call) }
             } catch {
                 model.actionFailed(t("That could not be done. Try again."))
             }
