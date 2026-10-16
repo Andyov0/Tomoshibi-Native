@@ -1,6 +1,7 @@
 import AVFoundation
 import Foundation
 import Observation
+import SwiftUI
 import TomoshibiCore
 
 /// One person in the call, as the screens see them.
@@ -36,11 +37,24 @@ public struct Surface: Identifiable, Equatable, Sendable {
     public let sid: String?
 }
 
-/// One thing said in the corner of a call.
+/// One thing said in the corner of a call: a notice (web/src/live/notices.ts).
+///
+/// The web's rule is about lifetime rather than severity. Something that
+/// happened is said here and fades; something still true is a banner over the
+/// stage (`CallModel.notice`, "Reconnecting"). A notice about something over
+/// carries no way to close it, because a target that lives two seconds is one
+/// nobody hits; one somebody may want to deal with now, or not at all, has
+/// the close button (`closable`).
 public struct CallToast: Identifiable, Equatable, Sendable {
-    public enum Kind: Sendable { case info, warning, failure }
+    /// What it is about, said by its edge (Notices.tsx: "the edge is the whole
+    /// of the severity system"): plain, the signal colour for somebody else
+    /// taking the stage (`is-signal`) or anything else happening now, red for
+    /// a failure.
+    public enum Kind: Sendable { case info, signal, warning, failure }
 
-    public let id = UUID()
+    /// Kept when it is said again under the same key, so the card stays where
+    /// it is and only its words change.
+    public internal(set) var id = UUID()
     public var title: String
     public var detail: String?
     public var kind: Kind
@@ -48,18 +62,26 @@ public struct CallToast: Identifiable, Equatable, Sendable {
     public var lasts: Double?
     /// The words on its button, when it has one.
     public var actionTitle: String?
-    /// A second toast with the same key replaces the first: one "Reconnecting"
-    /// rather than three.
+    /// A second toast with the same key replaces the first, in place: one
+    /// "Reconnecting" rather than three.
     public var key: String?
+    /// Whether it carries a close button (notices.ts `closeButton`). Unless
+    /// told, only one that would otherwise never go.
+    public var closable: Bool
+    /// Something drawn under its words, by the name whoever raised it gave
+    /// `CallModel.attach`: the people at the door, with their two answers.
+    public var attachment: String?
 
-    public init(_ title: String, detail: String? = nil, kind: Kind = .info, lasts: Double? = 4,
-                actionTitle: String? = nil, key: String? = nil) {
+    public init(_ title: String, detail: String? = nil, kind: Kind = .info, lasts: Double? = NoticeTimes.briefly,
+                actionTitle: String? = nil, key: String? = nil, closable: Bool? = nil, attachment: String? = nil) {
         self.title = title
         self.detail = detail
         self.kind = kind
         self.lasts = lasts
         self.actionTitle = actionTitle
         self.key = key
+        self.closable = closable ?? (lasts == nil)
+        self.attachment = attachment
     }
 }
 
@@ -118,44 +140,127 @@ public final class CallModel {
     }
     static let saidFor: Duration = .seconds(6)
 
-    /// Something that happened and is over, said for a moment over the call.
+    /// Something still true, said as a line across the top of the call for as
+    /// long as it is (the web's banners: Notices.tsx). What happened and is
+    /// over is a toast instead, in the corner.
     public var notice: String?
 
-    /// What the call says in the corner, newest last (the web's toasts,
+    /// What the call says in the corner, oldest first (the web's toasts,
     /// notices.ts): somebody arriving, a device that would not start, a song
-    /// that could not be played. At most three are shown.
+    /// that could not be played. At most three at a time.
     public private(set) var toasts: [CallToast] = []
+    /// Whether the corner is being read, under the pointer or a finger: every
+    /// countdown waits until it is not (sonner pauses its timers while the
+    /// stack is expanded).
+    public private(set) var toastsHeld = false
     @ObservationIgnored private var toastActions: [UUID: @MainActor () -> Void] = [:]
+    @ObservationIgnored private var toastClocks: [UUID: NoticeClock] = [:]
+    @ObservationIgnored private var toastTimers: [UUID: Task<Void, Never>] = [:]
+    /// What a toast's `attachment` names, drawn under its words.
+    @ObservationIgnored private(set) var attachments: [String: @MainActor () -> AnyView] = [:]
+    /// Where the corner's messages are drawn, in the window, while there are
+    /// any: the notices rise above them where the two would meet (CornerLanes).
+    var saidFrame: CGRect?
 
     /// Says `toast`; one with an action calls it when its button is pressed.
-    /// A toast that lasts for ever is one somebody has to act on, as the web
-    /// keeps a refused device until it is dismissed; anything else goes.
     public func announce(_ toast: CallToast, action: (@MainActor () -> Void)? = nil) {
+        var toast = toast
         if let key = toast.key, let index = toasts.firstIndex(where: { $0.key == key }) {
-            toastActions[toasts[index].id] = nil
-            toasts.remove(at: index)
-        }
-        toasts.append(toast)
-        if let action { toastActions[toast.id] = action }
-        while toasts.count > 3 { dismiss(toasts[0].id) }
-        if let lasts = toast.lasts {
-            let id = toast.id
-            Task { [weak self] in
-                try? await Task.sleep(for: .seconds(lasts))
-                self?.dismiss(id)
+            toast.id = toasts[index].id
+            stopClock(toast.id)
+            toasts[index] = toast
+        } else {
+            toasts.append(toast)
+            // The fourth pushes out the oldest one that goes by itself; one
+            // somebody has to act on is never what is lost.
+            for index in NoticeTimes.overflow(toasts.map { $0.lasts == nil }).reversed() {
+                forget(toasts[index].id)
+                toasts.remove(at: index)
             }
         }
+        toastActions[toast.id] = action
+        if let lasts = toast.lasts {
+            toastClocks[toast.id] = NoticeClock(lasts: lasts, now: Self.now(), running: !toastsHeld)
+            runClock(toast.id)
+        }
+        #if DEBUG
+        CallModel.noticeLog(toast)
+        #endif
     }
 
     public func dismiss(_ id: UUID) {
+        forget(id)
         toasts.removeAll { $0.id == id }
-        toastActions[id] = nil
+    }
+
+    /// Takes down whatever was said under `key`, if anything still is.
+    public func dismiss(key: String) {
+        guard let toast = toasts.first(where: { $0.key == key }) else { return }
+        dismiss(toast.id)
     }
 
     func act(on id: UUID) {
         let action = toastActions[id]
         dismiss(id)
         action?()
+    }
+
+    /// Holds every countdown while the corner is read, and lets them run on
+    /// once it is not, each with what it had left.
+    public func holdToasts(_ held: Bool) {
+        guard held != toastsHeld else { return }
+        toastsHeld = held
+        let now = Self.now()
+        for id in toastClocks.keys {
+            if held {
+                toastClocks[id]?.hold(now: now)
+                toastTimers.removeValue(forKey: id)?.cancel()
+            } else {
+                toastClocks[id]?.run(now: now)
+                runClock(id)
+            }
+        }
+    }
+
+    /// Registers what a toast's `attachment` draws. The closure is asked each
+    /// time the card is drawn, so whatever it draws stays live.
+    func attach(_ name: String, _ draw: @escaping @MainActor () -> AnyView) {
+        attachments[name] = draw
+    }
+
+    private func runClock(_ id: UUID) {
+        toastTimers.removeValue(forKey: id)?.cancel()
+        guard let due = toastClocks[id]?.due(now: Self.now()) else { return }
+        toastTimers[id] = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(due))
+            guard !Task.isCancelled else { return }
+            self?.dismiss(id)
+        }
+    }
+
+    private func stopClock(_ id: UUID) {
+        toastTimers.removeValue(forKey: id)?.cancel()
+        toastClocks[id] = nil
+    }
+
+    private func forget(_ id: UUID) {
+        stopClock(id)
+        toastActions[id] = nil
+    }
+
+    private static func now() -> Double { ProcessInfo.processInfo.systemUptime }
+
+    // MARK: The web's notices (notices.ts), for whatever raises them
+
+    /// Something somebody pressed did not take (`actionFailed`): it fades,
+    /// because pressing again is the whole of the remedy.
+    public func actionFailed(_ reason: String) {
+        announce(CallToast(reason, kind: .failure, lasts: NoticeTimes.atMost))
+    }
+
+    /// Something worked where working is not visible on its own (`actionDone`).
+    public func actionDone(_ said: String) {
+        announce(CallToast(said, lasts: NoticeTimes.atMost))
     }
 
     /// The uplink card for this participant's own share, while it stands
@@ -240,7 +345,14 @@ public final class CallModel {
         let model = CallModel(call: call, deployment: deployment, region: region, sealed: options.sealingWord != nil)
         model.bridge = bridge
         bridge.model = model
+        // The people already here when this participant arrives are told
+        // during the join itself, and nobody is told they joined: the web
+        // listens only once its room is connected (notices.ts `watch`).
         bridge.flush()
+        model.settled = true
+        #if DEBUG
+        model.driveChatForDebug()
+        #endif
         call.setLosslessSink(sink: model.lossless)
         #if os(iOS)
         model.watchInterruptions()
@@ -334,12 +446,61 @@ public final class CallModel {
         cameraOn = on
     }
 
+    /// A message is on its way (useChat.ts `sending`): the box sends nothing
+    /// more until it has gone or failed.
+    public private(set) var sending = false
+
+    /// Sends a message, and adds it to the call's own once the media server
+    /// has it. Throws when it could not be sent, so that the box can put the
+    /// words back: a send that failed silently looks exactly like one that
+    /// worked (ChatPanel.tsx).
     public func say(_ text: String) async throws {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        sending = true
+        defer { sending = false }
+        #if DEBUG
+        if rehearseFailedSends { try await Task.sleep(for: .milliseconds(400)); throw RehearsedFailure() }
+        #endif
         try await call.sendChat(text: trimmed)
         messages.append(ChatLine(id: UUID().uuidString, identity: localIdentity, name: localName, text: trimmed, at: Date(), mine: true))
+        if messages.count > 500 { messages.removeFirst(messages.count - 500) }
     }
+
+    /// What is in the messages box, kept with the call rather than the panel,
+    /// so that closing the panel half way through a sentence does not lose it.
+    public var chatDraft = "" {
+        didSet { if chatDraft != oldValue, !chatDraft.isEmpty { chatFailed = false } }
+    }
+    /// The last message did not leave. Its words are back in the box, and the
+    /// box says so until the next is typed or sent.
+    public private(set) var chatFailed = false
+
+    /// Sends what is in the box (ChatPanel.tsx `send`): cleared at once and
+    /// put back if it did not leave, because losing what somebody typed is
+    /// worse than showing it twice. Nothing goes while a message is already
+    /// on its way, or while the call is reconnecting.
+    public func sendDraft() async {
+        let body = chatDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty, !sending, state == .connected else { return }
+        chatDraft = ""
+        chatFailed = false
+        do {
+            try await say(body)
+        } catch {
+            // Whatever was typed since goes after it, rather than being
+            // replaced by it.
+            chatDraft = chatDraft.isEmpty ? body : body + "\n" + chatDraft
+            chatFailed = true
+        }
+    }
+
+    #if DEBUG
+    /// TOMOSHIBI_DEBUG_CHAT's `fail on`: sends fail, so the box can be seen
+    /// putting the words back.
+    @ObservationIgnored var rehearseFailedSends = false
+    struct RehearsedFailure: Error {}
+    #endif
 
     private var watchingWritten = ""
 
@@ -439,15 +600,23 @@ public final class CallModel {
                 onMoved?(moving.relay)
             }
         case let .participantJoined(participant):
+            let arriving = person(participant.identity) == nil
             upsert(participant)
+            if arriving, settled {
+                announce(CallToast(t("{name} joined", ["name": Self.named(participant.name, participant.identity)])))
+            }
         case let .participantChanged(participant):
             upsert(participant)
         case let .participantLeft(identity):
             if let person = person(identity) {
                 for sid in person.tracks.keys { audio.stopPlaying(sid: sid) }
+                announce(CallToast(t("{name} left", ["name": Self.named(person.name, identity)])))
             }
             people.removeAll { $0.id == identity }
         case let .trackPublished(identity, track), let .trackSubscribed(identity, track):
+            if case .trackPublished = event, settled, let person = person(identity), person.tracks[track.sid] == nil {
+                announceShare(track, by: person)
+            }
             update(identity) { $0.tracks[track.sid] = track }
             if case .trackSubscribed = event, track.kind == .audio {
                 let stereo = track.source == .screenShareAudio || track.source == .unknown
@@ -503,13 +672,41 @@ public final class CallModel {
         case let .connection(reading):
             connection = reading
         case .losslessGaveUp:
-            notice = t("Your connection could not keep up. Everyone still hears the sound in real time.")
-            Task { [weak self] in
-                try? await Task.sleep(for: .seconds(8))
-                self?.notice = nil
-            }
+            // Said to the person sharing, because it is their upload that
+            // could not keep up and they are the one who might do something
+            // about it; it stays a while, with a close button, and the share
+            // itself carries on (notices.ts `losslessGaveUp`).
+            announce(CallToast(t("Lossless sound stopped"),
+                               detail: t("Your connection could not keep up. Everyone still hears the sound in real time."),
+                               lasts: NoticeTimes.atMost, closable: true))
         }
         for listener in listeners { listener(event) }
+    }
+
+    /// Whether the join has finished telling this model who was already
+    /// here; until then nobody arriving is announced.
+    @ObservationIgnored private var settled = false
+
+    /// What a person is called in a notice: their name, or their identity
+    /// when they gave none (notices.ts `named`).
+    static func named(_ name: String, _ identity: String) -> String {
+        name.isEmpty ? identity : name
+    }
+
+    /// Somebody else taking the stage with a share, or starting sound on its
+    /// own, which has no picture to announce it: otherwise music simply
+    /// starts, from nowhere anybody can see (notices.ts `onPublished`). Only a
+    /// track that was not already there, so the shares running when this
+    /// participant arrived are not news; the core tells those with the person
+    /// they belong to.
+    private func announceShare(_ track: TrackInfo, by person: Person) {
+        let name = Self.named(person.name, person.id)
+        // sound.ts `soundOnly`: the shared sound's channel, in either form
+        // (lossless.ts `SHARED`), and not the song desk's music.
+        let soundOnly = track.source == .screenShareAudio && (track.name == "listening" || track.name == "listening-lossless")
+        guard track.source == .screenShare || soundOnly else { return }
+        announce(CallToast(soundOnly ? t("{name} is sharing sound", ["name": name]) : t("{name} started sharing", ["name": name]),
+                           kind: .signal, lasts: NoticeTimes.aMoment))
     }
 
     private func upsert(_ participant: ParticipantInfo) {

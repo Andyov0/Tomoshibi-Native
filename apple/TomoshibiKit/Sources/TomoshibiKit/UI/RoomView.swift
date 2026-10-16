@@ -181,13 +181,11 @@ public struct RoomView: View {
                 }
             }
             .overlay(alignment: .bottomLeading) {
-                if !model.arriving.isEmpty && panel != .messages {
-                    SaidView(lines: model.arriving)
-                        .frame(maxWidth: min(320, size.width - 32), alignment: .leading)
-                        .padding(.leading, 12)
-                        .padding(.bottom, Plan.island + 8)
-                        .transition(Theme.slideUp)
-                }
+                // Always there, so each card leaves with its own animation.
+                SaidView(model: model)
+                    .frame(maxWidth: min(320, size.width - 32), alignment: .leading)
+                    .padding(.leading, 12)
+                    .padding(.bottom, Plan.island + 8)
             }
             #if os(macOS)
             .overlay(alignment: .bottomTrailing) {

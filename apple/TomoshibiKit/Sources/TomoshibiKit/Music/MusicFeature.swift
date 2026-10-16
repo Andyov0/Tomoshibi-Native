@@ -136,7 +136,6 @@ final class SongDesk {
     @ObservationIgnored private var ducking: Task<Void, Never>?
     @ObservationIgnored private var lastDuck = 0.0
     @ObservationIgnored private var asked: UInt64?
-    @ObservationIgnored private var noticeTask: Task<Void, Never>?
     @ObservationIgnored private var over = false
     @ObservationIgnored let debug = MusicDebug()
 
@@ -596,14 +595,11 @@ final class SongDesk {
         reading = false
     }
 
+    /// Said in the call's corner, as the web says it (MusicPanel.tsx
+    /// `actionFailed`): drawn only inside the panel it went unseen whenever
+    /// the panel was shut, which is when a song is skipped.
     private func say(_ text: String) {
-        notice = text
-        noticeTask?.cancel()
-        noticeTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(4))
-            guard !Task.isCancelled else { return }
-            self?.notice = nil
-        }
+        call.actionFailed(text)
     }
 
     // MARK: Turning the music down under speech

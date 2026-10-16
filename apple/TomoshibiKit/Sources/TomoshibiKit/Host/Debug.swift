@@ -29,6 +29,15 @@ import AppKit
 ///     volume <name> <sound> <0..1>
 ///     enabled <sid> on|off               the core's remote switch, directly
 ///     state                              everything the panels draw from
+///     rightclick|ctrlclick|leftclick <x> <y>
+///                                        the other button, a Control-click or a
+///                                        plain one,
+///                                        at a point in the window (points from
+///                                        its top left, title bar included),
+///                                        put on the application's queue as the
+///                                        system would put it (Mac only)
+///     window <width> <height>            resize the window, to see a phone's
+///                                        width on the Mac (Mac only)
 ///
 /// The `move` and the relays need the host panel to have been opened once,
 /// which is when the relays are asked for, as on the web. With
@@ -169,11 +178,47 @@ final class HostDebug {
             }
         case "state":
             return state(feature)
+        #if os(macOS)
+        case "window":
+            guard rest.count == 2, let width = Double(rest[0]), let height = Double(rest[1]),
+                  let window = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil }) else { return "window <width> <height>" }
+            var frame = window.frame
+            frame.origin.y += frame.height - height
+            frame.size = NSSize(width: width, height: height)
+            window.setFrame(frame, display: true)
+            return "now \(Int(window.frame.width))x\(Int(window.frame.height))"
+        case "rightclick", "ctrlclick", "leftclick":
+            guard rest.count == 2, let x = Double(rest[0]), let y = Double(rest[1]) else { return "\(verb) <x> <y>" }
+            return click(verb, at: x, y)
+        #endif
         default:
             return "unknown: \(verb)"
         }
         return "done"
     }
+
+    #if os(macOS)
+    /// A click made in this process and put on the application's own queue,
+    /// so that it is dispatched as a real one is: a click posted from outside
+    /// goes nowhere on the machine these were checked on while the app is not
+    /// in front.
+    private func click(_ kind: String, at x: Double, _ y: Double) -> String {
+        guard let window = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil }) else { return "no window" }
+        let point = NSPoint(x: x, y: window.frame.height - y)
+        let right = kind == "rightclick"
+        let kinds: [NSEvent.EventType] = right ? [.rightMouseDown, .rightMouseUp] : [.leftMouseDown, .leftMouseUp]
+        for type in kinds {
+            guard let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: kind == "ctrlclick" ? .control : [],
+                                                 timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                                 context: nil, eventNumber: 0, clickCount: 1, pressure: 1) else { return "no event" }
+            // Through the queue rather than straight to `sendEvent`, so it
+            // meets the application's event monitors on the way, as a real
+            // click does.
+            NSApp.postEvent(event, atStart: false)
+        }
+        return "posted"
+    }
+    #endif
 
     private func state(_ feature: HostFeature) -> String {
         let call = feature.call
@@ -187,7 +232,7 @@ final class HostDebug {
         #endif
         out.append("waiting=\(feature.waiting.map { "\($0.name)@\($0.address)" })")
         out.append("relays=\((feature.relays ?? []).map(\.name)) usable=\(feature.usableRelays.map(\.name))")
-        out.append("moving=\(feature.movingTo ?? "-") handUp=\(call.handUp)")
+        out.append("moving=\(feature.movingTo ?? "-") handUp=\(call.handUp) tray=\(ReactionBoard.of(call.call).trayOpen)")
         for person in call.people {
             let tracks = person.tracks.values.sorted { $0.sid < $1.sid }
                 .map { "\($0.source)/\($0.name)/\($0.sid)\($0.muted ? "/muted" : "")\($0.subscribed ? "" : "/unsubscribed")" }
@@ -198,7 +243,8 @@ final class HostDebug {
             out.append("person \(person.name) \(person.id) hand=\(person.handUp) tracks=\(tracks) hearing=\(hearing)")
         }
         out.append("reactions=\(ReactionBoard.of(call.call).shown.map { "\($0.from):\($0.what.unicodeScalars.map { String($0.value, radix: 16) }.joined(separator: "+"))" })")
-        out.append("notices=\(feature.notices.map { ($0.danger ? "!" : "") + $0.text })")
+        // What the corner is saying, the host's notices among the rest.
+        out.append("toasts=\(call.toasts.map { ($0.kind == .failure ? "!" : "") + $0.title })")
         out.append("stored=\(UserDefaults.standard.string(forKey: HearingBook.storageKey) ?? "-")")
         return out.joined(separator: "\n")
     }

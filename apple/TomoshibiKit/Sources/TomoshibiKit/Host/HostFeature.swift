@@ -33,7 +33,9 @@ public final class HostFeature {
     private(set) var standing = HostStanding(yours: false, admin: false)
 
     /// Who is knocking, for as long as this participant can let them in.
-    private(set) var waiting: [Knocker] = []
+    private(set) var waiting: [Knocker] = [] {
+        didSet { sayWhoIsWaiting() }
+    }
     /// The knock being answered, so its buttons do nothing twice.
     private(set) var answering: String?
 
@@ -49,10 +51,6 @@ public final class HostFeature {
     /// The relays a meeting can be moved to, once asked for.
     private(set) var relays: [Relay]?
 
-    /// What is said over the call about something a press did (notices.ts
-    /// `actionFailed`, `actionDone`).
-    private(set) var notices: [HostNotice] = []
-
     /// Asked once rather than done at once: ending a meeting for eleven people
     /// cannot be undone, and its button sits beside three that can, so the
     /// press that matters is the second (HostPanel.tsx `ending`).
@@ -63,9 +61,13 @@ public final class HostFeature {
     /// Whether the host panel is on screen: the door's notice stands down
     /// while it is, because the panel lists the same people (HostPanel.tsx
     /// `Hosting`, which raises the notice only while the panel is shut).
-    var panelOpen = false
-    /// Whether the sound panel is: what is said over the call moves aside.
-    var soundOpen = false
+    var panelOpen = false {
+        didSet { sayWhoIsWaiting() }
+    }
+    /// How many people the door's notice last said were waiting; nought while
+    /// it is not up. Said again only when that changes, so a notice swiped
+    /// away stays away until somebody else knocks or somebody goes.
+    @ObservationIgnored private var doorSaid = 0
 
     /// A move older than this is no longer shown, whatever became of it
     /// (App.tsx: the overlay's twenty-second limit). Set from the overlay.
@@ -117,6 +119,12 @@ public final class HostFeature {
         guard !started else { return }
         started = true
         call.listen { [weak self] event in self?.heard(event) }
+        // The door's notice carries the people outside with both answers, so
+        // a knock is answered where it is read (DoorList).
+        call.attach(Self.door) { [weak self] in
+            guard let self else { return AnyView(EmptyView()) }
+            return AnyView(DoorList(feature: self))
+        }
         applyHearing()
         HostDebug.start(self)
     }
@@ -156,6 +164,7 @@ public final class HostFeature {
         guard let said = try? await call.deployment.hostStanding(room: call.room, bearer: bearer) else { return }
         let became = said.yours && !standing.yours
         standing = said
+        sayWhoIsWaiting()
         if !said.yours {
             waiting = []
             link = nil
@@ -350,17 +359,38 @@ public final class HostFeature {
 
     // MARK: Notices
 
+    /// What a press did, said in the corner with everything else the call
+    /// says (notices.ts `actionFailed`, `actionDone`): it fades after the
+    /// web's ten seconds and has nothing to close it with, because what it
+    /// reports is over.
     func say(_ text: String, danger: Bool = false) {
-        let notice = HostNotice(text: text, danger: danger)
-        // Three fit above the island; the fourth pushes the oldest out
-        // (Notices.tsx `visibleToasts`).
-        notices.append(notice)
-        if notices.count > 3 { notices.removeFirst(notices.count - 3) }
-        Task { [weak self] in
-            // notices.ts `AT_MOST`: what a press did is over, so it goes.
-            try? await Task.sleep(for: .seconds(10))
-            self?.notices.removeAll { $0.id == notice.id }
+        if danger { call.actionFailed(text) } else { call.actionDone(text) }
+    }
+
+    /// The name the door's notice is raised and drawn under.
+    static let door = "door"
+
+    /// Somebody waiting to be let in, said where the host will see it and
+    /// taken back the moment the door is empty (notices.ts `atTheDoor`).
+    ///
+    /// The web's notice only opens the panel, because a decision made from a
+    /// toast is one made without reading the name or where it came from. This
+    /// one carries both, the name somebody typed and the address they knocked
+    /// from, so the decision can be made where it is read. It has no duration
+    /// and no close button: somebody is outside until they are answered or
+    /// they leave. It stands down while the panel is open, which lists the
+    /// same people under the same two answers.
+    private func sayWhoIsWaiting() {
+        let count = panelOpen || !standing.yours ? 0 : waiting.count
+        guard count != doorSaid else { return }
+        doorSaid = count
+        guard count > 0 else {
+            call.dismiss(key: Self.door)
+            return
         }
+        call.announce(CallToast(count == 1 ? t("Somebody is waiting to be let in")
+                                           : t("{count} people are waiting to be let in", ["count": String(count)]),
+                                kind: .signal, lasts: nil, key: Self.door, closable: false, attachment: Self.door))
     }
 
     func giveUpMoving(at: Date) {
@@ -404,14 +434,6 @@ public final class HostFeature {
         return true
         #endif
     }
-}
-
-/// Something said over the call about a press: an error, with a red edge, or
-/// something that worked where working is not visible on its own.
-struct HostNotice: Identifiable, Equatable {
-    let id = UUID()
-    let text: String
-    let danger: Bool
 }
 
 /// The sound panel's record for this app, kept where the web keeps it and

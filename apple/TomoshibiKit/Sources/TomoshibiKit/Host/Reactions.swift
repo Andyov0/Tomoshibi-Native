@@ -2,6 +2,9 @@ import Foundation
 import Observation
 import SwiftUI
 import TomoshibiCore
+#if os(macOS)
+import AppKit
+#endif
 
 /// The reactions on screen in one call (hands.ts `useReactions`).
 ///
@@ -26,6 +29,19 @@ final class ReactionBoard {
     /// Whether the six are open above the hand. Kept here rather than in the
     /// control, so that a test can open them (TOMOSHIBI_DEBUG_HOST).
     var trayOpen = false
+
+    /// A long press on the hand opened the tray, and the press's own release
+    /// is still to come: the hand's button fires on that release too, and
+    /// must not raise the hand as well.
+    @ObservationIgnored fileprivate var held = false
+
+    /// Whether a press on the hand was the end of a long press that opened
+    /// the reactions instead, which then does nothing else. Asked by the
+    /// hand's button before it does what it does.
+    func pressWasHold() -> Bool {
+        defer { held = false }
+        return held
+    }
 
     private struct Entry {
         weak var call: Call?
@@ -156,6 +172,7 @@ struct HandControl: View {
     var body: some View {
         HStack(spacing: 0) {
             Button {
+                guard !board.pressWasHold() else { return }
                 act { try await model.setHand(!model.handUp) }
             } label: {
                 Image(systemName: "hand.raised.fill")
@@ -167,6 +184,7 @@ struct HandControl: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .opensReactions(board)
             .accessibilityLabel(model.handUp ? t("Lower your hand") : t("Raise your hand"))
             .help(model.handUp ? t("Lower your hand") : t("Raise your hand"))
 
@@ -241,3 +259,111 @@ struct HandControl: View {
         }
     }
 }
+
+extension View {
+    /// The reactions behind the hand, by the other way of pressing it: a
+    /// right-click or a Control-click on the Mac, a long press on a touch
+    /// screen (HandButton.tsx `onContextMenu`). The hand's own press stays
+    /// the common act, raising it, and never opens anything; this is the way
+    /// to the six for somebody who reaches for the hand, beside the narrow
+    /// half that opens them too.
+    ///
+    /// Whatever draws the hand puts this on it, and its action begins with
+    /// `guard !board.pressWasHold() else { return }`, so that the release
+    /// of a long press does not raise the hand as well.
+    func opensReactions(_ board: ReactionBoard) -> some View {
+        modifier(OpensReactions(board: board))
+    }
+}
+
+private struct OpensReactions: ViewModifier {
+    let board: ReactionBoard
+    @State private var opened = 0
+    #if os(macOS)
+    @State private var region = SecondaryClicks.Region()
+    #endif
+
+    func body(content: Content) -> some View {
+        #if os(macOS)
+        content
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { region.frame = $0 }
+            .onAppear { region.watch { toggle() } }
+            .onDisappear { region.stop() }
+        #else
+        content
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.45).onEnded { _ in
+                    board.held = true
+                    toggle()
+                }
+            )
+            // The finger lifting is when the hand's button would fire. A
+            // finger that slid off the button first never fires it, and the
+            // hold it ended must not swallow the next real press; so the mark
+            // is cleared just after every lift, once the button has had its
+            // chance to read it.
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0).onEnded { _ in
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(80))
+                        board.held = false
+                    }
+                }
+            )
+            .sensoryFeedback(.impact(weight: .light), trigger: opened)
+        #endif
+    }
+
+    private func toggle() {
+        withAnimation(Theme.settle) { board.trayOpen.toggle() }
+        opened += 1
+    }
+}
+
+#if os(macOS)
+/// The other button, heard by the application before any view is: SwiftUI has
+/// no way to hear it but a context menu, and the reactions are not a menu.
+///
+/// A view laid over the hand that took right-clicks in its hit test and let
+/// everything else through was tried first; the hosting view decides for
+/// itself which of its views a click is for, and the click went to the hand's
+/// own button, which raised the hand. So the application's own stream of
+/// events is watched instead, and a right-click or a Control-click inside the
+/// region the hand occupies is taken out of it before it reaches any view.
+enum SecondaryClicks {
+    @MainActor
+    final class Region {
+        /// Where the hand is, in its window, from the top left (SwiftUI's
+        /// global space, which is the window's content).
+        var frame: CGRect = .zero
+        private var monitor: Any?
+
+        func watch(_ action: @escaping @MainActor () -> Void) {
+            stop()
+            monitor = NSEvent.addLocalMonitorForEvents(matching: [.rightMouseDown, .leftMouseDown]) { [weak self] event in
+                // Read here, so that only plain values cross into the main
+                // actor's isolation; the monitor is called on the main thread.
+                guard Self.secondary(event) else { return event }
+                let at = event.locationInWindow
+                let window = event.windowNumber
+                let taken = MainActor.assumeIsolated { () -> Bool in
+                    guard let self, let content = NSApp.window(withWindowNumber: window)?.contentView else { return false }
+                    guard self.frame.contains(CGPoint(x: at.x, y: content.bounds.height - at.y)) else { return false }
+                    action()
+                    return true
+                }
+                return taken ? nil : event
+            }
+        }
+
+        func stop() {
+            if let monitor { NSEvent.removeMonitor(monitor) }
+            monitor = nil
+        }
+
+        nonisolated private static func secondary(_ event: NSEvent) -> Bool {
+            event.type == .rightMouseDown || (event.type == .leftMouseDown && event.modifierFlags.contains(.control))
+        }
+    }
+}
+#endif

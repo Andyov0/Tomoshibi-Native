@@ -7,7 +7,8 @@ import TomoshibiCore
 /// is too loud may be on no tile at all. One row per thing there is to hear,
 /// because a shared screen's sound and the voice describing it arrive on
 /// separate tracks and are turned down separately; nobody hears their own
-/// microphone, so there is no row for it.
+/// microphone, so there is no row for it. Each person's rows share a card, so
+/// that whose sound a slider is never has to be read twice.
 struct SoundPanelView: View {
     let feature: HostFeature
     let close: () -> Void
@@ -16,39 +17,33 @@ struct SoundPanelView: View {
         VStack(spacing: 0) {
             Spacer(minLength: 0)
             VStack(spacing: 0) {
-                HStack {
-                    Text(t("Sound")).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(Theme.foreground)
-                    Spacer()
-                    Button(action: close) {
-                        Image(systemName: "xmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.muted)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(t("Close sound"))
-                }
-                .padding(12)
-                Divider().overlay(Theme.border)
+                PanelHeading(title: t("Sound"), symbol: "speaker.wave.2.fill", closeLabel: t("Close sound"), close: close)
+                PanelRule()
                 ViewThatFits(in: .vertical) {
                     rows
-                    ScrollView { rows }
+                    ScrollView { rows }.scrollIndicators(.hidden)
                 }
             }
             .glassPane(cornerRadius: 22)
         }
-        .onAppear { feature.soundOpen = true }
-        .onDisappear { feature.soundOpen = false }
     }
 
     @ViewBuilder
     private var rows: some View {
         let others = feature.call.people
-        VStack(spacing: 4) {
+        VStack(spacing: 8) {
             if others.isEmpty {
-                Text(t("Nobody else is here."))
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.muted)
-                    .padding(.vertical, 28)
-                    .frame(maxWidth: .infinity)
-                    .transition(Theme.arrive)
+                VStack(spacing: 10) {
+                    Image(systemName: "speaker.wave.2")
+                        .font(.system(size: 22, weight: .light))
+                        .foregroundStyle(Theme.foreground.opacity(0.4))
+                    Text(t("Nobody else is here."))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.muted)
+                }
+                .padding(.vertical, 26)
+                .frame(maxWidth: .infinity)
+                .transition(Theme.arrive)
             } else {
                 ForEach(others) { person in
                     PersonSounds(feature: feature, person: person)
@@ -56,7 +51,7 @@ struct SoundPanelView: View {
                 }
             }
         }
-        .padding(8)
+        .padding(10)
         .animation(Theme.settle, value: others.map(\.id))
     }
 }
@@ -71,20 +66,44 @@ private struct PersonSounds: View {
         // `isMicrophoneEnabled`: there and not muted. Said rather than drawn as
         // a state of the slider, which is about what the listener chose.
         let microphoneOn = person.track(.microphone).map { !$0.muted } ?? false
-        VStack(spacing: 4) {
-            SoundRow(feature: feature, person: person, sound: .voice, name: name,
-                     note: microphoneOn ? nil : t("microphone off"))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 9) {
+                Monogram(name: name, identity: person.id, size: 26)
+                Text(name)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.foreground)
+                    .lineLimit(1)
+                if !microphoneOn {
+                    Text(t("microphone off"))
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundStyle(Theme.muted)
+                        .padding(.horizontal, 7).padding(.vertical, 2)
+                        .background(Capsule().fill(Color.white.opacity(0.07)))
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
+                }
+                Spacer(minLength: 0)
+            }
+            SoundRow(feature: feature, person: person, sound: .voice, name: name)
             // A screen's row only while it is shared with sound: a share whose
             // sound was never granted has nothing to turn down.
             if person.track(.screenShareAudio) != nil {
-                SoundRow(feature: feature, person: person, sound: .screen, name: t("{name} (screen)", ["name": name]))
+                SoundRow(feature: feature, person: person, sound: .screen, name: t("{name} (screen)", ["name": name]),
+                         symbol: "rectangle.on.rectangle")
                     .transition(Theme.arrive)
             }
+            // And the song desk's music, a track of its own beside a screen's
+            // sound, turned down on its own.
             if person.musicTrack != nil {
-                SoundRow(feature: feature, person: person, sound: .music, name: t("{name} (music)", ["name": name]))
+                SoundRow(feature: feature, person: person, sound: .music, name: t("{name} (music)", ["name": name]),
+                         symbol: "music.note")
                     .transition(Theme.arrive)
             }
         }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 8)
+        .panelCard()
+        .animation(Theme.settle, value: microphoneOn)
         .animation(Theme.settle, value: person.track(.screenShareAudio)?.sid)
         .animation(Theme.settle, value: person.musicTrack?.sid)
     }
@@ -96,74 +115,63 @@ private struct SoundRow: View {
     let person: Person
     let sound: Sound
     let name: String
-    var note: String?
-    @State private var hovering = false
+    /// Drawn with its name above the slider when it is not the voice, which
+    /// the card's own heading already names.
+    var symbol: String?
 
     var body: some View {
         let setting = feature.setting(person, sound)
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(name)
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(setting.silenced ? Theme.muted : Theme.foreground)
-                    .lineLimit(1)
-                if let note {
-                    Text(note)
-                        .font(.system(size: 10.5))
-                        .foregroundStyle(Theme.muted)
-                        .transition(.opacity.animation(Theme.settle))
+        VStack(alignment: .leading, spacing: 4) {
+            if let symbol {
+                HStack(spacing: 6) {
+                    Image(systemName: symbol)
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(name)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .lineLimit(1)
                 }
+                .foregroundStyle(setting.silenced ? Theme.muted.opacity(0.7) : Theme.muted)
+                .padding(.leading, 2)
             }
-            HStack(spacing: 8) {
+            HStack(spacing: 10) {
                 // Named for what pressing it does, not for the state it is in:
                 // the two read as opposites, and only one is being decided.
                 Button {
                     feature.setBlocked(person, sound, !setting.blocked)
                 } label: {
                     Image(systemName: setting.blocked ? "speaker.slash.fill" : "speaker.wave.2.fill")
-                        .font(.system(size: 12))
+                        .font(.system(size: 11.5, weight: .semibold))
                         .foregroundStyle(setting.blocked ? Theme.foreground : Theme.muted)
-                        .frame(width: 26, height: 26)
-                        .background(Circle().fill(setting.blocked ? Theme.surfaceHigh : .clear))
                         .contentTransition(.symbolEffect(.replace))
-                        .contentShape(Rectangle())
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(setting.blocked ? Color.white.opacity(0.16) : Color.white.opacity(0.06)))
+                        .overlay(Circle().stroke(Color.white.opacity(setting.blocked ? 0.16 : 0.06), lineWidth: 1))
+                        .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(setting.blocked ? t("Unmute {name}", ["name": name]) : t("Mute {name}", ["name": name]))
                 .accessibilityAddTraits(setting.blocked ? .isSelected : [])
+                .help(setting.blocked ? t("Unmute {name}", ["name": name]) : t("Mute {name}", ["name": name]))
 
                 // Disabled rather than hidden while blocked: nothing is
                 // arriving to be made louder, and a slider that moves while the
                 // sound stays off is a control that lies.
-                // In twentieths, as the web's range steps, but rounded here
-                // rather than given as a step: a stepped slider on the Mac
-                // draws a tick for every one of them.
-                Slider(value: Binding(
+                GlassSlider(value: Binding(
                     get: { feature.setting(person, sound).volume },
-                    set: { feature.setVolume(person, sound, ($0 * 20).rounded() / 20) }
-                ), in: 0...1)
-                .controlSize(.small)
-                .tint(Theme.foreground)
+                    set: { feature.setVolume(person, sound, $0) }
+                ), label: t("{name}'s volume", ["name": name]))
                 .disabled(setting.blocked)
-                .opacity(setting.blocked ? 0.4 : 1)
-                .accessibilityLabel(t("{name}'s volume", ["name": name]))
 
                 // Read at a glance, because a slider near one end tells nobody
                 // whether it is at nought.
                 Text(setting.blocked ? t("Muted") : "\(Int((setting.volume * 100).rounded()))%")
-                    .font(.system(size: 10.5, design: .monospaced))
-                    .monospacedDigit()
+                    .font(.system(size: 11, weight: .medium).monospacedDigit())
                     .foregroundStyle(Theme.muted)
-                    .frame(width: 40, alignment: .trailing)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                    .fixedSize()
+                    .frame(minWidth: 42, alignment: .trailing)
             }
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 8).fill(hovering ? Theme.surfaceHigh.opacity(0.6) : .clear))
-        .onHover { hovering = $0 }
         .animation(Theme.settle, value: setting.blocked)
-        .animation(Theme.settle, value: hovering)
     }
 }
