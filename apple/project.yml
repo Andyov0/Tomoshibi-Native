@@ -73,6 +73,18 @@ targets:
         CFBundleDevelopmentRegion: en
         CFBundleLocalizations: [en, zh-Hans, zh-Hant, ja]
         UILaunchScreen: {}
+        # Said outright, as the defaults iOS used while they were left out: an
+        # upload that runs on the iPad is refused without every orientation
+        # (error 90474), because iPad multitasking may give it any of them.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         NSMicrophoneUsageDescription: Tomoshibi uses the microphone so that others in a call can hear you.
         NSCameraUsageDescription: Tomoshibi uses the camera so that others in a call can see you.
         NSLocalNetworkUsageDescription: Tomoshibi talks to a meeting server on your network.
