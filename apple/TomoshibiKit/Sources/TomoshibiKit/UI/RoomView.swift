@@ -36,6 +36,9 @@ public struct RoomView: View {
     /// The pointer is on the controls, which do not step aside from under it
     /// (ControlBar.tsx `near`).
     @State private var nearControls = false
+    /// How tall the pile of notices in the corner is, for lifting the card
+    /// above it clear of the filmstrip.
+    @State private var toastsHeight: CGFloat = 0
     #if os(macOS)
     @State private var window = WindowFill()
     #else
@@ -264,7 +267,8 @@ public struct RoomView: View {
 
             if model.people.isEmpty && pin.pinned == nil && !aloneDismissed && !filled
                 && model.state == .connected && record.joining != nil {
-                EmptyRoomCard(model: model, linkWorks: record.linkWorks, host: host.standing.yours, link: record.link) {
+                EmptyRoomCard(model: model, linkWorks: record.linkWorks, host: host.standing.yours, link: record.link,
+                              recheck: { [host] in await host.refreshStanding() }) {
                     withAnimation(Theme.settle) { aloneDismissed = true }
                 }
                 .padding(.horizontal, 16)
@@ -342,15 +346,23 @@ public struct RoomView: View {
         // is not.
         .overlay(alignment: .bottomTrailing) {
             let beside = panel != nil && size.width - Self.panelWidth(size) - 48 >= 280
+            // Where the filmstrip begins, where there is one: the strain card
+            // ends above it rather than above the controls, under which the
+            // strip starts (Room.tsx `aboveStrip`, plan.ts `clearOf`).
+            let aboveStrip = pin.pinned != nil && !filled ? Plan.clear(of: room.spots, ids: room.shown, container: size) : nil
+            let lift = Plan.lift(toClear: aboveStrip, ends: Plan.island + 8 + toastsHeight + 10)
             VStack(alignment: .trailing, spacing: 10) {
                 #if os(macOS)
-                if let hint = model.strainHint, sharing.active {
+                if let hint = model.strainHint ?? StageDebug.strain, sharing.active {
                     StrainCard(hint: hint, model: model, sharing: sharing)
+                        .padding(.bottom, lift)
                         .transition(Theme.slideUp)
                 }
                 #endif
                 ToastStack(model: model)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { toastsHeight = $0 }
             }
+            .animation(Theme.settle, value: lift)
             .padding(.trailing, beside ? Self.panelWidth(size) + 24 + 8 : 16)
             .padding(.bottom, Plan.island + 8)
             .animation(Theme.settle, value: beside)
@@ -982,13 +994,15 @@ extension View {
 ///   `TOMOSHIBI_DEBUG_JOINING=invited` and `TOMOSHIBI_DEBUG_RELAY=a|b` stand
 ///   in for a share of this participant's own, who is watching it, the
 ///   deployment's door and the join answer's machine names;
-///   `TOMOSHIBI_DEBUG_SIGNAL=open` opens the signal's figures and
+///   `TOMOSHIBI_DEBUG_SIGNAL=open` opens the signal's figures,
+///   `TOMOSHIBI_DEBUG_STRAIN=1` raises the uplink card and
 ///   `TOMOSHIBI_DEBUG_WINDOW=WxH` sizes the window.
 /// - `TOMOSHIBI_DEBUG_STAGE=4:press:Alice;6:double:Alice;9:unfill` presses,
 ///   double presses or pins a picture (by a person's name, `me`, `myshare`
 ///   or `screen:<name>`), and fills, unfills, shows the grid, turns the page,
-///   opens a panel, starts a share, raises this participant's hand or mutes a
-///   guest for this participant, each that many seconds after the one before.
+///   opens a panel, starts a share, raises this participant's hand, mutes a
+///   guest for this participant or leaves the call as the Leave menu does,
+///   each that many seconds after the one before.
 enum StageDebug {
     struct Step {
         let at: Double
@@ -1034,6 +1048,11 @@ enum StageDebug {
     static let relay: [String]? = environment["TOMOSHIBI_DEBUG_RELAY"].map { $0.split(separator: "|").map(String.init) }
     static let fillsWindowOnly = environment["TOMOSHIBI_DEBUG_FILL"] == "window"
     static let hover = environment["TOMOSHIBI_DEBUG_HOVER"] != nil
+    /// `TOMOSHIBI_DEBUG_STRAIN=1`: the uplink card as the core raises it for
+    /// a line that cannot carry the share, for a picture of where it sits;
+    /// with `TOMOSHIBI_DEBUG_SHARING=screen` for a share to raise it over.
+    static let strain: StrainHint? = environment["TOMOSHIBI_DEBUG_STRAIN"] == nil ? nil
+        : StrainHint(have: 2_400_000, need: 7_800_000, to: ShareSetting(quality: .p1080, frameRate: 30))
 
     static let steps: [Step] = (environment["TOMOSHIBI_DEBUG_STAGE"] ?? "").split(separator: ";").compactMap { text in
         let parts = text.split(separator: ":", maxSplits: 2).map(String.init)

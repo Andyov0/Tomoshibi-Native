@@ -176,6 +176,27 @@ final class PlanTests: XCTestCase {
         XCTAssertNil(room.spots["gone"])
     }
 
+    /// The strain card, stacked above the notices, is lifted clear of the
+    /// filmstrip's pictures and of nothing else (plan.test.ts `clearOf`).
+    func testTheStrainCardEndsAboveTheFilmstrip() {
+        let room = Plan.room(window, pictures: ["me", "stage"] + ids(3), mine: "me", stage: "stage")
+        let clear = Plan.clear(of: room.spots, ids: room.shown, container: window)
+        let stripTop = room.shown.compactMap { room.spots[$0]?.minY }.min()!
+        XCTAssertEqual(clear, window.height - stripTop + Plan.gap)
+        // Sitting just above the controls, as it did, it ends inside the
+        // strip, and goes up by the rest.
+        let ends = Plan.island + 8 + 10
+        let lift = Plan.lift(toClear: clear, ends: ends)
+        XCTAssertGreaterThan(lift, 0)
+        XCTAssertLessThanOrEqual(window.height - (ends + lift), stripTop - Plan.gap)
+        // Already above it, under a pile of notices: where it is.
+        XCTAssertEqual(Plan.lift(toClear: clear, ends: clear! + 40), 0)
+        // No strip, nothing to clear.
+        let grid = Plan.room(window, pictures: ["me"] + ids(3), mine: "me", stage: nil)
+        XCTAssertNil(Plan.clear(of: grid.spots, ids: [], container: window))
+        XCTAssertEqual(Plan.lift(toClear: nil, ends: ends), 0)
+    }
+
     // MARK: Who has the stage (usePin.test.tsx)
 
     func testAShareTakesTheStageWhenItStartsAndGivesItBack() {

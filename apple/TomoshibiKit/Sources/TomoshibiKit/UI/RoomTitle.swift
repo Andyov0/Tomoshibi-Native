@@ -30,6 +30,15 @@ struct RoomTitle: View {
 /// invitation instead, and only for whoever runs the room, since the server
 /// refuses anybody else; somebody who does not is told who can.
 ///
+/// Which of the two is shown is the room's standing and nothing else, as on
+/// the web. An invitation that fails says why in the corner and leaves the
+/// button there to press again (EmptyRoom.tsx `share`, `actionFailed`); only
+/// the server's "not yours" says the standing is out of date, and then the
+/// standing is asked again, which is what turns the button into the
+/// sentence. Any failure at all used to turn it into the sentence for the
+/// rest of the call, a dropped connection included, telling the person who
+/// runs the room that only whoever runs it could let anybody in.
+///
 /// A small capsule above the controls that can be put away, as the web's is a
 /// single quiet button. It used to be a pane of glass with a heading laid over
 /// the middle of your own picture, with no way to close it, and the owner
@@ -42,12 +51,13 @@ struct EmptyRoomCard: View {
     let host: Bool
     /// The room's plain address.
     let link: String
+    /// Asks the server again who runs the room.
+    let recheck: () async -> Void
     let dismiss: () -> Void
     @State private var copied = false
-    @State private var refused = false
     @State private var minting = false
 
-    private var notHost: Bool { refused || (!linkWorks && !host) }
+    private var notHost: Bool { !linkWorks && !host }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -127,7 +137,11 @@ struct EmptyRoomCard: View {
                 try? await Task.sleep(for: .seconds(1.6))
                 copied = false
             } catch {
-                refused = true
+                minting = false
+                model.actionFailed(HostFeature.explain(error))
+                if case let .Refused(_, code)? = error as? ProtocolError, code == "not_yours" {
+                    await recheck()
+                }
             }
         }
     }
