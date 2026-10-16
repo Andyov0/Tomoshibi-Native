@@ -30,6 +30,9 @@ struct ControlBar: View {
     #if os(macOS)
     let sharing: Sharing
     #endif
+    /// Along the foot of the call, or down its side for the "At the side"
+    /// placement (Appearance.controlsPlacement, controls.ts).
+    var axis: Axis = .horizontal
     @State private var confirmLeave = false
     @State private var busy = false
 
