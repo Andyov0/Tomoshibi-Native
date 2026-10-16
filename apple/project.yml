@@ -80,8 +80,9 @@ targets:
           NSAllowsLocalNetworking: true
         # A call goes on with the screen locked or another app in front, as a
         # telephone call does; a browser tab cannot, which is half of why the
-        # app exists.
-        UIBackgroundModes: [audio, voip]
+        # app exists. Audio alone carries it: voip is for an app woken by
+        # PushKit, which this is not, and a review asks what it is for.
+        UIBackgroundModes: [audio]
         CFBundleURLTypes:
           - CFBundleURLName: app.tomoshibi.link
             CFBundleURLSchemes: [tomoshibi]
