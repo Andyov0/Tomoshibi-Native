@@ -73,14 +73,21 @@ final class LosslessPlayback: LosslessSink, @unchecked Sendable {
         let rate: UInt32
         let channels: UInt32
 
-        init(rate: UInt32, channels: UInt32, level: Float) {
+        /// Nil for a rate or a channel count no audio format has; the core
+        /// drops such packets before they reach here (`playable_rate`), and
+        /// this is the second wall: the format used to be forced, and a
+        /// block saying 0 brought every listener down.
+        init?(rate: UInt32, channels: UInt32, level: Float) {
+            guard (8_000...384_000).contains(rate), (1...2).contains(channels),
+                  let format = AVAudioFormat(standardFormatWithSampleRate: Double(rate), channels: AVAudioChannelCount(channels)) else {
+                return nil
+            }
             let ring = PCMRing(channels: Int(channels), startFrames: Int(rate) / 50, ceilingFrames: Int(rate) / 5, settleFrames: Int(rate) / 25)
             let gain = Gain(level: level, rate: Double(rate))
             self.ring = ring
             self.gain = gain
             self.rate = rate
             self.channels = channels
-            let format = AVAudioFormat(standardFormatWithSampleRate: Double(rate), channels: AVAudioChannelCount(channels))!
             node = AVAudioSourceNode(format: format) { _, _, frames, list in
                 let buffers = UnsafeMutableAudioBufferListPointer(list)
                 ring.render(into: buffers, frames: Int(frames))
@@ -189,7 +196,11 @@ final class LosslessPlayback: LosslessSink, @unchecked Sendable {
         let music = key.hasSuffix("/music")
         let identity = String(key.dropLast(music ? "/music".count : "/screen".count))
         lock.lock()
-        let stream = Stream(rate: waiting.rate, channels: waiting.channels, level: level(key, identity: identity, music: music))
+        guard let stream = Stream(rate: waiting.rate, channels: waiting.channels, level: level(key, identity: identity, music: music)) else {
+            pending[key] = nil
+            lock.unlock()
+            return
+        }
         let first = pending.removeValue(forKey: key)?.samples ?? []
         stream.ring.write(floats: first)
         streams[key] = stream

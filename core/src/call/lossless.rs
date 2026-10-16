@@ -111,6 +111,25 @@ fn room(call: &Call) -> Vec<Remote> {
         .collect()
 }
 
+/// Whether a lossless packet's rate is one this app can play.
+///
+/// The format takes any rate a sender writes, as the web's does, byte for
+/// byte; what refuses a rate in a browser is the AudioContext the receiver
+/// then asks for, so the stream is simply never played. Nothing refused it
+/// here: a block saying 0 crashed every native listener at once (there is no
+/// audio format without a rate), 1 to 4 gave a playback buffer of no length,
+/// and a huge rate asked for gigabytes. Such a packet is dropped before the
+/// receiver sees it, as if it had not come. Every rate audio is really made at
+/// lies inside these bounds. The rate is bytes 4 to 8 of the header
+/// (format.rs `unpack`); a packet too short to have one is the format's to
+/// call malformed.
+fn playable_rate(payload: &[u8]) -> bool {
+    match payload.get(4..8) {
+        Some(b) => (8_000..=384_000).contains(&u32::from_le_bytes([b[0], b[1], b[2], b[3]])),
+        None => true,
+    }
+}
+
 impl Call {
     /// Runs the receiver once, now: on the second, and whenever the room or a
     /// hearing setting changed.
@@ -133,6 +152,9 @@ impl Call {
     /// stopped after anything from none to seventeen blocks (2026-10-17).
     pub(super) fn lossless_heard(self: &Arc<Self>, from: &str, topic: &str, payload: &[u8]) -> (Outcome, Vec<Remote>) {
         let room = room(self);
+        if !playable_rate(payload) {
+            return (Outcome::default(), room);
+        }
         let outcome = {
             let settings = self.lossless.settings.lock().unwrap();
             self.lossless.receiver.lock().unwrap().on_data(now_ms() as u64, from, topic, payload, &room, &*settings)
@@ -157,8 +179,12 @@ impl Call {
         // Every screen sound and music track as Audible.tsx sets it: off at
         // the server when the listener blocked it or a lossless stream is
         // standing in for it, on otherwise.
-        let receiver = self.lossless.receiver.lock().unwrap();
+        // Settings before the receiver, as everywhere else that holds both:
+        // taken the other way round here, a packet being read on the room's
+        // event pump and this could each hold one and wait for the other,
+        // and every event of the call stopped with them.
         let settings = self.lossless.settings.lock().unwrap();
+        let receiver = self.lossless.receiver.lock().unwrap();
         let sink = self.lossless.sink.lock().unwrap().clone();
         for remote in room {
             for publication in &remote.publications {
@@ -246,5 +272,25 @@ impl Player for NativePlayer {
 
     fn broken(&self) -> bool {
         false
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::playable_rate;
+    use tomoshibi_protocol::lossless::{pack, Block};
+
+    fn packet(rate: u32) -> Vec<u8> {
+        pack(&Block { rate, stream: 7, seq: 1, channels: vec![vec![0; 480]] }).expect("packs")
+    }
+
+    #[test]
+    fn a_rate_nobody_records_at_is_never_played() {
+        for rate in [0, 1, 4, 7_999, 384_001, u32::MAX] {
+            assert!(!playable_rate(&packet(rate)), "rate {rate} would be played");
+        }
+        for rate in [8_000, 44_100, 48_000, 96_000, 192_000, 384_000] {
+            assert!(playable_rate(&packet(rate)), "rate {rate} would be dropped");
+        }
     }
 }
