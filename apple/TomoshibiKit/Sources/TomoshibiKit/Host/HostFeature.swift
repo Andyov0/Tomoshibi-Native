@@ -55,14 +55,27 @@ public final class HostFeature {
     /// cannot be undone, and its button sits beside three that can, so the
     /// press that matters is the second (HostPanel.tsx `ending`).
     var ending = false
-    /// Whether the list of relays to move to is open.
+    /// Whether the list of relays to move to is open (HostPanel.tsx
+    /// `Elsewhere`'s `open`).
     var choosingRelay = false
 
     /// Whether the host panel is on screen: the door's notice stands down
     /// while it is, because the panel lists the same people (HostPanel.tsx
     /// `Hosting`, which raises the notice only while the panel is shut).
+    ///
+    /// Closing it also puts both questions away. On the web they are the
+    /// panel's own state and go with it; kept here for the whole call, the
+    /// panel opened again on "Close the room" already armed, one press from
+    /// ending the meeting for everybody, or with the relays open, where one
+    /// press moves everybody.
     var panelOpen = false {
-        didSet { sayWhoIsWaiting() }
+        didSet {
+            if !panelOpen {
+                ending = false
+                choosingRelay = false
+            }
+            sayWhoIsWaiting()
+        }
     }
     /// How many people the door's notice last said were waiting; nought while
     /// it is not up. Said again only when that changes, so a notice swiped
