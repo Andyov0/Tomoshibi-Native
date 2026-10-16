@@ -80,7 +80,7 @@ final class SurfaceView: NSView {
     }
 
     func disconnect() {
-        if let call { VideoHub.of(call).remove(renderer, from: sid) }
+        if let call { VideoHub.existing(call)?.remove(renderer, from: sid) }
         call = nil
     }
 
@@ -88,7 +88,7 @@ final class SurfaceView: NSView {
         let wanted = (Int(points.width * scale), Int(points.height * scale))
         guard wanted.0 > 0, wanted.1 > 0, wanted != asked, let call else { return }
         asked = wanted
-        VideoHub.of(call).want(wanted, for: renderer, on: sid)
+        VideoHub.existing(call)?.want(wanted, for: renderer, on: sid)
     }
 }
 #else
@@ -142,7 +142,7 @@ final class SurfaceView: UIView {
     }
 
     func disconnect() {
-        if let call { VideoHub.of(call).remove(renderer, from: sid) }
+        if let call { VideoHub.existing(call)?.remove(renderer, from: sid) }
         call = nil
     }
 
@@ -150,7 +150,7 @@ final class SurfaceView: UIView {
         let wanted = (Int(points.width * scale), Int(points.height * scale))
         guard wanted.0 > 0, wanted.1 > 0, wanted != asked, let call else { return }
         asked = wanted
-        VideoHub.of(call).want(wanted, for: renderer, on: sid)
+        VideoHub.existing(call)?.want(wanted, for: renderer, on: sid)
     }
 }
 #endif

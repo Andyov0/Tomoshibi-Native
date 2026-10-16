@@ -24,6 +24,15 @@ final class VideoHub: @unchecked Sendable {
         return hub
     }
 
+    /// The hub for a call if there is one, without making one: what a
+    /// renderer going away or resizing asks for. Asking `of` there made a new
+    /// hub for a call already left, and a hub holds its call.
+    static func existing(_ call: Call) -> VideoHub? {
+        lock.lock()
+        defer { lock.unlock() }
+        return hubs[ObjectIdentifier(call)]
+    }
+
     static func forget(_ call: Call) {
         lock.lock()
         hubs[ObjectIdentifier(call)] = nil
@@ -53,8 +62,15 @@ final class VideoHub: @unchecked Sendable {
         guard let fan = fans[sid] else { lock.unlock(); return }
         let empty = fan.remove(renderer)
         if empty { fans[sid] = nil }
+        let nothingLeft = fans.isEmpty
         lock.unlock()
         if empty { call.detach(sid: sid) } else { ask(sid) }
+        // The last picture of the call gone, the hub goes too. Nothing ever
+        // forgot a hub, and the table of hubs kept every call that had shown
+        // a remote camera alive after it was left, its per-second loops in
+        // the core with it, one more for every call and every move
+        // (2026-10-17).
+        if nothingLeft { Self.forget(call) }
     }
 
     /// A renderer's wish, in device pixels.

@@ -55,11 +55,11 @@ struct PictureInPictureHost: UIViewRepresentable {
 
         func follow(_ next: String?) {
             guard next != sid else { return }
-            if let sid { VideoHub.of(call).remove(renderer, from: sid) }
+            if let sid { VideoHub.existing(call)?.remove(renderer, from: sid) }
             sid = next
             if let next {
                 VideoHub.of(call).add(renderer, to: next)
-                VideoHub.of(call).want((640, 360), for: renderer, on: next)
+                VideoHub.existing(call)?.want((640, 360), for: renderer, on: next)
             }
             renderer.layer.sampleBufferRenderer.flush()
         }
@@ -72,7 +72,7 @@ struct PictureInPictureHost: UIViewRepresentable {
         func pictureInPictureControllerIsPlaybackPaused(_ controller: AVPictureInPictureController) -> Bool { false }
         func pictureInPictureController(_ controller: AVPictureInPictureController, didTransitionToRenderSize newRenderSize: CMVideoDimensions) {
             guard let sid else { return }
-            VideoHub.of(call).want((Int(newRenderSize.width), Int(newRenderSize.height)), for: renderer, on: sid)
+            VideoHub.existing(call)?.want((Int(newRenderSize.width), Int(newRenderSize.height)), for: renderer, on: sid)
         }
         func pictureInPictureController(_ controller: AVPictureInPictureController, skipByInterval skipInterval: CMTime) async {}
     }
