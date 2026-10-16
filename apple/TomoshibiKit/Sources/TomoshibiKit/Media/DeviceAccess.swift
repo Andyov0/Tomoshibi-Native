@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import TomoshibiBasics
 #if os(macOS)
 import AppKit
 #else
@@ -12,6 +13,10 @@ public enum DeviceKind: Sendable {
     case camera, microphone
 
     var media: AVMediaType { self == .camera ? .video : .audio }
+
+    /// What the call's notice about this device is filed under, so that the
+    /// next start that works takes it down.
+    var noticeKey: String { self == .camera ? "device.camera" : "device.microphone" }
 }
 
 /// The system said no: the person refused the camera or the microphone, or a
@@ -60,9 +65,17 @@ enum DeviceAccess {
 }
 
 extension CallModel {
-    /// Says that a camera or a microphone would not start, and stays until it
-    /// is dismissed (notices.ts `deviceFailed`): it is something somebody has
-    /// to go and deal with.
+    /// Says that a camera or a microphone would not start (notices.ts
+    /// `deviceFailed`): ten seconds at most, with a close button, as the web
+    /// says it, and taken down at once by the next start of the same device
+    /// that works (CallModel `setMicrophone`, `setCamera`).
+    ///
+    /// It used to stay until closed, on the reasoning the web gave up: a
+    /// refused camera is a state, not an event. The web found that a notice
+    /// that never leaves sits over the pictures for the whole meeting long
+    /// after it was read, and that by the third nobody reads any (notices.ts
+    /// `AT_MOST`); here it also went on saying the microphone could not be
+    /// used while the microphone was working.
     ///
     /// Two whole phrases rather than one with the device put in, because a
     /// sentence built around a noun has to agree with it in most languages
@@ -83,8 +96,8 @@ extension CallModel {
         let open = t("Open Settings")
         #endif
         let toast = CallToast(title, detail: refused ? allow : t("Something else may be using it."),
-                              kind: .failure, lasts: nil, actionTitle: refused ? open : nil,
-                              key: kind == .camera ? "device.camera" : "device.microphone")
+                              kind: .failure, lasts: NoticeTimes.atMost, actionTitle: refused ? open : nil,
+                              key: kind.noticeKey, closable: true)
         if refused {
             announce(toast) { DeviceAccess.openSettings(for: kind) }
         } else {

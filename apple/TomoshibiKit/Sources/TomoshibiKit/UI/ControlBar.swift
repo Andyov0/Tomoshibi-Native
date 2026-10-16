@@ -1,3 +1,4 @@
+import AVFoundation
 import os
 import SwiftUI
 import TomoshibiCore
@@ -45,7 +46,30 @@ struct ControlBar: View {
     var axis: Axis = .horizontal
     @Environment(\.popovers) private var shared
     @State private var own = Popovers()
+    /// A microphone or camera press still being carried out (ControlBar.tsx
+    /// `guard`): another toggle press meanwhile is ignored. Only ignored:
+    /// the bar used to be disabled for it, Leave included, so somebody could
+    /// not leave while the system's permission prompt was open or a publish
+    /// was slow.
     @State private var busy = false
+    /// The hand's own press, so that a pending microphone does not hold up
+    /// a raised hand, nor the hand a microphone.
+    @State private var raising = false
+    #if DEBUG
+    /// TOMOSHIBI_DEBUG_PRESS's `offer:<watch|music|host|knock>`: what the
+    /// features offer, changed mid-call as a song starting or somebody
+    /// knocking changes it, which a rehearsal cannot otherwise bring about.
+    @State private var rehearsedOffers: Offers?
+    #endif
+
+    /// What the features offer, or what a rehearsal says they do.
+    private var offered: Offers {
+        #if DEBUG
+        rehearsedOffers ?? offers
+        #else
+        offers
+        #endif
+    }
 
     /// The room's popovers, one open at a time across the whole screen; the
     /// bar's own where it is drawn outside a room (a preview).
@@ -73,11 +97,25 @@ struct ControlBar: View {
                 .padding(.vertical, 10)
             }
         }
-        .disabled(busy)
         #if os(macOS)
         .modifier(EscapeClosesPopovers(popovers: popovers))
         #endif
-        .onAppear { ControlDebug.arrive(model, popovers: popovers) }
+        .onAppear {
+            ControlDebug.arrive(model, popovers: popovers) { which in
+                switch which {
+                case "mic": device { try await model.setMicrophone(!model.microphoneOn) }
+                case "camera": device { try await model.setCamera(!model.cameraOn) }
+                case "hand": act { try await model.setHand(!model.handUp) }
+                #if DEBUG
+                case "offer:watch": rehearsedOffers = { var o = offered; o.watch.toggle(); return o }()
+                case "offer:music": rehearsedOffers = { var o = offered; o.music.toggle(); return o }()
+                case "offer:host": rehearsedOffers = { var o = offered; o.host.toggle(); return o }()
+                case "offer:knock": rehearsedOffers = { var o = offered; o.knocking = o.knocking > 0 ? 0 : 2; return o }()
+                #endif
+                default: break
+                }
+            }
+        }
     }
 
     private func bar(compact: Bool) -> some View {
@@ -121,9 +159,8 @@ struct ControlBar: View {
                 if model.unread && panel != .messages { BarDot() }
             }
             .animation(Theme.settle, value: model.unread)
-            .animation(Theme.settle, value: offers)
             if compact {
-                MoreControl(model: model, panel: $panel, offers: offers, popovers: popovers, axis: axis, size: size)
+                MoreControl(model: model, panel: $panel, offers: offered, popovers: popovers, axis: axis, size: size)
             } else {
                 panels(size: size)
             }
@@ -132,11 +169,17 @@ struct ControlBar: View {
                     .frame(width: axis == .horizontal ? 1 : 26, height: axis == .horizontal ? 26 : 1)
                     .padding(axis == .horizontal ? .horizontal : .vertical, 2)
             }
-            LeaveControl(model: model, host: offers.host || ControlDebug.hosting, popovers: popovers, axis: axis, compact: compact, size: size)
+            LeaveControl(model: model, host: offered.host || ControlDebug.hosting, popovers: popovers, axis: axis, compact: compact, size: size)
         }
         .padding(compact ? 5 : 7)
         .glassSurface(Capsule())
         .fixedSize()
+        // On the whole bar rather than on one button: the buttons that come
+        // and go with the features (watch, music, running the room, the
+        // count of people at the door) are the bar's own children, and an
+        // animation on the messages button beside them left them to pop in
+        // and out while the capsule jumped to its new width.
+        .animation(Theme.settle, value: offered)
     }
 
     @ViewBuilder
@@ -145,28 +188,28 @@ struct ControlBar: View {
                   lit: panel == .sound, size: size) {
             panel = panel == .sound ? nil : .sound
         }
-        if !model.sealed && (offers.watch || panel == .watch) {
+        if !model.sealed && (offered.watch || panel == .watch) {
             BarButton(symbol: "play.rectangle.fill", label: panel == .watch ? t("Hide watch together") : t("Show watch together"),
                       lit: panel == .watch, size: size) {
                 panel = panel == .watch ? nil : .watch
             }
             // The show is playing while its panel is closed (ControlBar.tsx ~430).
             .overlay(alignment: .topTrailing) {
-                if offers.watchPlaying && panel != .watch { BarDot() }
+                if offered.watchPlaying && panel != .watch { BarDot() }
             }
             .transition(Theme.arrive)
         }
-        if offers.music || panel == .music {
+        if offered.music || panel == .music {
             BarButton(symbol: "music.note", label: panel == .music ? t("Hide music") : t("Show music"),
                       lit: panel == .music, size: size) {
                 panel = panel == .music ? nil : .music
             }
             .overlay(alignment: .topTrailing) {
-                if offers.musicPlaying && panel != .music { BarDot() }
+                if offered.musicPlaying && panel != .music { BarDot() }
             }
             .transition(Theme.arrive)
         }
-        if offers.host || panel == .host {
+        if offered.host || panel == .host {
             BarButton(symbol: "crown.fill", label: t("Running this room"), lit: panel == .host, size: size) {
                 panel = panel == .host ? nil : .host
             }
@@ -174,8 +217,8 @@ struct ControlBar: View {
             // waiting outside is the one thing in the room that is lost if
             // nobody notices.
             .overlay(alignment: .topTrailing) {
-                if offers.knocking > 0 && panel != .host {
-                    Text("\(offers.knocking)")
+                if offered.knocking > 0 && panel != .host {
+                    Text("\(offered.knocking)")
                         .font(.system(size: 10, weight: .bold).monospacedDigit())
                         .foregroundStyle(Theme.tallyForeground)
                         .padding(.horizontal, 4).frame(minWidth: 16, minHeight: 16)
@@ -192,26 +235,29 @@ struct ControlBar: View {
         }
     }
 
-    /// A press that did not take, for the hand: said briefly, and gone.
+    /// A press that did not take, for the hand: said briefly, and gone. A
+    /// second press while the first is still being written is ignored.
     private func act(_ work: @escaping () async throws -> Void) {
-        busy = true
+        guard !raising else { return }
+        raising = true
         Task {
             do {
                 try await work()
             } catch {
                 model.announce(CallToast(t("That could not be done. Try again."), kind: .failure, lasts: 4))
             }
-            busy = false
+            raising = false
         }
     }
 
     /// The microphone or the camera. A device that would not start says so
-    /// itself, and stays said until it is dealt with (CallModel
-    /// `deviceFailed`); the bar only waits for it, because each press may ask
-    /// the system for a device, and a second press while that question is
-    /// open left the button and the device disagreeing about what was on
-    /// (ControlBar.tsx `guard`).
+    /// itself (CallModel `deviceFailed`); the bar only waits for it, because
+    /// each press may ask the system for a device, and a second press while
+    /// that question is open left the button and the device disagreeing
+    /// about what was on (ControlBar.tsx `guard`). The press is ignored, as
+    /// the web's guard ignores it; nothing else on the bar waits.
     private func device(_ work: @escaping () async throws -> Void) {
+        guard !busy else { return }
         busy = true
         Task {
             try? await work()
@@ -294,7 +340,9 @@ private struct ScreenShareControl: View {
         }
         .animation(Theme.settle, value: shown.quality == .auto)
         .animation(Theme.settle, value: sharing.active)
-        .disabled(sharing.screenBusy)
+        // Not disabled while busy: a change waits its turn and a stop always
+        // goes through (Sharing), and the press that releases a picker the
+        // system never showed has to be taken while that picker is out.
     }
 
     /// What somebody is choosing between rather than pixels (ShareButton.tsx
@@ -395,7 +443,6 @@ private struct SoundShareControl: View {
             }
         }
         .animation(Theme.settle, value: sharing.listening)
-        .disabled(sharing.soundBusy)
     }
 }
 #endif
@@ -417,6 +464,9 @@ private struct LeaveControl: View {
     let size: CGFloat
     @State private var ending = false
     @State private var hovering = false
+    #if DEBUG
+    @Environment(\.isEnabled) private var enabled
+    #endif
 
     static let id = "leave"
 
@@ -441,6 +491,13 @@ private struct LeaveControl: View {
         .accessibilityAddTraits(open ? .isSelected : [])
         .help(t("Leave"))
         .barPopover(Self.id, in: popovers, axis: axis, place: .end, width: 272) { panel }
+        #if DEBUG
+        // Whether Leave can be pressed, said each time that changes, for a
+        // rehearsal to read while the microphone is starting.
+        .onChange(of: enabled, initial: true) { _, now in
+            if ControlDebug.on { ControlDebug.log.notice("leave \(now ? "can" : "cannot", privacy: .public) be pressed") }
+        }
+        #endif
     }
 
     private var panel: some View {
@@ -570,8 +627,35 @@ private struct MoreControl: View {
 ///   that size and rate.
 /// - TOMOSHIBI_DEBUG_WINDOW=<width>x<height>: the window at that size, for
 ///   the narrow bar.
+/// - TOMOSHIBI_DEBUG_SLOW=<seconds>[,<seconds>]: the microphone and the
+///   camera wait that long to start, as they wait on the system's permission
+///   prompt (`askedAsIfPrompted`), and the voice's publish the second figure
+///   longer, as it waits on a distant server.
+/// - TOMOSHIBI_DEBUG_PICKER=never|cancel[:<seconds>]|pick[:<seconds>]: the
+///   system's share picker replaced by a stand-in that never answers (as a
+///   picker the system declined to show), is cancelled, or picks a pretend
+///   screen after that long; the pretend share publishes its tracks and
+///   captures nothing, its capture taking TOMOSHIBI_DEBUG_CAPTURE seconds
+///   (0.3 unless told) to start or change.
+/// - TOMOSHIBI_DEBUG_PRESS=<seconds>:<what>[:<argument>];...: presses, each
+///   that many seconds after the one before: `mic`, `camera` and `hand`
+///   through the bar's own guards; `micon` straight to the call, as the join
+///   and the menu's shortcut ask; `share`, `sound`, `stopshare`, `stopsound`
+///   and `size:<shorter side>[@<rate>]` as the share menus press them;
+///   `stop` as the share's tile and leaving stop everything; `systemstop` as
+///   the menu bar's Stop; `strain:<shorter side>@<rate>` as the uplink card's
+///   Switch; `leave`; `audiochange` (the hardware changing under the engine)
+///   and `audiofail:<n>` (the next n starts of the engine fail); on a phone
+///   `interrupt` and `resume` (a telephone call beginning and ending);
+///   `failed:camera|microphone`; `offer:watch|music|host|knock` (a feature
+///   offering its button, or somebody knocking, as the bar is told it);
+///   `signal` (the badge's figures opened or
+///   closed) and `lossless` (the sound share's switch), which a rehearsal
+///   must not write down; and `state`, which logs what the call is doing
+///   under the subsystem's `rehearsal` category.
 enum ControlDebug {
     static let environment = ProcessInfo.processInfo.environment
+    static let log = Logger(subsystem: "app.tomoshibi", category: "rehearsal")
 
     static var on: Bool {
         #if DEBUG
@@ -585,10 +669,84 @@ enum ControlDebug {
     static var sealedLook: Bool { on && environment["TOMOSHIBI_DEBUG_SEALED"] != nil }
     static var hosting: Bool { on && environment["TOMOSHIBI_DEBUG_HOSTING"] != nil }
 
+    #if DEBUG
+    static var slowDevices: Double? { slow.first }
+    private static var slow: [Double] {
+        on ? (environment["TOMOSHIBI_DEBUG_SLOW"] ?? "").split(separator: ",").compactMap { Double($0) } : []
+    }
+
+    /// TOMOSHIBI_DEBUG_SLOW's second figure: a publish's round trip to a
+    /// server further away than the test's own, which answers in a few
+    /// milliseconds and so never leaves the window a real one leaves open.
+    static func publishing() async throws {
+        guard slow.count > 1 else { return }
+        try await Task.sleep(for: .seconds(slow[1]))
+    }
+    @MainActor private static var prompt: ContinuousClock.Instant?
+
+    /// TOMOSHIBI_DEBUG_SLOW: waits as a start of the microphone or the camera
+    /// waits on the system's permission prompt. The first press opens it, and
+    /// every press made while it is open is let go at the same moment, when
+    /// it is answered: which is how two starts both came to find no voice
+    /// track and published one each.
     @MainActor
-    static func arrive(_ model: CallModel, popovers: Popovers) {
+    static func askedAsIfPrompted() async throws {
+        guard let seconds = slowDevices else { return }
+        let now = ContinuousClock.now
+        let answered: ContinuousClock.Instant
+        if let open = prompt, open > now {
+            answered = open
+        } else {
+            answered = now + .seconds(seconds)
+            prompt = answered
+        }
+        try await Task.sleep(until: answered, clock: .continuous)
+    }
+
+    enum PickerAnswer: CustomStringConvertible {
+        case never, cancel(Double), pick(Double)
+
+        var description: String {
+            switch self {
+            case .never: "never answers"
+            case let .cancel(after): "cancelled after \(after) s"
+            case let .pick(after): "picks after \(after) s"
+            }
+        }
+    }
+
+    static var picker: PickerAnswer? {
+        guard on, let text = environment["TOMOSHIBI_DEBUG_PICKER"] else { return nil }
+        let parts = text.split(separator: ":")
+        let after = parts.count > 1 ? Double(parts[1]) ?? 1 : 1
+        switch parts.first {
+        case "never": return .never
+        case "cancel": return .cancel(after)
+        case "pick": return .pick(after)
+        default: return nil
+        }
+    }
+
+    /// A pretend share's capture starting or changing.
+    static func pretendCapture() async throws {
+        let seconds = environment["TOMOSHIBI_DEBUG_CAPTURE"].flatMap(Double.init) ?? 0.3
+        try await Task.sleep(for: .seconds(seconds))
+    }
+    #endif
+
+    /// Arrives in the call: what the switches above set up, and the presses,
+    /// once per call however often the bar appears. `press` presses the bar's
+    /// own microphone, camera or hand.
+    @MainActor
+    static func arrive(_ model: CallModel, popovers: Popovers, press: @escaping @MainActor (String) -> Void = { _ in }) {
         guard on else { return }
         #if DEBUG
+        if model.parts["rehearsal.arrived"] == nil {
+            model.parts["rehearsal.arrived"] = NSNull()
+            if let steps = environment["TOMOSHIBI_DEBUG_PRESS"] {
+                Task { await run(steps, model, press: press) }
+            }
+        }
         #if os(macOS)
         // TOMOSHIBI_DEBUG_SHARE_SIZE=<shorter side>[@<rate>]: the share menu
         // on that size, not written down (Sharing.remembers is off in a
@@ -630,4 +788,101 @@ enum ControlDebug {
         }
         #endif
     }
+
+    #if DEBUG
+    @MainActor
+    private static func run(_ steps: String, _ model: CallModel, press: @escaping @MainActor (String) -> Void) async {
+        for step in steps.split(separator: ";") {
+            let parts = step.split(separator: ":", maxSplits: 2).map(String.init)
+            guard parts.count >= 2, let after = Double(parts[0]) else { continue }
+            let argument = parts.count > 2 ? parts[2] : ""
+            try? await Task.sleep(for: .seconds(after))
+            log.notice("press \(parts[1], privacy: .public) \(argument, privacy: .public)")
+            switch parts[1] {
+            case "mic", "camera", "hand":
+                press(parts[1])
+            case "offer":
+                press("offer:" + argument)
+            case "micon":
+                Task { try? await model.setMicrophone(true) }
+            case "leave":
+                Task { await model.leave() }
+            case "failed":
+                let kind: DeviceKind = argument == "camera" ? .camera : .microphone
+                model.deviceFailed(kind, CocoaError(.featureUnsupported))
+            case "signal":
+                model.connectionOpen.toggle()
+            case "audiochange":
+                model.audio.rehearseHardwareChange()
+            case "audiofail":
+                model.audio.failingStarts = Int(argument) ?? 1
+            #if os(iOS)
+            case "interrupt":
+                // As the system does it: the engine stopped, then the notice.
+                model.audio.engine.stop()
+                NotificationCenter.default.post(name: AVAudioSession.interruptionNotification, object: AVAudioSession.sharedInstance(),
+                                                userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.began.rawValue])
+            case "resume":
+                NotificationCenter.default.post(name: AVAudioSession.interruptionNotification, object: AVAudioSession.sharedInstance(),
+                                                userInfo: [AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.ended.rawValue])
+            #endif
+            #if os(macOS)
+            case "share":
+                Task {
+                    do { try await model.sharing.start(on: model.call) } catch {
+                        model.announce(CallToast(t("That could not be done. Try again."), kind: .failure, lasts: 4))
+                    }
+                }
+            case "sound":
+                Task { try? await model.sharing.startSoundOnly(on: model.call, sealed: model.sealed) }
+            case "stopshare":
+                Task { await model.sharing.stopScreen() }
+            case "stopsound":
+                Task { await model.sharing.stopSound() }
+            case "stop":
+                Task { await model.sharing.stop() }
+            case "systemstop":
+                model.sharing.rehearseSystemStop()
+            case "lossless":
+                model.sharing.lossless.toggle()
+            case "size":
+                let chosen = argument.split(separator: "@").compactMap { Int($0) }
+                if let size = chosen.first, let quality = ScreenCapture.Quality(rawValue: size) {
+                    Task {
+                        do { try await model.sharing.choose(quality: quality, fps: chosen.count > 1 ? chosen[1] : nil) } catch {
+                            log.notice("the size change failed: \(String(describing: error), privacy: .public)")
+                        }
+                    }
+                }
+            case "strain":
+                let chosen = argument.split(separator: "@").compactMap { Int($0) }
+                if chosen.count == 2, let quality = ScreenCapture.Quality(rawValue: chosen[0]) {
+                    Task {
+                        do { try await model.sharing.restart(quality: quality, fps: chosen[1], on: model.call) } catch {
+                            log.notice("the uplink card's switch did not take: \(String(describing: error), privacy: .public)")
+                        }
+                    }
+                }
+            #endif
+            case "state":
+                state(model)
+            default:
+                log.error("no such press: \(parts[1], privacy: .public)")
+            }
+        }
+    }
+
+    /// What the call is doing, in one line of the log.
+    @MainActor
+    static func state(_ model: CallModel) {
+        let tracks = model.localTracks.values
+            .map { "\($0.source)/\($0.name) \($0.sid)\($0.muted ? " muted" : "")" }
+            .sorted().joined(separator: ", ")
+        var line = "microphone \(model.microphoneOn ? "on" : "off"), camera \(model.cameraOn ? "on" : "off"); \(model.audio.rehearsalState); tracks [\(tracks)]; notices [\(model.toasts.compactMap(\.key).joined(separator: ", "))]"
+        #if os(macOS)
+        line += "; \(model.sharing.rehearsalState)"
+        #endif
+        log.notice("state: \(line, privacy: .public)")
+    }
+    #endif
 }

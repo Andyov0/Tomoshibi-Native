@@ -277,10 +277,17 @@ public final class CallModel {
     /// How the call is going from here, every two seconds (connection.ts):
     /// nothing until the first sample, which the badge reads as unmeasured.
     public private(set) var connection: ConnectionReading?
-    /// Whether the badge's figures are open, kept for the call.
-    public var connectionOpen = UserDefaults.standard.bool(forKey: "meet-live.signal-detail") {
-        didSet { UserDefaults.standard.set(connectionOpen, forKey: "meet-live.signal-detail") }
+    /// Whether the badge's figures are open, kept between calls under the
+    /// web's name (Signal.tsx `DETAIL_KEY`), where `memory` keeps things:
+    /// nowhere in a rehearsal. It was written to the owner's own defaults by
+    /// every test that opened the figures.
+    public var connectionOpen = false {
+        didSet {
+            guard connectionOpen != oldValue else { return }
+            memory.defaults?.set(connectionOpen, forKey: Self.signalDetailKey)
+        }
     }
+    static let signalDetailKey = "meet-live.signal-detail"
 
     public private(set) var microphoneOn = false
     public private(set) var cameraOn = false
@@ -331,6 +338,12 @@ public final class CallModel {
     private var microphoneInput: AudioInput?
     private var cameraInput: VideoInput?
     @ObservationIgnored private var cameraStarting = false
+    @ObservationIgnored private var microphoneStarting = false
+    /// Left, or ended under it. Leave can be pressed while the microphone or
+    /// the camera is still starting, and a start that woke after the call
+    /// had gone would have opened the device again with nobody to send to,
+    /// its light on after the call.
+    @ObservationIgnored private var over = false
     private var bridge: Bridge?
 
     init(call: Call, deployment: Deployment, region: String?, sealed: Bool) {
@@ -342,6 +355,7 @@ public final class CallModel {
         self.region = region
         self.sealed = sealed
         lossless.audio = audio
+        audio.onNews = { [weak self] news in self?.heard(news) }
     }
 
     /// Joins the call that `options` describes.
@@ -399,12 +413,23 @@ public final class CallModel {
 
     // MARK: What the person does
 
-    /// Where this participant's device choices are kept: under the web's
-    /// names for a real call, nowhere for a rehearsal (AppModel sets it).
-    @ObservationIgnored public var memory: DeviceMemory = .standard {
+    /// Where this participant's choices are kept, the devices and the rest a
+    /// call remembers (the signal's figures, the share's size and rate):
+    /// under the web's names for a real call, nowhere for a rehearsal, and
+    /// in the suite TOMOSHIBI_DEBUG_DEVICE_MEMORY names for a rehearsal that
+    /// checks what is carried (AppModel sets it).
+    ///
+    /// Nowhere until it is set. The join turns a remembered original sound
+    /// back on before it sets this, and while this started as the owner's
+    /// own defaults, a rehearsal reading its device memory from a suite
+    /// (TOMOSHIBI_DEBUG_DEVICE_MEMORY) wrote its choice into the owner's. A
+    /// real call loses nothing by it: what its join turns on was read from
+    /// where this is about to point.
+    @ObservationIgnored public var memory: DeviceMemory = .nothing {
         didSet {
+            connectionOpen = memory.defaults?.bool(forKey: Self.signalDetailKey) ?? false
             #if os(macOS)
-            sharing.remembers = memory.keeps
+            sharing.keep(in: memory.defaults)
             #endif
         }
     }
@@ -415,11 +440,30 @@ public final class CallModel {
     /// done" for four seconds and the join said nothing at all.
     public func setMicrophone(_ on: Bool) async throws {
         if on {
+            // Once, whoever asks: the join turns it on without the bar
+            // knowing, the menu's shortcut has no guard of its own, and a
+            // press while the first was still publishing, or still asking the
+            // system, published a second voice track and left the first one
+            // up and unmuted, as the camera did before `cameraStarting`.
+            guard !microphoneStarting else { return }
+            microphoneStarting = true
+            defer { microphoneStarting = false }
             do {
+                #if DEBUG
+                try await ControlDebug.askedAsIfPrompted()
+                #endif
                 try await DeviceAccess.ensure(.microphone)
+                guard !over else { return }
                 if microphoneInput == nil {
+                    #if DEBUG
+                    try await ControlDebug.publishing()
+                    #endif
                     let input = try await call.publishAudio(kind: .voice(original: audio.originalSound))
+                    #if DEBUG
+                    if ControlDebug.on { ControlDebug.log.notice("voice published as \(input.sid(), privacy: .public)") }
+                    #endif
                     microphoneInput = input
+                    guard !over else { return }
                 }
                 try audio.startMicrophone(into: microphoneInput!)
                 microphoneInput?.setMuted(muted: false)
@@ -430,6 +474,9 @@ public final class CallModel {
                 deviceFailed(.microphone, error)
                 throw error
             }
+            // What said it would not start is no longer true.
+            dismiss(key: DeviceKind.microphone.noticeKey)
+            dismiss(key: Self.soundStoppedKey)
         } else {
             microphoneInput?.setMuted(muted: true)
             audio.stopMicrophone()
@@ -459,6 +506,7 @@ public final class CallModel {
             deviceFailed(.microphone, error)
             throw error
         }
+        dismiss(key: DeviceKind.microphone.noticeKey)
         memory.remember(originalSound: original)
     }
 
@@ -472,6 +520,7 @@ public final class CallModel {
                 deviceFailed(.camera, error)
                 throw error
             }
+            dismiss(key: DeviceKind.camera.noticeKey)
         } else {
             camera.preferred = device.uniqueID
         }
@@ -488,6 +537,7 @@ public final class CallModel {
             if input { deviceFailed(.microphone, error) }
             throw error
         }
+        if input, microphoneOn { dismiss(key: DeviceKind.microphone.noticeKey) }
         memory.remember(input ? .microphone : .speakers, id: device.id)
     }
 
@@ -519,8 +569,16 @@ public final class CallModel {
             cameraStarting = true
             defer { cameraStarting = false }
             do {
+                #if DEBUG
+                try await ControlDebug.askedAsIfPrompted()
+                #endif
                 try await DeviceAccess.ensure(.camera)
+                guard !over else { return }
                 let input = try await call.publishVideo(kind: .camera, width: CameraCapture.width, height: CameraCapture.height)
+                guard !over else {
+                    try? await input.unpublish()
+                    return
+                }
                 do {
                     try camera.start(into: input)
                 } catch {
@@ -534,6 +592,7 @@ public final class CallModel {
                 deviceFailed(.camera, error)
                 throw error
             }
+            dismiss(key: DeviceKind.camera.noticeKey)
         } else {
             camera.stop()
             if let input = cameraInput {
@@ -625,23 +684,58 @@ public final class CallModel {
 
     /// A telephone call, an alarm or Siri takes the audio session away; when
     /// it is handed back the engine is started again, with the microphone if
-    /// it was on. Without this a call came back silent in both directions.
+    /// it was on (CallAudio `suspend`, `resume`). Without this a call came
+    /// back silent both ways. It still did while the end of an interruption
+    /// only asked the engine to start: the engine, still marked started
+    /// across the interruption, returned at once, and the microphone was
+    /// tapped onto an engine that was not running.
     private func watchInterruptions() {
         interruptions = NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
         ) { [weak self] note in
             guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
-                  AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
+                  let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
             MainActor.assumeIsolated {
                 guard let self else { return }
-                try? self.audio.start()
-                if self.microphoneOn, let input = self.microphoneInput {
-                    try? self.audio.startMicrophone(into: input)
+                switch type {
+                case .began: self.audio.suspend()
+                case .ended: self.audio.resume()
+                @unknown default: break
                 }
             }
         }
     }
     #endif
+
+    /// What the engine said without being asked (CallAudio `News`).
+    ///
+    /// Given up, it is said, and the microphone's button goes off with the
+    /// microphone, so that nothing on the screen says a voice is going out
+    /// that is not; the notice says how to try again, which is to turn the
+    /// microphone on, since that starts the engine. Back again, the notice
+    /// goes.
+    private func heard(_ news: CallAudio.News) {
+        switch news {
+        case let .gaveUp(error):
+            CallAudio.log.error("the call's sound stopped: \(String(describing: error), privacy: .public)")
+            if microphoneOn {
+                microphoneInput?.setMuted(muted: true)
+                audio.stopMicrophone()
+                microphoneOn = false
+            }
+            announce(CallToast(t("The call's sound stopped"),
+                               detail: t("The microphone or speakers kept changing. Turn the microphone on to try again."),
+                               kind: .failure, lasts: NoticeTimes.atMost, key: Self.soundStoppedKey, closable: true))
+        case .back:
+            dismiss(key: Self.soundStoppedKey)
+        case let .microphoneLost(error):
+            microphoneInput?.setMuted(muted: true)
+            microphoneOn = false
+            deviceFailed(.microphone, error)
+        }
+    }
+
+    static let soundStoppedKey = "device.sound"
 
     /// The listener's setting for one of a person's sounds (hearing.ts): the
     /// level on the Opus track's node and on any lossless stream standing in
@@ -669,6 +763,7 @@ public final class CallModel {
     @ObservationIgnored public var beforeLeaving: [String: @MainActor () async -> Void] = [:]
 
     public func leave() async {
+        over = true
         for last in beforeLeaving.values { await last() }
         beforeLeaving = [:]
         lossless.closeAll()
@@ -690,6 +785,7 @@ public final class CallModel {
             self.state = state
         case let .ended(reason):
             endedReason = reason
+            over = true
             audio.stop()
             camera.stop()
             #if os(macOS)

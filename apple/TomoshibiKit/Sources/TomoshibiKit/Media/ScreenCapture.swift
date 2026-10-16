@@ -50,28 +50,65 @@ public final class ScreenCapture: NSObject {
         super.init()
     }
 
+    /// What the person picked: the system's filter, or in a rehearsal a
+    /// stand-in with nothing behind it (TOMOSHIBI_DEBUG_PICKER), for the
+    /// logic around a picker no script can answer.
+    public enum Picked {
+        case content(SCContentFilter)
+        #if DEBUG
+        case pretend
+        #endif
+    }
+
     /// Shows the system's picker and resolves with what the person chose, or
-    /// nil when they cancelled.
+    /// nil when they cancelled, when a later press asked again, or when the
+    /// picker was taken down (`dismissPicker`).
     ///
     /// One picker for every capture. The picker is the system's single
     /// shared one and tells every observer it has about every answer, so with
     /// a screen and a sound each watching it, picking a window for one
     /// started both.
-    public static func pick() async -> SCContentFilter? {
+    public static func pick() async -> Picked? {
         await Picker.shared.pick()
+    }
+
+    /// Takes the picker down if it is out, and answers whoever waits on it
+    /// with nothing: leaving, or the call ending, with the picker open. It
+    /// used to stay up, and a window picked in it afterwards was published
+    /// into the call that had been left. Whatever is picked after this
+    /// reaches nobody.
+    public static func dismissPicker() {
+        Picker.shared.dismiss()
     }
 
     @MainActor
     private final class Picker: NSObject, SCContentSharingPickerObserver {
         static let shared = Picker()
-        private var picked: ((SCContentFilter?) -> Void)?
+        private var picked: ((Picked?) -> Void)?
+        /// Whether the system's picker was asked for, rather than a
+        /// rehearsal's stand-in.
+        private var presented = false
+        /// Which ask an answer is for: a rehearsal's stand-in answers an ask
+        /// that a later one has replaced with nothing.
+        private var asked = 0
 
-        func pick() async -> SCContentFilter? {
+        func pick() async -> Picked? {
             // A picker the system declined to show never answers at all, so a
-            // second press would otherwise leave the first one waiting for ever.
+            // second press would otherwise leave the first one waiting for
+            // ever; this is that press's way out, and the reason the share's
+            // controls take a press while a picker is out (Sharing).
             finish(nil)
+            asked += 1
+            let ask = asked
             return await withCheckedContinuation { continuation in
                 picked = { continuation.resume(returning: $0) }
+                #if DEBUG
+                if let answer = ControlDebug.picker {
+                    standIn(answer, for: ask)
+                    return
+                }
+                #endif
+                presented = true
                 let picker = SCContentSharingPicker.shared
                 var configuration = SCContentSharingPickerConfiguration()
                 configuration.allowedPickerModes = [.singleDisplay, .singleWindow, .singleApplication]
@@ -96,19 +133,68 @@ public final class ScreenCapture: NSObject {
         }
 
         nonisolated func contentSharingPicker(_ picker: SCContentSharingPicker, didUpdateWith filter: SCContentFilter, for stream: SCStream?) {
-            Task { @MainActor in self.finish(filter) }
+            Task { @MainActor in self.finish(.content(filter)) }
         }
 
         nonisolated func contentSharingPickerStartDidFailWithError(_ error: any Error) {
             Task { @MainActor in self.finish(nil) }
         }
 
-        private func finish(_ filter: SCContentFilter?) {
+        func dismiss() {
+            guard picked != nil else { return }
+            Sharing.log.notice("the picker is taken down; nobody is waiting on it any more")
+            finish(nil)
+        }
+
+        /// Answers whoever waits. Inactive, the system takes its picker down
+        /// and removes this app from the menu bar's sharing menu, and with
+        /// this observer gone an answer given after reaches nothing.
+        private func finish(_ choice: Picked?) {
             guard let done = picked else { return }
             picked = nil
-            SCContentSharingPicker.shared.remove(self)
-            SCContentSharingPicker.shared.isActive = false
-            done(filter)
+            if presented {
+                presented = false
+                SCContentSharingPicker.shared.remove(self)
+                SCContentSharingPicker.shared.isActive = false
+            }
+            done(choice)
+        }
+
+        #if DEBUG
+        private func standIn(_ answer: ControlDebug.PickerAnswer, for ask: Int) {
+            Sharing.log.notice("rehearsal: the picker is out (ask \(ask, privacy: .public), \(String(describing: answer), privacy: .public))")
+            let after: Double
+            let choice: Picked?
+            switch answer {
+            case .never: return
+            case let .cancel(seconds): (after, choice) = (seconds, nil)
+            case let .pick(seconds): (after, choice) = (seconds, .pretend)
+            }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(after))
+                guard self.asked == ask, self.picked != nil else {
+                    Sharing.log.notice("rehearsal: ask \(ask, privacy: .public) answered after it was replaced or taken down; nobody hears it")
+                    return
+                }
+                Sharing.log.notice("rehearsal: ask \(ask, privacy: .public) answered")
+                self.finish(choice)
+            }
+        }
+        #endif
+    }
+
+    /// The capture size for what was picked at a quality. A rehearsal's
+    /// stand-in is a 2560 by 1600 screen.
+    public static func size(for picked: Picked, quality: Quality) -> (width: Int, height: Int) {
+        switch picked {
+        case let .content(filter):
+            return size(for: filter, quality: quality)
+        #if DEBUG
+        case .pretend:
+            let limit = Double(quality == .auto ? 1440 : quality.rawValue)
+            let scale = min(1, limit / 1600)
+            return (Int(2560 * scale) & ~1, Int(1600 * scale) & ~1)
+        #endif
         }
     }
 

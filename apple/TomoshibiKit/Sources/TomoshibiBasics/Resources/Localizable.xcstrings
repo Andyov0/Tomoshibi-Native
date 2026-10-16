@@ -18001,6 +18001,36 @@
         }
       }
     },
+    "The call's sound stopped" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The call's sound stopped"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通話の音声が止まりました"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通话声音已停止"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通話聲音已停止"
+          }
+        }
+      }
+    },
     "The change could not be written down, so nothing was changed." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -18417,6 +18447,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "會議會在你走後繼續。"
+          }
+        }
+      }
+    },
+    "The microphone or speakers kept changing. Turn the microphone on to try again." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The microphone or speakers kept changing. Turn the microphone on to try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "マイクかスピーカーが切り替わり続けました。マイクをオンにしてもう一度お試しください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "麦克风或扬声器一直在切换。打开麦克风再试一次。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "麥克風或揚聲器一直在切換。打開麥克風再試一次。"
           }
         }
       }

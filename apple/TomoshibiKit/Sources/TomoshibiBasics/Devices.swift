@@ -45,8 +45,11 @@ public struct DeviceMemory: @unchecked Sendable {
     }
 
     /// Where it is all kept; nil keeps nothing and remembers nothing, which
-    /// is what a test driving the app gets (AppModel.rehearsal).
-    private let defaults: UserDefaults?
+    /// is what a test driving the app gets (AppModel.rehearsal). The other
+    /// choices a call remembers (the signal's figures, the share's size and
+    /// rate) are kept here too, so that a rehearsal keeps none of them
+    /// either.
+    public let defaults: UserDefaults?
 
     public init(defaults: UserDefaults?) {
         self.defaults = defaults
