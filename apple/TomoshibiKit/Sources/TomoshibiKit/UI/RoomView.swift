@@ -286,11 +286,6 @@ public struct RoomView: View {
                     .transition(Theme.arrive)
             }
         }
-        .overlay(alignment: .bottomTrailing) {
-            ToastStack(model: model)
-                .padding(.trailing, 16)
-                .padding(.bottom, Plan.island + 8)
-        }
         // A click outside an open popover closes it; drawn under the
         // controls, which is where the popovers hang from.
         .overlay { PopoverCatcher(popovers: popovers) }
@@ -339,16 +334,27 @@ public struct RoomView: View {
                 .padding(.leading, 12)
                 .padding(.bottom, Plan.island + 8)
         }
-        #if os(macOS)
+        // The corner for what the call says: the uplink card above the
+        // toasts, one column so they cannot land on each other, and drawn
+        // after the panels so a tall panel never covers them. Beside an open
+        // panel where the window leaves room for both; over it where it does
+        // not (a phone, a narrow window), since a toast is brief and a panel
+        // is not.
         .overlay(alignment: .bottomTrailing) {
-            if let hint = model.strainHint, sharing.active {
-                StrainCard(hint: hint, model: model, sharing: sharing)
-                    .padding(.trailing, 12)
-                    .padding(.bottom, Plan.island + 8)
-                    .transition(Theme.slideUp)
+            let beside = panel != nil && size.width - Self.panelWidth(size) - 48 >= 280
+            VStack(alignment: .trailing, spacing: 10) {
+                #if os(macOS)
+                if let hint = model.strainHint, sharing.active {
+                    StrainCard(hint: hint, model: model, sharing: sharing)
+                        .transition(Theme.slideUp)
+                }
+                #endif
+                ToastStack(model: model)
             }
+            .padding(.trailing, beside ? Self.panelWidth(size) + 24 + 8 : 16)
+            .padding(.bottom, Plan.island + 8)
+            .animation(Theme.settle, value: beside)
         }
-        #endif
         .overlay(alignment: .top) {
             if let problem {
                 Notice(text: problem, danger: true)
@@ -849,7 +855,7 @@ public struct RoomView: View {
             do {
                 if sharing.active { await sharing.stop() } else { try await sharing.start(on: model.call) }
             } catch {
-                problem = t("That could not be done. Try again.")
+                model.actionFailed(t("That could not be done. Try again."))
             }
         }
         #endif

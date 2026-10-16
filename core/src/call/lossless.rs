@@ -123,17 +123,24 @@ impl Call {
         self.lossless_apply(outcome, &room).await;
     }
 
-    /// A packet on a lossless topic, from a participant.
-    pub(super) async fn lossless_data(self: &Arc<Self>, from: &str, topic: &str, payload: &[u8]) {
+    /// A packet on a lossless topic, from a participant, read at once and in
+    /// the order the room delivered it; what it leads to (a message to send,
+    /// a track to switch at the server) is the caller's to wait on.
+    ///
+    /// Each packet used to be read in a task of its own, and the runtime ran
+    /// those tasks in whatever order it liked: the receiver took a packet that
+    /// overtook another for a gap and gave the stream up, so a native listener
+    /// stopped after anything from none to seventeen blocks (2026-10-17).
+    pub(super) fn lossless_heard(self: &Arc<Self>, from: &str, topic: &str, payload: &[u8]) -> (Outcome, Vec<Remote>) {
         let room = room(self);
         let outcome = {
             let settings = self.lossless.settings.lock().unwrap();
             self.lossless.receiver.lock().unwrap().on_data(now_ms() as u64, from, topic, payload, &room, &*settings)
         };
-        self.lossless_apply(outcome, &room).await;
+        (outcome, room)
     }
 
-    async fn lossless_apply(self: &Arc<Self>, outcome: Outcome, room: &[Remote]) {
+    pub(super) async fn lossless_apply(self: &Arc<Self>, outcome: Outcome, room: &[Remote]) {
         for out in outcome.send {
             let packet = DataPacket {
                 payload: out.payload,

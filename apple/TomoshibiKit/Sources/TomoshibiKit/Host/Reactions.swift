@@ -165,6 +165,9 @@ struct HandControl: View {
     /// machine whose accessibility answers with the application for every
     /// element, and the panels are the room view's to open.
     @Binding var panel: RoomView.Panel?
+    /// The bar's axis: down the side, the tray opens towards the pictures
+    /// rather than over the buttons above it.
+    var axis: Axis = .horizontal
 
     private var board: ReactionBoard { ReactionBoard.of(model.call) }
     private var open: Bool { board.trayOpen }
@@ -206,15 +209,16 @@ struct HandControl: View {
             .help(t("Reactions"))
         }
         .animation(Theme.settle, value: model.handUp)
-        .overlay(alignment: .bottom) {
+        .overlay(alignment: axis == .horizontal ? .bottom : .trailing) {
             if open {
+                let anchor: UnitPoint = axis == .horizontal ? .bottom : .trailing
                 tray
                     .fixedSize()
                     // Clear of the bar's own edge as well as the control's.
-                    .offset(y: -58)
+                    .offset(x: axis == .horizontal ? 0 : -78, y: axis == .horizontal ? -58 : 0)
                     .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .scale(scale: 0.94, anchor: .bottom)).animation(Theme.settle),
-                        removal: .opacity.combined(with: .scale(scale: 0.97, anchor: .bottom)).animation(Theme.leave)
+                        insertion: .opacity.combined(with: .scale(scale: 0.94, anchor: anchor)).animation(Theme.settle),
+                        removal: .opacity.combined(with: .scale(scale: 0.97, anchor: anchor)).animation(Theme.leave)
                     ))
             }
         }

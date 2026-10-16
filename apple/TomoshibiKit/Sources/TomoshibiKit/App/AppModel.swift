@@ -176,6 +176,13 @@ public final class AppModel {
     private var passphraseKey: String { "passphrase:" + (deployment?.baseUrl() ?? serverAddress) }
     private var cookieKey: String { "account:" + (deployment?.baseUrl() ?? serverAddress) }
     private var identityKey: String { "tomoshibi.identity." + (deployment?.baseUrl() ?? serverAddress) }
+    /// A rehearsal's identity, for its own joins only, as a fresh browser tab
+    /// has one of its own. It read the identity this machine had kept while
+    /// it never wrote one, so two test apps in one room joined as the same
+    /// participant, and the server put the first out as a duplicate the
+    /// moment the second arrived: a listener that "never subscribed" to the
+    /// music had simply replaced its holder (2026-10-17).
+    private var rehearsalIdentity: String?
 
     // MARK: What is switched on when somebody joins
 
@@ -573,12 +580,12 @@ public final class AppModel {
                 room: room,
                 name: joiningName,
                 passphrase: signed || scopedGuest ? "" : passphrase,
-                identity: UserDefaults.standard.string(forKey: identityKey),
+                identity: rehearsal ? rehearsalIdentity : UserDefaults.standard.string(forKey: identityKey),
                 relay: relayChoice ?? "",
                 invite: invite)
             // Every join's identity is kept: signing in or out makes the server
             // issue a new one, and a stale one sent back would be refused.
-            if !rehearsal { UserDefaults.standard.set(grant.identity, forKey: identityKey) }
+            if rehearsal { rehearsalIdentity = grant.identity } else { UserDefaults.standard.set(grant.identity, forKey: identityKey) }
             let options = CallOptions(
                 url: grant.url, token: grant.token, room: grant.room,
                 sealingWord: sealingWord.isEmpty ? nil : sealingWord,

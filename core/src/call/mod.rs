@@ -273,13 +273,14 @@ impl Call {
                 })
             }
             // Lossless streams are fifty packets a second and are the core's to
-            // play; the app never sees them.
+            // play; the app never sees them. Read here, in the room's order
+            // (`lossless_heard`); only what follows from a packet waits.
             RoomEvent::DataReceived { payload, topic: Some(topic), participant: Some(from), .. }
                 if topic == "lossless" || topic == "lossless-music" =>
             {
+                let (outcome, room) = self.lossless_heard(from.identity().as_str(), &topic, &payload);
                 let call = self.clone();
-                let from = from.identity().to_string();
-                tokio::spawn(async move { call.lossless_data(&from, &topic, &payload).await });
+                tokio::spawn(async move { call.lossless_apply(outcome, &room).await });
             }
             RoomEvent::DataReceived { payload, topic: Some(topic), participant: Some(from), .. }
                 if topic == "lossless-ask" || topic == "lossless-music-ask" =>

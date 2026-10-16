@@ -144,10 +144,10 @@ public final class CallAudio {
             // and that first initialisation is where the simulator's audio
             // server once timed out and aborted the app.
             try engine.inputNode.setVoiceProcessingEnabled(!originalSound)
-            muteForTests()
             pointAtChosenDevices()
             engine.prepare()
             try engine.start()
+            muteForTests()
             voiceProcessing = !originalSound
             Self.log.notice("engine started, voice processing \(self.voiceProcessing ? "on" : "off", privacy: .public)")
         } catch where !originalSound {
@@ -159,10 +159,10 @@ public final class CallAudio {
             // without sound is not. So the engine starts again without it.
             engine.stop()
             try engine.inputNode.setVoiceProcessingEnabled(false)
-            muteForTests()
             pointAtChosenDevices()
             engine.prepare()
             try engine.start()
+            muteForTests()
             voiceProcessing = false
             Self.log.notice("engine started without voice processing")
         }
@@ -182,6 +182,13 @@ public final class CallAudio {
     /// scripts set it: a test browser's fake microphone beeps once a second,
     /// and a native app in the same room plays that through the machine's
     /// real speakers, which once sounded exactly like a fault.
+    ///
+    /// Only once the engine runs: asking for the mixer before the start
+    /// builds the output side early, and on this Mac voice processing then
+    /// failed to initialise (-10875) on every muted run and none of the
+    /// others, so every test saw a call without echo cancellation that no
+    /// real call ever had (2026-10-17: three muted runs in three failed
+    /// before the move, three in three started with it after).
     private func muteForTests() {
         if ProcessInfo.processInfo.environment["TOMOSHIBI_MUTE"] != nil {
             engine.mainMixerNode.outputVolume = 0
