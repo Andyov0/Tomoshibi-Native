@@ -339,8 +339,7 @@ public struct SettingsView: View {
                     AccountAvatar(name: account.name, address: app.avatarAddress, size: 32)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(account.name).font(.system(size: 12.5, weight: .semibold)).lineLimit(1)
-                        Text(app.deployment.flatMap { URL(string: $0.baseUrl())?.host() } ?? "")
-                            .font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1)
+                        Text(account.trip).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.muted).lineLimit(1)
                     }
                 }
                 .padding(10)
@@ -408,13 +407,14 @@ public struct SettingsView: View {
                             AccountAvatar(name: account.name, address: app.avatarAddress, size: 54)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(account.name).font(.system(size: 19, weight: .semibold))
-                                Text(host).font(.system(size: 13)).foregroundStyle(Theme.muted)
+                                Text(account.trip).font(.system(size: 13, design: .monospaced)).foregroundStyle(Theme.muted)
                             }
                         } else {
                             Mark(size: 54)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(t("Account")).font(.system(size: 19, weight: .semibold))
-                                Text(host).font(.system(size: 13)).foregroundStyle(Theme.muted)
+                                Text(t("Sign in to change your passphrase or picture.")).font(.system(size: 13)).foregroundStyle(Theme.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                         }
                         Spacer(minLength: 6)
@@ -508,10 +508,6 @@ public struct SettingsView: View {
         })
     }
     #endif
-
-    private var host: String {
-        app.deployment.flatMap { URL(string: $0.baseUrl())?.host() } ?? app.serverAddress
-    }
 
     // MARK: One page
 
@@ -1419,15 +1415,14 @@ private struct AccountSettings: View {
             if let account = app.account {
                 profile(account)
                 abilities(account)
-                places
                 passphrase
                 if app.holds("invite"), account.admin || !account.scopes.isEmpty || debugGuestLinks {
                     GuestLinksCard(app: app, account: account)
                 }
             } else {
-                SettingsSection(title: t("Your account"), footer: t("Sign in to change your passphrase or picture.")) {
-                    serverRow(last: true)
-                }
+                Text(t("Sign in to change your passphrase or picture."))
+                    .font(.system(size: 12.5)).foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             if let said {
                 Text(said).font(.system(size: 12.5)).foregroundStyle(Theme.danger)
@@ -1472,10 +1467,6 @@ private struct AccountSettings: View {
                     // somebody has a reason to read their own (Account.tsx).
                     Text(account.trip).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.muted)
                         .textSelection(.enabled)
-                    HStack(spacing: 5) {
-                        Circle().fill(Theme.good).frame(width: 6, height: 6)
-                        Text(host).font(.system(size: 12)).foregroundStyle(Theme.muted)
-                    }
                 }
                 Spacer(minLength: 0)
             }
@@ -1639,24 +1630,6 @@ private struct AccountSettings: View {
 
     // MARK: Where
 
-    /// Which server this is, said and nothing more. The user console and the
-    /// administrators' pages of the web were linked here, and a "Change
-    /// server" beside them: an app that sends people out to a website is one
-    /// App Review questions, and the app is for this one server (AppModel
-    /// `home`).
-    private var places: some View {
-        SettingsSection(title: t("Server")) {
-            serverRow(last: true)
-        }
-    }
-
-    private func serverRow(last: Bool) -> some View {
-        SettingsRow(title: host, symbol: "server.rack", last: last) { EmptyView() }
-    }
-
-    private var host: String {
-        app.deployment.flatMap { URL(string: $0.baseUrl())?.host() } ?? app.serverAddress
-    }
 
     // MARK: The passphrase
 
@@ -1955,9 +1928,11 @@ private struct AboutSettings: View {
                     Text(coreVersion()).font(.system(size: 12.5, design: .monospaced)).foregroundStyle(Theme.muted)
                 }
                 if let info = app.info {
-                    SettingsRow(title: t("Server"), detail: info.build.isEmpty ? nil : String(info.build.prefix(12)),
-                                symbol: "server.rack", last: info.source.isEmpty) {
-                        Text(host).font(.system(size: 12.5)).foregroundStyle(Theme.muted)
+                    // The server's build and not its address: which server this is
+                    // is not something the app says anywhere (AppModel `home`).
+                    SettingsRow(title: t("Server"), symbol: "server.rack", last: info.source.isEmpty) {
+                        Text(info.build.isEmpty ? "—" : String(info.build.prefix(12)))
+                            .font(.system(size: 12.5, design: .monospaced)).foregroundStyle(Theme.muted)
                     }
                     // Where the code running there can be read: an obligation
                     // under the AGPL's thirteenth section, which only a page
@@ -1996,9 +1971,6 @@ private struct AboutSettings: View {
         return "\(short) (\(build))"
     }
 
-    private var host: String {
-        app.deployment.flatMap { URL(string: $0.baseUrl())?.host() } ?? app.serverAddress
-    }
 }
 
 // MARK: - The Mac's window

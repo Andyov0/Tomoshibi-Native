@@ -224,7 +224,9 @@ struct UnreachableScreen: View {
     var body: some View {
         CardScreen {
             Mark(size: 56)
-            Heading(title: t("Could not reach the server."), detail: URL(string: AppModel.home)?.host() ?? "")
+            // Without the address: which server this is is not something the
+            // app says anywhere (AppModel `home`).
+            Heading(title: t("Could not reach the server."))
             Button { Task { await app.connect() } } label: {
                 Group {
                     if app.busy { ProgressView().controlSize(.small).tint(Theme.tallyForeground) } else { Text(t("Try again")) }

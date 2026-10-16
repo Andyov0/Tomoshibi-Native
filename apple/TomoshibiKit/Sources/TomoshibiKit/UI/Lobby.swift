@@ -320,7 +320,6 @@ struct SignInView: View {
                         Text(t("Meetings here are started by the people who belong here. If somebody sent you a link, open that instead."))
                             .font(.system(size: 14)).foregroundStyle(Theme.muted)
                             .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-                        ServerLine(app: app)
                     }
                     .rise()
 
@@ -460,23 +459,6 @@ struct SignInView: View {
     private func openLink() {
         guard let url = URL(string: link.trimmingCharacters(in: .whitespaces)), url.host() != nil else { return }
         Task { await app.open(url) }
-    }
-}
-
-/// Which deployment this is. There is no way to another: the app is for this
-/// one (AppModel `home`).
-struct ServerLine: View {
-    @Bindable var app: AppModel
-
-    var body: some View {
-        if let base = app.deployment?.baseUrl() {
-            HStack(spacing: 6) {
-                Circle().fill(Theme.good).frame(width: 6, height: 6)
-                Text(URL(string: base)?.host() ?? base)
-            }
-            .font(.system(size: 12))
-            .foregroundStyle(Theme.muted)
-        }
     }
 }
 
@@ -661,11 +643,7 @@ struct AccountMenu: View {
             Button { popovers.toggle("account") } label: {
                 HStack(spacing: 10) {
                     AccountAvatar(name: account.name, address: app.avatarAddress, size: 30)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(account.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
-                        Text(app.deployment.flatMap { URL(string: $0.baseUrl())?.host() } ?? "")
-                            .font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1)
-                    }
+                    Text(account.name).font(.system(size: 13, weight: .semibold)).lineLimit(1)
                     Spacer(minLength: 4)
                     Image(systemName: "chevron.up.chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.muted)
                 }
