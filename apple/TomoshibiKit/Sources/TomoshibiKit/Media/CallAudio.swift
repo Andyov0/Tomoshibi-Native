@@ -1,6 +1,7 @@
 import AVFoundation
 import os
 import Foundation
+import TomoshibiBasics
 import TomoshibiCore
 
 /// Everything a call hears and says, through one AVAudioEngine.
@@ -15,9 +16,30 @@ import TomoshibiCore
 public final class CallAudio {
     let engine = AVAudioEngine()
     private var players: [String: Player] = [:]
+    /// The track the microphone feeds while it is on, kept apart from whether
+    /// the tap that feeds it is on the engine right now (`tapped`). A restart
+    /// takes the tap off, and it used to forget the track with it: a restart
+    /// that failed, or the undo after it, came back with no microphone, and
+    /// the call went on sending nothing with the microphone's button on. Now
+    /// whatever starts the engine puts the tap back for this track.
     private var microphone: AudioInput?
+    private var tapped = false
     private var converter: AVAudioConverter?
     private(set) var started = false
+
+    /// What the call is told about the engine that it did not ask for.
+    enum News {
+        /// It stopped and could not be brought back (EngineRecovery): nothing
+        /// is heard and nothing is sent until something starts it again.
+        case gaveUp(Error)
+        /// It runs again after having been given up.
+        case back
+        /// It runs again, but the microphone would not go back on it.
+        case microphoneLost(Error)
+    }
+
+    /// Told on the main actor; the call says these to the person.
+    var onNews: ((News) -> Void)?
 
     /// What the core takes from a microphone: 48 kHz, 16-bit, mono.
     private let voiceFormat = AVAudioFormat(commonFormat: .pcmFormatInt16, sampleRate: 48_000, channels: 1, interleaved: true)!
@@ -59,26 +81,65 @@ public final class CallAudio {
         if let configurationWatch { NotificationCenter.default.removeObserver(configurationWatch) }
     }
 
-    /// When the engine was last started again for a change of hardware.
-    private var restarts: [Date] = []
+    /// When the engine is started again after stopping under the call, and
+    /// when that is given up (EngineRecovery).
+    private var recovery = EngineRecovery()
+    /// The one more try once the hardware has been quiet.
+    private var quietTry: Task<Void, Never>?
+    private static func clock() -> Double { ProcessInfo.processInfo.systemUptime }
 
     private func hardwareChanged() {
-        guard started, !engine.isRunning else { return }
-        // A start that itself changes the hardware (voice processing builds
-        // its own aggregate device) must not become a loop: three in ten
-        // seconds is a machine that will not settle, and the engine is left
-        // as the system left it.
-        restarts = restarts.filter { Date().timeIntervalSince($0) < 10 } + [Date()]
-        guard restarts.count <= 3 else {
-            Self.log.error("the audio hardware keeps changing; not starting the engine again")
-            return
+        #if os(iOS)
+        // The system stopped it for a telephone call or Siri, and hands it
+        // back when that is over (`resume`); starting it in between fails,
+        // and would have been given up and said in the middle of the call.
+        if interrupted { return }
+        #endif
+        // A change while waiting for quiet pushes the try back.
+        guard (started && !engine.isRunning) || recovery.waiting else { return }
+        Self.log.notice("the audio hardware changed under the engine")
+        follow(recovery.changed(at: Self.clock()))
+    }
+
+    private func follow(_ step: EngineRecovery.Step, _ error: Error? = nil) {
+        switch step {
+        case .restart:
+            Self.log.notice("starting the engine again")
+            do {
+                try restartNow()
+            } catch {
+                Self.log.error("the engine would not start again: \(String(describing: error), privacy: .public)")
+                follow(recovery.failed(at: Self.clock()), error)
+            }
+        case let .wait(seconds):
+            // Stopped, and said to be: `started` false is what lets anything
+            // that wants sound in the meantime (a voice arriving, the
+            // microphone pressed) start it again, where `started` left true
+            // over a stopped engine made every start return at once.
+            pause()
+            Self.log.notice("waiting \(seconds, privacy: .public) s for the audio hardware to settle")
+            quietTry?.cancel()
+            quietTry = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(seconds))
+                guard !Task.isCancelled, let self else { return }
+                self.quietTry = nil
+                self.follow(self.recovery.quiet(at: Self.clock()))
+            }
+        case .giveUp:
+            pause()
+            Self.log.error("the audio hardware will not settle; the engine stays stopped until it is asked for again")
+            onNews?(.gaveUp(error ?? CocoaError(.featureUnsupported)))
+        case .none:
+            break
         }
-        Self.log.notice("the audio hardware changed under the engine; starting it again")
-        do {
-            try restart()
-        } catch {
-            Self.log.error("the engine would not start again: \(String(describing: error), privacy: .public)")
-        }
+    }
+
+    /// The engine stopped and marked stopped, the microphone's track kept for
+    /// when it starts again.
+    private func pause() {
+        untap()
+        engine.stop()
+        started = false
     }
 
     /// The devices and processing a call starts with. The engine may already
@@ -99,14 +160,23 @@ public final class CallAudio {
 
     /// Stops the engine and starts it again, with the microphone if it was
     /// on: for a change of device or of processing, which only takes on a
-    /// unit that is not running.
+    /// unit that is not running. One that does not start again is not left
+    /// at that: it is tried once more when the hardware is quiet, and given
+    /// up and said only if that fails as well (EngineRecovery), while the
+    /// caller hears the error now and may try something else first (`use`
+    /// goes back to the device it had).
     func restart() throws {
-        let input = microphone
-        stopMicrophone()
-        engine.stop()
-        started = false
+        do {
+            try restartNow()
+        } catch {
+            follow(recovery.failed(at: Self.clock()), error)
+            throw error
+        }
+    }
+
+    private func restartNow() throws {
+        pause()
         try start()
-        if let input { try startMicrophone(into: input) }
     }
 
     private final class Player {
@@ -131,6 +201,13 @@ public final class CallAudio {
     /// Starts the engine. On iOS this also claims the audio session for a call.
     public func start() throws {
         guard !started else { return }
+        #if DEBUG
+        if failingStarts > 0 {
+            failingStarts -= 1
+            Self.log.notice("rehearsal: this start of the engine fails")
+            throw CocoaError(.featureUnsupported)
+        }
+        #endif
         #if os(iOS)
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.playAndRecord, mode: .videoChat, options: [.allowBluetoothHFP, .allowBluetoothA2DP, .defaultToSpeaker])
@@ -167,6 +244,24 @@ public final class CallAudio {
             Self.log.notice("engine started without voice processing")
         }
         started = true
+        let wasGivenUp = recovery.gaveUp
+        recovery.started()
+        quietTry?.cancel()
+        quietTry = nil
+        // Whatever started it, the microphone goes back on: the restart for a
+        // change of device, the try after the hardware settled, a voice
+        // arriving while the engine waited for quiet, the end of a telephone
+        // call on a phone.
+        if let microphone, !tapped {
+            do {
+                try tap(microphone)
+            } catch {
+                Self.log.error("the microphone would not go back on the engine: \(String(describing: error), privacy: .public)")
+                self.microphone = nil
+                onNews?(.microphoneLost(error))
+            }
+        }
+        if wasGivenUp { onNews?(.back) }
     }
 
     /// Whether the system's voice processing (echo cancellation, noise
@@ -200,6 +295,9 @@ public final class CallAudio {
         for sid in Array(players.keys) { stopPlaying(sid: sid) }
         engine.stop()
         started = false
+        quietTry?.cancel()
+        quietTry = nil
+        recovery = EngineRecovery()
         #if os(iOS)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
         #endif
@@ -219,8 +317,19 @@ public final class CallAudio {
     /// channel is the processed voice in the one case and the microphone the
     /// system records mono from in the other.
     public func startMicrophone(into input: AudioInput) throws {
-        try start()
+        // Forgotten first, so that a start of the engine below does not put
+        // the last one back only to have it replaced.
         stopMicrophone()
+        try start()
+        try tap(input)
+        microphone = input
+    }
+
+    /// The tap that feeds `input`, on the engine as it is now: a restart may
+    /// bring the input back with another rate or channel count, so it is
+    /// installed again rather than kept.
+    private func tap(_ input: AudioInput) throws {
+        untap()
         let node = engine.inputNode
         let format = node.outputFormat(forBus: 0)
         guard format.sampleRate > 0,
@@ -229,7 +338,6 @@ public final class CallAudio {
             throw CocoaError(.featureUnsupported)
         }
         self.converter = converter
-        self.microphone = input
         let target = voiceFormat
         let permission = AVCaptureDevice.authorizationStatus(for: .audio)
         Self.log.notice("microphone on: \(format.sampleRate, privacy: .public) Hz \(format.channelCount, privacy: .public) ch, permission \(permission.rawValue, privacy: .public), voice processing \(self.voiceProcessing ? "on" : "off", privacy: .public)")
@@ -276,24 +384,92 @@ public final class CallAudio {
             }
             input.push(samples: Array(UnsafeBufferPointer(start: samples[0], count: Int(out.frameLength))))
         }
+        tapped = true
     }
 
     public func stopMicrophone() {
-        guard microphone != nil else { return }
-        engine.inputNode.removeTap(onBus: 0)
         microphone = nil
+        untap()
+    }
+
+    private func untap() {
+        guard tapped else { return }
+        engine.inputNode.removeTap(onBus: 0)
+        tapped = false
         converter = nil
         microphoneLevel = nil
     }
 
     /// Turns the system's voice processing off or on. The engine has to be
-    /// restarted for the change to take, and the microphone with it.
+    /// restarted for the change to take, and the microphone with it. One that
+    /// does not take is put back as it was, so that the voice track the call
+    /// keeps (published for one processing or the other) and the engine
+    /// agree.
     public func setOriginalSound(_ original: Bool) throws {
         guard original != originalSound else { return }
         originalSound = original
         guard started else { return }
-        try restart()
+        do {
+            try restart()
+        } catch {
+            originalSound = !original
+            try? restart()
+            throw error
+        }
     }
+
+    #if os(iOS)
+    /// A telephone call, an alarm or Siri has the audio session; the system
+    /// has stopped the engine.
+    private var interrupted = false
+
+    /// The session was taken away. The engine is marked stopped, the
+    /// microphone's track kept, and nothing tries to start it until `resume`:
+    /// `started` left true across the interruption made the start at its end
+    /// return at once, and the call came back silent both ways.
+    func suspend() {
+        interrupted = true
+        quietTry?.cancel()
+        quietTry = nil
+        recovery = EngineRecovery()
+        pause()
+        Self.log.notice("the audio session was interrupted")
+    }
+
+    /// The session is handed back: the engine starts again, and with it the
+    /// microphone if it was on. A start that fails is tried again once the
+    /// hardware is quiet, and said if that fails too.
+    func resume() {
+        guard interrupted else { return }
+        interrupted = false
+        Self.log.notice("the audio session is back; starting the engine again")
+        do {
+            try start()
+        } catch {
+            Self.log.error("the engine would not start after the interruption: \(String(describing: error), privacy: .public)")
+            follow(recovery.failed(at: Self.clock()), error)
+        }
+    }
+    #endif
+
+    #if DEBUG
+    /// TOMOSHIBI_DEBUG_PRESS's `audiofail:<n>`, in a rehearsal: the next n
+    /// starts of the engine throw, as a device that will not start does.
+    var failingStarts = 0
+
+    /// TOMOSHIBI_DEBUG_PRESS's `audiochange`: the engine stopped under the
+    /// call as the system stops it when the hardware changes, and the
+    /// system's notice of it.
+    func rehearseHardwareChange() {
+        engine.stop()
+        NotificationCenter.default.post(name: .AVAudioEngineConfigurationChange, object: engine)
+    }
+
+    /// What the engine is doing, for a rehearsal's log.
+    var rehearsalState: String {
+        "engine \(engine.isRunning ? "running" : "stopped"), started \(started), microphone \(microphone != nil ? "wanted" : "off"), tap \(tapped ? "on" : "off"), waiting \(recovery.waiting), given up \(recovery.gaveUp)"
+    }
+    #endif
 
     // MARK: Remote sound
 

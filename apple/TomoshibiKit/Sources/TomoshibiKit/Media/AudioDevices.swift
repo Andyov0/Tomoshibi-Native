@@ -164,6 +164,12 @@ extension CallAudio {
     /// started again, and the microphone with it: a new device may have
     /// another channel count or rate, and a tap left on the old format went
     /// silent or stopped the engine.
+    ///
+    /// A device that will not start goes back to the one before. Neither
+    /// restart loses the microphone: it went back on with whichever started
+    /// (CallAudio `microphone`), where the undo after a failed start used to
+    /// come back without it. If the undo will not start either, the engine is
+    /// tried again once the hardware is quiet (EngineRecovery).
     public func use(_ device: AudioDevice, input: Bool) throws {
         guard choosable, Self.deviceID(uid: device.id) != nil else { throw CocoaError(.featureUnsupported) }
         let before = input ? chosenInput : chosenOutput
