@@ -230,14 +230,43 @@ struct CameraStage: View {
     private func show(_ on: Bool) {
         let session = preview.session
         if on {
-            if session.inputs.isEmpty, let device = AVCaptureDevice.default(for: .video),
-               let input = try? AVCaptureDeviceInput(device: device), session.canAddInput(input) {
-                session.addInput(input)
+            // The camera the call will start on: the one last picked, where it
+            // is still plugged in, and the system's otherwise (CallModel
+            // `restoreDevices`). The web previews the remembered one for the
+            // same reason (PreJoin.tsx ~373: "a preview of another camera
+            // would be a rehearsal of the wrong picture"); this showed the
+            // system's default whatever the call was about to send. Looked
+            // up again each time the camera goes on, so a choice made in the
+            // settings meanwhile is the one shown.
+            let device = Self.joiningCamera(app.deviceMemory)
+            let current = (session.inputs.first as? AVCaptureDeviceInput)?.device
+            if let device, current?.uniqueID != device.uniqueID, let input = try? AVCaptureDeviceInput(device: device) {
+                session.beginConfiguration()
+                for existing in session.inputs { session.removeInput(existing) }
+                if session.canAddInput(input) { session.addInput(input) }
+                session.commitConfiguration()
             }
             DispatchQueue.global(qos: .userInitiated).async { session.startRunning() }
         } else {
             DispatchQueue.global(qos: .userInitiated).async { session.stopRunning() }
         }
+    }
+
+    /// The camera a join will start, by what is remembered and what is
+    /// plugged in now; with nothing remembered, the one CameraCapture falls
+    /// back on, which on a phone is the front camera; the system's default
+    /// there is the back one, which is not the camera the call sends.
+    static func joiningCamera(_ memory: DeviceMemory) -> AVCaptureDevice? {
+        let cameras = CameraCapture.cameras()
+        if let id = memory.restorable(.camera, present: cameras.map(\.uniqueID)),
+           let remembered = cameras.first(where: { $0.uniqueID == id }) {
+            return remembered
+        }
+        #if os(iOS)
+        return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) ?? AVCaptureDevice.default(for: .video)
+        #else
+        return AVCaptureDevice.default(for: .video)
+        #endif
     }
 }
 
@@ -927,6 +956,9 @@ struct MeetingSheet: View {
     @State private var room = ""
     @State private var sealing = false
     @State private var working = false
+    /// The press of Start or Join, while it is asking whether the meeting is
+    /// live and then joining: Cancel calls it off.
+    @State private var going: Task<Void, Never>?
     @State private var popovers = Popovers()
     @Environment(\.dismiss) private var dismiss
 
@@ -979,9 +1011,20 @@ struct MeetingSheet: View {
         .onAppear { popovers.openFromDebug() }
     }
 
+    /// Closes the sheet, and calls off whatever its press set going: Cancel
+    /// and the cross stayed live while a join was out and did nothing to it,
+    /// so somebody who pressed Cancel was put in the call a moment later
+    /// with the microphone on.
+    private func cancel() {
+        going?.cancel()
+        going = nil
+        app.cancelJoin()
+        dismiss()
+    }
+
     private var header: some View {
         HStack {
-            Button { dismiss() } label: { Image(systemName: "xmark").font(.system(size: 13, weight: .bold)) }
+            Button { cancel() } label: { Image(systemName: "xmark").font(.system(size: 13, weight: .bold)) }
                 .buttonStyle(.glassCircle(32))
                 .accessibilityLabel(t("Cancel"))
             #if os(macOS)
@@ -1039,11 +1082,12 @@ struct MeetingSheet: View {
                 if app.canKnock {
                     Button(t("Ask to be let in")) { Task { await app.knock(); dismiss() } }
                         .buttonStyle(.glassCapsule(40))
+                        .disabled(app.busy)
                         .transition(Theme.arrive)
                 }
                 Spacer()
                 #if os(macOS)
-                Button(t("Cancel")) { dismiss() }.buttonStyle(.glassCapsule(36)).keyboardShortcut(.cancelAction)
+                Button(t("Cancel")) { cancel() }.buttonStyle(.glassCapsule(36)).keyboardShortcut(.cancelAction)
                 #endif
                 Button(action: go) {
                     Group {
@@ -1056,7 +1100,9 @@ struct MeetingSheet: View {
                 }
                 .buttonStyle(.glassCapsule(platformTall, prominent: true))
                 .keyboardShortcut(.defaultAction)
-                .disabled(working || (!starting && !validRoomName(name: normaliseRoomName(typed: room))))
+                // And while any join is out, a called-off one included: a
+                // second beside it would go in as the same participant.
+                .disabled(working || app.busy || (!starting && !validRoomName(name: normaliseRoomName(typed: room))))
             }
         }
     }
@@ -1073,16 +1119,18 @@ struct MeetingSheet: View {
     /// one that exists cannot be started and one that does not cannot be
     /// joined. An unknown answer goes through; the join is the authority.
     private func go() {
-        guard !working, let deployment = app.deployment else { return }
+        guard !working, !app.busy, let deployment = app.deployment else { return }
         let typed = normaliseRoomName(typed: room)
         let target = starting ? (validRoomName(name: typed) ? typed : generateRoomName()) : typed
         guard validRoomName(name: target) else { return }
         if !sealing { app.sealingWord = "" }
         working = true
         app.problem = nil
-        Task {
+        going = Task {
             defer { working = false }
             let live = (try? await deployment.roomLive(room: target)) ?? nil
+            // Cancelled while the question was out: nothing more is asked.
+            if Task.isCancelled { return }
             if starting, live == true {
                 app.problem = t("A meeting is already happening under that name.")
                 return

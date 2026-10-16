@@ -378,6 +378,18 @@
       "zh-Hans": "这个应用放不了这种格式的视频,其他人照常在看。",
       "zh-Hant": "這個應用程式放不了這種格式的影片,其他人照常在看。",
       "ja": "このアプリではこの形式の動画を再生できません。ほかの人はそのまま視聴を続けます。"
+    },
+    "Leave this call to open that link.": {
+      "en": "Leave this call to open that link.",
+      "zh-Hans": "离开这个通话后，再打开那个链接。",
+      "zh-Hant": "離開這個通話後，再打開那個連結。",
+      "ja": "そのリンクを開くには、この通話から退出してください。"
+    },
+    "Leave the call to change server.": {
+      "en": "Leave the call to change server.",
+      "zh-Hans": "离开通话后才能更换服务器。",
+      "zh-Hant": "離開通話後才能更換伺服器。",
+      "ja": "サーバーを変更するには、通話から退出してください。"
     }
   }
 }
