@@ -24,11 +24,20 @@ struct MediaSlider: View {
     /// move in twentieths (`step={0.05}`).
     var step: Double?
     var tint: Color = Theme.foreground
-    /// Told when a drag starts and ends, for a scrubber that only seeks once
-    /// it is let go.
+    /// Told when a change starts and ends, for a scrubber that only seeks
+    /// once it is let go. Every way of changing the value ends what it
+    /// started: a drag that is let go, a drag the system takes away (a touch
+    /// cancelled, the view going from under it), and a step from VoiceOver,
+    /// which is a whole change on its own. Only a drag let
+    /// go ended one, and a VoiceOver step or an interrupted drag left the
+    /// watch scrubber editing for good: it never sought, its place stood
+    /// still, and the controls over the video never hid again.
     var editing: (Bool) -> Void = { _ in }
     @State private var dragging = false
     @State private var hovering = false
+    /// True while a drag is under way, and put back by the system however the
+    /// drag ends, a cancelled one included, which `onEnded` never hears of.
+    @GestureState private var held = false
     @Environment(\.isEnabled) private var enabled
 
     private var fraction: Double {
@@ -58,6 +67,7 @@ struct MediaSlider: View {
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 0)
+                    .updating($held) { _, held, _ in held = true }
                     .onChanged { drag in
                         if !dragging {
                             dragging = true
@@ -66,26 +76,48 @@ struct MediaSlider: View {
                         set(Double((drag.location.x - knob / 2) / (width - knob)))
                     }
                     .onEnded { drag in
-                        set(Double((drag.location.x - knob / 2) / (width - knob)))
-                        dragging = false
-                        editing(false)
+                        // Not after a finish already said, whose change would
+                        // then be one nobody is told the end of.
+                        if dragging { set(Double((drag.location.x - knob / 2) / (width - knob))) }
+                        finish()
                     }
             )
         }
         .frame(height: 22)
         .onHover { hovering = $0 }
+        // A drag that ended without `onEnded`: cancelled by the system.
+        .onChange(of: held) { _, now in
+            if !now { finish() }
+        }
+        .onDisappear { finish() }
         .animation(Theme.settle, value: dragging)
         .animation(.easeOut(duration: 0.15), value: hovering)
         .accessibilityElement()
         .accessibilityValue("\(Int((fraction * 100).rounded()))%")
         .accessibilityAdjustableAction { direction in
-            let nudge = (range.upperBound - range.lowerBound) / 20
             switch direction {
-            case .increment: value = min(range.upperBound, value + nudge)
-            case .decrement: value = max(range.lowerBound, value - nudge)
+            case .increment: step(by: 1)
+            case .decrement: step(by: -1)
             @unknown default: break
             }
         }
+    }
+
+    /// One step of a twentieth, from VoiceOver: begun, moved and finished at
+    /// once, so a scrubber seeks to it as it would to a drag let go there.
+    func step(by steps: Double) {
+        let nudge = (range.upperBound - range.lowerBound) / 20
+        let next = min(range.upperBound, max(range.lowerBound, value + steps * nudge))
+        editing(true)
+        if next != value { value = next }
+        editing(false)
+    }
+
+    /// The end of a drag, however it came: said once.
+    private func finish() {
+        guard dragging else { return }
+        dragging = false
+        editing(false)
     }
 
     private func set(_ fraction: Double) {
