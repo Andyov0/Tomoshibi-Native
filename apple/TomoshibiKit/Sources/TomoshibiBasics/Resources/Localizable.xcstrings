@@ -18601,6 +18601,36 @@
         }
       }
     },
+    "This app cannot play this kind of video. Everybody else goes on watching." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This app cannot play this kind of video. Everybody else goes on watching."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このアプリではこの形式の動画を再生できません。ほかの人はそのまま視聴を続けます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个应用放不了这种格式的视频,其他人照常在看。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個應用程式放不了這種格式的影片,其他人照常在看。"
+          }
+        }
+      }
+    },
     "This browser blocks camera and microphone access." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,

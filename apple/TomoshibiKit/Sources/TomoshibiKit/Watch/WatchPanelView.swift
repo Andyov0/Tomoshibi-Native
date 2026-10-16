@@ -1,64 +1,60 @@
 import SwiftUI
+import TomoshibiBasics
 import TomoshibiCore
 
 /// Watching a video together: a link to paste, what is playing and coming
 /// up, and the media servers where this person may browse them
 /// (WatchPanel.tsx, WatchTab.tsx).
+///
+/// Drawn with the app's own pieces, as the music panel is (Kit.swift,
+/// Kit+Media.swift): the web's tab strip is a sliding segmented choice, its
+/// field a capsule that lights while it is typed in, and each video a row
+/// with its poster.
 struct WatchPanelView: View {
     let feature: WatchFeature
     let close: () -> Void
     @State private var tab: Tab = WatchDebug.panelAtMedia ? .media : .queue
 
-    enum Tab { case queue, media }
+    enum Tab: Hashable { case queue, media }
+
+    /// As tall as the music panel, for the reason it gives.
+    static let height: CGFloat = MusicPanelView.height
 
     var body: some View {
         let engine = feature.engine
         VStack(spacing: 0) {
-            HStack {
-                Text(t("Watch together")).font(.system(size: 12.5, weight: .semibold)).foregroundStyle(Theme.foreground)
-                Spacer()
-                Button(action: close) {
-                    Image(systemName: "xmark").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.muted)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(t("Close watch together"))
-                .help(t("Close watch together"))
-            }
-            .padding(12)
-            Divider().overlay(Theme.border)
+            MediaPanelHeader(title: t("Watch together"), symbol: "play.rectangle.fill",
+                             closeLabel: t("Close watch together"), close: close)
 
             if engine.call.sealed {
                 // The control bar offers no button in a sealed call; should
                 // the panel be reached anyway, it says why there is nothing.
-                Text(t("Not available in an encrypted call"))
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.muted)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .padding(16)
+                MediaEmpty(symbol: "lock.fill", text: t("Not available in an encrypted call"))
+                    .frame(maxHeight: .infinity)
             } else {
                 // The tab is there only for somebody the server lists media
                 // servers for, which is somebody given them.
                 if !engine.servers.isEmpty {
-                    HStack(spacing: 4) {
-                        TabButton(title: t("Queue"), chosen: tab == .queue) { tab = .queue }
-                        TabButton(title: t("Media servers"), chosen: tab == .media) { tab = .media }
-                    }
-                    .padding(6)
-                    .transition(Theme.arrive)
-                    Divider().overlay(Theme.border)
+                    SegmentedChoice(options: [(Tab.queue, t("Queue")), (.media, t("Media servers"))], selection: $tab)
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 10)
+                        .transition(Theme.arrive)
                 }
-                Group {
+                MediaRule()
+                ZStack(alignment: .top) {
                     if tab == .media, !engine.servers.isEmpty {
                         MediaBrowserView(engine: engine, servers: engine.servers) { tab = .queue }
+                            .transition(.opacity.animation(Theme.settle))
                     } else {
                         QueueView(engine: engine)
+                            .transition(.opacity.animation(Theme.settle))
                     }
                 }
-                .frame(maxHeight: .infinity)
+                .frame(maxHeight: .infinity, alignment: .top)
             }
         }
-        .glassPane(cornerRadius: 22)
-        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .frame(minHeight: 320, idealHeight: Self.height, maxHeight: Self.height)
+        .mediaPanelGlass()
         .animation(Theme.settle, value: engine.servers.isEmpty)
         .animation(Theme.settle, value: tab)
         .onAppear {
@@ -67,26 +63,6 @@ struct WatchPanelView: View {
         }
         .onDisappear { engine.panelOpen = false }
         .onChange(of: engine.ready) { engine.loadServers() }
-    }
-}
-
-private struct TabButton: View {
-    let title: String
-    let chosen: Bool
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 12))
-                .foregroundStyle(chosen ? Theme.foreground : Theme.muted)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 5)
-                .background(RoundedRectangle(cornerRadius: 6).fill(chosen ? Theme.surfaceHigh : .clear))
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(chosen ? .isSelected : [])
     }
 }
 
@@ -102,92 +78,65 @@ private struct QueueView: View {
         // may read links; anybody may add to a show that is running.
         let canAdd = show != nil || engine.ready
         VStack(spacing: 0) {
-            HStack(spacing: 6) {
-                TextField(t("A video link, or the text it was shared in"), text: $pasted)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.foreground)
-                    .padding(.horizontal, 10).padding(.vertical, 7)
-                    .background(RoundedRectangle(cornerRadius: 7).fill(Theme.surfaceHigh))
-                    .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Theme.border))
+            HStack(spacing: 8) {
+                MediaField(prompt: t("A video link, or the text it was shared in"), text: $pasted, symbol: "link",
+                           limit: 2000, url: true, submit: add)
                     .accessibilityLabel(t("Video link"))
-                    .onSubmit(add)
-                    #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled()
-                    .keyboardType(.URL)
-                    #endif
-                    .onChange(of: pasted) {
-                        // As long as the web's field allows.
-                        if pasted.utf16.count > 2000 { pasted = WatchWords.cut(pasted, 2000) }
+                ZStack {
+                    if busy {
+                        MediaSpinner(size: 16).transition(Theme.arrive)
+                    } else {
+                        MediaIconButton(symbol: "plus", label: t("Add a video"), size: 34,
+                                        prominent: !pasted.trimmingCharacters(in: .whitespaces).isEmpty, action: add)
+                            .transition(Theme.arrive)
                     }
-                Button(action: add) {
-                    ZStack {
-                        if busy {
-                            ProgressView().controlSize(.small).transition(Theme.arrive)
-                        } else {
-                            Image(systemName: "plus").font(.system(size: 12, weight: .bold)).transition(Theme.arrive)
-                        }
-                    }
-                    .foregroundStyle(Theme.foreground)
-                    .frame(width: 30, height: 30)
-                    .background(RoundedRectangle(cornerRadius: 7).fill(Theme.surfaceHigh))
-                    .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Theme.border))
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(t("Add a video"))
-                .help(t("Add a video"))
+                .frame(width: 34, height: 34)
             }
             .disabled(!canAdd)
             .opacity(canAdd ? 1 : 0.5)
-            .padding(8)
+            .padding(12)
 
             if let notice = engine.notice {
-                Text(notice)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.danger)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 10).padding(.bottom, 8)
+                MediaProblem(text: notice)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 10)
                     .onTapGesture { engine.dismissNotice() }
                     .transition(Theme.arrive)
             }
-            Divider().overlay(Theme.border)
+            MediaRule()
 
             ScrollView {
-                LazyVStack(spacing: 2) {
+                LazyVStack(alignment: .leading, spacing: 2) {
                     if let show, let now = show.now {
                         VideoRow(engine: engine, video: now, playing: true, remove: nil)
                             .transition(Theme.arrive)
+                        if !show.queue.isEmpty {
+                            MenuHeading(title: t("Queue")).padding(.top, 6)
+                        }
                         ForEach(show.queue, id: \.key) { video in
                             VideoRow(engine: engine, video: video, playing: false) { engine.remove(video.key) }
                                 .transition(Theme.arrive)
                         }
                     } else {
-                        VStack(spacing: 8) {
-                            Image(systemName: "film").font(.system(size: 20))
-                            Text(canAdd
-                                 ? t("Paste a link and everybody watches it together, in step.")
-                                 : t("When somebody signed in starts a video, it shows up here."))
-                                .font(.system(size: 12))
-                                .multilineTextAlignment(.center)
-                        }
-                        .foregroundStyle(Theme.muted)
-                        .padding(.horizontal, 16).padding(.vertical, 32)
-                        .transition(Theme.arrive)
+                        MediaEmpty(symbol: "film",
+                                   text: canAdd
+                                       ? t("Paste a link and everybody watches it together, in step.")
+                                       : t("When somebody signed in starts a video, it shows up here."))
+                            .transition(Theme.arrive)
                     }
                 }
-                .padding(6)
+                .padding(8)
             }
+            .scrollIndicators(.hidden)
             .frame(maxHeight: .infinity)
 
             if engine.mine {
-                Divider().overlay(Theme.border)
+                MediaRule()
                 HStack {
                     Spacer()
-                    Button(t("Stop watching together")) { engine.stop() }
-                        .buttonStyle(.plain)
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.muted)
+                    Button { engine.stop() } label: { Label(t("Stop watching together"), systemImage: "stop.circle") }
+                        .buttonStyle(.media(quiet: true))
                 }
                 .padding(10)
                 .transition(Theme.slideUp)
@@ -198,6 +147,7 @@ private struct QueueView: View {
         .animation(Theme.settle, value: show?.now?.key)
         .animation(Theme.settle, value: show?.queue.map(\.key))
         .animation(Theme.settle, value: busy)
+        .animation(Theme.settle, value: pasted.isEmpty)
     }
 
     private func add() {
@@ -222,56 +172,46 @@ private struct VideoRow: View {
     var body: some View {
         let info = engine.info(video.ticket)
         let known = info?.video
-        HStack(spacing: 10) {
-            Cover(url: known?.cover ?? "")
-                .frame(width: 64, height: 36)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-            VStack(alignment: .leading, spacing: 2) {
-                Text(known?.title ?? (info == .unavailable
-                                      ? t("That video cannot be played here.")
-                                      : info == .failed ? t("The video could not be read. Try again.") : "…"))
-                    .font(.system(size: 12.5))
-                    .foregroundStyle(Theme.foreground)
-                    .lineLimit(1)
-                Text([playing ? t("Playing") : nil,
-                      t("Added by {name}", ["name": video.by]),
-                      video.duration > 0 ? musicClock(seconds: video.duration) : nil].compactMap { $0 }.joined(separator: " · "))
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(Theme.muted)
-                    .lineLimit(1)
-            }
-            Spacer(minLength: 0)
-            if let remove {
-                Button(action: remove) {
-                    Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.muted)
-                        .frame(width: 24, height: 24)
-                        .contentShape(Rectangle())
+        MediaRow(lit: playing) { hovering in
+            HStack(spacing: 10) {
+                ZStack(alignment: .bottomLeading) {
+                    MediaArtwork(url: known?.cover ?? "", symbol: "film", corner: 6)
+                    if playing {
+                        Image(systemName: "play.fill")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(Theme.tallyForeground)
+                            .frame(width: 16, height: 16)
+                            .background(Circle().fill(Theme.tally))
+                            .padding(4)
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(t("Take {title} off", ["title": known?.title ?? ""]))
-                .help(t("Take {title} off", ["title": known?.title ?? ""]))
-            }
-        }
-        .padding(.horizontal, 8).padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 7).fill(playing ? Theme.surfaceHigh.opacity(0.6) : .clear))
-    }
-}
-
-/// A poster: one relayed by the deployment by its ticket, which anybody in
-/// the call may fetch, or one on the open web.
-private struct Cover: View {
-    let url: String
-
-    var body: some View {
-        ZStack {
-            Theme.surfaceHigh
-            if let address = URL(string: url), !url.isEmpty {
-                AsyncImage(url: address) { image in
-                    image.resizable().aspectRatio(contentMode: .fill).transition(Theme.arrive)
-                } placeholder: {
-                    Color.clear
+                .frame(width: 72, height: 40)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(known?.title ?? (info == .unavailable
+                                          ? t("That video cannot be played here.")
+                                          : info == .failed ? t("The video could not be read. Try again.") : "…"))
+                        .font(.system(size: 12.5, weight: .medium))
+                        .foregroundStyle(Theme.foreground)
+                        .lineLimit(1)
+                    Text([playing ? t("Playing") : nil,
+                          t("Added by {name}", ["name": video.by]),
+                          video.duration > 0 ? musicClock(seconds: video.duration) : nil].compactMap { $0 }.joined(separator: " · "))
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(playing ? Theme.tally : Theme.muted)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+                if let remove, hovering || touchScreen {
+                    MediaIconButton(symbol: "xmark", label: t("Take {title} off", ["title": known?.title ?? ""]), size: 24, action: remove)
+                        .transition(.opacity.animation(Theme.settle))
                 }
             }
         }
     }
 }
+
+#if os(iOS)
+private let touchScreen = true
+#else
+private let touchScreen = false
+#endif

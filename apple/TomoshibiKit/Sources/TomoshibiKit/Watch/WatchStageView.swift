@@ -44,7 +44,11 @@ struct WatchStageView: View {
                 }
             }
             .animation(Theme.settle, value: engine.notice)
+            // Whether a refusal said now would be seen here; otherwise it is
+            // a call toast (WatchEngine.say).
+            .onChange(of: compact, initial: true) { engine.stageShowing = !compact }
         }
+        .onDisappear { engine.stageShowing = false }
     }
 
     @ViewBuilder
@@ -70,7 +74,7 @@ struct WatchStageView: View {
                             .foregroundStyle(.white.opacity(0.7))
                             .multilineTextAlignment(.center)
                         if !compact {
-                            Button(t("Next video")) { engine.skip(video.key) }
+                            Button { engine.skip(video.key) } label: { Label(t("Next video"), systemImage: "forward.end.fill") }
                                 .buttonStyle(StageButtonStyle())
                         }
                     }
@@ -88,8 +92,8 @@ struct WatchStageView: View {
                     Text(t("Nothing is playing. Paste a video link to watch together."))
                         .font(.system(size: 13))
                         .multilineTextAlignment(.center)
-                    Button(t("Add a video"), action: openPanel)
-                        .buttonStyle(StageButtonStyle())
+                    Button(action: openPanel) { Label(t("Add a video"), systemImage: "plus") }
+                        .buttonStyle(StageButtonStyle(prominent: true))
                 }
             }
             .foregroundStyle(Theme.muted)
@@ -116,7 +120,7 @@ struct WatchStageView: View {
 
 private struct Spinner: View {
     var body: some View {
-        ProgressView().controlSize(.regular).tint(.white.opacity(0.7))
+        MediaSpinner(size: 26, tint: .white.opacity(0.85))
     }
 }
 
@@ -153,8 +157,8 @@ private struct PlayerStage: View {
                     VStack(spacing: 12) {
                         Image(systemName: "icloud.slash").font(.system(size: 22)).foregroundStyle(.white.opacity(0.7))
                         Text(t("The video stopped coming through.")).font(.system(size: 13)).foregroundStyle(.white)
-                        Button(t("Try again")) { player.tryAgain() }
-                            .buttonStyle(StageButtonStyle())
+                        Button { player.tryAgain() } label: { Label(t("Try again"), systemImage: "arrow.clockwise") }
+                            .buttonStyle(StageButtonStyle(prominent: true))
                     }
                     .padding(16)
                 }
@@ -167,10 +171,10 @@ private struct PlayerStage: View {
                 }
                 if player.tapYoutube, player.unreachable == nil {
                     Label(t("Tap the video to join"), systemImage: "play.fill")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(Capsule().fill(.black.opacity(0.7)))
+                        .padding(.horizontal, 16).padding(.vertical, 9)
+                        .glassSurface(Capsule())
                         .allowsHitTesting(false)
                         .transition(Theme.arrive)
                 }
@@ -221,8 +225,13 @@ private struct Unreachable: View {
         ZStack {
             Color.black.opacity(0.85)
             VStack(spacing: 8) {
-                Image(systemName: "icloud.slash").font(.system(size: 22)).foregroundStyle(.white.opacity(0.7))
-                Text(t("This video does not reach you")).font(.system(size: 13)).foregroundStyle(.white)
+                Image(systemName: lost == .format ? "film.stack" : "icloud.slash")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.75))
+                    .frame(width: 48, height: 48)
+                    .background(Circle().fill(.white.opacity(0.08)))
+                    .padding(.bottom, 4)
+                Text(t("This video does not reach you")).font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
                 // Not "everybody else goes on watching" for what the site
                 // refused: what it refuses here, it refuses everybody.
                 Text(sentence(site))
@@ -230,10 +239,11 @@ private struct Unreachable: View {
                     .foregroundStyle(.white.opacity(0.6))
                     .multilineTextAlignment(.center)
                 if let url = URL(string: link), ["http", "https"].contains(url.scheme?.lowercased() ?? "") {
-                    Link(t("Open the link"), destination: url)
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.white.opacity(0.8))
-                        .underline()
+                    Link(destination: url) {
+                        Label(t("Open the link"), systemImage: "arrow.up.right.square")
+                    }
+                    .buttonStyle(StageButtonStyle())
+                    .padding(.top, 4)
                 }
             }
             .frame(maxWidth: 288)
@@ -243,6 +253,10 @@ private struct Unreachable: View {
 
     private func sentence(_ site: String) -> String {
         switch lost {
+        // A kind of video the player here cannot open, from where it is and
+        // through the relay alike: the browsers in the call can, so the show
+        // goes on for them.
+        case .format: t("This app cannot play this kind of video. Everybody else goes on watching.")
         case .refused where !site.isEmpty: t("It plays only on {site} itself.", ["site": site])
         case .failed where !site.isEmpty: t("{site} would not play it here.", ["site": site])
         default:
@@ -280,18 +294,17 @@ private struct Controls: View {
             .foregroundStyle(.white)
 
             if length > 0, !video.live {
-                Slider(
+                MediaSlider(
                     value: Binding(get: { min(shown, length) }, set: { scrubbing = $0 }),
-                    in: 0...length,
-                    onEditingChanged: { editing in
+                    range: 0...length,
+                    tint: Theme.tally,
+                    editing: { editing in
                         if !editing, let to = scrubbing {
                             engine.seek(to: to)
                             scrubbing = nil
                         }
                     }
                 )
-                .tint(.white)
-                .controlSize(.small)
                 .accessibilityLabel(t("Position in the video"))
             }
 
@@ -315,13 +328,11 @@ private struct Controls: View {
                              label: player.muted ? t("Unmute the video") : t("Mute the video")) {
                     player.muted.toggle()
                 }
-                Slider(value: Binding(get: { player.muted ? 0 : player.volume }, set: { level in
+                MediaSlider(value: Binding(get: { player.muted ? 0 : player.volume }, set: { level in
                     player.muted = false
                     player.volume = level
-                }), in: 0...1)
-                .tint(.white)
-                .controlSize(.mini)
-                .frame(width: 80)
+                }), step: 0.05, tint: .white)
+                .frame(width: 84)
                 .accessibilityLabel(t("Video volume"))
                 if player.pictureInPicturePossible || player.pictureInPictureActive {
                     StageControl(symbol: player.pictureInPictureActive ? "pip.exit" : "pip.enter",
@@ -346,31 +357,39 @@ private struct StageControl: View {
     let label: String
     var lit = false
     let action: () -> Void
+    @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(lit ? Theme.tallyForeground : .white)
-                .frame(width: 32, height: 32)
-                .background(Circle().fill(lit ? Theme.tally : .white.opacity(0.001)))
+                .contentTransition(.symbolEffect(.replace))
+                .frame(width: 34, height: 34)
+                .background(Circle().fill(lit ? Theme.tally : .white.opacity(hovering ? 0.16 : 0.001)))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
         .accessibilityLabel(label)
         .help(label)
     }
 }
 
-/// The few buttons said over the video: light on black, as the web's
-/// secondary buttons are on its stage.
+/// The few buttons said over the video: glass capsules, the chosen colour
+/// for the one that is the way on.
 struct StageButtonStyle: ButtonStyle {
+    var prominent = false
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 12.5, weight: .medium))
-            .foregroundStyle(Theme.foreground)
-            .padding(.horizontal, 12).padding(.vertical, 6)
-            .background(RoundedRectangle(cornerRadius: 7).fill(Theme.surfaceHigh.opacity(configuration.isPressed ? 0.7 : 1)))
-            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Theme.border))
+            .font(.system(size: 12.5, weight: .semibold))
+            .foregroundStyle(prominent ? Theme.tallyForeground : .white)
+            .padding(.horizontal, 14)
+            .frame(minHeight: 32)
+            .glassSurface(Capsule(), tint: prominent ? Theme.tally : nil, interactive: true)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .animation(Theme.settle, value: configuration.isPressed)
     }
 }

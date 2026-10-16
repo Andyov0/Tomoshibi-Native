@@ -28,80 +28,41 @@ struct MediaBrowserView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 if servers.count > 1 {
-                    HStack(spacing: 4) {
-                        ForEach(servers, id: \.key) { one in
-                            Button {
-                                server = one.key
-                                trail = []
-                                searched = nil
-                            } label: {
-                                Text(one.name)
-                                    .font(.system(size: 12))
-                                    .lineLimit(1)
-                                    .foregroundStyle(one.key == server ? Theme.foreground : Theme.muted)
-                                    .frame(maxWidth: .infinity)
-                                    .padding(.vertical, 5)
-                                    .background(RoundedRectangle(cornerRadius: 6).fill(one.key == server ? Theme.tally.opacity(0.15) : .clear))
-                                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(one.key == server ? Theme.tally.opacity(0.5) : Theme.border))
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityAddTraits(one.key == server ? .isSelected : [])
-                        }
-                    }
+                    SegmentedChoice(options: servers.map { ($0.key, $0.name) },
+                                    selection: Binding(get: { server }, set: { chosen in
+                                        server = chosen
+                                        trail = []
+                                        searched = nil
+                                    }), height: 28)
                 }
-                HStack(spacing: 6) {
-                    TextField(t("Search films and series"), text: $words)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 13))
-                        .foregroundStyle(Theme.foreground)
-                        .padding(.horizontal, 10).padding(.vertical, 7)
-                        .background(RoundedRectangle(cornerRadius: 7).fill(Theme.surfaceHigh))
-                        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Theme.border))
+                HStack(spacing: 8) {
+                    MediaField(prompt: t("Search films and series"), text: $words, symbol: "magnifyingglass", limit: 100, submit: search)
                         .accessibilityLabel(t("Search films and series"))
-                        .onSubmit(search)
-                        .onChange(of: words) { if words.utf16.count > 100 { words = WatchWords.cut(words, 100) } }
-                    Button(action: search) {
-                        Image(systemName: "magnifyingglass").font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(Theme.foreground)
-                            .frame(width: 30, height: 30)
-                            .background(RoundedRectangle(cornerRadius: 7).fill(Theme.surfaceHigh))
-                            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Theme.border))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(t("Search"))
-                    .help(t("Search"))
+                    MediaIconButton(symbol: "arrow.right", label: t("Search"), size: 34,
+                                    prominent: !words.trimmingCharacters(in: .whitespaces).isEmpty, action: search)
                 }
                 if !trail.isEmpty || searched != nil {
                     Button(action: back) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "chevron.left").font(.system(size: 11, weight: .semibold))
-                            Text(searched.map { t("Results for {words}", ["words": $0]) } ?? trail.last?.name ?? "")
-                                .lineLimit(1)
-                        }
-                        .font(.system(size: 12))
-                        .foregroundStyle(Theme.muted)
+                        Label(searched.map { t("Results for {words}", ["words": $0]) } ?? trail.last?.name ?? "", systemImage: "chevron.left")
+                            .lineLimit(1)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.media(quiet: true, height: 26))
                     .transition(Theme.arrive)
                 }
             }
-            .padding(8)
-            Divider().overlay(Theme.border)
+            .padding(12)
+            MediaRule()
 
-            Group {
+            ZStack(alignment: .top) {
                 if loading {
-                    ProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(.vertical, 32)
+                    MediaSpinner(size: 20).padding(.vertical, 40).transition(Theme.arrive)
                 } else if failed {
-                    Text(t("The media server did not answer. Try again."))
-                        .font(.system(size: 12)).foregroundStyle(Theme.muted)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 12).padding(.vertical, 32)
+                    MediaEmpty(symbol: "externaldrive.badge.exclamationmark", text: t("The media server did not answer. Try again."))
+                        .transition(Theme.arrive)
                 } else if let items, items.isEmpty {
-                    Text(t("Nothing found."))
-                        .font(.system(size: 12)).foregroundStyle(Theme.muted)
-                        .padding(.vertical, 32)
+                    MediaEmpty(symbol: "magnifyingglass", text: t("Nothing found.")).transition(Theme.arrive)
                 } else {
                     ScrollView {
                         LazyVStack(spacing: 2) {
@@ -109,11 +70,12 @@ struct MediaBrowserView: View {
                                 ItemRow(engine: engine, item: item, adding: adding == item.id) { open(item) }
                             }
                         }
-                        .padding(6)
+                        .padding(8)
                     }
+                    .scrollIndicators(.hidden)
+                    .transition(.opacity.animation(Theme.settle))
                 }
             }
-            .transition(Theme.arrive)
             .frame(maxHeight: .infinity, alignment: .top)
         }
         .animation(Theme.settle, value: loading)
@@ -184,31 +146,36 @@ private struct ItemRow: View {
 
     var body: some View {
         Button(action: open) {
-            HStack(spacing: 10) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 4).fill(Theme.surfaceHigh)
-                    if item.image.isEmpty {
-                        Image(systemName: item.folder ? "folder" : "play.fill")
-                            .font(.system(size: 12)).foregroundStyle(Theme.muted)
-                    } else {
-                        Poster(engine: engine, url: item.image)
+            MediaRow { hovering in
+                HStack(spacing: 10) {
+                    ZStack {
+                        MediaArtwork(url: "", symbol: item.folder ? "folder.fill" : "play.fill", corner: 6)
+                        if !item.image.isEmpty {
+                            Poster(engine: engine, url: item.image)
+                        }
                     }
-                }
-                .frame(width: 32, height: 48)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.name).font(.system(size: 13)).foregroundStyle(Theme.foreground).lineLimit(1)
-                    Text([item.year > 0 ? String(item.year) : nil, item.duration > 0 ? musicClock(seconds: item.duration) : nil]
-                        .compactMap { $0 }.joined(separator: " · "))
-                        .font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                if adding {
-                    ProgressView().controlSize(.small).transition(Theme.arrive)
+                    .frame(width: 34, height: 50)
+                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(item.name).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.foreground).lineLimit(1)
+                        Text([item.year > 0 ? String(item.year) : nil, item.duration > 0 ? musicClock(seconds: item.duration) : nil]
+                            .compactMap { $0 }.joined(separator: " · "))
+                            .font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    ZStack {
+                        if adding {
+                            MediaSpinner(size: 14).transition(Theme.arrive)
+                        } else if hovering, item.playable || item.folder {
+                            Image(systemName: item.folder ? "chevron.right" : "play.circle.fill")
+                                .font(.system(size: item.folder ? 12 : 17, weight: .semibold))
+                                .foregroundStyle(item.folder ? Theme.muted : Theme.tally)
+                                .transition(Theme.arrive)
+                        }
+                    }
+                    .animation(Theme.settle, value: hovering)
                 }
             }
-            .padding(.horizontal, 8).padding(.vertical, 6)
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .disabled(!item.playable && !item.folder)

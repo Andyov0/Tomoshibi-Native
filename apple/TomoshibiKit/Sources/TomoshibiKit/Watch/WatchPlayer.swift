@@ -57,8 +57,12 @@ final class WatchPlayer {
     /// carries over (WatchScreen.tsx `VOLUME_KEY`).
     static let volumeKey = "meet-live.watch-volume"
 
-    /// Why a video does not play for this viewer, where nothing is relayed.
-    enum Lost: Equatable { case network, refused, failed }
+    /// Why a video does not play for this viewer: their connection does not
+    /// reach it, the site refused it (`refused`, `failed`), or it is a kind of
+    /// video this app's player cannot open at all (`format`: WebM, Matroska,
+    /// Ogg, a codec the system has no decoder for), which no connection and
+    /// no relay cures.
+    enum Lost: Equatable { case network, refused, failed, format }
     /// Where a relay-only video that had been playing stands, once its relay
     /// stopped.
     enum Halted: Equatable { case resuming, stopped }
@@ -98,6 +102,11 @@ final class WatchPlayer {
     /// For a video that starts on the relay: whether the copy from where it is
     /// has been tried.
     @ObservationIgnored private var triedDirect = false
+    /// Whether the relay has been tried, for a video that starts where it is.
+    @ObservationIgnored private var triedRelay = false
+    /// Some place it was tried from answered with a file the player cannot
+    /// open, as opposed to not answering: what is said once neither plays.
+    @ObservationIgnored private var unopenable = false
     @ObservationIgnored private var resumed = 0
     /// A resume is being asked about; a second failure meanwhile is the same.
     @ObservationIgnored private var askingAgain = false
@@ -151,6 +160,7 @@ final class WatchPlayer {
         pictureInPicturePossible = false
         pictureInPictureActive = false
         gaveUp = false
+        if relayed { triedRelay = true }
         started = watchClock()
         keeper = WatchKeeper()
         if playsAsYoutube, let id = info.play.id {
@@ -183,15 +193,30 @@ final class WatchPlayer {
         }
     }
 
-    /// A file or playlist that failed: given the relay once, and only while
-    /// it has never played.
-    private func failed(_ why: String) {
+    /// A file or playlist that failed: given the other place once, and only
+    /// while it has never played; said once neither plays.
+    ///
+    /// The web stops at the second failure and goes on showing its spinner,
+    /// which in a browser is the rare case: a browser opens WebM, Matroska
+    /// with VP9 and Ogg. AVPlayer opens none of them, and a video like that
+    /// failed where it was, failed again on the relay, and then spun for ever
+    /// with nothing said. So the second failure is the end: "this video does
+    /// not reach you", with the sentence for why and the link to open it
+    /// elsewhere, as the web says for a video nothing relays.
+    private func failed(_ why: String, format: Bool = false) {
         guard !played else { return }
+        if format { unopenable = true }
+        let lost: Lost = unopenable ? .format : .network
         if !relayed {
             if gaveUp { return }
-            gaveUp = info.proxy == nil
             WatchDebug.log("direct failed \(why)")
-            giveUp()
+            if info.proxy != nil, !triedRelay {
+                relayed = true
+                build()
+            } else {
+                gaveUp = true
+                unreachable = lost
+            }
         } else if info.relay, !relayOnly, !triedDirect {
             // The relay was the first choice and failed: the lower quality
             // from where the video is, rather than nothing.
@@ -199,6 +224,10 @@ final class WatchPlayer {
             triedDirect = true
             relayed = false
             build()
+        } else {
+            WatchDebug.log("relay failed \(why), nowhere left to play it from")
+            gaveUp = true
+            unreachable = lost
         }
     }
 
@@ -233,12 +262,12 @@ final class WatchPlayer {
     /// AVPlayer could not play it. Before it has played, a source that does
     /// not work; after, for a video that plays only through the relay, the
     /// relay stopped, and it is asked about and started again.
-    func backendFailed(_ from: WatchBackend, _ why: String) {
+    func backendFailed(_ from: WatchBackend, _ why: String, format: Bool) {
         guard from === backend else { return }
         if played, relayOnly, let av = from as? AVBackend {
             Task { await resume(av) }
         } else {
-            failed(why)
+            failed(why, format: format)
         }
     }
 
@@ -311,7 +340,7 @@ final class WatchPlayer {
             return
         }
         // A refused player is not asked again.
-        let refusedForGood = unreachable == .refused || unreachable == .failed
+        let refusedForGood = unreachable == .refused || unreachable == .failed || unreachable == .format
         let reading = WatchPlayerReading(
             ready: backend.ready && !refusedForGood, time: backend.time, playing: backend.playing,
             rate: backend.rate, nudges: backend.nudges, youtube: backend.youtube)
