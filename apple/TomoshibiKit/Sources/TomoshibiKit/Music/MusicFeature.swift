@@ -89,17 +89,23 @@ final class SongDesk {
     /// says every one of them (notices.ts `actionFailed`). Set by the panel.
     var panelOpen = false
 
+    // These three are kept between calls under the web's names, and in a
+    // rehearsal not at all (`Rehearsal.choices`): a test's `monitor50` and
+    // `noduck` steps were written into the owner's own defaults, and the
+    // owner's next real call played the music at half volume in their own
+    // speakers.
+
     /// The library's quality, this participant's own (preferences.ts
     /// `meet-live.music-quality`): lossless unless the highest was chosen.
     var quality: MusicQuality {
-        didSet { UserDefaults.standard.set(quality == .best ? "best" : nil, forKey: Self.qualityKey) }
+        didSet { Rehearsal.choices?.set(quality == .best ? "best" : nil, forKey: Self.qualityKey) }
     }
 
     /// Whether the music is turned down while anybody talks (duck.ts
     /// `meet-live.music-duck`, on unless turned off).
     var ducks: Bool {
         didSet {
-            UserDefaults.standard.set(ducks ? nil : "off", forKey: Self.duckKey)
+            Rehearsal.choices?.set(ducks ? nil : "off", forKey: Self.duckKey)
             duck.enabled = ducks
             applyDuck(Self.clock())
         }
@@ -110,7 +116,7 @@ final class SongDesk {
     /// there: what is sent is the decoded file whatever this says.
     var monitorVolume: Float {
         didSet {
-            UserDefaults.standard.set(monitorVolume == 1 ? nil : String(monitorVolume), forKey: Self.monitorKey)
+            Rehearsal.choices?.set(monitorVolume == 1 ? nil : String(monitorVolume), forKey: Self.monitorKey)
             call.audio.setVolume(sid: MusicDuck.local, monitorVolume)
         }
     }
@@ -172,7 +178,7 @@ final class SongDesk {
     /// would carry the file's samples across the relay in the clear. Any
     /// participant here can send it, which in the web only Chromium can.
     var losslessOffered: Bool {
-        soundLosslessOffered(wanted: UserDefaults.standard.string(forKey: Self.losslessKey) != "off",
+        soundLosslessOffered(wanted: Rehearsal.choices?.string(forKey: Self.losslessKey) != "off",
                              encrypted: call.sealed, able: true)
     }
 
@@ -188,15 +194,15 @@ final class SongDesk {
     private init(call: CallModel) {
         self.call = call
         desk = JukeboxDesk(identity: call.localIdentity, name: call.localName, sealed: call.sealed)
-        let defaults = UserDefaults.standard
-        let ducks = defaults.string(forKey: Self.duckKey) != "off"
+        let defaults = Rehearsal.choices
+        let ducks = defaults?.string(forKey: Self.duckKey) != "off"
         self.ducks = ducks
         duck = MusicDuck(enabled: ducks)
-        quality = defaults.string(forKey: Self.qualityKey) == "best" ? .best : .lossless
+        quality = defaults?.string(forKey: Self.qualityKey) == "best" ? .best : .lossless
         // A volume nothing was kept for is full, and so is one that is not a
         // volume: sound.ts once read "nothing kept" as nought and played the
         // music to everybody but its own speakers.
-        if let kept = defaults.string(forKey: Self.monitorKey).flatMap(Float.init), kept >= 0, kept <= 1 {
+        if let kept = defaults?.string(forKey: Self.monitorKey).flatMap(Float.init), kept >= 0, kept <= 1 {
             monitorVolume = kept
         } else {
             monitorVolume = 1

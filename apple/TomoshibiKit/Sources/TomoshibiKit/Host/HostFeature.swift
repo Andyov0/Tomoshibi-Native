@@ -441,17 +441,22 @@ public final class HostFeature {
 /// per call, as the web's is one per page: a call that is moved, or comes
 /// back after a drop, is joined again as the same identity, and its settings
 /// should be waiting for it.
+///
+/// Nowhere in a rehearsal (`Rehearsal.choices`): a test's `mute` or
+/// `volume30` is written against a proven identity like anybody's, and was
+/// saved into the owner's own book, where it would have silenced that person
+/// in the owner's next real call.
 @MainActor
 @Observable
 final class Hearing {
-    static let shared = Hearing()
+    static let shared = Hearing(defaults: Rehearsal.choices)
 
     private var book: HearingBook
-    private let defaults: UserDefaults
+    private let defaults: UserDefaults?
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults?) {
         self.defaults = defaults
-        book = HearingBook(stored: defaults.string(forKey: HearingBook.storageKey))
+        book = HearingBook(stored: defaults?.string(forKey: HearingBook.storageKey))
     }
 
     /// Filed under the signature for a proven identity, which is the same on
@@ -469,7 +474,7 @@ final class Hearing {
     }
 
     func set(_ identity: String, _ sound: Sound, _ setting: HearingSetting) {
-        if book.set(Self.filing(identity), sound, setting) {
+        if book.set(Self.filing(identity), sound, setting), let defaults {
             if let stored = book.stored {
                 defaults.set(stored, forKey: HearingBook.storageKey)
             } else {
