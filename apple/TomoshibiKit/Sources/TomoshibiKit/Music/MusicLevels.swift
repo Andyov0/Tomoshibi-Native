@@ -43,7 +43,10 @@ final class SoundLevel: @unchecked Sendable {
         let now = DispatchTime.now().uptimeNanoseconds
         return lock.withLockUnchecked {
             guard written > 0 else { return 0 }
-            let since = Double(now &- arrived) / 1e9
+            // Saturating: a delivery between the clock being read above and
+            // the lock being taken arrived after `now`, and wrapped round it
+            // was eighteen billion seconds ago rather than none.
+            let since = Double(now > arrived ? now - arrived : 0) / 1e9
             let into = min(chunk, Int(since * rate))
             let end = written - chunk + into
             let start = max(0, end - Self.window, written - ring.count)

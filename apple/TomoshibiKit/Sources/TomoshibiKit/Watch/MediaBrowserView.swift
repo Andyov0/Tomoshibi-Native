@@ -90,7 +90,7 @@ struct MediaBrowserView: View {
         guard !server.isEmpty, searched == nil else { return }
         loading = true
         failed = false
-        let found = try? await engine.call.deployment.browseMedia(server: server, parent: trail.last?.id)
+        let found = try? await engine.deployment.browseMedia(server: server, parent: trail.last?.id)
         guard !Task.isCancelled else { return }
         items = found
         failed = found == nil
@@ -106,7 +106,7 @@ struct MediaBrowserView: View {
         loading = true
         failed = false
         Task {
-            let found = try? await engine.call.deployment.searchMedia(server: server, words: asked)
+            let found = try? await engine.deployment.searchMedia(server: server, words: asked)
             items = found
             failed = found == nil
             searched = asked
@@ -204,7 +204,7 @@ private struct Poster: View {
         .task(id: url) {
             guard let address = URL(string: url) else { return }
             var request = URLRequest(url: address)
-            if let cookie = engine.call.deployment.cookieHeader() { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
+            if let cookie = engine.deployment.cookieHeader() { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
             request.httpShouldHandleCookies = false
             guard let (data, response) = try? await URLSession.shared.data(for: request),
                   (response as? HTTPURLResponse)?.statusCode == 200 else { return }

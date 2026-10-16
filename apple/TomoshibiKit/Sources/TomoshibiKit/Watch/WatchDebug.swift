@@ -13,7 +13,11 @@ import TomoshibiCore
 ///   signed in can read links and hold a show.
 /// - `TOMOSHIBI_DEBUG_WATCH_CONTROL=<file>` is read four times a second for
 ///   lines appended to it, each one press: `add <link>`, `play`, `pause`,
-///   `seek <seconds>`, `skip`, `remove <index in the queue>`, `stop`, `pip`.
+///   `seek <seconds>`, `skip`, `remove <index in the queue>`, `stop`, `pip`;
+///   and in a debug build driven by a test, `volume <0..1>` as the volume
+///   slider sets it, and on the Mac `voiceover up|down`, which steps the
+///   scrubber under the video through the window's own accessibility, as
+///   VoiceOver's adjust does.
 /// - `TOMOSHIBI_DEBUG_WATCH_LOG=<file>` gets a line at every keep step: the
 ///   wall clock in milliseconds, where the player is, whether it plays, its
 ///   rate, and where the show is. The wall clock because the browser's side
@@ -33,6 +37,12 @@ import TomoshibiCore
 ///   video a relay, the address with the link's path after it, standing in
 ///   for the deployment's own. What crosses the call is unchanged: the show
 ///   carries the stand-in's ticket as it would the gateway's.
+///
+/// In a debug build driven by a test (`Rehearsal.running`), two more:
+/// `TOMOSHIBI_DEBUG_WATCH_KNOWN=<link>|<link>` has the stand-in know those
+/// links' tickets from the start, as a viewer's deployment knows a ticket
+/// somebody else read, and `TOMOSHIBI_DEBUG_WATCH_SLOW=<seconds>` holds every
+/// question about a ticket that long, as a slow gateway would.
 ///
 /// `TOMOSHIBI_MUTE`, which the interop scripts always set, also silences the
 /// shared video: the call's own engine is silenced by it (CallAudio), and a
@@ -56,6 +66,7 @@ enum WatchDebug {
     /// word of 16 to 64 letters, digits, dashes and underscores (show.rs
     /// `is_ticket`), so the link itself cannot be one.
     @MainActor private static var tickets: [String: String] = [:]
+    @MainActor private static var loadedKnown = false
 
     /// What the stand-in makes of a pasted link.
     @MainActor static func resolve(_ text: String) -> ResolvedLink {
@@ -69,8 +80,25 @@ enum WatchDebug {
 
     /// What a stand-in ticket plays, or nil for a ticket that is not one.
     @MainActor static func info(_ ticket: String) -> WatchInfo? {
-        guard links, let link = tickets[ticket], let url = URL(string: link) else { return nil }
+        guard links else { return nil }
+        #if DEBUG
+        if Rehearsal.running, !loadedKnown, let known = environment["TOMOSHIBI_DEBUG_WATCH_KNOWN"] {
+            loadedKnown = true
+            for link in known.split(separator: "|").map(String.init) { _ = resolve(link) }
+        }
+        #endif
+        guard let link = tickets[ticket], let url = URL(string: link) else { return nil }
         return .known(video(link, url))
+    }
+
+    /// How long a question about a ticket is held (`TOMOSHIBI_DEBUG_WATCH_SLOW`).
+    static var slow: Duration? {
+        #if DEBUG
+        guard Rehearsal.running, let seconds = environment["TOMOSHIBI_DEBUG_WATCH_SLOW"].flatMap(Double.init) else { return nil }
+        return .milliseconds(Int(seconds * 1000))
+        #else
+        return nil
+        #endif
     }
 
     @MainActor private static func video(_ link: String, _ url: URL) -> ResolvedVideo {
@@ -81,7 +109,16 @@ enum WatchDebug {
         tickets[ticket] = link
         let hls = url.pathExtension.lowercased() == "m3u8"
         let proxy = relay.map { ResolvedProxy(kind: hls ? .hls : .file, url: $0 + url.path) }
-        return ResolvedVideo(ticket: ticket, title: url.deletingPathExtension().lastPathComponent, duration: 0,
+        // How long the video is, where the link says (`?duration=6`), as a
+        // gateway's answer says: only a video with a length is one the show
+        // moves on from by itself once it has run its course, and a test of
+        // that had no way to give one.
+        var duration = 0.0
+        #if DEBUG
+        if Rehearsal.running { duration = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+            .first { $0.name == "duration" }?.value.flatMap(Double.init) ?? 0 }
+        #endif
+        return ResolvedVideo(ticket: ticket, title: url.deletingPathExtension().lastPathComponent, duration: duration,
                              cover: "", link: link, live: false, relay: false,
                              play: ResolvedPlay(kind: hls ? .hls : .file, url: link, id: nil), proxy: proxy, grantor: nil)
     }

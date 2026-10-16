@@ -69,7 +69,13 @@ final class WatchPlayer {
 
     let video: WatchVideo
     let info: ResolvedVideo
-    @ObservationIgnored unowned let engine: WatchEngine
+    /// Weak: the stage and a resume's task can hold a player past the call
+    /// whose engine made it, and an unowned reference to an engine already
+    /// let go is a crash rather than a press that does nothing.
+    @ObservationIgnored private weak var engine: WatchEngine?
+    /// The deployment's address, for YouTube's player, read once while the
+    /// call is certainly there.
+    @ObservationIgnored private let base: String
 
     /// Playing the deployment's relayed copy rather than the original.
     private(set) var relayed: Bool
@@ -110,19 +116,19 @@ final class WatchPlayer {
     @ObservationIgnored private var resumed = 0
     /// A resume is being asked about; a second failure meanwhile is the same.
     @ObservationIgnored private var askingAgain = false
-    /// When this source began, for the stall.
-    @ObservationIgnored private var started: UInt64 = 0
-    @ObservationIgnored private var lastStallCheck: UInt64 = 0
+    /// When this source began, and when the stall was last looked at.
+    @ObservationIgnored private var stall = WatchStall(started: 0, stallMs: WatchPlayer.stallMs)
     /// Said once, where there is no relay: a stall goes on being one.
     @ObservationIgnored private var gaveUp = false
     @ObservationIgnored private var keeper = WatchKeeper()
     @ObservationIgnored private var playingShow = false
 
-    init(video: WatchVideo, info: ResolvedVideo, engine: WatchEngine, mainland: Bool) {
+    init(video: WatchVideo, info: ResolvedVideo, engine: WatchEngine, base: String, mainland: Bool) {
         self.video = video
         self.info = info
         self.engine = engine
-        let kept = UserDefaults.standard.string(forKey: Self.volumeKey).flatMap(Double.init)
+        self.base = base
+        let kept = Rehearsal.choices?.string(forKey: Self.volumeKey).flatMap(Double.init)
         volume = kept.map { $0.isFinite && $0 >= 0 && $0 <= 1 ? $0 : 1 } ?? 1
         // Straight to the relay, for a YouTube video and a viewer who came in
         // through a relay in mainland China, where the server relays it at
@@ -161,10 +167,10 @@ final class WatchPlayer {
         pictureInPictureActive = false
         gaveUp = false
         if relayed { triedRelay = true }
-        started = watchClock()
+        stall.restart(at: watchClock())
         keeper = WatchKeeper()
         if playsAsYoutube, let id = info.play.id {
-            backend = YouTubeBackend(id: id, base: engine.call.deployment.baseUrl(), owner: self)
+            backend = YouTubeBackend(id: id, base: base, owner: self)
         } else if let source, let url = URL(string: source.url) {
             // Held to the size it is shown at where the relay is not the one
             // chosen for its quality: a film at four times the pixels the tile
@@ -239,7 +245,7 @@ final class WatchPlayer {
     /// heard left the whole room at the last frame on the web.
     func backendPlayable(_ from: WatchBackend) {
         guard from === backend else { return }
-        engine.playerReady(video.key)
+        engine?.playerReady(video.key)
     }
 
     func backendBegan(_ from: WatchBackend) {
@@ -256,7 +262,7 @@ final class WatchPlayer {
 
     func backendEnded(_ from: WatchBackend) {
         guard from === backend else { return }
-        engine.playerEnded(video.key)
+        engine?.playerEnded(video.key)
     }
 
     /// AVPlayer could not play it. Before it has played, a source that does
@@ -295,7 +301,7 @@ final class WatchPlayer {
     /// drives this player alone; it is the show's to decide, so it is asked
     /// of the show, as the controls on the stage ask it.
     func pressedInPictureInPicture(playing: Bool) {
-        engine.setPlaying(playing)
+        engine?.setPlaying(playing)
     }
 
     /// A relay-only video that stopped after it had played: the server is
@@ -305,7 +311,7 @@ final class WatchPlayer {
     /// started again from where it stood, `resumes` times, and then the
     /// viewer is told it stopped and given a press.
     private func resume(_ av: AVBackend) async {
-        guard !askingAgain else { return }
+        guard !askingAgain, let engine else { return }
         askingAgain = true
         halted = .resuming
         let now = await engine.askAgain(video.ticket)
@@ -368,9 +374,8 @@ final class WatchPlayer {
 
     /// Asked once a second, as the web's interval asks it.
     private func checkStall(_ now: UInt64) {
-        guard now - lastStallCheck >= 1000, let backend else { return }
-        lastStallCheck = now
-        let late = now - started > Self.stallMs
+        guard let backend, stall.due(now) else { return }
+        let late = stall.late(now)
         if backend.youtube {
             // The API arrived but the player never became ready: the relay. A
             // player that is ready and refused a press is the platform's
@@ -418,8 +423,10 @@ final class WatchPlayer {
     }
 
     private func remember() {
-        // Kept only when it is not the default, as the web keeps it.
-        UserDefaults.standard.set(volume == 1 ? nil : String(volume), forKey: Self.volumeKey)
+        // Kept only when it is not the default, as the web keeps it, and never
+        // in a rehearsal, whose volume is no business of the owner's next film
+        // (`Rehearsal.choices`).
+        Rehearsal.choices?.set(volume == 1 ? nil : String(volume), forKey: Self.volumeKey)
     }
 
     func stop() {
