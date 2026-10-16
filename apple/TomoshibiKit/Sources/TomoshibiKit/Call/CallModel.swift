@@ -95,6 +95,11 @@ public final class CallModel {
     /// Whether the call is sealed; watching together, the song desk's
     /// broadcast and the lossless stream switch themselves off in one.
     public let sealed: Bool
+    /// What the join answer called the machine this call was sent to, and
+    /// the machine the meeting is actually on where that is another one (the
+    /// web's `relay` and `carrying`, which the signal badge's detail names).
+    public internal(set) var relay: String?
+    public internal(set) var holding: String?
 
     public private(set) var state: CallState = .connected
     public private(set) var people: [Person] = []

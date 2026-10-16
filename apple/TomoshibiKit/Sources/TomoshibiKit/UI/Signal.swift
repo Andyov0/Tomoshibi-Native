@@ -14,7 +14,11 @@ struct SignalBadge: View {
     let reading: ConnectionReading
     let detailed: Bool
     @Binding var open: Bool
-    var server: String?
+    /// What the machine this call was sent to is called (the join answer's
+    /// `relay`), and, where the meeting is on another, that one's name
+    /// (`holding`, the web's `carrying`).
+    var relay: String?
+    var holding: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -41,7 +45,7 @@ struct SignalBadge: View {
             .help(title)
 
             if detailed && open {
-                Detail(reading: reading, server: server)
+                Detail(reading: reading, relay: relay, holding: holding)
                     .transition(.asymmetric(
                         insertion: .opacity.combined(with: .scale(scale: 0.94, anchor: .topTrailing)).animation(Theme.settle),
                         removal: .opacity.animation(Theme.leave)))
@@ -81,24 +85,39 @@ private struct Bars: View {
     }
 }
 
-/// The figures, as Signal.tsx `Detail` lists them.
+/// The figures, as Signal.tsx `Detail` lists them, each arriving a moment
+/// after the one above it, from under the bars they belong to: a panel that is
+/// simply there on the next frame reads as the screen having redrawn itself.
 private struct Detail: View {
     let reading: ConnectionReading
-    let server: String?
+    let relay: String?
+    let holding: String?
+    @State private var shown = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
-            if let server, !server.isEmpty { figure(t("Server"), say(server)) }
-            if let address = reading.ownAddress { figure(t("Your address"), address) }
-            figure(t("Round trip"), reading.rttMs.map { "\(Int($0)) ms" } ?? "—")
-            figure(t("Lost"), reading.lossPercent.map { String(format: "%.1f%%", $0) } ?? "—", warn: (reading.lossPercent ?? 0) > 2)
-            figure(t("Jitter"), reading.jitterMs.map { "\(Int($0)) ms" } ?? "—")
+            // Said by the server, which picked both machines, and by nothing
+            // else (Signal.tsx `relayed`): a second name arrives only when there
+            // is a second machine, so its absence is the answer. One line where
+            // the call is on the machine that was dialled; two where somebody's
+            // signalling is forwarded to the one holding the meeting, which is
+            // not a fault and is said nowhere else.
+            if let relay, !relay.isEmpty, let holding, !holding.isEmpty {
+                figure(0, t("Relay server"), say(relay))
+                figure(1, t("Original server"), say(holding))
+            } else if let relay, !relay.isEmpty {
+                figure(0, t("Server"), say(relay))
+            }
+            if let address = reading.ownAddress { figure(2, t("Your address"), address) }
+            figure(3, t("Round trip"), reading.rttMs.map { "\(Int($0)) ms" } ?? "—")
+            figure(4, t("Lost"), reading.lossPercent.map { String(format: "%.1f%%", $0) } ?? "—", warn: (reading.lossPercent ?? 0) > 2)
+            figure(5, t("Jitter"), reading.jitterMs.map { "\(Int($0)) ms" } ?? "—")
             if let share = reading.share {
-                figure(share.sending ? t("Sharing") : t("Watching"),
+                figure(6, share.sending ? t("Sharing") : t("Watching"),
                        share.height.flatMap { height in share.fps.map { "\(Int(height))p · \(Int($0)) fps" } } ?? t("Measuring…"),
                        warn: (share.fps ?? 30) < 10)
                 if let limited = share.limited {
-                    figure(t("Held back by"), {
+                    figure(6.5, t("Held back by"), {
                         switch limited {
                         case .cpu: t("this machine")
                         case .bandwidth: t("the connection")
@@ -107,10 +126,12 @@ private struct Detail: View {
                     }(), warn: true)
                 }
             }
-            figure(t("Sending"), rate(reading.upKbps))
-            figure(t("Receiving"), rate(reading.downKbps))
+            figure(7, t("Sending"), rate(reading.upKbps))
+            figure(8, t("Receiving"), rate(reading.downKbps))
             if !reading.measured {
                 Text(t("Measuring…")).foregroundStyle(Theme.muted)
+                    .opacity(shown ? 1 : 0)
+                    .animation(Theme.settle.delay(0.27), value: shown)
             }
         }
         .font(.system(size: 11.5))
@@ -119,14 +140,23 @@ private struct Detail: View {
         // the room's width, and the figures ended up under the side panel.
         .frame(width: 236)
         .glassSurface(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .onAppear { shown = true }
     }
 
-    private func figure(_ label: String, _ value: String, warn: Bool = false) -> some View {
+    /// One line, `order` places down the list: thirty milliseconds apart, as
+    /// the web staggers its `animate-arrive`. The value changes colour rather
+    /// than snapping, because these numbers change while somebody reads them.
+    private func figure(_ order: Double, _ label: String, _ value: String, warn: Bool = false) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 16) {
             Text(label).foregroundStyle(Theme.muted)
             Spacer(minLength: 8)
             Text(value).monospacedDigit().foregroundStyle(warn ? Theme.tally : Theme.foreground)
+                .lineLimit(1)
+                .animation(.easeOut(duration: 0.3), value: warn)
         }
+        .opacity(shown ? 1 : 0)
+        .offset(y: shown ? 0 : -4)
+        .animation(Theme.settle.delay(order * 0.03), value: shown)
     }
 
     private func rate(_ kbps: Double?) -> String {

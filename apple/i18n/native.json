@@ -240,6 +240,12 @@
       "zh-Hans": "全部",
       "zh-Hant": "全部",
       "ja": "すべて"
+    },
+    "You are sharing your screen": {
+      "en": "You are sharing your screen",
+      "zh-Hans": "你正在共享屏幕",
+      "zh-Hant": "你正在分享螢幕",
+      "ja": "画面を共有しています"
     }
   }
 }
