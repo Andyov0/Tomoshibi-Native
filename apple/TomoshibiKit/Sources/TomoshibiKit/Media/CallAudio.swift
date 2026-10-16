@@ -118,20 +118,49 @@ public final class CallAudio {
     // MARK: Microphone
 
     /// Sends the microphone to `input` until `stopMicrophone`.
+    ///
+    /// One channel is taken out of the input before anything is converted.
+    /// The input is never mono on a Mac: with voice processing on, macOS 27
+    /// hands over nine channels that all carry the same processed voice, and
+    /// with it off, one channel for each of the three built-in microphones.
+    /// Given more channels than it was asked for and no channel map,
+    /// AVAudioConverter wrote zeros, so every call from a Mac sent digital
+    /// silence while the microphone's own light was on (2026-10-16). The first
+    /// channel is the processed voice in the one case and the microphone the
+    /// system records mono from in the other.
     public func startMicrophone(into input: AudioInput) throws {
         try start()
         stopMicrophone()
         let node = engine.inputNode
         let format = node.outputFormat(forBus: 0)
-        guard let converter = AVAudioConverter(from: format, to: voiceFormat) else {
+        guard format.sampleRate > 0,
+              let mono = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: format.sampleRate, channels: 1, interleaved: false),
+              let converter = AVAudioConverter(from: mono, to: voiceFormat) else {
             throw CocoaError(.featureUnsupported)
         }
         self.converter = converter
         self.microphone = input
         let target = voiceFormat
+        let permission = AVCaptureDevice.authorizationStatus(for: .audio)
+        Self.log.notice("microphone on: \(format.sampleRate, privacy: .public) Hz \(format.channelCount, privacy: .public) ch, permission \(permission.rawValue, privacy: .public), voice processing \(self.voiceProcessing ? "on" : "off", privacy: .public)")
+        // How loud the microphone was in its first two seconds, as it came and
+        // as it was sent: a microphone the system refuses gives silence rather
+        // than an error, and so did the conversion above, with nothing to say
+        // which.
+        let first = FirstReading()
         node.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
-            let ratio = target.sampleRate / format.sampleRate
-            let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 32
+            guard let data = buffer.floatChannelData, buffer.frameLength > 0,
+                  let one = AVAudioPCMBuffer(pcmFormat: mono, frameCapacity: buffer.frameLength),
+                  let into = one.floatChannelData?[0] else { return }
+            let frames = Int(buffer.frameLength)
+            let stride = buffer.stride
+            one.frameLength = buffer.frameLength
+            for i in 0..<frames { into[i] = data[0][i * stride] }
+            if !first.done {
+                for i in 0..<frames { first.peak = max(first.peak, abs(into[i])) }
+            }
+            let ratio = target.sampleRate / mono.sampleRate
+            let capacity = AVAudioFrameCount(Double(frames) * ratio) + 32
             guard let out = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: capacity) else { return }
             var fed = false
             var error: NSError?
@@ -142,9 +171,16 @@ public final class CallAudio {
                 }
                 fed = true
                 status.pointee = .haveData
-                return buffer
+                return one
             }
             guard error == nil, let samples = out.int16ChannelData, out.frameLength > 0 else { return }
+            if !first.done {
+                for i in 0..<Int(out.frameLength) { first.sent = max(first.sent, Int(abs(Int32(samples[0][i])))) }
+                if Date().timeIntervalSince(first.started) > 2 {
+                    first.done = true
+                    Self.log.notice("microphone peak in its first 2 s: \(first.peak, privacy: .public), as sent \(first.sent, privacy: .public) of 32767")
+                }
+            }
             input.push(samples: Array(UnsafeBufferPointer(start: samples[0], count: Int(out.frameLength))))
         }
     }
@@ -206,6 +242,15 @@ public final class CallAudio {
         player.duck = max(0, min(1, factor))
         player.node.volume = player.volume * player.duck
     }
+}
+
+/// The microphone's loudest sample in its first seconds, written only from
+/// the tap's own thread.
+private final class FirstReading: @unchecked Sendable {
+    var peak: Float = 0
+    var sent = 0
+    var done = false
+    let started = Date()
 }
 
 /// The core's audio sink, writing into the ring the hardware reads.

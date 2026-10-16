@@ -102,7 +102,10 @@ public final class AppModel {
         if rehearsal, let base = environment["TOMOSHIBI_BASE"] {
             serverAddress = base
             name = environment["TOMOSHIBI_NAME"] ?? "Native App"
-            startWithMicrophone = false
+            // TOMOSHIBI_MIC joins with the microphone on, for the echo
+            // measurements, which need the real microphone hearing the real
+            // speakers; asking for it means the permission prompt may show.
+            startWithMicrophone = environment["TOMOSHIBI_MIC"] != nil
             startWithCamera = false
             await connect()
             // TOMOSHIBI_SIGNIN=<name>:<file holding the passphrase> signs in
@@ -118,6 +121,8 @@ public final class AppModel {
             if let room = environment["TOMOSHIBI_AUTOJOIN"] {
                 prepare(room: room)
                 await join()
+                // TOMOSHIBI_ORIGINAL: the same call with "original sound" on.
+                if environment["TOMOSHIBI_ORIGINAL"] != nil { try? await call?.setOriginalSound(true) }
             } else if let room = environment["TOMOSHIBI_PREPARE"] {
                 // Stops before the call, for a test to look at that screen.
                 prepare(room: room)
