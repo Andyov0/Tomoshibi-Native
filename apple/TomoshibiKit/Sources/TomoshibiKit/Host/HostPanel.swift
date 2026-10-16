@@ -152,20 +152,34 @@ struct HostPanelView: View {
 
     // MARK: Where it is held
 
+    /// The move under way takes the chevron's place with the app's spinner,
+    /// each fading into the other: the menu row's own spinner is the
+    /// system's, which is grey on this glass, and it arrived and left without
+    /// a frame between (HostPanel.tsx `Elsewhere`, whose button swaps its
+    /// icon for the spinner the same way and is not pressable meanwhile).
     private var moving: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            MenuItem(title: t("Hold this call somewhere else"), symbol: "server.rack", busy: feature.busy == "move") {
+        let busy = feature.busy == "move"
+        return VStack(alignment: .leading, spacing: 2) {
+            MenuItem(title: t("Hold this call somewhere else"), symbol: "server.rack") {
                 withAnimation(Theme.settle) { feature.choosingRelay.toggle() }
             }
+            .disabled(busy)
             .overlay(alignment: .trailing) {
-                if feature.busy != "move" {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(Theme.muted)
-                        .rotationEffect(.degrees(elsewhere ? 180 : 0))
-                        .padding(.trailing, 12)
-                        .allowsHitTesting(false)
+                ZStack {
+                    if busy {
+                        MediaSpinner(size: 14, tint: Theme.muted)
+                            .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                    } else {
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(Theme.muted)
+                            .rotationEffect(.degrees(elsewhere ? 180 : 0))
+                            .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                    }
                 }
+                .padding(.trailing, 12)
+                .allowsHitTesting(false)
+                .animation(Theme.settle, value: busy)
             }
             if elsewhere {
                 VStack(alignment: .leading, spacing: 2) {
@@ -281,7 +295,7 @@ private struct PersonRow: View {
                 .lineLimit(1)
                 .frame(maxWidth: .infinity, alignment: .leading)
             if feature.busy == person.id {
-                ProgressView().controlSize(.small)
+                MediaSpinner(size: 14, tint: Theme.muted)
                     .transition(.opacity.animation(Theme.settle))
             }
             RoundButton(symbol: "mic.slash.fill", label: t("Mute")) {
@@ -332,12 +346,14 @@ private struct QuietButton: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 if busy {
-                    ProgressView().controlSize(.mini)
+                    MediaSpinner(size: 10, tint: hovering ? Theme.foreground : Theme.muted)
+                        .transition(.opacity.combined(with: .scale(scale: 0.6)))
                 } else {
                     // A link struck through; there is no such symbol.
                     Image(systemName: "link")
                         .font(.system(size: 10, weight: .semibold))
                         .overlay(Capsule().frame(width: 1.4, height: 14).rotationEffect(.degrees(-45)))
+                        .transition(.opacity.combined(with: .scale(scale: 0.6)))
                 }
                 Text(title)
                     .font(.system(size: 11.5, weight: .medium))
@@ -350,5 +366,6 @@ private struct QuietButton: View {
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.12), value: hovering)
+        .animation(Theme.settle, value: busy)
     }
 }

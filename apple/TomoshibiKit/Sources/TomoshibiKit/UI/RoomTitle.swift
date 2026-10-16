@@ -72,7 +72,8 @@ struct EmptyRoomCard: View {
                     HStack(spacing: 7) {
                         ZStack {
                             if minting {
-                                ProgressView().controlSize(.mini)
+                                MediaSpinner(size: 12)
+                                    .transition(.scale.combined(with: .opacity))
                             } else {
                                 Image(systemName: copied ? "checkmark" : linkWorks ? "doc.on.doc" : "link")
                                     .foregroundStyle(copied ? Theme.tally : Theme.foreground)

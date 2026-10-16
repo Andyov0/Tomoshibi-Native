@@ -162,7 +162,7 @@ struct PillButton: View {
         Button(action: action) {
             HStack(spacing: 6) {
                 if busy {
-                    ProgressView().controlSize(.mini).tint(ink)
+                    MediaSpinner(size: height < 28 ? 11 : 12, tint: ink)
                         .transition(.opacity.combined(with: .scale(scale: 0.6)))
                 }
                 Text(title)
