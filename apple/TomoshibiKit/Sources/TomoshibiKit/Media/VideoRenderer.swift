@@ -2,6 +2,7 @@ import AVFoundation
 import CoreMedia
 import CoreVideo
 import Foundation
+import os
 import QuartzCore
 import TomoshibiCore
 
@@ -17,6 +18,11 @@ public final class VideoRenderer: @unchecked Sendable {
     private var format: CMVideoFormatDescription?
     private var lastSize: (Int, Int) = (0, 0)
     private let lock = NSLock()
+    /// When the layer last took a frame, and how many it has turned away
+    /// since (`enqueue`).
+    private var lastTaken = CFAbsoluteTimeGetCurrent()
+    private var turnedAway = 0
+    private static let log = Logger(subsystem: "app.tomoshibi", category: "video")
 
     /// The size of the last frame and its rotation, for the view to fit the
     /// picture rather than the box it sits in (web SurfaceTile.tsx ~93-124).
@@ -56,7 +62,31 @@ public final class VideoRenderer: @unchecked Sendable {
         }
         let renderer = layer.sampleBufferRenderer
         if renderer.status == .failed { renderer.flush() }
+        // Only a frame the layer is ready for. Every frame was given to it
+        // whether it was taking them or not, and a layer that is not (off
+        // the screen, under another, between layouts) keeps what it is given
+        // queued, each frame holding the decoder's surface: on an iPhone the
+        // app, the system's media renderer, the video decoder and the
+        // compositor grew together past three gigabytes each until the
+        // compositor was killed for it and the screen came back at the home
+        // screen (Jetsam, 2026-10-17). A picture of a call only ever wants
+        // its newest frame, so one the layer is not ready for is dropped;
+        // and a layer that has taken nothing for two seconds is flushed, and
+        // said, in case it is waiting on something that will not come.
+        guard renderer.isReadyForMoreMediaData else {
+            turnedAway += 1
+            let now = CFAbsoluteTimeGetCurrent()
+            if now - lastTaken > 2 {
+                Self.log.notice("a picture took no frame for \(now - self.lastTaken, privacy: .public) s, \(self.turnedAway, privacy: .public) turned away; flushing it")
+                renderer.flush()
+                lastTaken = now
+                turnedAway = 0
+            }
+            return
+        }
         renderer.enqueue(sample)
+        lastTaken = CFAbsoluteTimeGetCurrent()
+        turnedAway = 0
         let angle = CGFloat(rotation) * .pi / 180
         if rotation != 0 || layer.affineTransform() != .identity {
             DispatchQueue.main.async { [layer] in
