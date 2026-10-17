@@ -13201,6 +13201,36 @@
         }
       }
     },
+    "Remove {room} from recent" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove {room} from recent"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{room} を最近の履歴から削除"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从最近记录中移除 {room}"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "從最近記錄中移除 {room}"
+          }
+        }
+      }
+    },
     "Removing somebody ends their call. It does not stop them rejoining with the same name." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -13287,6 +13317,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "房間名稱"
+          }
+        }
+      }
+    },
+    "Room name or invite link" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Room name or invite link"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ルーム名または招待リンク"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "房间名或邀请链接"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "房間名稱或邀請連結"
           }
         }
       }

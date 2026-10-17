@@ -112,6 +112,39 @@ struct PopoverCatcher: View {
     }
 }
 
+// MARK: - The keyboard
+
+extension View {
+    /// On an iPhone, puts the keyboard away on a tap on nothing in particular
+    /// and on a scroll: tapped into the lobby's join bar or the link field,
+    /// the keyboard stayed over half the screen with no way to put it away
+    /// but pressing Join. Taken by a catcher behind the content rather than a
+    /// gesture over it, so that a tap on a field or a button is still theirs:
+    /// a tap laid over everything put the keyboard away again as a field was
+    /// pressed to bring it up.
+    @ViewBuilder
+    func putsKeyboardAway() -> some View {
+        #if os(iOS)
+        scrollDismissesKeyboard(.immediately)
+            .background {
+                Color.clear
+                    .contentShape(Rectangle())
+                    .onTapGesture { putKeyboardAway() }
+            }
+        #else
+        self
+        #endif
+    }
+}
+
+#if os(iOS)
+/// Whatever is typing gives the keyboard up.
+@MainActor
+func putKeyboardAway() {
+    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+}
+#endif
+
 // MARK: - Menus
 
 /// What a popover menu is made of: rows of items, small headings, rules.

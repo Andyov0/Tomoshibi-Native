@@ -45,6 +45,7 @@ enum LobbyDebug {
         switch open {
         case "start": .start
         case "join": .join("")
+        case "again": .again(room ?? "")
         default: nil
         }
     }
@@ -297,6 +298,70 @@ struct DeviceSwitches: View {
     }
 }
 
+/// What was typed, if it is a link: an invitation or a room's address pasted
+/// where a room's name goes. The app opens it as it opens one handed over by
+/// the system, and refuses it there if it is another server's.
+func pastedLink(_ text: String) -> URL? {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard let url = URL(string: trimmed), let scheme = url.scheme?.lowercased(),
+          ["https", "http", "tomoshibi"].contains(scheme), url.host() != nil else { return nil }
+    return url
+}
+
+/// The cross that takes a room off the recent list.
+struct RecentForget: View {
+    let room: String
+    var size: CGFloat = 24
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark")
+                .font(.system(size: size * 0.36, weight: .bold))
+                .foregroundStyle(Theme.muted)
+                .frame(width: size, height: size)
+                .background(Circle().fill(Color.white.opacity(0.07)))
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(t("Remove {room} from recent", ["room": room]))
+        .help(t("Remove {room} from recent", ["room": room]))
+    }
+}
+
+/// A recent room in the Mac's sidebar: the row opens it, and the cross that
+/// takes it off the list shows under the pointer, as the sidebar's own rows
+/// show what they offer.
+struct RecentSidebarRow: View {
+    let recent: LobbyModel.Recent
+    let open: () -> Void
+    let forget: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Button(action: open) {
+                HStack(spacing: 10) {
+                    Initial(name: recent.room, size: 26)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(recent.room).font(.system(size: 13, weight: .medium)).lineLimit(1)
+                        Text(recent.at.formatted(.relative(presentation: .named)))
+                            .font(.system(size: 11)).foregroundStyle(Theme.muted)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            RecentForget(room: recent.room, size: 20, action: forget)
+                .opacity(hovering ? 1 : 0)
+                .allowsHitTesting(hovering)
+        }
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
+    }
+}
+
 // MARK: - Signing in
 
 /// Say who you are (Lobby.tsx `SignIn`), or open the link you were sent.
@@ -365,8 +430,10 @@ struct SignInView: View {
                 .padding(.top, 72)
                 .padding(.bottom, 140)
                 .frame(maxWidth: .infinity)
+                .putsKeyboardAway()
             }
             .scrollIndicators(.never)
+            .putsKeyboardAway()
         }
         #if os(iOS)
         .safeAreaInset(edge: .bottom) {
@@ -573,19 +640,9 @@ private struct MacSidebar: View {
             if !app.lobby.recentHere.isEmpty {
                 Section(t("Recent")) {
                     ForEach(app.lobby.recentHere.prefix(6)) { recent in
-                        Button {
-                            sheet = .join(recent.room)
-                        } label: {
-                            HStack(spacing: 10) {
-                                Initial(name: recent.room, size: 26)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(recent.room).font(.system(size: 13, weight: .medium)).lineLimit(1)
-                                    Text(recent.at.formatted(.relative(presentation: .named)))
-                                        .font(.system(size: 11)).foregroundStyle(Theme.muted)
-                                }
-                            }
-                        }
-                        .buttonStyle(.plain)
+                        RecentSidebarRow(recent: recent, open: { sheet = .again(recent.room) },
+                                         forget: { withAnimation(Theme.settle) { app.lobby.forget(recent) } })
+                            .transition(Theme.arrive)
                     }
                 }
             }
@@ -773,20 +830,28 @@ struct PhoneLobby: View {
                             Text(t("Recent")).font(.system(size: 20, weight: .bold)).padding(.horizontal, 6)
                             VStack(spacing: 0) {
                                 ForEach(app.lobby.recentHere.prefix(4)) { recent in
-                                    Button { sheet = .join(recent.room) } label: {
-                                        HStack(spacing: 12) {
-                                            Initial(name: recent.room, size: 36)
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(recent.room).font(.system(size: 16, weight: .semibold))
-                                                Text(recent.at.formatted(.relative(presentation: .named))).font(.system(size: 13)).foregroundStyle(Theme.muted)
+                                    HStack(spacing: 4) {
+                                        Button { sheet = .again(recent.room) } label: {
+                                            HStack(spacing: 12) {
+                                                Initial(name: recent.room, size: 36)
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    Text(recent.room).font(.system(size: 16, weight: .semibold))
+                                                    Text(recent.at.formatted(.relative(presentation: .named))).font(.system(size: 13)).foregroundStyle(Theme.muted)
+                                                }
+                                                Spacer(minLength: 0)
                                             }
-                                            Spacer()
-                                            Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.muted.opacity(0.6))
+                                            .padding(.leading, 14).padding(.vertical, 11)
+                                            .contentShape(Rectangle())
                                         }
-                                        .padding(.horizontal, 14).padding(.vertical, 11)
-                                        .contentShape(Rectangle())
+                                        .buttonStyle(.plain)
+                                        // Its own button beside the row's, not inside it:
+                                        // the record is the person's to tidy.
+                                        RecentForget(room: recent.room, size: 30) {
+                                            withAnimation(Theme.settle) { app.lobby.forget(recent) }
+                                        }
+                                        .padding(.trailing, 10)
                                     }
-                                    .buttonStyle(.plain)
+                                    .transition(Theme.arrive)
                                     if recent.id != app.lobby.recentHere.prefix(4).last?.id { Divider().padding(.leading, 62) }
                                 }
                             }
@@ -821,8 +886,10 @@ struct PhoneLobby: View {
                 .padding(.horizontal, 16)
                 .padding(.bottom, 24)
                 .animation(Theme.settle, value: app.offersRelayChoice)
+                .putsKeyboardAway()
             }
             .scrollIndicators(.never)
+            .putsKeyboardAway()
             .background(Color.black.ignoresSafeArea())
             .navigationTitle("Tomoshibi")
             .toolbar {
@@ -878,19 +945,26 @@ struct PhoneLobby: View {
     /// thumb already is.
     private var joinBar: some View {
         HStack(alignment: .bottom, spacing: 10) {
-            ScopedRoomField(prompt: t("The name you were given."), text: $typed, scopes: account.scopes, admin: account.admin,
+            ScopedRoomField(prompt: t("Room name or invite link"), text: $typed, scopes: account.scopes, admin: account.admin,
                             capsule: true, onSubmit: joinTyped)
             Button(action: joinTyped) {
                 Image(systemName: "arrow.right").font(.system(size: 20, weight: .bold))
             }
             .buttonStyle(.glassCircle(54, prominent: true))
-            .disabled(!validRoomName(name: normaliseRoomName(typed: typed)))
+            .disabled(!validRoomName(name: normaliseRoomName(typed: typed)) && pastedLink(typed) == nil)
             .accessibilityLabel(t("Join"))
         }
         .padding(.horizontal, 16).padding(.bottom, 6)
     }
 
     private func joinTyped() {
+        // An invitation pasted in is opened as the link it is.
+        if let url = pastedLink(typed) {
+            typed = ""
+            putKeyboardAway()
+            Task { await app.open(url) }
+            return
+        }
         let room = normaliseRoomName(typed: typed)
         guard validRoomName(name: room) else { return }
         sheet = .join(room)
@@ -909,11 +983,18 @@ struct MeetingSheet: View {
     enum Mode: Identifiable, Hashable {
         case start
         case join(String)
+        /// A room from the recent list: joined if a meeting is live in it,
+        /// started again under the same name if not. Opened as a join, it was
+        /// refused whenever the meeting had ended ("No meeting is happening
+        /// under that name"), which for a room somebody has been in before is
+        /// most of the time.
+        case again(String)
 
         var id: String {
             switch self {
             case .start: "start"
             case let .join(room): "join:" + room
+            case let .again(room): "again:" + room
             }
         }
     }
@@ -933,12 +1014,26 @@ struct MeetingSheet: View {
         self.app = app
         _mode = State(initialValue: mode)
         if case let .join(name) = mode { _room = State(initialValue: name) }
+        if case let .again(name) = mode { _room = State(initialValue: name) }
         if let typed = LobbyDebug.room { _room = State(initialValue: typed) }
         // A word already typed for this sitting is shown, and the switch on.
         _sealing = State(initialValue: !app.sealingWord.isEmpty)
     }
 
     private var starting: Bool { if case .start = mode { return true } else { return false } }
+
+    private var again: Bool { if case .again = mode { return true } else { return false } }
+
+    /// Settles a room from the recent list into the choice the sheet shows:
+    /// Join while a meeting is live in it, Start, with its name, while none
+    /// is. Not over a choice made meanwhile, and left as it is when the
+    /// deployment does not say, which `go` then takes either way.
+    private func settleAgain() async {
+        guard case let .again(name) = mode, let deployment = app.deployment else { return }
+        let live = (try? await deployment.roomLive(room: name)) ?? nil
+        guard again, let live else { return }
+        withAnimation(Theme.settle) { mode = live ? .join(room) : .start }
+    }
 
     var body: some View {
         Group {
@@ -969,6 +1064,7 @@ struct MeetingSheet: View {
                 .glassPane(cornerRadius: 34)
                 .padding(10)
             }
+            .putsKeyboardAway()
             #endif
         }
         .animation(Theme.settle, value: sealing)
@@ -976,6 +1072,7 @@ struct MeetingSheet: View {
         .animation(Theme.settle, value: starting)
         .floatingPopoverLayer(popovers)
         .onAppear { popovers.openFromDebug() }
+        .task { await settleAgain() }
     }
 
     /// Closes the sheet, and calls off whatever its press set going: Cancel
@@ -1017,7 +1114,7 @@ struct MeetingSheet: View {
         VStack(alignment: .leading, spacing: 10) {
             // The scope half of a name completes from the account's own
             // (ScopedRoomInput.tsx), in both directions as on the web.
-            ScopedRoomField(prompt: starting ? t("Name it yourself, or leave it blank for one nobody has used.") : t("The name you were given."),
+            ScopedRoomField(prompt: starting ? t("Name it yourself, or leave it blank for one nobody has used.") : t("Room name or invite link"),
                             text: $room, scopes: app.account?.scopes ?? [], admin: app.account?.admin ?? false,
                             focusOnAppear: LobbyDebug.room != nil, onSubmit: go)
             VStack(spacing: 0) {
@@ -1073,7 +1170,7 @@ struct MeetingSheet: View {
                 .keyboardShortcut(.defaultAction)
                 // And while any join is out, a called-off one included: a
                 // second beside it would go in as the same participant.
-                .disabled(working || app.busy || (!starting && !validRoomName(name: normaliseRoomName(typed: room))))
+                .disabled(working || app.busy || (!starting && !validRoomName(name: normaliseRoomName(typed: room)) && pastedLink(room) == nil))
             }
         }
     }
@@ -1091,6 +1188,14 @@ struct MeetingSheet: View {
     /// joined. An unknown answer goes through; the join is the authority.
     private func go() {
         guard !working, !app.busy, let deployment = app.deployment else { return }
+        // An invitation pasted in where a name goes is opened as the link it
+        // is: a room's name taken out of it would leave the invitation behind.
+        if !starting, let url = pastedLink(room) {
+            if !sealing { app.sealingWord = "" }
+            dismiss()
+            Task { await app.open(url) }
+            return
+        }
         let typed = normaliseRoomName(typed: room)
         let target = starting ? (validRoomName(name: typed) ? typed : generateRoomName()) : typed
         guard validRoomName(name: target) else { return }
@@ -1106,7 +1211,10 @@ struct MeetingSheet: View {
                 app.problem = t("A meeting is already happening under that name.")
                 return
             }
-            if !starting, live == false {
+            // A room from the recent list goes in whether or not it is live:
+            // pressed before the sheet had settled which it is, it is that room
+            // somebody means, and entering it starts it again if it has ended.
+            if !starting, !again, live == false {
                 app.problem = t("No meeting is happening under that name.")
                 return
             }

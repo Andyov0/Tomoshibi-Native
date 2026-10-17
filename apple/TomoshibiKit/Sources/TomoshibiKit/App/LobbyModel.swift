@@ -150,14 +150,41 @@ public final class LobbyModel {
     /// The ones joined on the deployment showing now, latest first.
     public var recentHere: [Recent] {
         let here = app?.deployment?.baseUrl() ?? ""
+        #if DEBUG
+        seedRecents(here)
+        #endif
         return recents.filter { $0.server == here }.sorted { $0.at > $1.at }
     }
+
+    #if DEBUG
+    /// TOMOSHIBI_DEBUG_RECENTS=<room>,<room>: rooms on the recent list of a
+    /// rehearsal, which remembers none of its own, for a look at the list and
+    /// its crosses. Kept in memory only.
+    @ObservationIgnored private var seeded = false
+    private func seedRecents(_ here: String) {
+        guard !seeded, app?.rehearsal == true, !here.isEmpty,
+              let rooms = ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_RECENTS"] else { return }
+        seeded = true
+        let names = rooms.split(separator: ",").map(String.init)
+        recents = names.enumerated().map { Recent(room: $1, server: here, at: Date().addingTimeInterval(-Double($0 + 1) * 3600)) }
+    }
+    #endif
 
     func remember(room: String) {
         guard let server = app?.deployment?.baseUrl(), app?.rehearsal == false else { return }
         recents.removeAll { $0.server == server && $0.room == room }
         recents.insert(Recent(room: room, server: server, at: Date()), at: 0)
         recents = Array(recents.prefix(24))
+        if let data = try? JSONEncoder().encode(recents) {
+            UserDefaults.standard.set(data, forKey: Self.recentsKey)
+        }
+    }
+
+    /// Takes a room off the recent list, which is the person's own record of
+    /// where they have been and theirs to tidy.
+    public func forget(_ recent: Recent) {
+        recents.removeAll { $0.id == recent.id }
+        guard app?.rehearsal == false else { return }
         if let data = try? JSONEncoder().encode(recents) {
             UserDefaults.standard.set(data, forKey: Self.recentsKey)
         }
