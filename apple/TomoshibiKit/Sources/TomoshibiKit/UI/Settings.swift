@@ -297,6 +297,7 @@ public struct SettingsView: View {
         .frame(minWidth: 720, idealWidth: 820, minHeight: 520, idealHeight: 640)
         .background(SettingsWindowStyle())
         .hidesToolbarBackground()
+        .removesWindowTitle()
         .animation(Theme.settle, value: section)
         #else
         ZStack {
@@ -910,6 +911,20 @@ private struct PlacementCards: View {
 }
 
 extension View {
+    /// The window's title, out of its toolbar where SwiftUI would put it.
+    @ViewBuilder
+    func removesWindowTitle() -> some View {
+        #if os(macOS)
+        if #available(macOS 15.0, *) {
+            toolbar(removing: .title)
+        } else {
+            self
+        }
+        #else
+        self
+        #endif
+    }
+
     /// The title bar's own ground, which the Settings window drew as a band
     /// across the top of the content column.
     @ViewBuilder
@@ -1984,6 +1999,16 @@ private struct AboutSettings: View {
 #if os(macOS)
 /// The Settings window with its title bar gone, so the glass sidebar runs to
 /// the top with the window's buttons on it, as the lobby's does.
+///
+/// On it, not across its edge. With no toolbar the title bar was 28 points
+/// tall and the buttons sat at its very top, over the line where the sidebar's
+/// glass begins ten points down and on the curve of its corner: the owner
+/// found it untidy (2026-10-17). An empty unified toolbar makes the bar 52
+/// points tall with the buttons centred in it, which puts them inside the
+/// glass with room on every side, as a macOS 26 sidebar has them (Finder,
+/// Mail). The title was also seen back over the sidebar now and then, so it
+/// is taken out of the toolbar as well (`toolbar(removing: .title)`), and the
+/// window is styled again whenever it becomes key.
 /// TOMOSHIBI_DEBUG_SETTINGS_WINDOW=<width>x<height> sizes it, in a debug
 /// build, for a test to look at it at more than one size.
 private struct SettingsWindowStyle: NSViewRepresentable {
@@ -1997,12 +2022,22 @@ private struct SettingsWindowStyle: NSViewRepresentable {
     /// later: SwiftUI writes the window's title after the first pass, and
     /// "Tomoshibi Settings" came back over the sidebar on some launches.
     final class Styler: NSView {
+        private var keyWatch: NSObjectProtocol?
+
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
             style()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in self?.style() }
             DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in self?.style() }
+            if let keyWatch { NotificationCenter.default.removeObserver(keyWatch) }
+            keyWatch = window.map { window in
+                NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification, object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.style() }
+                }
+            }
         }
+
+        private static let toolbarID = NSToolbar.Identifier("app.tomoshibi.settings")
 
         func style() {
             guard let window else { return }
@@ -2011,7 +2046,13 @@ private struct SettingsWindowStyle: NSViewRepresentable {
             window.styleMask.insert(.fullSizeContentView)
             window.isMovableByWindowBackground = true
             window.titlebarSeparatorStyle = .none
-            window.toolbar = nil
+            if window.toolbar?.identifier != Self.toolbarID {
+                let bar = NSToolbar(identifier: Self.toolbarID)
+                bar.allowsUserCustomization = false
+                bar.displayMode = .iconOnly
+                window.toolbar = bar
+            }
+            window.toolbarStyle = .unified
             #if DEBUG
             if !sized, let size = ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_SETTINGS_WINDOW"]?
                 .split(separator: "x").compactMap({ Double($0) }), size.count == 2 {
