@@ -1052,8 +1052,12 @@ struct MeetingSheet: View {
                         .disabled(app.busy)
                         .transition(Theme.arrive)
                 }
-                Spacer()
+                // On the Mac the buttons sit at the trailing end, after the
+                // space. On an iPhone the one button is the whole width, and
+                // the space before it, its minimum and the stack's spacing,
+                // pushed it eighteen points off centre.
                 #if os(macOS)
+                Spacer()
                 Button(t("Cancel")) { cancel() }.buttonStyle(.glassCapsule(36)).keyboardShortcut(.cancelAction)
                 #endif
                 Button(action: go) {
