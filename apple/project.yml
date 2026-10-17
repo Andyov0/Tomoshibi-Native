@@ -104,6 +104,14 @@ targets:
         # app exists. Audio alone carries it: voip is for an app woken by
         # PushKit, which this is not, and a review asks what it is for.
         UIBackgroundModes: [audio]
+        # The camera's own effects from Control Center, which iOS applies by
+        # default only to apps with the voip mode: without it "Blur my
+        # background" opened the system's video effects and the blur never
+        # reached the call. Portrait (the blur) and Studio Light are asked for;
+        # the gesture reactions are not, since the call has reactions of its
+        # own and a hand raised to speak set off fireworks (AVCaptureDevice.h).
+        NSCameraPortraitEffectEnabled: true
+        NSCameraStudioLightEnabled: true
         CFBundleURLTypes:
           - CFBundleURLName: app.tomoshibi.link
             CFBundleURLSchemes: [tomoshibi]
