@@ -23,6 +23,20 @@ final class PCMRing: @unchecked Sendable {
     private var count = 0
     private var playing = false
     private let lock = OSAllocatedUnfairLock()
+    #if DEBUG
+    /// Frames written in and played out, and the loudest played, since the
+    /// last `debugTake`: a probe's proof that a sound arriving is also heard.
+    private var debugWritten = 0
+    private var debugRendered = 0
+    private var debugPeak: Float = 0
+
+    func debugTake() -> (written: Int, rendered: Int, peak: Float) {
+        lock.withLockUnchecked {
+            defer { debugWritten = 0; debugRendered = 0; debugPeak = 0 }
+            return (debugWritten, debugRendered, debugPeak)
+        }
+    }
+    #endif
 
     /// Frames are per channel; at 48 kHz, 480 frames are 10 ms.
     init(channels: Int, startFrames: Int = 1440, ceilingFrames: Int = 9600, settleFrames: Int = 2880) {
@@ -38,6 +52,9 @@ final class PCMRing: @unchecked Sendable {
     func write(_ input: [Int16]) {
         let frames = input.count / channels
         lock.withLockUnchecked {
+            #if DEBUG
+            debugWritten += frames
+            #endif
             for frame in 0..<frames {
                 if count == capacity {
                     read = (read + 1) % capacity
@@ -94,6 +111,9 @@ final class PCMRing: @unchecked Sendable {
                 for frame in 0..<frames {
                     if frame < available {
                         data[frame] = samples[((read + frame) % capacity) * channels + channel]
+                        #if DEBUG
+                        debugPeak = max(debugPeak, abs(data[frame]))
+                        #endif
                     } else {
                         data[frame] = 0
                     }
@@ -101,6 +121,9 @@ final class PCMRing: @unchecked Sendable {
             }
             read = (read + available) % capacity
             count -= available
+            #if DEBUG
+            debugRendered += frames
+            #endif
         }
     }
 

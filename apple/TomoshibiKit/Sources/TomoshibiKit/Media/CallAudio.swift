@@ -24,6 +24,21 @@ public final class CallAudio {
     /// whatever starts the engine puts the tap back for this track.
     private var microphone: AudioInput?
     private var tapped = false
+    #if os(iOS)
+    /// Whether the engine is set up to record, from a press of the
+    /// microphone until it is pressed off. While it is not, the session is
+    /// one for playback with no voice processing (`start`).
+    ///
+    /// On an iPhone the call's session recorded from the first sound to the
+    /// last, microphone on or off: voice processing took the whole of the
+    /// output, so music in a call sounded like a telephone call however
+    /// still the microphone was, the orange light stayed lit, and Bluetooth
+    /// headphones stayed on the narrow headset profile. The owner chose a
+    /// short gap at each press of the microphone over that (2026-10-17).
+    private var recording = false
+    /// How the engine was last started: for playback only, or to record.
+    private(set) var listeningOnly = false
+    #endif
     private var converter: AVAudioConverter?
     private(set) var started = false
 
@@ -210,9 +225,16 @@ public final class CallAudio {
         #endif
         #if os(iOS)
         let session = AVAudioSession.sharedInstance()
-        try session.setCategory(.playAndRecord, mode: .videoChat, options: [.allowBluetoothHFP, .allowBluetoothA2DP, .defaultToSpeaker])
+        let listening = !recording
+        if listening {
+            try session.setCategory(.playback, mode: .default, options: [])
+        } else {
+            try session.setCategory(.playAndRecord, mode: .videoChat, options: [.allowBluetoothHFP, .allowBluetoothA2DP, .defaultToSpeaker])
+        }
         try session.setPreferredSampleRate(48_000)
         try session.setActive(true)
+        #else
+        let listening = false
         #endif
         do {
             // Voice processing is chosen before anything touches the output:
@@ -220,14 +242,32 @@ public final class CallAudio {
             // unit that turning voice processing on then has to tear down,
             // and that first initialisation is where the simulator's audio
             // server once timed out and aborted the app.
-            try engine.inputNode.setVoiceProcessingEnabled(!originalSound)
+            if !listening {
+                try engine.inputNode.setVoiceProcessingEnabled(!originalSound)
+            } else {
+                if voiceProcessing {
+                    // Off again after a microphone that had it; the input is
+                    // not touched otherwise, since one made under a session
+                    // that records nothing has no channels.
+                    try engine.inputNode.setVoiceProcessingEnabled(false)
+                }
+                // The output, made before the engine is prepared: with the
+                // input left alone the graph had neither, and the first voice
+                // to arrive while the microphone was off aborted the app
+                // ("inputNode != nullptr || outputNode != nullptr"). The
+                // warning above is about voice processing, which is off here.
+                _ = engine.mainMixerNode
+            }
             pointAtChosenDevices()
             engine.prepare()
             try engine.start()
             muteForTests()
-            voiceProcessing = !originalSound
-            Self.log.notice("engine started, voice processing \(self.voiceProcessing ? "on" : "off", privacy: .public)")
-        } catch where !originalSound {
+            voiceProcessing = !listening && !originalSound
+            #if os(iOS)
+            listeningOnly = listening
+            #endif
+            Self.log.notice("engine started, \(listening ? "for playback only" : "to record", privacy: .public), voice processing \(self.voiceProcessing ? "on" : "off", privacy: .public)")
+        } catch where !originalSound && !listening {
             Self.log.error("voice processing would not start (\(String(describing: error), privacy: .public)); starting without it")
             // The system's voice processing would not start: on the macOS 27
             // Mac this was written on, the output unit failed to initialise
@@ -291,7 +331,11 @@ public final class CallAudio {
     }
 
     public func stop() {
-        stopMicrophone()
+        microphone = nil
+        untap()
+        #if os(iOS)
+        recording = false
+        #endif
         for sid in Array(players.keys) { stopPlaying(sid: sid) }
         engine.stop()
         started = false
@@ -319,9 +363,28 @@ public final class CallAudio {
     public func startMicrophone(into input: AudioInput) throws {
         // Forgotten first, so that a start of the engine below does not put
         // the last one back only to have it replaced.
-        stopMicrophone()
+        microphone = nil
+        untap()
+        #if os(iOS)
+        // Set up to record before anything is tapped: an engine started for
+        // playback only is started again for it, which is the gap a press of
+        // the microphone costs.
+        recording = true
+        do {
+            if started && listeningOnly {
+                try restart()
+            } else {
+                try start()
+            }
+            try tap(input)
+        } catch {
+            recording = false
+            throw error
+        }
+        #else
         try start()
         try tap(input)
+        #endif
         microphone = input
     }
 
@@ -390,6 +453,20 @@ public final class CallAudio {
     public func stopMicrophone() {
         microphone = nil
         untap()
+        #if os(iOS)
+        // Back to playback only, so that what is heard is heard whole. Only
+        // over an engine that is running: one stopped or given up starts
+        // set up for playback when it is next asked for sound.
+        guard recording else { return }
+        recording = false
+        if started && engine.isRunning && !listeningOnly {
+            do {
+                try restart()
+            } catch {
+                Self.log.error("the engine would not start again for playback only: \(String(describing: error), privacy: .public)")
+            }
+        }
+        #endif
     }
 
     private func untap() {
@@ -483,6 +560,23 @@ public final class CallAudio {
         players[sid] = player
         call.attachAudio(sid: sid, sink: player.sink)
         Self.log.notice("playing \(sid, privacy: .public) in \(channels) channels")
+        #if DEBUG
+        // TOMOSHIBI_DEBUG_PLAYER_LEVEL: how loud each remote sound comes out
+        // of its node, once a second. A node is only pulled while the engine
+        // plays it, so a level is the proof that a sound is still heard
+        // across a restart of the engine (the switch between playback only
+        // and recording on iOS).
+        if ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_PLAYER_LEVEL"] != nil {
+            let ring = player.ring
+            Task { @MainActor [weak self] in
+                while let self, self.players[sid] === player {
+                    try? await Task.sleep(for: .seconds(1))
+                    let taken = ring.debugTake()
+                    Self.log.notice("PLAYER \(sid, privacy: .public) in \(taken.written, privacy: .public) out \(taken.rendered, privacy: .public) peak \(taken.peak, privacy: .public)")
+                }
+            }
+        }
+        #endif
     }
 
     public func stopPlaying(sid: String, call: Call? = nil) {
