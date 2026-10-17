@@ -47,11 +47,23 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: app.tomoshibi.link
             CFBundleURLSchemes: [tomoshibi]
+    # The hardened runtime, which notarization asks of an app given out
+    # outside the App Store, and the two devices it would otherwise keep from
+    # the app: under the hardened runtime a camera or microphone not declared
+    # here gives nothing, silently. The screen needs no entitlement (it asks
+    # for Screen Recording itself), and nothing here is loaded from a library
+    # signed by anybody else.
+    entitlements:
+      path: build/Tomoshibi-macOS.entitlements
+      properties:
+        com.apple.security.device.camera: true
+        com.apple.security.device.audio-input: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.tomoshibi.mac
         PRODUCT_NAME: Tomoshibi
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ENABLE_HARDENED_RUNTIME: YES
   Tomoshibi-iOS:
     type: application
     platform: iOS
