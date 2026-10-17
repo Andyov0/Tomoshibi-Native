@@ -321,12 +321,19 @@ public struct RoomView: View {
                     }
                 }
                 .scrollIndicators(.hidden)
+                // Where it covers the call rather than standing beside it,
+                // dark under its glass: through the glass alone the edges of
+                // the pictures beneath ran across the panel, a line through
+                // the middle of the song desk.
+                .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Theme.background.opacity(narrow ? 0.72 : 0)))
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                 .frame(width: Self.panelWidth(size))
-                .frame(maxHeight: max(160, size.height - Plan.island - 24 - (watchersInRow ? 38 : 0)), alignment: .top)
+                // Below the row at the top wherever it cannot stand beside
+                // it: over it, the panel hid the room's name and its signal.
+                .frame(maxHeight: max(160, size.height - Plan.island - 24 - (narrow ? 38 : 0)), alignment: .top)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(12)
-                .padding(.top, (watchersInRow ? 38 : 0) + inset.top)
+                .padding(.top, (narrow ? 38 : 0) + inset.top)
                 .transition(Theme.slideIn)
                 .id(panel)
             }
@@ -403,8 +410,14 @@ public struct RoomView: View {
         }
     }
 
+    /// Beside the call where the window has room for it, and on a screen
+    /// that has none (a phone held upright) the width of the screen inside
+    /// the same twelve points on either side: at 360 it left thirty points on
+    /// one side and twelve on the other, and its corner sat over the room's
+    /// name.
     static func panelWidth(_ size: CGSize) -> CGFloat {
-        min(360, size.width - 32)
+        let beside = min(360, size.width - 32)
+        return size.width < beside + 24 + 172 + 22 ? max(0, size.width - 24) : beside
     }
 
     // MARK: Arrangement

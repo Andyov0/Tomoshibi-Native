@@ -296,14 +296,23 @@ private struct NowPlaying: View {
         }
         .padding(14)
         .background {
-            ZStack {
-                MediaArtwork(url: now.cover, corner: 0)
-                    .scaleEffect(1.6)
-                    .blur(radius: 36)
-                    .opacity(0.55)
-                LinearGradient(colors: [Color.black.opacity(0.15), Color.black.opacity(0.45)], startPoint: .top, endPoint: .bottom)
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            // The card's size, whatever the cover's: the cover fills a square,
+            // and laid in the background as it was it made the background that
+            // square, as wide as the card and taller, clipped to its own
+            // corners. A second rounded pane stood out below the card and ran
+            // up under the panel's tabs. Over a clear view the background is
+            // the card, and the cover is clipped to it.
+            Color.clear
+                .overlay {
+                    MediaArtwork(url: now.cover, corner: 0)
+                        .scaleEffect(1.6)
+                        .blur(radius: 36)
+                        .opacity(0.55)
+                }
+                .overlay {
+                    LinearGradient(colors: [Color.black.opacity(0.15), Color.black.opacity(0.45)], startPoint: .top, endPoint: .bottom)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.09)))
         .animation(Theme.settle, value: desk.mine)
