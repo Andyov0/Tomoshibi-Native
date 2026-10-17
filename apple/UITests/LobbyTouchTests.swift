@@ -70,12 +70,16 @@ final class LobbyTouchTests: XCTestCase {
         XCTAssertTrue(app.buttons["More"].waitForExistence(timeout: 30), "and Start goes into the room")
     }
 
-    func testRecentRoomCanBeRemoved() throws {
+    func testRecentRoomIsRemovedBySwipingIt() throws {
         let app = lobby(["TOMOSHIBI_DEBUG_RECENTS": "old-standup,design-review"])
-        let cross = app.buttons["Remove old-standup from recent"]
-        XCTAssertTrue(cross.waitForExistence(timeout: 30), "a cross on the recent room")
-        cross.tap()
-        XCTAssertTrue(app.staticTexts["old-standup"].waitForNonExistence(timeout: 5), "the room leaves the recent list")
+        let row = app.staticTexts["old-standup"]
+        XCTAssertTrue(row.waitForExistence(timeout: 30), "the recent room")
+        let remove = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Remove")).firstMatch
+        XCTAssertFalse(remove.exists, "Remove is out of sight until the row is swiped")
+        row.swipeLeft()
+        XCTAssertTrue(remove.waitForExistence(timeout: 3), "swiped to the left, the row shows Remove")
+        remove.tap()
+        XCTAssertTrue(row.waitForNonExistence(timeout: 5), "the room leaves the recent list")
         XCTAssertTrue(app.staticTexts["design-review"].exists, "and the other stays")
     }
 

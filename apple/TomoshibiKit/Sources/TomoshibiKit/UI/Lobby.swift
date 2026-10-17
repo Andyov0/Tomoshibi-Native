@@ -796,6 +796,9 @@ struct PhoneLobby: View {
     @State private var scheduling = LobbyDebug.open == "scheduled"
     @State private var typed = ""
     @State private var popovers = Popovers()
+    /// The height of a recent room's row, which the list's own height is
+    /// counted in: the list does not scroll, so it is as tall as its rows.
+    private static let recentRow: CGFloat = 58
 
     var body: some View {
         NavigationStack {
@@ -828,34 +831,53 @@ struct PhoneLobby: View {
                     if !app.lobby.recentHere.isEmpty {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(t("Recent")).font(.system(size: 20, weight: .bold)).padding(.horizontal, 6)
-                            VStack(spacing: 0) {
-                                ForEach(app.lobby.recentHere.prefix(4)) { recent in
-                                    HStack(spacing: 4) {
-                                        Button { sheet = .again(recent.room) } label: {
-                                            HStack(spacing: 12) {
-                                                Initial(name: recent.room, size: 36)
-                                                VStack(alignment: .leading, spacing: 2) {
-                                                    Text(recent.room).font(.system(size: 16, weight: .semibold))
-                                                    Text(recent.at.formatted(.relative(presentation: .named))).font(.system(size: 13)).foregroundStyle(Theme.muted)
-                                                }
-                                                Spacer(minLength: 0)
+                            // In a List of its own, which does not scroll, for the
+                            // system's swipe to the left: Remove is out of sight
+                            // until the row is swiped. Made by hand on a plain
+                            // stack first, the row moved and its touch did not,
+                            // and pressing Remove opened the room instead.
+                            let shown = Array(app.lobby.recentHere.prefix(4))
+                            List {
+                                ForEach(shown) { recent in
+                                    Button { sheet = .again(recent.room) } label: {
+                                        HStack(spacing: 12) {
+                                            Initial(name: recent.room, size: 36)
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(recent.room).font(.system(size: 16, weight: .semibold))
+                                                Text(recent.at.formatted(.relative(presentation: .named))).font(.system(size: 13)).foregroundStyle(Theme.muted)
                                             }
-                                            .padding(.leading, 14).padding(.vertical, 11)
-                                            .contentShape(Rectangle())
+                                            Spacer(minLength: 0)
+                                            Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.muted.opacity(0.6))
                                         }
-                                        .buttonStyle(.plain)
-                                        // Its own button beside the row's, not inside it:
-                                        // the record is the person's to tidy.
-                                        RecentForget(room: recent.room, size: 30) {
-                                            withAnimation(Theme.settle) { app.lobby.forget(recent) }
+                                        .padding(.horizontal, 14)
+                                        .frame(height: Self.recentRow)
+                                        .contentShape(Rectangle())
+                                        .overlay(alignment: .bottom) {
+                                            if recent.id != shown.last?.id {
+                                                Divider().padding(.leading, 62)
+                                            }
                                         }
-                                        .padding(.trailing, 10)
                                     }
-                                    .transition(Theme.arrive)
-                                    if recent.id != app.lobby.recentHere.prefix(4).last?.id { Divider().padding(.leading, 62) }
+                                    .buttonStyle(.plain)
+                                    .listRowInsets(EdgeInsets())
+                                    .listRowBackground(Theme.surface)
+                                    .listRowSeparator(.hidden)
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                        Button(role: .destructive) {
+                                            withAnimation(Theme.settle) { app.lobby.forget(recent) }
+                                        } label: {
+                                            Label(t("Remove"), systemImage: "trash")
+                                        }
+                                        .accessibilityLabel(t("Remove {room} from recent", ["room": recent.room]))
+                                    }
                                 }
                             }
-                            .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Theme.surface))
+                            .listStyle(.plain)
+                            .scrollDisabled(true)
+                            .scrollContentBackground(.hidden)
+                            .environment(\.defaultMinListRowHeight, Self.recentRow)
+                            .frame(height: Self.recentRow * CGFloat(shown.count))
+                            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                         }
                         .rise(0.1)
                     }
