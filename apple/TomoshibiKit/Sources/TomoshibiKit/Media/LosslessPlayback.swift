@@ -205,8 +205,7 @@ final class LosslessPlayback: LosslessSink, @unchecked Sendable {
         stream.ring.write(floats: first)
         streams[key] = stream
         lock.unlock()
-        audio.engine.attach(stream.node)
-        audio.engine.connect(stream.node, to: audio.engine.mainMixerNode, format: stream.node.outputFormat(forBus: 0))
+        audio.attachPlayback(stream.node, format: stream.node.outputFormat(forBus: 0))
     }
 
     @MainActor private func close(_ key: String) {
@@ -221,8 +220,7 @@ final class LosslessPlayback: LosslessSink, @unchecked Sendable {
         let stream = streams.removeValue(forKey: key)
         lock.unlock()
         guard let stream, let audio else { return }
-        audio.engine.disconnectNodeOutput(stream.node)
-        audio.engine.detach(stream.node)
+        audio.detachPlayback(stream.node)
     }
 
     @MainActor func closeAll() {

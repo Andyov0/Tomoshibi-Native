@@ -14,8 +14,19 @@ import TomoshibiCore
 /// as the web client's sound panel does (web/src/live/hearing.ts).
 @MainActor
 public final class CallAudio {
-    let engine = AVAudioEngine()
+    /// Replaced on a Mac when the microphone goes off (`freshEngine`), which
+    /// is why nothing outside holds on to it: a node played into the call
+    /// goes through `attachPlayback`.
+    private(set) var engine = AVAudioEngine()
     private var players: [String: Player] = [:]
+    /// Nodes others play into the call's mixer (the lossless streams), with
+    /// the format each was connected in, so that a new engine takes them over.
+    private var others: [ObjectIdentifier: (node: AVAudioNode, format: AVAudioFormat)] = [:]
+    #if os(macOS)
+    /// Whether this engine has recorded. Once it has, it records for good:
+    /// see `freshEngine`.
+    private var engineRecorded = false
+    #endif
     /// The track the microphone feeds while it is on, kept apart from whether
     /// the tap that feeds it is on the engine right now (`tapped`). A restart
     /// takes the tap off, and it used to forget the track with it: a restart
@@ -24,10 +35,10 @@ public final class CallAudio {
     /// whatever starts the engine puts the tap back for this track.
     private var microphone: AudioInput?
     private var tapped = false
-    #if os(iOS)
     /// Whether the engine is set up to record, from a press of the
-    /// microphone until it is pressed off. While it is not, the session is
-    /// one for playback with no voice processing (`start`).
+    /// microphone until it is pressed off. While it is not, the engine plays
+    /// and nothing else: no voice processing, and on an iPhone a session for
+    /// playback (`start`).
     ///
     /// On an iPhone the call's session recorded from the first sound to the
     /// last, microphone on or off: voice processing took the whole of the
@@ -35,10 +46,16 @@ public final class CallAudio {
     /// still the microphone was, the orange light stayed lit, and Bluetooth
     /// headphones stayed on the narrow headset profile. The owner chose a
     /// short gap at each press of the microphone over that (2026-10-17).
+    ///
+    /// A Mac did the same, and there it cost every other app its sound: the
+    /// system's voice processing ducks whatever else is playing while it
+    /// runs, and it ran from the moment somebody walked into a room, so Apple
+    /// Music fell silent on entering one with the microphone off, and a
+    /// sound shared from it was shared from an app the sharer could no
+    /// longer hear (2026-10-17).
     private var recording = false
     /// How the engine was last started: for playback only, or to record.
     private(set) var listeningOnly = false
-    #endif
     private var converter: AVAudioConverter?
     private(set) var started = false
 
@@ -85,12 +102,63 @@ public final class CallAudio {
         // headset plugged in or taken out, a default device that changes its
         // rate. Nothing started it again, so a call went silent both ways the
         // moment somebody put their headphones on.
+        watchConfiguration()
+    }
+
+    private func watchConfiguration() {
+        if let configurationWatch { NotificationCenter.default.removeObserver(configurationWatch) }
         configurationWatch = NotificationCenter.default.addObserver(
             forName: .AVAudioEngineConfigurationChange, object: engine, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.hardwareChanged() }
         }
     }
+
+    /// A node somebody else plays into the call, on the call's mixer.
+    func attachPlayback(_ node: AVAudioNode, format: AVAudioFormat) {
+        engine.attach(node)
+        engine.connect(node, to: engine.mainMixerNode, format: format)
+        others[ObjectIdentifier(node)] = (node, format)
+    }
+
+    func detachPlayback(_ node: AVAudioNode) {
+        guard others.removeValue(forKey: ObjectIdentifier(node)) != nil else { return }
+        engine.disconnectNodeOutput(node)
+        engine.detach(node)
+    }
+
+    #if os(macOS)
+    /// A new engine for playing only, with every sound the old one played.
+    ///
+    /// An engine whose microphone has been on keeps recording on a Mac. With
+    /// voice processing turned off again it ran on the system's default
+    /// aggregate of microphone and speakers, the microphone stayed in use
+    /// with nothing taking from it (DeviceIsRunningSomewhere 1, the orange
+    /// light lit), and the speakers somebody picked could not be pointed at
+    /// alone (the aggregate refuses a device that only plays, -10851).
+    /// Turning the unit's input off instead left an engine that would not
+    /// start at all, since it still had an input node. AVAudioEngine has no
+    /// way to give an input node back, so the engine is replaced: the nodes
+    /// are moved across in the formats they played in, and their volumes go
+    /// with them, being the nodes' own.
+    private func freshEngine() {
+        let old = engine
+        let moving = players.values.map { ($0.node as AVAudioNode, $0.format) } + others.values.map { ($0.node, $0.format) }
+        for (node, _) in moving {
+            old.disconnectNodeOutput(node)
+            old.detach(node)
+        }
+        engine = AVAudioEngine()
+        watchConfiguration()
+        for (node, format) in moving {
+            engine.attach(node)
+            engine.connect(node, to: engine.mainMixerNode, format: format)
+        }
+        engineRecorded = false
+        voiceProcessing = false
+        Self.log.notice("a new engine for playback only, with \(moving.count, privacy: .public) sounds moved across")
+    }
+    #endif
 
     deinit {
         if let configurationWatch { NotificationCenter.default.removeObserver(configurationWatch) }
@@ -198,6 +266,7 @@ public final class CallAudio {
         let node: AVAudioSourceNode
         let ring: PCMRing
         let sink: RingSink
+        let format: AVAudioFormat
         var volume: Float = 1
         var duck: Float = 1
 
@@ -206,6 +275,7 @@ public final class CallAudio {
             self.ring = ring
             self.sink = RingSink(ring: ring)
             let format = AVAudioFormat(standardFormatWithSampleRate: 48_000, channels: AVAudioChannelCount(channels))!
+            self.format = format
             self.node = AVAudioSourceNode(format: format) { _, _, frames, list in
                 ring.render(into: UnsafeMutableAudioBufferListPointer(list), frames: Int(frames))
                 return noErr
@@ -223,9 +293,12 @@ public final class CallAudio {
             throw CocoaError(.featureUnsupported)
         }
         #endif
+        let listening = !recording
+        #if os(macOS)
+        if listening && engineRecorded { freshEngine() }
+        #endif
         #if os(iOS)
         let session = AVAudioSession.sharedInstance()
-        let listening = !recording
         if listening {
             try session.setCategory(.playback, mode: .default, options: [])
         } else {
@@ -233,8 +306,6 @@ public final class CallAudio {
         }
         try session.setPreferredSampleRate(48_000)
         try session.setActive(true)
-        #else
-        let listening = false
         #endif
         do {
             // Voice processing is chosen before anything touches the output:
@@ -258,13 +329,15 @@ public final class CallAudio {
                 // warning above is about voice processing, which is off here.
                 _ = engine.mainMixerNode
             }
-            pointAtChosenDevices()
+            pointAtChosenDevices(listening: listening)
             engine.prepare()
             try engine.start()
             muteForTests()
             voiceProcessing = !listening && !originalSound
-            #if os(iOS)
             listeningOnly = listening
+            if voiceProcessing { duckOthersLeast() }
+            #if os(macOS)
+            if !listening { engineRecorded = true }
             #endif
             Self.log.notice("engine started, \(listening ? "for playback only" : "to record", privacy: .public), voice processing \(self.voiceProcessing ? "on" : "off", privacy: .public)")
         } catch where !originalSound && !listening {
@@ -281,6 +354,9 @@ public final class CallAudio {
             try engine.start()
             muteForTests()
             voiceProcessing = false
+            #if os(macOS)
+            engineRecorded = true
+            #endif
             Self.log.notice("engine started without voice processing")
         }
         started = true
@@ -302,6 +378,22 @@ public final class CallAudio {
             }
         }
         if wasGivenUp { onNews?(.back) }
+    }
+
+    /// Voice processing ducks every other app's sound while it runs, and by
+    /// default nearly to nothing: on a Mac, Apple Music was silent through a
+    /// call with the microphone on, and an app's sound shared into the call
+    /// was one its sharer could not hear. The least the system offers is
+    /// asked for, and none of its own judging of when somebody speaks, which
+    /// is the call's business (the web's echo canceller ducks nothing).
+    ///
+    /// Asked of a running engine: set before the start, it brought the
+    /// voice-processing unit up early, the engine's own preparing of it was
+    /// then refused (-10849, already initialised), and the microphone would
+    /// not go on with voice processing or without it.
+    private func duckOthersLeast() {
+        engine.inputNode.voiceProcessingOtherAudioDuckingConfiguration =
+            AVAudioVoiceProcessingOtherAudioDuckingConfiguration(enableAdvancedDucking: false, duckingLevel: .min)
     }
 
     /// Whether the system's voice processing (echo cancellation, noise
@@ -333,9 +425,7 @@ public final class CallAudio {
     public func stop() {
         microphone = nil
         untap()
-        #if os(iOS)
         recording = false
-        #endif
         for sid in Array(players.keys) { stopPlaying(sid: sid) }
         engine.stop()
         started = false
@@ -365,7 +455,6 @@ public final class CallAudio {
         // the last one back only to have it replaced.
         microphone = nil
         untap()
-        #if os(iOS)
         // Set up to record before anything is tapped: an engine started for
         // playback only is started again for it, which is the gap a press of
         // the microphone costs.
@@ -381,10 +470,6 @@ public final class CallAudio {
             recording = false
             throw error
         }
-        #else
-        try start()
-        try tap(input)
-        #endif
         microphone = input
     }
 
@@ -453,7 +538,6 @@ public final class CallAudio {
     public func stopMicrophone() {
         microphone = nil
         untap()
-        #if os(iOS)
         // Back to playback only, so that what is heard is heard whole. Only
         // over an engine that is running: one stopped or given up starts
         // set up for playback when it is next asked for sound.
@@ -466,7 +550,6 @@ public final class CallAudio {
                 Self.log.error("the engine would not start again for playback only: \(String(describing: error), privacy: .public)")
             }
         }
-        #endif
     }
 
     private func untap() {
@@ -556,7 +639,7 @@ public final class CallAudio {
         stopPlaying(sid: sid)
         let player = Player(channels: channels)
         engine.attach(player.node)
-        engine.connect(player.node, to: engine.mainMixerNode, format: player.node.outputFormat(forBus: 0))
+        engine.connect(player.node, to: engine.mainMixerNode, format: player.format)
         players[sid] = player
         call.attachAudio(sid: sid, sink: player.sink)
         Self.log.notice("playing \(sid, privacy: .public) in \(channels) channels")
@@ -639,7 +722,7 @@ extension CallAudio {
         stopPlaying(sid: key)
         let player = Player(channels: channels)
         engine.attach(player.node)
-        engine.connect(player.node, to: engine.mainMixerNode, format: player.node.outputFormat(forBus: 0))
+        engine.connect(player.node, to: engine.mainMixerNode, format: player.format)
         players[key] = player
         return player.ring
     }
