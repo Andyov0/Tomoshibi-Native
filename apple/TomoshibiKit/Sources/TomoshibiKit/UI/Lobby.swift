@@ -217,7 +217,7 @@ struct CameraStage: View {
         ZStack {
             Backdrop()
             if app.startWithCamera {
-                SelfView(session: preview.session)
+                SelfView(session: preview.session, capture: preview)
                     .transition(.opacity.animation(Theme.settle))
             }
         }
@@ -239,15 +239,15 @@ struct CameraStage: View {
             // system's default whatever the call was about to send. Looked
             // up again each time the camera goes on, so a choice made in the
             // settings meanwhile is the one shown.
-            let device = Self.joiningCamera(app.deviceMemory)
-            let current = (session.inputs.first as? AVCaptureDeviceInput)?.device
-            if let device, current?.uniqueID != device.uniqueID, let input = try? AVCaptureDeviceInput(device: device) {
-                session.beginConfiguration()
-                for existing in session.inputs { session.removeInput(existing) }
-                if session.canAddInput(input) { session.addInput(input) }
-                session.commitConfiguration()
+            // Blurred as the call will send it, when blur is chosen: the
+            // preview takes its frames through the same blur (CameraCapture
+            // `preview`).
+            preview.blurring = app.deviceMemory.blur
+            if let device = Self.joiningCamera(app.deviceMemory) {
+                preview.preview(device: device)
+            } else {
+                DispatchQueue.global(qos: .userInitiated).async { session.startRunning() }
             }
-            DispatchQueue.global(qos: .userInitiated).async { session.startRunning() }
         } else {
             DispatchQueue.global(qos: .userInitiated).async { session.stopRunning() }
         }

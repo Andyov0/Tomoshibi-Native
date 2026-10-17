@@ -488,6 +488,16 @@ public final class CallModel {
     /// system's voice processing off and the voice republished at the higher
     /// rate, because nothing is taken out of it any more. Remembered once it
     /// took, as the web remembers it.
+    /// Blurs the background behind the camera or stops (live/blur.ts), from
+    /// the next frame, in what is sent and in the picture of yourself, and
+    /// remembers it for the next call as the web does.
+    public var blurring: Bool { camera.blurring }
+
+    public func setBlur(_ on: Bool) {
+        camera.blurring = on
+        memory.remember(blur: on)
+    }
+
     public func setOriginalSound(_ original: Bool) async throws {
         guard original != audio.originalSound else { return }
         do {
@@ -580,6 +590,10 @@ public final class CallModel {
                     return
                 }
                 do {
+                    // Blurred from the first frame where blur is chosen: a
+                    // frame or two of the room before the switch took was the
+                    // room shown to everybody.
+                    camera.blurring = memory.blur
                     try camera.start(into: input)
                 } catch {
                     // A camera published and never fed is a black tile for

@@ -20,6 +20,9 @@ public struct DeviceMemory: @unchecked Sendable {
     public static let devicesKey = "meet-live.devices"
     public static let choiceKey = "meet-live.device-choice"
     public static let originalKey = "meet-live.original-sound"
+    /// Whether the background is blurred (preferences.ts `BLUR_KEY`), in the
+    /// web's own words, "on" or nothing.
+    public static let blurKey = "meet-live.blur"
 
     /// The kinds of device somebody picks from a list (preferences.ts
     /// `CHOSEN_KINDS`), named as the web names them.
@@ -136,6 +139,16 @@ public struct DeviceMemory: @unchecked Sendable {
 
     public func remember(originalSound on: Bool) {
         defaults?.set(on ? "on" : nil, forKey: Self.originalKey)
+    }
+
+    /// The background blurred behind somebody's camera, remembered as the
+    /// web remembers it (preferences.ts `blurWanted`).
+    public var blur: Bool {
+        defaults?.string(forKey: Self.blurKey) == "on"
+    }
+
+    public func remember(blur on: Bool) {
+        defaults?.set(on ? "on" : nil, forKey: Self.blurKey)
     }
 }
 

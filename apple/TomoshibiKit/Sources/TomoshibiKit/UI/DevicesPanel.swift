@@ -22,6 +22,9 @@ struct DevicesPanel: View {
     let close: () -> Void
     @State private var lists = DeviceLists()
     @State private var changingOriginal = false
+    /// Shown from the camera's own state, which is not observed: read when
+    /// the panel opens and written by the switch.
+    @State private var blurring = false
     @State private var language = Localization.shared.language
 
     var body: some View {
@@ -53,7 +56,10 @@ struct DevicesPanel: View {
         .animation(Theme.settle, value: lists.speakers)
         .animation(Theme.settle, value: lists.cameras)
         .animation(Theme.settle, value: model.microphoneOn)
-        .onAppear { lists.start(model) }
+        .onAppear {
+            lists.start(model)
+            blurring = model.blurring
+        }
         .onDisappear { lists.stop() }
     }
 
@@ -171,14 +177,18 @@ struct DevicesPanel: View {
                 }
                 .transition(Theme.arrive)
             }
+            // The app's own blur (BackgroundBlur), from the next frame, in
+            // what is sent and in the picture of yourself. It opened the
+            // system's video effects, a sheet of the system's that did not
+            // look like the app and on an iPhone did not reach the call.
             SettingsRow(title: t("Blur my background"), symbol: "person.and.background.dotted", last: true) {
-                Image(systemName: "arrow.up.forward")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(Theme.muted)
+                Toggle("", isOn: Binding(get: { blurring }, set: { on in
+                    blurring = on
+                    model.setBlur(on)
+                }))
+                .labelsHidden()
+                .toggleStyle(.glassSwitch)
             }
-            .contentShape(Rectangle())
-            .onTapGesture { AVCaptureDevice.showSystemUserInterface(.videoEffects) }
-            .accessibilityAddTraits(.isButton)
         }
     }
 

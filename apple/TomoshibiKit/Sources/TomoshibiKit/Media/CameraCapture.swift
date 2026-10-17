@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import os
 #if os(iOS)
 import UIKit
 #endif
@@ -37,6 +38,56 @@ public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
     public static var height: UInt32 { size.height }
     private var scaler: VTPixelTransferSession?
     private var pool: CVPixelBufferPool?
+
+    /// Whether the background behind the person is blurred (BackgroundBlur),
+    /// in what is sent and in the picture of themselves. Set from anywhere;
+    /// read by each frame on the camera's queue.
+    public var blurring: Bool {
+        get { blurState.withLock { $0 } }
+        set {
+            let was = blurState.withLock { state -> Bool in
+                let was = state
+                state = newValue
+                return was
+            }
+            if was != newValue {
+                DispatchQueue.main.async { NotificationCenter.default.post(name: Self.blurChanged, object: self) }
+            }
+        }
+    }
+    private let blurState = OSAllocatedUnfairLock(initialState: false)
+    /// Made on the camera's queue the first time a frame is blurred, and
+    /// used only there.
+    private var blur: BackgroundBlur?
+    /// Where blurred frames are shown as well as sent: the picture of
+    /// yourself, which otherwise comes straight from the session and would
+    /// show a room the call no longer sees.
+    private let frameSink = OSAllocatedUnfairLock<FrameSink?>(initialState: nil)
+
+    private final class FrameSink: @unchecked Sendable {
+        let id = UUID()
+        let show: @Sendable (CVPixelBuffer) -> Void
+        init(_ show: @escaping @Sendable (CVPixelBuffer) -> Void) { self.show = show }
+    }
+
+    /// Posted on the main queue, with the capture as its object, when
+    /// `blurring` changes: the picture of yourself switches between the
+    /// session's own and the blurred frames.
+    public static let blurChanged = Notification.Name("tomoshibi.camera.blur")
+
+    /// Shows every blurred frame through `show` until `stopShowing` with the
+    /// token this returns.
+    func showFrames(_ show: @escaping @Sendable (CVPixelBuffer) -> Void) -> UUID {
+        let sink = FrameSink(show)
+        frameSink.withLock { $0 = sink }
+        return sink.id
+    }
+
+    func stopShowing(_ id: UUID) {
+        frameSink.withLock { current in
+            if current?.id == id { current = nil }
+        }
+    }
 
     public override init() {
         super.init()
@@ -154,6 +205,41 @@ public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         NotificationCenter.default.post(name: Self.changedCamera, object: session)
     }
 
+    /// Shows `device` with nothing sent: the join screen's picture of
+    /// yourself. Its frames are taken (and blurred) only while `blurring`;
+    /// otherwise the session's own preview draws it and the frames go
+    /// nowhere.
+    public func preview(device: AVCaptureDevice) {
+        let current = (session.inputs.first as? AVCaptureDeviceInput)?.device
+        session.beginConfiguration()
+        if current?.uniqueID != device.uniqueID, let capture = try? AVCaptureDeviceInput(device: device) {
+            for existing in session.inputs { session.removeInput(existing) }
+            if session.canAddInput(capture) { session.addInput(capture) }
+        }
+        if session.canSetSessionPreset(.hd1280x720) { session.sessionPreset = .hd1280x720 }
+        if !session.outputs.contains(output), session.canAddOutput(output) { session.addOutput(output) }
+        #if os(iOS)
+        if let connection = output.connection(with: .video) {
+            if device.position == .front, connection.isVideoMirroringSupported { connection.isVideoMirrored = false }
+            let coordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: nil)
+            rotation = coordinator
+            let apply = { [weak connection] (angle: CGFloat) in
+                guard let connection, connection.isVideoRotationAngleSupported(angle) else { return }
+                connection.videoRotationAngle = angle
+            }
+            apply(coordinator.videoRotationAngleForHorizonLevelCapture)
+            rotationWatch = coordinator.observe(\.videoRotationAngleForHorizonLevelCapture, options: [.new]) { coordinator, _ in
+                apply(coordinator.videoRotationAngleForHorizonLevelCapture)
+            }
+        }
+        #endif
+        session.commitConfiguration()
+        self.device = device
+        let session = self.session
+        queue.async { session.startRunning() }
+        NotificationCenter.default.post(name: Self.changedCamera, object: session)
+    }
+
     public func stop() {
         let session = self.session
         queue.async {
@@ -163,8 +249,18 @@ public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
     }
 
     public func captureOutput(_ output: AVCaptureOutput, didOutput sample: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard let input, let captured = CMSampleBufferGetImageBuffer(sample) else { return }
-        let buffer = scaled(captured) ?? captured
+        let blurring = blurState.withLock { $0 }
+        // A preview with nothing to send still runs while blurred: the join
+        // screen shows the blurred picture before there is a call to send it.
+        guard input != nil || blurring, let captured = CMSampleBufferGetImageBuffer(sample) else { return }
+        var buffer = scaled(captured) ?? captured
+        if blurring {
+            if blur == nil { blur = BackgroundBlur() }
+            if let blurred = blur?.process(buffer) { buffer = blurred }
+            let sink = frameSink.withLock { $0 }
+            sink?.show(buffer)
+        }
+        guard let input else { return }
         let time = CMSampleBufferGetPresentationTimeStamp(sample)
         let micros = Int64(CMTimeGetSeconds(time) * 1_000_000)
         input.push(pixelBuffer: UInt64(UInt(bitPattern: Unmanaged.passRetained(buffer).toOpaque())), timestampUs: micros, rotation: 0)

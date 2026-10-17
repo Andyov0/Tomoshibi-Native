@@ -955,6 +955,8 @@ private struct MediaSettings: View {
     @State private var speakers: [AudioDevice] = []
     @State private var cameras: [AVCaptureDevice] = []
     @State private var check = DeviceCheck()
+    /// The blur switch, read from what is remembered when the page opens.
+    @State private var blurWanted = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -979,18 +981,21 @@ private struct MediaSettings: View {
                     GlassChoice(id: "settings.camera", options: choices(cameras.map { ($0.uniqueID, $0.localizedName) }),
                                 selection: binding("videoinput"), width: 280)
                 }
-                // The web's "Blur my background" tick, which on Apple's
-                // systems is the camera's own video effects: every app gets
-                // them, they run on the Neural Engine, and the system keeps the
-                // choice. The row opens the system's control for them, as the
-                // devices panel in a call does.
-                Button { AVCaptureDevice.showSystemUserInterface(.videoEffects) } label: {
-                    SettingsRow(title: t("Blur my background"), symbol: "person.and.background.dotted") {
-                        Image(systemName: "arrow.up.right").font(.system(size: 11.5, weight: .bold)).foregroundStyle(Theme.muted)
-                    }
-                    .contentShape(Rectangle())
+                // The web's "Blur my background" tick, kept as the web keeps
+                // it (`meet-live.blur`) and applied by the app's own blur from
+                // the next call, and at once in a call that is on. It opened
+                // the system's video effects, which the owner found did not
+                // look like the app and which on an iPhone did not reach the
+                // call (BackgroundBlur).
+                SettingsRow(title: t("Blur my background"), symbol: "person.and.background.dotted") {
+                    Toggle("", isOn: Binding(get: { blurWanted }, set: { on in
+                        blurWanted = on
+                        app.deviceMemory.remember(blur: on)
+                        app.call?.setBlur(on)
+                    }))
+                    .labelsHidden()
+                    .toggleStyle(.glassSwitch)
                 }
-                .buttonStyle(.plain)
                 AdaptiveRow(title: t("Microphone"), symbol: "mic", last: speakers.isEmpty && preferences.devices.isEmpty) {
                     GlassChoice(id: "settings.microphone", options: choices(microphones.map { ($0.id, $0.name) }),
                                 selection: binding("audioinput"), width: 280)
@@ -1016,6 +1021,7 @@ private struct MediaSettings: View {
             .animation(Theme.settle, value: preferences.devices.isEmpty)
         }
         .onAppear {
+            blurWanted = app.deviceMemory.blur
             cameras = CameraCapture.cameras()
             microphones = CallAudio.devices(input: true)
             speakers = CallAudio.devices(input: false)

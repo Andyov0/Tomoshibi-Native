@@ -294,7 +294,7 @@ struct SelfPicture: View {
     var body: some View {
         ZStack {
             if model.cameraOn {
-                SelfView(session: model.camera.session).transition(.opacity.animation(Theme.settle))
+                SelfView(session: model.camera.session, capture: model.camera).transition(.opacity.animation(Theme.settle))
             } else {
                 Avatar(name: model.localName, identity: model.localIdentity)
                     .transition(.opacity.animation(Theme.settle))
@@ -464,15 +464,137 @@ struct Avatar: View {
     }
 }
 
-/// This participant's own camera, drawn straight from the capture session.
+/// This participant's own camera, drawn straight from the capture session,
+/// or, while the background is blurred, from the frames as they are sent: the
+/// session's own preview shows the room the call no longer sees.
 struct SelfView: View {
     let session: AVCaptureSession
+    var capture: CameraCapture?
+    @State private var blurred = false
 
     var body: some View {
-        PreviewRepresentable(session: session)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.tileRadius))
+        Group {
+            if let capture, blurred {
+                BlurredPreview(capture: capture).transition(.opacity)
+            } else {
+                PreviewRepresentable(session: session).transition(.opacity)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: Theme.tileRadius))
+        .animation(Theme.settle, value: blurred)
+        .onAppear { blurred = capture?.blurring ?? false }
+        .onReceive(NotificationCenter.default.publisher(for: CameraCapture.blurChanged)) { note in
+            guard let capture, note.object as? CameraCapture === capture else { return }
+            blurred = capture.blurring
+        }
     }
 }
+
+/// The blurred frames, drawn as a remote picture is (VideoRenderer), filling
+/// the tile and mirrored as the session's preview mirrors a camera that faces
+/// its owner. The mirroring is the view's: the renderer sets its own layer's
+/// transform with every frame.
+private struct BlurredPreview: View {
+    let capture: CameraCapture
+
+    var body: some View {
+        BlurredRepresentable(capture: capture)
+    }
+}
+
+#if os(macOS)
+private struct BlurredRepresentable: NSViewRepresentable {
+    let capture: CameraCapture
+    func makeNSView(context: Context) -> BlurredView { BlurredView(capture: capture) }
+    func updateNSView(_ view: BlurredView, context: Context) { view.mirror() }
+    static func dismantleNSView(_ view: BlurredView, coordinator: ()) { view.stop() }
+}
+
+final class BlurredView: NSView {
+    private let capture: CameraCapture
+    private let renderer = VideoRenderer()
+    private var token: UUID?
+    private let holder = CALayer()
+
+    init(capture: CameraCapture) {
+        self.capture = capture
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer = CALayer()
+        renderer.layer.videoGravity = .resizeAspectFill
+        holder.addSublayer(renderer.layer)
+        layer?.addSublayer(holder)
+        let renderer = self.renderer
+        token = capture.showFrames { renderer.show($0, rotation: 0) }
+        mirror()
+    }
+
+    required init?(coder: NSCoder) { fatalError("not from a nib") }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        holder.frame = bounds
+        renderer.layer.frame = holder.bounds
+        CATransaction.commit()
+        mirror()
+    }
+
+    func mirror() {
+        let faces = capture.device.map(CameraCapture.facesUser) ?? true
+        holder.setAffineTransform(faces ? CGAffineTransform(scaleX: -1, y: 1) : .identity)
+    }
+
+    func stop() {
+        if let token { capture.stopShowing(token) }
+        token = nil
+    }
+}
+#else
+private struct BlurredRepresentable: UIViewRepresentable {
+    let capture: CameraCapture
+    func makeUIView(context: Context) -> BlurredView { BlurredView(capture: capture) }
+    func updateUIView(_ view: BlurredView, context: Context) { view.mirror() }
+    static func dismantleUIView(_ view: BlurredView, coordinator: ()) { view.stop() }
+}
+
+final class BlurredView: UIView {
+    private let capture: CameraCapture
+    private let renderer = VideoRenderer()
+    private var token: UUID?
+
+    init(capture: CameraCapture) {
+        self.capture = capture
+        super.init(frame: .zero)
+        renderer.layer.videoGravity = .resizeAspectFill
+        layer.addSublayer(renderer.layer)
+        let renderer = self.renderer
+        token = capture.showFrames { renderer.show($0, rotation: 0) }
+        mirror()
+    }
+
+    required init?(coder: NSCoder) { fatalError("not from a storyboard") }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        renderer.layer.frame = bounds
+        CATransaction.commit()
+    }
+
+    func mirror() {
+        let faces = capture.device.map(CameraCapture.facesUser) ?? true
+        transform = faces ? CGAffineTransform(scaleX: -1, y: 1) : .identity
+    }
+
+    func stop() {
+        if let token { capture.stopShowing(token) }
+        token = nil
+    }
+}
+#endif
 
 /// Keeps a preview mirrored only while the camera feeding it faces its owner
 /// (CameraCapture.facesUser, live/facing.ts, hooks/useMirrored.ts). It was
