@@ -593,7 +593,13 @@ struct MacLobby: View {
                 case .servers: ServersView(app: app)
                 }
             }
-            .transition(.opacity.animation(Theme.settle))
+            // One identity for each section: the same Group switching what
+            // is in it is one view changing, and the transition below never
+            // played, so a section arrived as a cut.
+            .id(section ?? .home)
+            .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 10)).animation(Theme.settle),
+                                    removal: .opacity.animation(Theme.leave)))
+            .animation(Theme.settle, value: section)
             .floatingPopoverLayer(popovers)
         }
         .sheet(item: $sheet) { mode in
@@ -929,7 +935,9 @@ struct PhoneLobby: View {
             SettingsView(app: app)
         }
         .sheet(isPresented: $scheduling) {
-            NavigationStack { ScheduleView(app: app, account: account) }
+            ScheduleView(app: app, account: account)
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Theme.background)
         }
         .toast(app)
         .floatingPopoverLayer(popovers)
@@ -1507,9 +1515,18 @@ struct MeetingRow: View {
     }
 
     private var when: String {
-        let date = AppModel.instant(one.at).map(LobbyModel.said) ?? one.at
+        let date = AppModel.instant(one.at).map(Self.said) ?? one.at
         if let relay = one.relay, !relay.isEmpty { return "\(date) · \(app.lobby.label(relay))" }
         return date
+    }
+
+    /// A meeting's time as a row has room for it: this year's go without
+    /// the year, which with the zone cut the time short on a phone ("Oct
+    /// 18, 2026 at 10:00 AM G…").
+    static func said(_ date: Date) -> String {
+        guard Calendar.current.isDate(date, equalTo: Date(), toGranularity: .year) else { return LobbyModel.said(date) }
+        return date.formatted(Date.FormatStyle(locale: Localization.shared.language.locale)
+            .month(.abbreviated).day().hour().minute().timeZone(.specificName(.short)))
     }
 }
 
@@ -1528,6 +1545,9 @@ struct ScheduleView: View {
     @State private var copied: String?
     @State private var now = Date()
     @State private var popovers = Popovers()
+    #if os(iOS)
+    @Environment(\.dismiss) private var dismiss
+    #endif
 
     private static let ahead: TimeInterval = 60 * 24 * 60 * 60
 
@@ -1548,40 +1568,87 @@ struct ScheduleView: View {
         return at < now || at > now.addingTimeInterval(Self.ahead)
     }
 
+    // The page was the system's on a phone (a navigation bar over plain
+    // black, nothing to close it with), its parts did not line up (the time
+    // pushed to the left of a row it did not fill, the summary beside the
+    // button breaking "GMT+8" onto a line of its own, "No meetings arranged
+    // yet." floating at the top of an empty column on a Mac), and nothing on
+    // it moved: a meeting arranged or called off appeared and vanished, as
+    // did the summary's warnings (the owner, 2026-10-17). Now it is drawn as
+    // the start and join sheet is, on the room's evening ground with a close
+    // of its own on a phone; the time sits at the end of its row and the
+    // summary has the card's width above a button that has it too; the list
+    // is a card at the height of the form's, empty or not; and what comes and
+    // goes does so with the app's own arrival and leaving.
     var body: some View {
         ScrollView {
             #if os(macOS)
             VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(t("Scheduled meetings")).font(.system(size: 26, weight: .bold))
-                    Text(t("Pick a time and hand out the link before it starts.")).foregroundStyle(Theme.muted)
-                }
-                HStack(alignment: .top, spacing: 20) {
-                    form.frame(width: 360)
-                    list.frame(maxWidth: .infinity)
+                heading(size: 26)
+                // Side by side where the list has room for a meeting's name,
+                // its time and its three buttons; in a narrower window it
+                // was squeezed to "…" beside the form, so it goes under it.
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 20) {
+                        form.frame(width: 360)
+                        list.frame(minWidth: 420, maxWidth: .infinity, alignment: .top)
+                    }
+                    VStack(alignment: .leading, spacing: 20) {
+                        form.frame(maxWidth: 560)
+                        list.frame(maxWidth: 560)
+                    }
                 }
             }
             .padding(28)
             #else
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(alignment: .top, spacing: 12) {
+                    heading(size: 22)
+                    Spacer(minLength: 0)
+                    Button { dismiss() } label: { Image(systemName: "xmark").font(.system(size: 13, weight: .bold)) }
+                        .buttonStyle(.glassCircle(32))
+                        .accessibilityLabel(t("Close"))
+                }
+                // Clear of the sheet's grabber, which it sat against.
+                .padding(.top, 22)
                 form
                 list
             }
-            .padding(16)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)
             #endif
         }
         .scrollIndicators(.never)
         #if os(iOS)
-        .navigationTitle(t("Scheduled meetings"))
-        .navigationBarTitleDisplayMode(.inline)
-        .background(Color.black.ignoresSafeArea())
+        .background(Backdrop().opacity(0.6).ignoresSafeArea())
+        .putsKeyboardAway()
         #else
         .background(Backdrop().opacity(0.6))
         #endif
         .task { await app.lobby.refreshArrangements() }
         .animation(Theme.settle, value: app.lobby.arrangements.map(\.id))
+        .animation(Theme.settle, value: listing)
         .floatingPopoverLayer(popovers)
         .onAppear { popovers.openFromDebug() }
+    }
+
+    private func heading(size: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(t("Scheduled meetings")).font(.system(size: size, weight: .bold))
+            Text(t("Pick a time and hand out the link before it starts."))
+                .font(.system(size: size > 24 ? 14 : 13)).foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// A label at the start of one of the form's rows.
+    private func rowLabel(_ text: String, _ symbol: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: symbol).font(.system(size: 12, weight: .semibold))
+            Text(text)
+        }
+        .font(.system(size: 13))
+        .foregroundStyle(Theme.muted)
     }
 
     @ViewBuilder
@@ -1592,6 +1659,7 @@ struct ScheduleView: View {
             } else {
                 GlassField(prompt: t("Room name"), text: $planning, symbol: "number", mono: !planning.isEmpty, height: 40)
                 Text(t("Name it yourself, or leave it blank for one nobody has used.")).font(.system(size: 11.5)).foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
                 // The app's own month rather than the system's calendar: the
                 // chosen day in the person's colour, the days past and beyond
                 // sixty dimmed (Schedule.tsx offers no further ahead).
@@ -1599,23 +1667,42 @@ struct ScheduleView: View {
                     .padding(12)
                     .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.black.opacity(0.18)))
                 HStack(spacing: 8) {
-                    Text(t("Time")).font(.system(size: 12)).foregroundStyle(Theme.muted)
+                    rowLabel(t("Time"), "clock")
+                    Spacer(minLength: 8)
                     ClockChoice(id: "schedule.clock", hour: $hour, minute: $minute)
-                    Spacer()
-                    if app.offersRelayChoice {
+                }
+                if app.offersRelayChoice {
+                    HStack(spacing: 8) {
+                        rowLabel(t("Server"), "server.rack")
+                        Spacer(minLength: 8)
                         ServerMenu(app: app, compact: true, id: "schedule.server")
                     }
                 }
-                HStack(spacing: 10) {
-                    Text(verdict).font(.system(size: 12)).foregroundStyle(problem ? Theme.danger : Theme.muted)
+                Divider().overlay(Color.white.opacity(0.06))
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    Image(systemName: problem ? "exclamationmark.circle" : "calendar.badge.clock")
+                        .font(.system(size: 12, weight: .semibold))
+                        .contentTransition(.symbolEffect(.replace))
+                    Text(verdict).font(.system(size: 12.5))
                         .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: 8)
-                    Button(action: plan) {
-                        if arranging { ProgressView().controlSize(.small).tint(Theme.tallyForeground) } else { Text(t("Arrange")) }
-                    }
-                    .buttonStyle(.glassCapsule(36, prominent: true))
-                    .disabled(arranging || problem)
+                        .contentTransition(.opacity)
                 }
+                .foregroundStyle(problem ? Theme.danger : Theme.muted)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .animation(Theme.settle, value: verdict)
+                Button(action: plan) {
+                    ZStack {
+                        if arranging {
+                            ProgressView().controlSize(.small).tint(Theme.tallyForeground).transition(.opacity)
+                        } else {
+                            Text(t("Arrange")).transition(.opacity)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glassCapsule(40, prominent: true))
+                .disabled(arranging || problem)
+                .animation(Theme.settle, value: arranging)
             }
         }
         .padding(18)
@@ -1629,65 +1716,165 @@ struct ScheduleView: View {
         return t("Arranged for {when}", ["when": LobbyModel.said(at)])
     }
 
+    /// What the list has to say, which its card changes between.
+    private enum Listing: Hashable { case signedOut, failed, loading, empty, meetings }
+
+    private var listing: Listing {
+        switch app.lobby.status {
+        case .signedOut: return .signedOut
+        case .failed: return .failed
+        case .loading where app.lobby.arrangements.isEmpty: return .loading
+        default: return app.lobby.arrangements.isEmpty ? .empty : .meetings
+        }
+    }
+
     @ViewBuilder
     private var list: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            switch app.lobby.status {
+        VStack(alignment: .leading, spacing: 10) {
+            switch listing {
             case .signedOut:
-                Text(t("Your session has expired. Sign in again.")).font(.system(size: 13)).foregroundStyle(Theme.muted)
+                notice(t("Your session has expired. Sign in again."), "person.crop.circle.badge.exclamationmark")
+                    .transition(Theme.arrive)
             case .failed:
-                HStack {
-                    Text(t("Could not load your meetings.")).font(.system(size: 13)).foregroundStyle(Theme.muted)
-                    Spacer()
-                    Button(t("Try again")) { Task { await app.lobby.refreshArrangements() } }.buttonStyle(.glassCapsule(30))
+                notice(t("Could not load your meetings."), "exclamationmark.triangle", retry: true)
+                    .transition(Theme.arrive)
+            case .loading:
+                ProgressView().controlSize(.small)
+                    .frame(maxWidth: .infinity, minHeight: 140)
+                    .glassPane(cornerRadius: 22)
+                    .transition(Theme.arrive)
+            case .empty:
+                VStack(spacing: 10) {
+                    Image(systemName: "calendar.badge.clock").font(.system(size: 26)).foregroundStyle(Theme.muted)
+                    Text(t("No meetings arranged yet.")).font(.system(size: 14, weight: .semibold))
                 }
-            case .loading where app.lobby.arrangements.isEmpty:
-                ProgressView().controlSize(.small).frame(maxWidth: .infinity)
-            default:
-                if app.lobby.arrangements.isEmpty {
-                    Text(t("No meetings arranged yet.")).font(.system(size: 13)).foregroundStyle(Theme.muted)
-                }
+                .frame(maxWidth: .infinity, minHeight: 140)
+                .glassPane(cornerRadius: 22)
+                .transition(Theme.arrive)
+            case .meetings:
+                EmptyView()
             }
             if !app.lobby.arrangements.isEmpty {
+                #if os(iOS)
+                phoneMeetings
+                    .transition(Theme.arrive)
+                #else
                 VStack(spacing: 0) {
                     ForEach(app.lobby.arrangements, id: \.id) { one in
-                        HStack(spacing: 6) {
-                            Button {
-                                if !one.ended, let url = app.lobby.link(one) { Task { await app.open(url) } }
-                            } label: {
-                                MeetingRow(one: one, app: app)
-                            }
-                            .buttonStyle(.plain)
-                            .disabled(one.ended)
-                            .opacity(one.ended ? 0.5 : 1)
-                            small(copied == one.id ? "checkmark" : "doc.on.doc", copied == one.id ? t("Link copied") : t("Copy link")) { copy(one) }
-                            #if os(macOS)
-                            small("calendar.badge.plus", t("Add to calendar")) {
-                                if let file = app.lobby.calendarFile(one) { NSWorkspace.shared.open(file) }
-                            }
-                            #else
-                            if let file = app.lobby.calendarFile(one) {
-                                ShareLink(item: file) {
-                                    Image(systemName: "calendar.badge.plus").font(.system(size: 13))
-                                }
-                                .buttonStyle(.glassCircle(32))
-                                .accessibilityLabel(t("Add to calendar"))
-                            }
-                            #endif
-                            small("xmark", t("Cancel meeting"), destructive: true) {
-                                Task { if let said = await app.lobby.cancel(one) { app.problem = said } }
-                            }
+                        VStack(spacing: 0) {
+                            row(one)
+                            if one.id != app.lobby.arrangements.last?.id { Divider().overlay(Color.white.opacity(0.06)) }
                         }
-                        .padding(.horizontal, 14).padding(.vertical, 10)
-                        if one.id != app.lobby.arrangements.last?.id { Divider().overlay(Color.white.opacity(0.06)) }
+                        .transition(.asymmetric(
+                            insertion: .move(edge: .top).combined(with: .opacity).animation(Theme.settle),
+                            removal: .opacity.combined(with: .scale(scale: 0.96)).animation(Theme.leave)
+                        ))
                     }
                 }
                 .glassPane(cornerRadius: 22)
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .transition(Theme.arrive)
+                #endif
             }
         }
     }
 
+    #if os(iOS)
+    private static let meetingRow: CGFloat = 60
+
+    /// On a phone Cancel is out of sight until a meeting is swiped to the
+    /// left, as Remove is on the recent rooms (the owner asked for it there),
+    /// which leaves the row room for its time beside the two buttons kept.
+    private var phoneMeetings: some View {
+        let shown = app.lobby.arrangements
+        return List {
+            ForEach(shown, id: \.id) { one in
+                row(one, cancel: false)
+                    .frame(height: Self.meetingRow)
+                    .overlay(alignment: .bottom) {
+                        if one.id != shown.last?.id { Divider().overlay(Color.white.opacity(0.06)).padding(.leading, 60) }
+                    }
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button(role: .destructive) {
+                            Task { if let said = await app.lobby.cancel(one) { app.problem = said } }
+                        } label: {
+                            Label(t("Cancel meeting"), systemImage: "xmark")
+                        }
+                    }
+            }
+        }
+        .listStyle(.plain)
+        .scrollDisabled(true)
+        .scrollContentBackground(.hidden)
+        .environment(\.defaultMinListRowHeight, Self.meetingRow)
+        .frame(height: Self.meetingRow * CGFloat(shown.count))
+        .glassPane(cornerRadius: 22)
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+    #endif
+
+    private func notice(_ text: String, _ symbol: String, retry: Bool = false) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(Theme.muted)
+            Text(text).font(.system(size: 13)).foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            if retry {
+                Button(t("Try again")) { Task { await app.lobby.refreshArrangements() } }.buttonStyle(.glassCapsule(30))
+            }
+        }
+        .padding(14)
+        .glassPane(cornerRadius: 18)
+    }
+
+    private func row(_ one: Arrangement, cancel: Bool = true) -> some View {
+        HStack(spacing: 6) {
+            Button {
+                if !one.ended, let url = app.lobby.link(one) { Task { await app.open(url) } }
+            } label: {
+                MeetingRow(one: one, app: app)
+            }
+            .buttonStyle(.plain)
+            .disabled(one.ended)
+            .opacity(one.ended ? 0.5 : 1)
+            small(copied == one.id ? "checkmark" : "doc.on.doc", copied == one.id ? t("Link copied") : t("Copy link")) { copy(one) }
+            #if os(macOS)
+            small("calendar.badge.plus", t("Add to calendar")) {
+                if let file = app.lobby.calendarFile(one) { NSWorkspace.shared.open(file) }
+            }
+            #else
+            if let file = app.lobby.calendarFile(one) {
+                ShareLink(item: file) {
+                    Self.rowCircle("calendar.badge.plus")
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(t("Add to calendar"))
+            }
+            #endif
+            if cancel {
+                small("xmark", t("Cancel meeting"), destructive: true) {
+                    Task { if let said = await app.lobby.cancel(one) { app.problem = said } }
+                }
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 10)
+    }
+
     private func small(_ symbol: String, _ label: String, destructive: Bool = false, action: @escaping () -> Void) -> some View {
+        #if os(iOS)
+        // In a List row a button of a style of the app's own is not pressed
+        // by itself: the row takes the touch, and Copy link did nothing under
+        // a finger (UITests/LobbyTouchTests, "Link copied" never came). A
+        // borderless button is pressed by itself, and draws its own circle.
+        Button(action: action) {
+            Self.rowCircle(symbol, destructive: destructive)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel(label)
+        #else
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(destructive ? Theme.danger : Theme.foreground)
@@ -1695,7 +1882,21 @@ struct ScheduleView: View {
         .buttonStyle(.glassCircle(32))
         .accessibilityLabel(label)
         .help(label)
+        #endif
     }
+
+    #if os(iOS)
+    /// A row's small round button as the app's other buttons in the content
+    /// layer are drawn: a light fill and a hairline.
+    static func rowCircle(_ symbol: String, destructive: Bool = false) -> some View {
+        Image(systemName: symbol).font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(destructive ? Theme.danger : Theme.foreground)
+            .frame(width: 32, height: 32)
+            .background(Circle().fill(Color.white.opacity(0.07)))
+            .overlay(Circle().stroke(Color.white.opacity(0.09), lineWidth: 1))
+            .contentShape(Circle())
+    }
+    #endif
 
     private func copy(_ one: Arrangement) {
         guard let link = app.lobby.link(one)?.absoluteString else { return }

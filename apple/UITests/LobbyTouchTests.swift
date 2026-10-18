@@ -83,6 +83,31 @@ final class LobbyTouchTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["design-review"].exists, "and the other stays")
     }
 
+    /// The scheduled meetings on a phone, pressed with a finger: a meeting's
+    /// copy button, Cancel out of sight until the meeting is swiped to the
+    /// left and then pressed, and the page's own close. Needs a meeting
+    /// called "swipe-check" arranged for the signed-in account; the run
+    /// arranges it through the deployment before it starts.
+    func testScheduledMeetingIsCancelledBySwipingIt() throws {
+        continueAfterFailure = false
+        let app = lobby(["TOMOSHIBI_DEBUG_LOBBY": "scheduled"])
+        let meeting = app.cells.containing(.staticText, identifier: "swipe-check").firstMatch
+        XCTAssertTrue(meeting.waitForExistence(timeout: 30), "the arranged meeting in the list")
+        XCTAssertFalse(app.buttons["Cancel meeting"].exists, "Cancel out of sight before the swipe")
+        meeting.buttons["Copy link"].tap()
+        // "Link copied" for 1.6 s, then the button is Copy link again.
+        let copied = meeting.buttons["Link copied"].waitForExistence(timeout: 1.5)
+        XCTAssertTrue(copied, "the copy button pressed")
+        meeting.swipeLeft()
+        let cancel = app.buttons["Cancel meeting"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5), "Cancel, shown by the swipe")
+        cancel.tap()
+        XCTAssertTrue(app.staticTexts["swipe-check"].waitForNonExistence(timeout: 10), "the meeting called off")
+        app.buttons["Close"].tap()
+        XCTAssertTrue(app.staticTexts["Pick a time and hand out the link before it starts."].waitForNonExistence(timeout: 5),
+                      "the page closed by its own close")
+    }
+
     func testJoinBarOpensAPastedLink() throws {
         let app = lobby()
         typingInTheJoinBar(app)
