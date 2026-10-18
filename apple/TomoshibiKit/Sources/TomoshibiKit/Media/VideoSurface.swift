@@ -146,11 +146,46 @@ final class SurfaceView: UIView {
         call = nil
     }
 
+    private var points = CGSize.zero
+    private var scale: CGFloat = 1
+    private var thermalWatch: NSObjectProtocol?
+
+    /// The size asked of the server for this picture: the tile's points at
+    /// the screen's density, as the web asks (room.ts `pixelDensity:
+    /// "screen"`), but on a phone at twice the points at most, and at the
+    /// points themselves once the phone is hot.
+    ///
+    /// At the screen's three, a shared screen on a phone's stage (440 by 285
+    /// points) asked for 1320 by 854, which the 1112 by 720 rung is too small
+    /// for, so the phone was sent the 1668 by 1080 rung at sixty frames a
+    /// second, decoded and drew all of it, and grew hot within a minute and a
+    /// half (the owner's 17 Pro Max at thermal Warn, 2026-10-17). At twice the
+    /// points the same stage takes the 720 rung at thirty, a quarter of the
+    /// work for a picture its own size; turned to fill the screen it asks for
+    /// the 1080 rung again. On a Mac or an iPad the screen's density stands.
     func ask(points: CGSize, scale: CGFloat) {
-        let wanted = (Int(points.width * scale), Int(points.height * scale))
+        self.points = points
+        self.scale = scale
+        if thermalWatch == nil {
+            thermalWatch = NotificationCenter.default.addObserver(forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.askAgain() }
+            }
+        }
+        askAgain()
+    }
+
+    private func askAgain() {
+        var density = scale
+        if UIDevice.current.userInterfaceIdiom == .phone { density = min(density, 2) }
+        if ProcessInfo.processInfo.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue { density = 1 }
+        let wanted = (Int(points.width * density), Int(points.height * density))
         guard wanted.0 > 0, wanted.1 > 0, wanted != asked, let call else { return }
         asked = wanted
         VideoHub.existing(call)?.want(wanted, for: renderer, on: sid)
+    }
+
+    deinit {
+        if let thermalWatch { NotificationCenter.default.removeObserver(thermalWatch) }
     }
 }
 #endif
