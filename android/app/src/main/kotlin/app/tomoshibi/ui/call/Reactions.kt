@@ -45,6 +45,8 @@ import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import app.tomoshibi.basics.Plan
 import app.tomoshibi.basics.Theme
@@ -54,7 +56,9 @@ import app.tomoshibi.model.host.CrateRules
 import app.tomoshibi.model.host.ReactionBoard
 import app.tomoshibi.ui.kit.BarAxis
 import app.tomoshibi.ui.kit.BarPopover
+import app.tomoshibi.ui.kit.Fingertip
 import app.tomoshibi.ui.kit.Font
+import app.tomoshibi.ui.kit.narrowWindow
 import app.tomoshibi.ui.kit.KitText
 import app.tomoshibi.ui.kit.Popovers
 import app.tomoshibi.ui.kit.Symbol
@@ -83,6 +87,14 @@ internal fun HandControl(
     call: CallModel,
     popovers: Popovers,
     axis: BarAxis,
+    /**
+     * Whether the reactions have their narrow half beside the hand. On a bar
+     * too short for every control at a fingertip's width (the Fold's cover
+     * screen) they do not: the half was twenty points wide, and the
+     * reactions are opened by holding the hand, or from More (ControlBar).
+     */
+    beside: Boolean = true,
+    size: Dp = 44.dp,
     act: (suspend () -> Unit) -> Unit,
 ) {
     val board = ReactionBoard.of(call)
@@ -96,13 +108,16 @@ internal fun HandControl(
     val raise by rememberUpdatedState { act { call.setHand(!call.handUp) } }
     val handPress = remember { MutableInteractionSource() }
     val handScale by animateFloatAsState(if (pressing(handPress)) 0.93f else 1f, tween(120), label = "press")
+    // A fingertip each on a phone and the cover screen, side by side with
+    // nothing between them: the six were 36 points apart.
+    val narrow = narrowWindow()
     BarPopover(
         TRAY, popovers, axis,
-        width = 234.dp,
+        width = if (narrow) 300.dp else 234.dp,
         panel = {
-            Row(Modifier.padding(4.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(Modifier.padding(4.dp), horizontalArrangement = Arrangement.spacedBy(if (narrow) 0.dp else 2.dp)) {
                 for (one in CrateRules.reactionChoices()) {
-                    ReactionChoice(one) {
+                    ReactionChoice(one, if (narrow) DpSize(Fingertip, Fingertip) else DpSize(36.dp, 34.dp)) {
                         board.send(one)
                         popovers.close()
                     }
@@ -118,8 +133,11 @@ internal fun HandControl(
                         scaleX = handScale
                         scaleY = handScale
                     }
-                    .size(40.dp, 44.dp)
-                    .background(handFill, RoundedCornerShape(topStart = 22.dp, bottomStart = 22.dp))
+                    .size(if (beside) 40.dp else size, if (beside) 44.dp else size)
+                    .background(
+                        handFill,
+                        if (beside) RoundedCornerShape(topStart = 22.dp, bottomStart = 22.dp) else RoundedCornerShape(50),
+                    )
                     .pointerInput(Unit) {
                         detectTapGestures(
                             onPress = {
@@ -149,7 +167,7 @@ internal fun HandControl(
                     },
                 contentAlignment = Alignment.Center,
             ) { Symbol("hand.raised.fill", size = 16f, weight = Font.Semibold, tint = handInk) }
-            Box(
+            if (beside) Box(
                 Modifier
                     .size(20.dp, 44.dp)
                     .background(trayFill, RoundedCornerShape(topEnd = 22.dp, bottomEnd = 22.dp))
@@ -192,14 +210,14 @@ private fun pressing(source: MutableInteractionSource): Boolean {
 
 /** One of the six: the reaction itself, which is its own name, as the web labels it. */
 @Composable
-private fun ReactionChoice(what: String, action: () -> Unit) {
+private fun ReactionChoice(what: String, size: DpSize, action: () -> Unit) {
     val source = remember { MutableInteractionSource() }
     val hovering by source.collectIsHoveredAsState()
     val lit = hovering || pressing(source)
     val grow by animateFloatAsState(if (lit) 1.25f else 1f, Theme.settle(), label = "grow")
     Box(
         Modifier
-            .size(36.dp, 34.dp)
+            .size(size)
             .background(if (lit) Theme.surface else Color.Transparent, RoundedCornerShape(8.dp))
             .hoverable(source)
             .pointerInput(Unit) {

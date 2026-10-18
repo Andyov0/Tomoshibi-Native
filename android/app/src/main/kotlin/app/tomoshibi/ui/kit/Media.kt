@@ -271,6 +271,8 @@ fun MediaIconButton(
     lit: Boolean = false,
     prominent: Boolean = false,
     enabled: Boolean = true,
+    /** How large it is pressed at, round the size it is drawn at (`fingertip`). */
+    reach: Dp = size,
 ) {
     val on = enabled && LocalEnabled.current
     val press = rememberPress()
@@ -286,11 +288,14 @@ fun MediaIconButton(
     Box(
         modifier
             .alpha(if (on) 1f else 0.4f)
-            .size(size)
-            .background(fill, CircleShape)
+            .size(maxOf(size, reach))
             .pressable(press, CircleShape, on, Role.Button, label, onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { SwappingSymbol(symbol, size = size.value * 0.42f, weight = Font.Semibold, tint = ink) }
+    ) {
+        Box(Modifier.size(size).background(fill, CircleShape), contentAlignment = Alignment.Center) {
+            SwappingSymbol(symbol, size = size.value * 0.42f, weight = Font.Semibold, tint = ink)
+        }
+    }
 }
 
 /**
@@ -462,6 +467,7 @@ fun HearingRow(
                 if (blocked) t("Unmute {name}", mapOf("name" to name)) else t("Mute {name}", mapOf("name" to name)),
                 { setBlocked(!blocked) },
                 size = 28.dp,
+                reach = fingertip(28.dp),
                 lit = blocked,
             )
             MediaSlider(

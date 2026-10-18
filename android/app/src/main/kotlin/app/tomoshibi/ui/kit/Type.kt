@@ -8,6 +8,7 @@ import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -118,9 +119,16 @@ fun KitText(
     lines: Int = Int.MAX_VALUE,
     align: TextAlign? = null,
     overflow: TextOverflow = TextOverflow.Ellipsis,
+    fit: Boolean = false,
 ) {
     val style = font.style(color).let { if (align != null) it.copy(textAlign = align) else it }
-    BasicText(text = text, modifier = modifier, style = style, maxLines = lines, overflow = overflow)
+    BasicText(
+        text = text, modifier = modifier, style = style, maxLines = lines, overflow = overflow,
+        // SwiftUI's `.minimumScaleFactor(0.75)`: words that are a little too
+        // long for their place, a segment's or a field's prompt on the
+        // Fold's cover screen, made a little smaller rather than cut short.
+        autoSize = if (fit) TextAutoSize.StepBased(minFontSize = (font.size * 0.75f).sp, maxFontSize = font.size.sp, stepSize = 0.25.sp) else null,
+    )
 }
 
 /**

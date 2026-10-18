@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,6 +57,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.tomoshibi.basics.ChatRules
 import app.tomoshibi.basics.Theme
@@ -74,6 +76,7 @@ import app.tomoshibi.ui.kit.PanelRule
 import app.tomoshibi.ui.kit.Symbol
 import app.tomoshibi.ui.kit.pressable
 import app.tomoshibi.ui.kit.rememberPress
+import app.tomoshibi.ui.kit.fingertip
 import app.tomoshibi.ui.kit.rounded
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -94,7 +97,7 @@ import java.util.Date
  * saying it was not sent.
  */
 @Composable
-internal fun ChatPanel(call: CallModel, close: () -> Unit, modifier: Modifier = Modifier) {
+internal fun ChatPanel(call: CallModel, close: () -> Unit, modifier: Modifier = Modifier, tallest: Dp = ChatTallest) {
     GlassShell(modifier.fillMaxWidth(), cornerRadius = 22.dp) {
         Column {
             PanelHeading(t("Messages"), t("Close messages"), close, symbol = "bubble.left.and.bubble.right.fill")
@@ -103,24 +106,24 @@ internal fun ChatPanel(call: CallModel, close: () -> Unit, modifier: Modifier = 
                 call.messages.isEmpty(),
                 transitionSpec = { Theme.arrive togetherWith Theme.depart },
                 label = "said",
-            ) { empty -> if (empty) Empty() else Log(call.messages) }
+            ) { empty -> if (empty) Empty() else Log(call.messages, tallest) }
             Composer(call, Modifier.padding(start = 10.dp, end = 10.dp, top = 4.dp, bottom = 10.dp))
         }
     }
 }
 
 /** The tallest the conversation grows before it scrolls: the web's panel stops at twenty-six rems with its heading and its box. */
-private val Tallest = 330.dp
+internal val ChatTallest = 330.dp
 
 @Composable
-private fun Log(lines: List<ChatLine>) {
+private fun Log(lines: List<ChatLine>, tallest: Dp) {
     val state = rememberLazyListState()
     val speakers = lines.map { it.identity }
     // The newest is where a conversation is read from.
     LaunchedEffect(Unit) { if (lines.isNotEmpty()) state.scrollToItem(lines.lastIndex) }
     LaunchedEffect(lines.lastOrNull()?.id) { if (lines.isNotEmpty()) state.animateScrollToItem(lines.lastIndex) }
     LazyColumn(
-        Modifier.fillMaxWidth().heightIn(max = Tallest),
+        Modifier.fillMaxWidth().heightIn(max = tallest),
         state = state,
         contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp, vertical = 12.dp),
     ) {
@@ -236,6 +239,9 @@ private fun Composer(call: CallModel, modifier: Modifier = Modifier) {
                 .alpha(if (offline) 0.6f else 1f)
                 .background(Color.Black.copy(alpha = 0.22f), rounded(18f))
                 .border(1.dp, edge, rounded(18f))
+                // The whole box takes the keyboard: the line typed on is
+                // nineteen points of it.
+                .clickable(interactionSource = null, indication = null) { runCatching { focus.requestFocus() } }
                 .padding(start = 12.dp, end = 5.dp, top = 5.dp, bottom = 5.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.Bottom,
@@ -309,18 +315,23 @@ private fun Composer(call: CallModel, modifier: Modifier = Modifier) {
 private fun SendButton(sendable: Boolean, sending: Boolean, send: () -> Unit, modifier: Modifier = Modifier) {
     val press = rememberPress()
     val fill by animateColorAsState(if (sendable || sending) Theme.tally else Color.White.copy(alpha = 0.08f), Theme.settle(), label = "send")
+    // Pressed over a fingertip's width on a phone and the cover screen, drawn
+    // at its own size; as tall as the box's line allows, which Compose's own
+    // reach below and above a small control makes up.
+    val reach = fingertip(28.dp)
     Box(
         modifier
-            .size(28.dp)
-            .background(fill, CircleShape)
+            .size(reach, 28.dp)
             .pressable(press, CircleShape, sendable, Role.Button, t("Send"), onClick = send),
-        contentAlignment = Alignment.Center,
+        contentAlignment = Alignment.CenterEnd,
     ) {
-        AnimatedContent(sending, transitionSpec = { fadeIn(tween(160)) togetherWith fadeOut(tween(160)) }, label = "sending") { busy ->
-            if (busy) {
-                MediaSpinner(size = 14f, tint = Theme.tallyForeground)
-            } else {
-                Symbol("arrow.up", size = 12.5f, weight = Font.Bold, tint = if (sendable) Theme.tallyForeground else Theme.muted)
+        Box(Modifier.size(28.dp).background(fill, CircleShape), contentAlignment = Alignment.Center) {
+            AnimatedContent(sending, transitionSpec = { fadeIn(tween(160)) togetherWith fadeOut(tween(160)) }, label = "sending") { busy ->
+                if (busy) {
+                    MediaSpinner(size = 14f, tint = Theme.tallyForeground)
+                } else {
+                    Symbol("arrow.up", size = 12.5f, weight = Font.Bold, tint = if (sendable) Theme.tallyForeground else Theme.muted)
+                }
             }
         }
     }

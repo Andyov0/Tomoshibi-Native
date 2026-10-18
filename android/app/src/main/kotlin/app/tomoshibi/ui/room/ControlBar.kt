@@ -67,6 +67,7 @@ import app.tomoshibi.ui.kit.Popovers
 import app.tomoshibi.ui.kit.SegmentedChoice
 import app.tomoshibi.ui.kit.Symbol
 import app.tomoshibi.ui.kit.barPress
+import app.tomoshibi.ui.kit.holdsPresses
 import app.tomoshibi.ui.kit.pressable
 import app.tomoshibi.ui.kit.rememberPress
 import kotlinx.coroutines.CancellationException
@@ -150,6 +151,18 @@ internal fun ControlBar(
     modifier: Modifier = Modifier,
 ) {
     val compact = BarLength.of(compact = false, axis, offers, panel, call.sealed) > room.value - 20
+    // The narrow bar's buttons as far apart as the bar has room for, up to
+    // eight points, which puts a fingertip's width between the middles of
+    // two forty-point buttons: four apart, a press between two went to
+    // whichever was nearer, and each was pressed over 44 points. Where even
+    // that leaves no room for the reactions' narrow half (the Fold's cover
+    // screen), the half goes behind More and the hand's long press.
+    val horizontal = axis == BarAxis.Horizontal
+    val beside = !compact || !horizontal || BarLength.of(true, axis, offers, panel, call.sealed, spacing = 8f) <= room.value - 20
+    val gap = if (!compact) 6f else {
+        val bare = BarLength.of(true, axis, offers, panel, call.sealed, spacing = 0f, reactionsBeside = beside)
+        ((room.value - 20 - bare) / (BarLength.count(true, axis, offers, panel, call.sealed) - 1)).coerceIn(4f, 8f)
+    }
     // A microphone or camera press still being carried out (ControlBar.tsx
     // `guard`): another toggle press meanwhile is ignored. Only ignored: the
     // bar used to be disabled for it, Leave included, so somebody could not
@@ -192,8 +205,7 @@ internal fun ControlBar(
         }
     }
     val size = if (compact) 40.dp else 44.dp
-    val spacing = Arrangement.spacedBy(if (compact) 4.dp else 6.dp)
-    val horizontal = axis == BarAxis.Horizontal
+    val spacing = Arrangement.spacedBy(gap.dp)
     val items: @Composable () -> Unit = {
         BarButton(
             if (call.microphoneOn) "mic.fill" else "mic.slash.fill",
@@ -210,7 +222,7 @@ internal fun ControlBar(
         ShareControl(call, popovers, axis, size)
         // The hand and, behind the narrow half beside it, the reactions
         // (HandButton.tsx).
-        HandControl(call, popovers, axis) { work -> act(work) }
+        HandControl(call, popovers, axis, beside = beside, size = size) { work -> act(work) }
         // The one dot that says something was said while the messages were
         // closed, in the signal colour (ControlBar.tsx ~383).
         BarButton(
@@ -220,7 +232,7 @@ internal fun ControlBar(
             lit = panel == RoomPanel.Messages, dot = call.unread && panel != RoomPanel.Messages, size = size,
         )
         if (compact) {
-            MoreControl(call, panel, onPanel, offers, popovers, axis, size)
+            MoreControl(call, panel, onPanel, offers, popovers, axis, size, reactions = !beside)
         } else {
             Panels(call, panel, onPanel, offers, axis, size)
             Box(
@@ -235,7 +247,9 @@ internal fun ControlBar(
     val inset = if (compact) 5.dp else 7.dp
     // Behind the buttons, not around them: the popovers hang outside the
     // capsule (Glass.swift `glassBacking`).
-    GlassBacking(Capsule, modifier) {
+    // Holding every press on the capsule, so that one between two buttons
+    // goes to the nearer of them rather than to the picture under the bar.
+    GlassBacking(Capsule, modifier.holdsPresses()) {
         if (horizontal) {
             Row(Modifier.padding(inset), horizontalArrangement = spacing, verticalAlignment = Alignment.CenterVertically) { items() }
         } else {
@@ -250,14 +264,32 @@ internal fun ControlBar(
  * offer are counted only while they are offered, as they are drawn.
  */
 internal object BarLength {
-    fun of(compact: Boolean, axis: BarAxis, offers: Offers, panel: RoomPanel?, sealed: Boolean): Float {
+    fun of(
+        compact: Boolean,
+        axis: BarAxis,
+        offers: Offers,
+        panel: RoomPanel?,
+        sealed: Boolean,
+        spacing: Float = if (compact) 4f else 6f,
+        reactionsBeside: Boolean = true,
+    ): Float {
+        val along = lengths(compact, axis, offers, panel, sealed, reactionsBeside)
+        val inset = if (compact) 5f else 7f
+        return 2 * inset + along.sum() + spacing * (along.size - 1)
+    }
+
+    /** How many things the bar holds along its length. */
+    fun count(compact: Boolean, axis: BarAxis, offers: Offers, panel: RoomPanel?, sealed: Boolean): Int =
+        lengths(compact, axis, offers, panel, sealed, true).size
+
+    private fun lengths(compact: Boolean, axis: BarAxis, offers: Offers, panel: RoomPanel?, sealed: Boolean, reactionsBeside: Boolean): List<Float> {
         val size = if (compact) 40f else 44f
         val horizontal = axis == BarAxis.Horizontal
         val along = ArrayList<Float>()
         along += size // microphone
         along += size // camera
         along += size // share
-        along += if (horizontal) 60f else 44f // the hand and its reactions
+        along += if (!horizontal) 44f else if (reactionsBeside) 60f else size // the hand, and its reactions beside it
         along += size // messages
         if (compact) {
             along += size // more
@@ -270,9 +302,7 @@ internal object BarLength {
             along += 1f + 4f // the rule before leaving
         }
         along += if (horizontal) (if (compact) 52f else 56f) else (if (compact) 48f else 52f)
-        val spacing = if (compact) 4f else 6f
-        val inset = if (compact) 5f else 7f
-        return 2 * inset + along.sum() + spacing * (along.size - 1)
+        return along
     }
 }
 
@@ -606,7 +636,7 @@ internal suspend fun AppModel.leaveCall(call: CallModel) {
  * stands for would: a show or the music playing, somebody at the door.
  */
 @Composable
-private fun MoreControl(call: CallModel, panel: RoomPanel?, onPanel: (RoomPanel?) -> Unit, offers: Offers, popovers: Popovers, axis: BarAxis, size: Dp) {
+private fun MoreControl(call: CallModel, panel: RoomPanel?, onPanel: (RoomPanel?) -> Unit, offers: Offers, popovers: Popovers, axis: BarAxis, size: Dp, reactions: Boolean = false) {
     val behind = listOf(RoomPanel.Sound, RoomPanel.Watch, RoomPanel.Music, RoomPanel.Host, RoomPanel.Devices)
     val open = panel in behind
     val busy = (offers.watchPlaying && panel != RoomPanel.Watch) || (offers.musicPlaying && panel != RoomPanel.Music) ||
@@ -642,6 +672,12 @@ private fun MoreControl(call: CallModel, panel: RoomPanel?, onPanel: (RoomPanel?
                 }
                 MenuRule()
                 item(t("Devices"), "gearshape.fill", RoomPanel.Devices)
+                // The reactions, where the bar had no room for their half
+                // beside the hand: opened over the hand, as from the half.
+                if (reactions) {
+                    MenuRule()
+                    MenuItem(t("Reactions"), { popovers.show(TRAY) }, symbol = "sparkles")
+                }
             }
         },
     ) {

@@ -91,7 +91,10 @@ fun MenuItem(
             .alpha(if (on) 1f else 0.4f)
             .background(Color.White.copy(alpha = light), shape)
             .pressable(press, shape, on, Role.Button, selected = if (checked) true else null, onClick = onClick)
-            .heightIn(min = 34.dp)
+            // A fingertip tall on a phone and the Fold's cover screen, where a
+            // menu is pressed with a thumb and its rows touch; the Mac's 34
+            // points in a wide window.
+            .heightIn(min = if (narrowWindow()) Fingertip else 34.dp)
             .padding(horizontal = 10.dp, vertical = if (detail == null) 7.dp else 6.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -157,7 +160,7 @@ fun MenuSwitch(
         modifier
             .fillMaxWidth()
             .switchable(press, shape, isOn, on, onChange = onChange)
-            .heightIn(min = 36.dp)
+            .heightIn(min = if (narrowWindow()) Fingertip else 36.dp)
             .padding(horizontal = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
