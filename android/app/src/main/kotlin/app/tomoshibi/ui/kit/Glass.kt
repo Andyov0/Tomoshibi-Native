@@ -1,8 +1,11 @@
 package app.tomoshibi.ui.kit
 
 import android.os.Build
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.EnterExitState
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
@@ -303,6 +306,21 @@ internal fun AnimatedVisibilityScope.glassFade(): State<Float> = transition.anim
     transitionSpec = { if (targetState == EnterExitState.Visible) Theme.settle() else Theme.leave() },
     label = "fade",
 ) { if (it == EnterExitState.Visible) 1f else 0f }
+
+/**
+ * Glass arriving and leaving as every view does (`.transition(Theme.arrive)`):
+ * grown in from 97 per cent with Theme.settle, faded in, faded out with
+ * Theme.leave. [Appear] with Theme.arrive does the same for anything else;
+ * this is for what wears the glass's shadow, which that fade would cut off
+ * square at its edge while it lasted.
+ */
+@Composable
+fun GlassAppear(visible: Boolean, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    AnimatedVisibility(visible, modifier, enter = scaleIn(Theme.settle(), initialScale = 0.97f), exit = ExitTransition.None) {
+        val fade by glassFade()
+        Box(Modifier.glassLayer({ fade })) { content() }
+    }
+}
 
 /** The shape of a [GlassButton]: a circle around a symbol, a capsule around words. */
 sealed interface GlassButtonShape {
