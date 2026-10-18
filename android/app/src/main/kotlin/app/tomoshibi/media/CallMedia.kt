@@ -47,7 +47,7 @@ class CallMedia(context: Context, val muted: Boolean = false) {
         }
     }
 
-    fun sharing(): Sharing = Sharing()
+    fun sharing(): Sharing = Sharing(context)
     fun pictureInPicture(): PictureInPicture = PictureInPicture()
 
     /**
