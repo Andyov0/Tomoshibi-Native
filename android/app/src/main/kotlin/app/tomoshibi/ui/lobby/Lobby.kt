@@ -68,6 +68,13 @@ import app.tomoshibi.model.AppModel
 import app.tomoshibi.model.LobbyModel
 import app.tomoshibi.ui.LocalAppScope
 import app.tomoshibi.ui.LocalHinge
+import app.tomoshibi.ui.Pane
+import app.tomoshibi.ui.Posture
+import app.tomoshibi.ui.effectivePosture
+import app.tomoshibi.ui.inPane
+import app.tomoshibi.ui.pane
+import androidx.compose.foundation.layout.absoluteOffset
+import androidx.compose.ui.platform.LocalLayoutDirection
 import app.tomoshibi.ui.kit.AccountAvatar
 import app.tomoshibi.ui.kit.Appear
 import app.tomoshibi.ui.kit.Backdrop
@@ -92,10 +99,14 @@ import app.tomoshibi.ui.kit.PopoverEdge
 import app.tomoshibi.ui.kit.Popovers
 import app.tomoshibi.ui.kit.Symbol
 import app.tomoshibi.ui.kit.glassSource
+import app.tomoshibi.ui.kit.fingertip
+import app.tomoshibi.ui.kit.holdsPresses
 import app.tomoshibi.ui.kit.glassSurface
 import app.tomoshibi.ui.kit.keepDeparting
 import app.tomoshibi.ui.kit.putsKeyboardAway
 import app.tomoshibi.ui.kit.rounded
+import app.tomoshibi.ui.settings.SettingsState
+import app.tomoshibi.ui.settings.SettingsTopic
 import app.tomoshibi.ui.settings.SettingsView
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
@@ -135,7 +146,27 @@ class LobbyState(sealingWord: String) {
         },
     )
     var sheet by mutableStateOf(LobbyDebug.sheet(opened)?.let { MeetingDraft(it, sealingWord) })
-    var settings by mutableStateOf(opened == "settings")
+    private var settingsOpen by mutableStateOf(opened == "settings")
+
+    /**
+     * Whether the settings are open. Opening them starts them afresh, as
+     * the Swift sheet starts its @State afresh; what they hold while open
+     * is [settingsPage], which the phone's sheet and the wide window's
+     * dialog both draw, so that a Fold folded or opened out with them
+     * showing keeps the section and whatever was half typed in it.
+     */
+    var settings: Boolean
+        get() = settingsOpen
+        set(open) {
+            if (open && !settingsOpen) settingsPage = SettingsState()
+            settingsOpen = open
+        }
+    var settingsPage by mutableStateOf(
+        SettingsState(
+            if (opened == "settings") LobbyDebug.section?.let { name -> SettingsTopic.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } } else null,
+        ).also { LobbyDebug.section = null },
+    )
+        private set
     var typed by mutableStateOf("")
     val schedule = ScheduleDraft()
     val popovers = Popovers()
@@ -255,7 +286,7 @@ private fun PhoneLobby(app: AppModel, account: Account, state: LobbyState) {
                 ScheduleView(app, account, state.schedule, wide = false, close = { state.place = Place.Home })
             }
             SheetHost(state.settings, { state.settings = false }) {
-                SettingsView(app, close = { state.settings = false })
+                SettingsView(app, close = { state.settings = false }, state = state.settingsPage)
             }
             // Over the sheets, so that a meeting that could not be arranged
             // says so where the schedule is open: behind the sheet, as on the
@@ -377,7 +408,12 @@ private fun Upcoming(app: AppModel, state: LobbyState, modifier: Modifier = Modi
         exit = shrinkVertically(Theme.leave()) + fadeOut(Theme.leave()),
     ) {
         Section(t("Upcoming"), trailing = {
-            KitText(t("All of them"), Modifier.plainPress({ state.place = Place.Scheduled }), font = Font(16f), color = Theme.tally, lines = 1)
+            // A fingertip tall, the words in its middle: drawn as a line of
+            // words it was pressed over twenty points, with the first meeting
+            // eight below.
+            Box(Modifier.heightIn(min = fingertip(0.dp)).plainPress({ state.place = Place.Scheduled }), contentAlignment = Alignment.CenterEnd) {
+                KitText(t("All of them"), font = Font(16f), color = Theme.tally, lines = 1)
+            }
         }) {
             for (one in upcoming) {
                 MeetingRow(
@@ -512,7 +548,10 @@ private fun JoinBar(app: AppModel, account: Account, state: LobbyState, modifier
         modifier
             .fillMaxWidth()
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
-            .padding(start = 16.dp, end = 16.dp, bottom = 6.dp),
+            .padding(start = 16.dp, end = 16.dp, bottom = 6.dp)
+            // A toolbar over the page: a press beside the field was a press
+            // on the recent room scrolled under it.
+            .holdsPresses(),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
@@ -541,61 +580,35 @@ private fun JoinBar(app: AppModel, account: Account, state: LobbyState, modifier
 /**
  * A window with a sidebar, as the Mac's own apps are (`MacLobby`): what to
  * do and what is coming in a sidebar of glass, and the picture of yourself
- * filling the rest. Where a hinge divides the screen, the sidebar keeps to
- * the half before it and the rest begins after it.
+ * filling the rest. Where a hinge divides the screen (ui/Fold.kt), held as a
+ * book the sidebar keeps to the first page and the rest, the picture with
+ * it, to the second; standing on a table the window turns into the desk
+ * lobby, the picture and the sections above the hinge and the sidebar's
+ * contents laid out along the lower half.
  */
 @Composable
 private fun WideLobby(app: AppModel, account: Account, state: LobbyState) {
-    val hinge = LocalHinge.current?.takeIf { it.vertical }
+    val hinge = LocalHinge.current
     val density = LocalDensity.current
     FloatingPopoverLayer(state.popovers) {
         OpenFromDebug(state.popovers)
         BoxWithConstraints(Modifier.fillMaxSize().background(Theme.background)) {
-            val home = state.place == Place.Home
+            val standing = hinge.effectivePosture(maxWidth.value, maxHeight.value, density) == Posture.Tabletop
             // The ground the sidebar floats over: the picture at home, the
             // evening room in the other sections.
             Backdrop(Modifier.fillMaxSize().glassSource())
-            Appear(home, Modifier.fillMaxSize(), enter = fadeIn(Theme.settle()), exit = fadeOut(Theme.leave())) {
-                CameraStage(app, Modifier.fillMaxSize().glassSource(1f))
-            }
-            val folded = hinge?.let { with(density) { it.left.toDp() to it.right.toDp() } }
-                ?.takeIf { (left, right) -> left >= 240.dp && maxWidth - right >= 320.dp }
-            val sidebar = folded?.first ?: if (maxWidth < 760.dp) 250.dp else 284.dp
-            Row(Modifier.fillMaxSize().then(if (state.sheet != null || state.settings) Modifier.clearAndSetSemantics {} else Modifier)) {
-                Box(Modifier.width(sidebar).fillMaxHeight()) {
-                    Sidebar(
-                        app, account, state,
-                        Modifier
-                            .width(min(sidebar, 340.dp))
-                            .fillMaxHeight()
-                            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical))
-                            .padding(10.dp),
-                    )
-                }
-                if (folded != null) Spacer(Modifier.width(folded.second - folded.first))
-                Box(Modifier.weight(1f).fillMaxHeight()) {
-                    // One identity for each section, so a section arrives
-                    // with its own transition rather than as one view
-                    // changing what is in it, which arrived as a cut.
-                    AnimatedContent(
-                        state.place,
-                        transitionSpec = {
-                            (fadeIn(Theme.settle()) + slideInVertically(Theme.settle()) { with(density) { 10.dp.roundToPx() } }) togetherWith
-                                fadeOut(Theme.leave())
-                        },
-                        label = "section",
-                    ) { place ->
-                        when (place) {
-                            Place.Home -> HomeStage(app, account)
-                            Place.Scheduled -> ScheduleView(app, account, state.schedule, wide = true, close = { state.place = Place.Home })
-                            Place.Servers -> ServersView(app, wide = true, back = { state.place = Place.Home })
-                        }
-                    }
+            AnimatedContent(
+                standing,
+                transitionSpec = { fadeIn(Theme.settle()) togetherWith fadeOut(Theme.leave()) },
+                label = "standing",
+            ) { onTable ->
+                Box(Modifier.fillMaxSize().then(if (state.sheet != null || state.settings) Modifier.clearAndSetSemantics {} else Modifier)) {
+                    if (onTable) DeskLobby(app, account, state) else SidebarLobby(app, account, state)
                 }
             }
             ProblemToast(app, Modifier.windowInsetsPadding(WindowInsets.safeDrawing))
             DialogHost(state.settings, { state.settings = false }, width = 900.dp, height = 700.dp) {
-                SettingsView(app, close = { state.settings = false }, Modifier.heightIn(max = 700.dp))
+                SettingsView(app, close = { state.settings = false }, Modifier.heightIn(max = 700.dp), state.settingsPage)
             }
             val draft = rememberShownDraft(state)
             DialogHost(state.sheet != null, {
@@ -604,8 +617,133 @@ private fun WideLobby(app: AppModel, account: Account, state: LobbyState) {
                     app.cancelJoin()
                 }
                 state.sheet = null
-            }) {
+            }, width = if (standing) 860.dp else 560.dp) {
                 draft?.let { MeetingSheet(app, it, close = { state.sheet = null }, wide = true) }
+            }
+        }
+    }
+}
+
+/** The wide lobby flat or held as a book: the sidebar, and the section beside it. */
+@Composable
+private fun SidebarLobby(app: AppModel, account: Account, state: LobbyState) {
+    val hinge = LocalHinge.current?.takeIf { it.vertical }
+    val density = LocalDensity.current
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val home = state.place == Place.Home
+        val folded = hinge?.let { with(density) { it.left.toDp() to it.right.toDp() } }
+            ?.takeIf { (left, right) -> left >= 240.dp && maxWidth - right >= 320.dp }
+        // The picture of yourself on the second page of a book rather than
+        // under the sidebar and across the hinge, where a face is folded.
+        val beside = folded?.second ?: 0.dp
+        Appear(home, Modifier.absoluteOffset(x = beside).width(maxWidth - beside).fillMaxHeight(), enter = fadeIn(Theme.settle()), exit = fadeOut(Theme.leave())) {
+            CameraStage(app, Modifier.fillMaxSize().glassSource(1f))
+        }
+        val sidebar = folded?.first ?: if (maxWidth < 760.dp) 250.dp else 284.dp
+        Row(Modifier.fillMaxSize()) {
+            Box(Modifier.width(sidebar).fillMaxHeight()) {
+                Sidebar(
+                    app, account, state,
+                    Modifier
+                        .width(min(sidebar, 340.dp))
+                        .fillMaxHeight()
+                        .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Vertical))
+                        .padding(10.dp),
+                )
+            }
+            if (folded != null) Spacer(Modifier.width(folded.second - folded.first))
+            Box(Modifier.weight(1f).fillMaxHeight()) { ChosenSection(app, account, state) }
+        }
+    }
+}
+
+/** The section the sidebar has chosen: home's picture and greeting, the arranged meetings, or the servers. */
+@Composable
+private fun ChosenSection(app: AppModel, account: Account, state: LobbyState) {
+    val density = LocalDensity.current
+    // One identity for each section, so a section arrives with its own
+    // transition rather than as one view changing what is in it, which
+    // arrived as a cut.
+    AnimatedContent(
+        state.place,
+        transitionSpec = {
+            (fadeIn(Theme.settle()) + slideInVertically(Theme.settle()) { with(density) { 10.dp.roundToPx() } }) togetherWith
+                fadeOut(Theme.leave())
+        },
+        label = "section",
+    ) { place ->
+        when (place) {
+            Place.Home -> HomeStage(app, account)
+            Place.Scheduled -> ScheduleView(app, account, state.schedule, wide = true, close = { state.place = Place.Home })
+            Place.Servers -> ServersView(app, wide = true, back = { state.place = Place.Home })
+        }
+    }
+}
+
+/**
+ * The wide lobby on a phone standing on a table (Samsung's Flex mode): the
+ * upper half is what is looked at, the picture of yourself at home and the
+ * section chosen otherwise, and the lower half, which lies on the table
+ * under the hand, is the sidebar laid out along it: what to do and where to
+ * go on the left, what is coming and the rooms lately beside them. Nothing
+ * of either lies across the hinge; a sheet opened from here opens above it
+ * (DialogHost), where the keyboard coming up over the lower half leaves it.
+ */
+@Composable
+private fun DeskLobby(app: AppModel, account: Account, state: LobbyState) {
+    val hinge = LocalHinge.current
+    val density = LocalDensity.current
+    val direction = LocalLayoutDirection.current
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        val width = maxWidth.value
+        val height = maxHeight.value
+        val upper = hinge.pane(width, height, density, direction, Pane.First)
+        val lower = hinge.pane(width, height, density, direction, Pane.Second)
+        Box(Modifier.inPane(upper, width, height)) {
+            Appear(state.place == Place.Home, Modifier.fillMaxSize(), enter = fadeIn(Theme.settle()), exit = fadeOut(Theme.leave())) {
+                CameraStage(app, Modifier.fillMaxSize().glassSource(1f))
+            }
+            ChosenSection(app, account, state)
+        }
+        Box(Modifier.inPane(lower, width, height)) {
+            Desk(
+                app, account, state,
+                Modifier
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                    .padding(10.dp),
+            )
+        }
+    }
+}
+
+/** The sidebar's contents along the lower half of a phone on a table (DeskLobby). */
+@Composable
+private fun Desk(app: AppModel, account: Account, state: LobbyState, modifier: Modifier) {
+    GlassShell(modifier, cornerRadius = 22.dp) {
+        Row(Modifier.fillMaxSize()) {
+            Column(Modifier.width(268.dp).fillMaxHeight()) {
+                SidebarActions(app, state)
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) { SidebarSections(app, state) }
+                SidebarFoot(app, account, state)
+            }
+            Box(Modifier.padding(vertical = 14.dp).width(1.dp).fillMaxHeight().background(Theme.border))
+            Row(Modifier.weight(1f).fillMaxHeight().padding(horizontal = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(
+                    Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) { SidebarUpcoming(app, Modifier.fillMaxWidth()) }
+                Column(
+                    Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState()).padding(vertical = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) { SidebarRecent(app, state, Modifier.fillMaxWidth()) }
             }
         }
     }
@@ -613,22 +751,9 @@ private fun WideLobby(app: AppModel, account: Account, state: LobbyState) {
 
 @Composable
 private fun Sidebar(app: AppModel, account: Account, state: LobbyState, modifier: Modifier = Modifier) {
-    val scope = LocalAppScope.current
     GlassShell(modifier, cornerRadius = 22.dp) {
         Column(Modifier.fillMaxSize()) {
-            Row(
-                Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                GlassButton({ state.open(MeetingMode.Start, app) }, Modifier.weight(1f), shape = GlassButtonShape.Capsule(36.dp), prominent = true, label = t("Start a meeting")) {
-                    Symbol("video.fill")
-                    KitText(t("Start"), lines = 1)
-                }
-                GlassButton({ state.open(MeetingMode.Join(""), app) }, Modifier.weight(1f), shape = GlassButtonShape.Capsule(36.dp), label = t("Join a meeting")) {
-                    Symbol("link")
-                    KitText(t("Join"), lines = 1)
-                }
-            }
+            SidebarActions(app, state)
             Column(
                 Modifier
                     .weight(1f)
@@ -637,49 +762,92 @@ private fun Sidebar(app: AppModel, account: Account, state: LobbyState, modifier
                     .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                SidebarItem(t("Home"), "house", state.place == Place.Home) { state.place = Place.Home }
-                SidebarItem(t("Scheduled meetings"), "calendar", state.place == Place.Scheduled, badge = app.lobby.upcoming.size) {
-                    state.place = Place.Scheduled
-                }
-                AnimatedVisibility(app.offersRelayChoice, enter = expandVertically(Theme.settle()) + fadeIn(Theme.settle()), exit = shrinkVertically(Theme.leave()) + fadeOut(Theme.leave())) {
-                    SidebarItem(t("Server"), "server.rack", state.place == Place.Servers) { state.place = Place.Servers }
-                }
-                val upcoming = app.lobby.upcoming.take(5)
-                AnimatedVisibility(upcoming.isNotEmpty(), enter = expandVertically(Theme.settle()) + fadeIn(Theme.settle()), exit = shrinkVertically(Theme.leave()) + fadeOut(Theme.leave())) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        SidebarHeading(t("Upcoming"))
-                        for (one in upcoming) {
-                            MeetingRow(
-                                one, app,
-                                Modifier
-                                    .fillMaxWidth()
-                                    .plainPress({ app.lobby.link(one)?.let { link -> scope.launch { app.open(link) } } }, shape = rounded(10f))
-                                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                            )
-                        }
-                    }
-                }
-                val recent = app.lobby.recentHere.take(6)
-                AnimatedVisibility(recent.isNotEmpty(), enter = expandVertically(Theme.settle()) + fadeIn(Theme.settle()), exit = shrinkVertically(Theme.leave()) + fadeOut(Theme.leave())) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        SidebarHeading(t("Recent"))
-                        for (entry in keepDeparting(recent) { it.id }) {
-                            AnimatedVisibility(entry.visible, enter = Theme.arrive, exit = Theme.depart) {
-                                RecentSidebarRow(
-                                    entry.item,
-                                    open = { state.open(MeetingMode.Again(entry.item.room), app) },
-                                    forget = { app.lobby.forget(entry.item) },
-                                )
-                            }
-                        }
-                    }
-                }
+                SidebarSections(app, state)
+                SidebarUpcoming(app)
+                SidebarRecent(app, state)
             }
-            Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                FleetLine(app, Modifier.padding(horizontal = 6.dp))
-                AccountMenu(app, account, state)
+            SidebarFoot(app, account, state)
+        }
+    }
+}
+
+/** The sidebar's two things to do, at its head. */
+@Composable
+private fun SidebarActions(app: AppModel, state: LobbyState) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        GlassButton({ state.open(MeetingMode.Start, app) }, Modifier.weight(1f), shape = GlassButtonShape.Capsule(36.dp), prominent = true, label = t("Start a meeting")) {
+            Symbol("video.fill")
+            KitText(t("Start"), lines = 1)
+        }
+        GlassButton({ state.open(MeetingMode.Join(""), app) }, Modifier.weight(1f), shape = GlassButtonShape.Capsule(36.dp), label = t("Join a meeting")) {
+            Symbol("link")
+            KitText(t("Join"), lines = 1)
+        }
+    }
+}
+
+/** The sidebar's sections: home, the arranged meetings, and the servers where there is a machine to choose. */
+@Composable
+private fun SidebarSections(app: AppModel, state: LobbyState) {
+    SidebarItem(t("Home"), "house", state.place == Place.Home) { state.place = Place.Home }
+    SidebarItem(t("Scheduled meetings"), "calendar", state.place == Place.Scheduled, badge = app.lobby.upcoming.size) {
+        state.place = Place.Scheduled
+    }
+    AnimatedVisibility(app.offersRelayChoice, enter = expandVertically(Theme.settle()) + fadeIn(Theme.settle()), exit = shrinkVertically(Theme.leave()) + fadeOut(Theme.leave())) {
+        SidebarItem(t("Server"), "server.rack", state.place == Place.Servers) { state.place = Place.Servers }
+    }
+}
+
+/** What is coming, the five soonest, each opened in one press. */
+@Composable
+private fun SidebarUpcoming(app: AppModel, modifier: Modifier = Modifier) {
+    val scope = LocalAppScope.current
+    val upcoming = app.lobby.upcoming.take(5)
+    AnimatedVisibility(upcoming.isNotEmpty(), modifier, enter = expandVertically(Theme.settle()) + fadeIn(Theme.settle()), exit = shrinkVertically(Theme.leave()) + fadeOut(Theme.leave())) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            SidebarHeading(t("Upcoming"))
+            for (one in upcoming) {
+                MeetingRow(
+                    one, app,
+                    Modifier
+                        .fillMaxWidth()
+                        .plainPress({ app.lobby.link(one)?.let { link -> scope.launch { app.open(link) } } }, shape = rounded(10f))
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                )
             }
         }
+    }
+}
+
+/** The rooms lately, six of them, each opened again in one press or taken off the list. */
+@Composable
+private fun SidebarRecent(app: AppModel, state: LobbyState, modifier: Modifier = Modifier) {
+    val recent = app.lobby.recentHere.take(6)
+    AnimatedVisibility(recent.isNotEmpty(), modifier, enter = expandVertically(Theme.settle()) + fadeIn(Theme.settle()), exit = shrinkVertically(Theme.leave()) + fadeOut(Theme.leave())) {
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            SidebarHeading(t("Recent"))
+            for (entry in keepDeparting(recent) { it.id }) {
+                AnimatedVisibility(entry.visible, enter = Theme.arrive, exit = Theme.depart) {
+                    RecentSidebarRow(
+                        entry.item,
+                        open = { state.open(MeetingMode.Again(entry.item.room), app) },
+                        forget = { app.lobby.forget(entry.item) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** The sidebar's foot: the servers answering, and the account with its menu. */
+@Composable
+private fun SidebarFoot(app: AppModel, account: Account, state: LobbyState) {
+    Column(Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        FleetLine(app, Modifier.padding(horizontal = 6.dp))
+        AccountMenu(app, account, state)
     }
 }
 

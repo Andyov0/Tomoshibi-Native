@@ -1,6 +1,5 @@
 package app.tomoshibi.ui
 
-import android.app.Activity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.AnimatedContent
@@ -11,17 +10,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.window.layout.FoldingFeature
-import androidx.window.layout.WindowInfoTracker
 import app.tomoshibi.basics.Theme
 import app.tomoshibi.model.AppModel
 import app.tomoshibi.model.AppModel.Screen
@@ -56,18 +48,6 @@ val LocalAppScope = staticCompositionLocalOf<CoroutineScope> { Detached }
 private val Detached = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
 /**
- * A foldable's hinge where it divides the window: half open, as a book or
- * on a table. In the window's own pixels, which are the screen's own pixels
- * here, since the app draws from edge to edge. Null where there is none, or
- * where the screen is flat and the hinge divides nothing (an unfolded Fold
- * lying flat reports its fold as not separating).
- */
-@Immutable
-data class Hinge(val left: Float, val top: Float, val right: Float, val bottom: Float, val vertical: Boolean)
-
-val LocalHinge = compositionLocalOf<Hinge?> { null }
-
-/**
  * The whole app (Screens.swift `AppRoot`): one screen at a time, each
  * arriving and leaving with the same two curves, over black.
  */
@@ -75,7 +55,9 @@ val LocalHinge = compositionLocalOf<Hinge?> { null }
 fun TomoshibiApp(app: AppModel, modifier: Modifier = Modifier) {
     val scope = rememberCoroutineScope()
     val activity = LocalActivity.current
-    val hinge = activity?.let { rememberHinge(it) }
+    // The window's hinge, or, where the window reports none (a test, which
+    // cannot fold), whatever was provided around the app.
+    val hinge = activity?.let { rememberHinge(it) } ?: LocalHinge.current
     CompositionLocalProvider(LocalAppScope provides scope, LocalHinge provides hinge) {
         FeedSelfViews(app)
         Box(modifier.fillMaxSize().background(Color.Black)) {
@@ -156,22 +138,4 @@ private fun backFor(app: AppModel): (() -> Unit)? = when (app.screen) {
     Screen.Ended -> app::backToLobby
     Screen.Call -> if (app.call == null && app.movingTo == null) app::backToLobby else null
     else -> null
-}
-
-/**
- * Where the hinge is while it divides the window, from the window library's
- * folding feature: half open (a book held open, a phone on a table), the
- * two halves are two screens to lay out for, and a sheet or a column of the
- * wide lobby lying across the fold is read bent.
- */
-@Composable
-private fun rememberHinge(activity: Activity): Hinge? {
-    val flow = remember(activity) { WindowInfoTracker.getOrCreate(activity).windowLayoutInfo(activity) }
-    val layout by flow.collectAsStateWithLifecycle(initialValue = null)
-    val fold = layout?.displayFeatures?.filterIsInstance<FoldingFeature>()?.firstOrNull { it.isSeparating } ?: return null
-    val bounds = fold.bounds
-    return Hinge(
-        bounds.left.toFloat(), bounds.top.toFloat(), bounds.right.toFloat(), bounds.bottom.toFloat(),
-        vertical = fold.orientation == FoldingFeature.Orientation.VERTICAL,
-    )
 }

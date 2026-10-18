@@ -26,6 +26,7 @@ import app.tomoshibi.basics.Theme
 import app.tomoshibi.basics.say
 import app.tomoshibi.basics.t
 import app.tomoshibi.model.host.HostFeature
+import app.tomoshibi.ui.KeptToOnePane
 import app.tomoshibi.ui.kit.Font
 import app.tomoshibi.ui.kit.KitEnabled
 import app.tomoshibi.ui.kit.KitText
@@ -128,18 +129,22 @@ fun MovingOverlay(to: String, modifier: Modifier = Modifier) {
             .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
         contentAlignment = Alignment.Center,
     ) {
-        Column(
-            Modifier.padding(horizontal = 24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            MediaSpinner(size = 18f, tint = Theme.muted)
-            KitText(
-                if (named.isEmpty()) t("Moving this meeting") else t("Moving this meeting to {name}", mapOf("name" to named)),
-                font = Font(14f, Font.Medium), align = TextAlign.Center,
-            )
-            // The one thing worth saying: nobody has to do anything.
-            KitText(t("You will be back in a moment."), font = Font(12f), color = Theme.muted, align = TextAlign.Center)
+        // In the middle of the half that is looked at (ui/Fold.kt): the
+        // middle of a phone standing on a table is its hinge.
+        KeptToOnePane(contentAlignment = Alignment.Center) {
+            Column(
+                Modifier.padding(horizontal = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                MediaSpinner(size = 18f, tint = Theme.muted)
+                KitText(
+                    if (named.isEmpty()) t("Moving this meeting") else t("Moving this meeting to {name}", mapOf("name" to named)),
+                    font = Font(14f, Font.Medium), align = TextAlign.Center,
+                )
+                // The one thing worth saying: nobody has to do anything.
+                KitText(t("You will be back in a moment."), font = Font(12f), color = Theme.muted, align = TextAlign.Center)
+            }
         }
     }
 }

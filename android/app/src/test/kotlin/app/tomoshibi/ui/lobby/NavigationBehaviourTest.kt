@@ -21,6 +21,8 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.click
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.swipeLeft
+import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.hasScrollAction
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import app.tomoshibi.basics.Appearance
@@ -77,6 +79,17 @@ class NavigationBehaviourTest {
     private fun settle() {
         compose.mainClock.advanceTimeBy(1500)
         compose.waitForIdle()
+    }
+
+    /**
+     * The phone's lobby scrolled until its recent rooms stand clear of the
+     * join bar floating over its foot, as a finger would scroll it: the bar
+     * holds every press made on it, and the second recent room starts
+     * under it.
+     */
+    private fun scrollRecentClearOfTheBar() {
+        compose.onNode(hasScrollAction()).performTouchInput { swipeUp(startY = centerY, endY = centerY - 300f, durationMillis = 300) }
+        settle()
     }
 
     private fun back() {
@@ -154,6 +167,7 @@ class NavigationBehaviourTest {
         val app = fakeApp()
         compose.setContent { TestApp(app) }
         settle()
+        scrollRecentClearOfTheBar()
         compose.onNodeWithText("friday-standup").performClick()
         settle()
         compose.onNodeWithText("Join a meeting").assertExists()
@@ -165,6 +179,7 @@ class NavigationBehaviourTest {
         val app = fakeApp()
         compose.setContent { TestApp(app) }
         settle()
+        scrollRecentClearOfTheBar()
         compose.onNodeWithText("friday-standup").performTouchInput { swipeLeft(startX = right - 4f, endX = left - 200f, durationMillis = 300) }
         settle()
         assertFalse(app.lobby.recentHere.any { it.room == "friday-standup" })
@@ -176,6 +191,7 @@ class NavigationBehaviourTest {
         val app = fakeApp()
         compose.setContent { TestApp(app) }
         settle()
+        scrollRecentClearOfTheBar()
         compose.onNodeWithText("friday-standup").performTouchInput { swipeLeft(startX = right - 10f, endX = right - 260f, durationMillis = 400) }
         settle()
         assertTrue(app.lobby.recentHere.any { it.room == "friday-standup" })
