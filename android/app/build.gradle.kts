@@ -73,6 +73,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.camera:camera-camera2:1.6.2")
     implementation("androidx.camera:camera-lifecycle:1.6.2")
+    // One's own picture in a call: CameraCapture.showPreview takes a
+    // PreviewView's surface, which turns and mirrors the front camera as the
+    // Apple apps' preview layer does.
+    implementation("androidx.camera:camera-view:1.6.2")
     // The glass: a real backdrop blur (RenderEffect) on Android 12 and
     // later, a translucent fill of the same tone before it.
     implementation("dev.chrisbanes.haze:haze:2.0.1")
