@@ -1,6 +1,9 @@
 package app.tomoshibi.media
 
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
+import androidx.compose.runtime.mutableStateMapOf
 import java.util.IdentityHashMap
 import uniffi.tomoshibi_core.Call
 import uniffi.tomoshibi_core.PictureShape
@@ -27,6 +30,20 @@ class VideoHub private constructor(private val call: Call) {
     }
 
     private val fans = HashMap<String, Fan>()
+    private val main = Handler(Looper.getMainLooper())
+
+    /** A picture's size as decoded and the clockwise turn it is shown at. */
+    data class Shape(val width: Int, val height: Int, val rotation: Int) {
+        /** Its width over its height as it is shown, turned. */
+        val shown: Pair<Int, Int> get() = if (rotation == 90 || rotation == 270) height to width else width to height
+    }
+
+    /**
+     * The last shape each picture was drawn in, by sid: snapshot state, so
+     * that the small window can follow the shape of the picture it shows
+     * without a view of its own (PictureInPicture).
+     */
+    val shapes = mutableStateMapOf<String, Shape>()
 
     /**
      * Draws [sid] into [window] (from CoreNative.windowFromSurface) for
@@ -37,7 +54,15 @@ class VideoHub private constructor(private val call: Call) {
         detach(owner)
         val fan = fans.getOrPut(sid) { Fan() }
         fan.windows[owner] = window
-        call.attachVideoWindow(sid, window.toULong(), shape)
+        call.attachVideoWindow(sid, window.toULong(), object : PictureShape {
+            // On a core thread: the view is told as it was, and the shape
+            // kept on the main thread, where snapshot state is written.
+            override fun changed(width: UInt, height: UInt, rotation: UInt) {
+                shape.changed(width, height, rotation)
+                val seen = Shape(width.toInt(), height.toInt(), rotation.toInt())
+                main.post { if (sid in fans) shapes[sid] = seen }
+            }
+        })
         ask(sid)
     }
 
@@ -50,6 +75,7 @@ class VideoHub private constructor(private val call: Call) {
             fan.wants.remove(owner)
             call.detachVideoWindow(sid, window.toULong())
             if (fan.windows.isEmpty()) iterator.remove() else ask(sid)
+            if (fan.windows.isEmpty()) shapes.remove(sid)
         }
         // The last picture of the call gone, the hub goes too: a hub holds
         // its call, and the table of hubs kept every call that had shown a
@@ -65,9 +91,13 @@ class VideoHub private constructor(private val call: Call) {
         ask(sid)
     }
 
+    /** What each picture was last asked for, so a log says only what changed. */
+    private val asked = HashMap<String, Pair<Int, Int>>()
+
     private fun ask(sid: String) {
         val largest = fans[sid]?.wants?.values?.maxByOrNull { it.first.toLong() * it.second } ?: return
         if (largest.first <= 0 || largest.second <= 0) return
+        if (asked.put(sid, largest) != largest) Log.i(TAG, "asking for $sid at ${largest.first}x${largest.second}")
         try {
             call.requestVideoSize(sid, largest.first.toUInt(), largest.second.toUInt())
         } catch (fault: Exception) {

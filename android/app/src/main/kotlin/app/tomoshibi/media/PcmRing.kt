@@ -116,12 +116,15 @@ class PcmRing(
      * count, for a reader that resamples; returns how many it took, nought
      * while the ring is gathering its cushion or has run dry.
      */
-    fun read(into: FloatArray, frames: Int): Int {
+    fun read(into: FloatArray, frames: Int): Int = read(into, 0, frames)
+
+    /** The same, written into [into] from [offset] (in samples, not frames). */
+    fun read(into: FloatArray, offset: Int, frames: Int): Int {
         synchronized(lock) {
             val available = available(frames)
             for (frame in 0 until available) {
                 val at = ((read + frame) % capacity) * channels
-                for (c in 0 until channels) into[frame * channels + c] = samples[at + c]
+                for (c in 0 until channels) into[offset + frame * channels + c] = samples[at + c]
             }
             read = (read + available) % capacity
             count -= available

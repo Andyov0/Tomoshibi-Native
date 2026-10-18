@@ -67,6 +67,8 @@ class CameraCapture(context: Context) {
     private var analysis: ImageAnalysis? = null
     private var preview: Preview? = null
     private var previewSurface: Preview.SurfaceProvider? = null
+    /** The use cases this capture has bound, which are all it may unbind. */
+    private var own: List<androidx.camera.core.UseCase> = emptyList()
     private var orientation: OrientationEventListener? = null
     /** The bound camera's state, watched for a camera taken away under the call. */
     private var watched: androidx.lifecycle.LiveData<CameraState>? = null
@@ -93,19 +95,41 @@ class CameraCapture(context: Context) {
     val running: Boolean get() = device != null
 
     /**
-     * Whether the background behind the person is blurred, in what is sent
-     * and in the picture of themselves.
+     * Whether the background behind the person is blurred in what is sent
+     * (BackgroundBlur), remembered by the call as the web remembers it
+     * (`meet-live.blur`). The segmenter exists only while this is on.
      *
-     * TODO(media): background blur. The switch is kept and remembered (the
-     * call writes `meet-live.blur`), but frames go out as they are; the Apple
-     * version segments each frame with Vision and blends a blurred copy
-     * behind the person (BackgroundBlur.swift). A segmenter here would run in
-     * the analyzer, on the planes, before they are pushed.
+     * The picture of oneself drawn from the camera's own preview is not
+     * blurred: CameraX hands the preview to its surface before any frame
+     * reaches the analyser. A self view that shows the blur is a view drawn
+     * from what is sent, which is the room view's to choose.
      */
     @Volatile var blurring: Boolean = false
+        set(value) {
+            if (value == field) return
+            field = value
+            if (value) {
+                blur = BackgroundBlur(context).also { made ->
+                    made.onFailure = { fault -> android.os.Handler(android.os.Looper.getMainLooper()).post { onBlurFailed?.invoke(fault) } }
+                }
+                Log.i(TAG, "blur on")
+            } else {
+                blur?.close()
+                blur = null
+                Log.i(TAG, "blur off")
+            }
+        }
+    @Volatile private var blur: BackgroundBlur? = null
+
+    /** Told on the main thread when blur cannot be done here (the segmenter would not start). */
+    var onBlurFailed: ((Throwable) -> Unit)? = null
 
     /** Told on the main thread when a camera that was running stops under the call (another app took it). */
     var onFailure: ((Throwable) -> Unit)? = null
+
+    /** Frames sent since the capture was made, for a debug build's log. */
+    @Volatile internal var sent = 0
+        private set
 
     /** The cameras somebody can pick, front first. */
     fun cameras(): List<CameraChoice> {
@@ -156,13 +180,11 @@ class CameraCapture(context: Context) {
         input = into
         val analysis = analysis ?: makeAnalysis().also { analysis = it }
         val preview = previewSurface?.let { surface -> (preview ?: Preview.Builder().build().also { preview = it }).also { it.surfaceProvider = surface } }
-        provider.unbindAll()
+        unbindOwn(provider)
         lifecycle.resume()
-        val bound = if (preview != null) {
-            provider.bindToLifecycle(lifecycle, selector, analysis, preview)
-        } else {
-            provider.bindToLifecycle(lifecycle, selector, analysis)
-        }
+        val cases = listOfNotNull(analysis, preview)
+        val bound = provider.bindToLifecycle(lifecycle, selector, *cases.toTypedArray())
+        own = cases
         // A camera another app holds, or one the system takes away mid-call,
         // is said by the camera's state rather than by the bind.
         watched?.removeObservers(lifecycle)
@@ -197,14 +219,30 @@ class CameraCapture(context: Context) {
         watched = null
         orientation?.disable()
         orientation = null
-        provider?.unbindAll()
+        provider?.let(::unbindOwn)
         lifecycle.pause()
         device = null
+    }
+
+    /**
+     * Takes this capture's own use cases off the camera, and nothing else.
+     * The provider is the process's, shared with every other capture: it
+     * unbound everything once, and a join screen's picture of oneself
+     * stopped a moment after the call's camera started took the call's
+     * camera away with it. Two captures may hold the camera at once that
+     * way, each on its own lifecycle; CameraX runs the one started last and
+     * gives the camera back to the other when that one stops.
+     */
+    private fun unbindOwn(provider: ProcessCameraProvider) {
+        if (own.isEmpty()) return
+        provider.unbind(*own.toTypedArray())
+        own = emptyList()
     }
 
     /** Stops for good: the call is over. */
     fun close() {
         stop()
+        blurring = false
         lifecycle.destroy()
         worker.shutdown()
     }
@@ -280,14 +318,28 @@ class CameraCapture(context: Context) {
                 due = if (stamp - due > interval) stamp + interval else due + interval
                 val (py, pu, pv) = image.planes
                 val halve = image.width >= width.toInt() * 2 && image.height >= height.toInt() * 2
+                val rotation = image.imageInfo.rotationDegrees
+                // Blurred on packed planes, which the halving already makes;
+                // without blur the planes go as the camera laid them out.
+                val blur = blur
                 if (halve) {
                     val w = image.width / 2
                     val h = image.height / 2
                     y = halved(py, image.width, image.height, 1, y)
                     u = halved(pu, (image.width + 1) / 2, (image.height + 1) / 2, pu.pixelStride, u)
                     v = halved(pv, (image.width + 1) / 2, (image.height + 1) / 2, pv.pixelStride, v)
+                    blur?.process(y, u, v, w, h, rotation, stamp)
                     input.pushPlanes(y, u, v, w.toUInt(), ((w + 1) / 2).toUInt(), 1u, w.toUInt(), h.toUInt(),
-                        stamp / 1000, image.imageInfo.rotationDegrees.toUInt())
+                        stamp / 1000, rotation.toUInt())
+                } else if (blur != null) {
+                    val w = image.width
+                    val h = image.height
+                    y = packed(py, w, h, y)
+                    u = packed(pu, (w + 1) / 2, (h + 1) / 2, u)
+                    v = packed(pv, (w + 1) / 2, (h + 1) / 2, v)
+                    blur.process(y, u, v, w, h, rotation, stamp)
+                    input.pushPlanes(y, u, v, w.toUInt(), ((w + 1) / 2).toUInt(), 1u, w.toUInt(), h.toUInt(),
+                        stamp / 1000, rotation.toUInt())
                 } else {
                     y = copied(py, y)
                     u = copied(pu, u)
@@ -295,6 +347,7 @@ class CameraCapture(context: Context) {
                     input.pushPlanes(y, u, v, py.rowStride.toUInt(), pu.rowStride.toUInt(), pu.pixelStride.toUInt(),
                         image.width.toUInt(), image.height.toUInt(), stamp / 1000, image.imageInfo.rotationDegrees.toUInt())
                 }
+                sent = frames + 1
                 if (++frames % 150 == 0) {
                     Log.i(TAG, "camera sent $frames frames ${image.width}x${image.height}${if (halve) " halved" else ""} turned ${image.imageInfo.rotationDegrees}")
                 }
@@ -311,6 +364,28 @@ class CameraCapture(context: Context) {
             buffer.rewind()
             val out = if (reuse.size == buffer.remaining()) reuse else ByteArray(buffer.remaining())
             buffer.get(out)
+            return out
+        }
+
+        /** A plane as it is, packed (stride = width, step one), for the blur to work on. */
+        private fun packed(plane: ImageProxy.PlaneProxy, planeWidth: Int, planeHeight: Int, reuse: ByteArray): ByteArray {
+            whole = copied(plane, whole)
+            val source = whole
+            val stride = plane.rowStride
+            val step = plane.pixelStride
+            val out = if (reuse.size == planeWidth * planeHeight) reuse else ByteArray(planeWidth * planeHeight)
+            for (row in 0 until planeHeight) {
+                val from = row * stride
+                val to = row * planeWidth
+                if (step == 1) {
+                    System.arraycopy(source, from, out, to, minOf(planeWidth, source.size - from))
+                } else {
+                    for (column in 0 until planeWidth) {
+                        val at = from + column * step
+                        if (at < source.size) out[to + column] = source[at]
+                    }
+                }
+            }
             return out
         }
 
