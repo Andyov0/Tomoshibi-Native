@@ -1,5 +1,6 @@
 package app.tomoshibi.ui.lobby
 
+import app.tomoshibi.model.host.standInRules
 import android.content.Context
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -61,6 +62,7 @@ class NavigationScreenshotTest(private val language: Language) {
 
     @Before
     fun setUp() {
+        standInRules()
         TimeZone.setDefault(TimeZone.getTimeZone("Asia/Shanghai"))
         Locale.setDefault(Locale.US)
         val context = ApplicationProvider.getApplicationContext<Context>()
@@ -82,7 +84,7 @@ class NavigationScreenshotTest(private val language: Language) {
     }
 
     private fun shoot(name: String, app: AppModel, wide: Boolean = false, before: () -> Unit = {}) {
-        compose.setContent { TomoshibiApp(app) }
+        compose.setContent { TestApp(app) }
         settle()
         before()
         settle()

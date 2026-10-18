@@ -1,4 +1,4 @@
-package app.tomoshibi.model
+package app.tomoshibi.basics
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -35,6 +35,10 @@ class CornerTest {
         assertEquals(listOf("https://example.com"), Linked.links("https://example.com, then"))
         // JavaScript's \s, not Java's: an ideographic space ends the address.
         assertEquals(listOf("https://example.com/x"), Linked.links("https://example.com/x　次"))
+        assertEquals(listOf("https://example.com/x"), Linked.links("https://example.com/x　好的"))
+        // And no wider than JavaScript's: NEL is not a space there, so it
+        // does not end an address in a browser and must not here.
+        assertEquals(listOf("https://example.com/x\u0085y"), Linked.links("https://example.com/x\u0085y"))
     }
 
     @Test
@@ -116,6 +120,8 @@ class CornerTest {
         assertEquals(90 + CornerLanes.GAP, CornerLanes.lift(60f, 332f, 90f))
         // Closer than the gap counts as touching.
         assertEquals(90 + CornerLanes.GAP, CornerLanes.lift(336f, 332f, 90f))
+        // Measured in the window's pixels, the gap is given in pixels too.
+        assertEquals(0f, CornerLanes.lift(336f, 332f, 90f, gap = 2f))
         assertEquals(0f, CornerLanes.lift(60f, null, null))
         assertEquals(0f, CornerLanes.lift(60f, 0f, 0f))
     }
@@ -125,7 +131,7 @@ class CornerTest {
         assertEquals(2000, ChatRules.clamp("a".repeat(2100)).length)
         assertEquals("short", ChatRules.clamp("short"))
         // One short of the limit, then an emoji of two UTF-16 units.
-        assertEquals("a".repeat(1999), ChatRules.clamp("a".repeat(1999) + "😀"))
+        assertEquals("a".repeat(1999), ChatRules.clamp("a".repeat(1999) + "\uD83D\uDE00"))
         assertEquals(2000, ChatRules.clamp("你".repeat(2001)).length)
     }
 

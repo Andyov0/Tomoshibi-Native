@@ -1,4 +1,4 @@
-package app.tomoshibi.model
+package app.tomoshibi.basics
 
 // The rules for the corner of a call, where notices and what people said
 // appear, kept apart from the views that draw them so that they can be held
@@ -123,12 +123,13 @@ object CornerLanes {
     /**
      * How far the notices must rise, given the messages' right edge and
      * height and the leading edge of the notices' own column; nothing while
-     * the two do not share any width.
+     * the two do not share any width. All four in one unit: [gap] is in
+     * points unless the caller measured in pixels, as the window does.
      */
-    fun lift(notices: Float, saidRight: Float?, saidHeight: Float?): Float {
+    fun lift(notices: Float, saidRight: Float?, saidHeight: Float?, gap: Float = GAP): Float {
         if (saidRight == null || saidHeight == null || saidHeight <= 0f) return 0f
-        if (saidRight + GAP <= notices) return 0f
-        return saidHeight + GAP
+        if (saidRight + gap <= notices) return 0f
+        return saidHeight + gap
     }
 }
 

@@ -1,5 +1,10 @@
 package app.tomoshibi.ui.lobby
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import app.tomoshibi.ui.TomoshibiApp
+import app.tomoshibi.ui.room.LocalRoomPictures
+import app.tomoshibi.ui.room.standInPictures
 import androidx.compose.runtime.MutableState
 import app.tomoshibi.media.CallAudio
 import app.tomoshibi.media.NoAudioRouting
@@ -193,3 +198,13 @@ fun fakeCall(audio: CallAudio): CallModel = CallModel(
 )
 
 fun silentAudio() = CallAudio(NoAudioRouting, muted = true)
+
+/**
+ * The whole app as the tests draw it: with the call room's coloured stand-ins
+ * where a picture would be, since a room drawn for real reaches for the
+ * core's library, which a computer's JVM cannot load.
+ */
+@Composable
+fun TestApp(app: AppModel) {
+    CompositionLocalProvider(LocalRoomPictures provides standInPictures) { TomoshibiApp(app) }
+}
