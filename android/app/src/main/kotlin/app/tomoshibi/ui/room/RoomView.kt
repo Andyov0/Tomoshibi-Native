@@ -330,7 +330,7 @@ private fun Room(app: AppModel, call: CallModel, state: RoomState, host: HostFea
 
         Box(Modifier.padding(frame.padding).size(whole.width.dp, whole.height.dp)) {
             Box(Modifier.size(size.width.dp, size.height.dp)) {
-                Content(app, call, state, host, record, pictures, room, size, island, shown, inset)
+                Content(app, call, state, host, record, pictures, room, size, island, shown, inset, barAtFoot = !side)
             }
             // Along the foot, or down the side for "At the side", sliding
             // from its edge as the placement changes.
@@ -462,6 +462,7 @@ private fun Content(
     island: Float,
     shown: Boolean,
     inset: Insets,
+    barAtFoot: Boolean,
 ) {
     val filled = state.filled
     val panel = state.panel
@@ -547,7 +548,7 @@ private fun Content(
                 },
         )
 
-        Tiles(app, call, state, host, record, pictures, room, size, shown, inset, suspects, ::pressed, ::openMenu, ::fill, ::unfill)
+        Tiles(app, call, state, host, record, pictures, room, size, shown, inset, barAtFoot, suspects, ::pressed, ::openMenu, ::fill, ::unfill)
 
         CallOverlay(host)
 
@@ -667,6 +668,7 @@ private fun Tiles(
     size: Size,
     shown: Boolean,
     inset: Insets,
+    barAtFoot: Boolean,
     suspects: Set<String>,
     pressed: (String?) -> Unit,
     openMenu: (String?, Offset) -> Unit,
@@ -696,7 +698,7 @@ private fun Tiles(
                 enter = Theme.arrive,
                 exit = Theme.depart,
             ) {
-                Tile(app, call, state, host, record, picture, spot, room, shown, inset, suspects, pressed, openMenu, fill, unfill)
+                Tile(app, call, state, host, record, picture, spot, room, size, shown, inset, barAtFoot, suspects, pressed, openMenu, fill, unfill)
             }
         }
     }
@@ -712,8 +714,10 @@ private fun Tile(
     picture: Picture,
     spot: Rect,
     room: Plan.Room,
+    size: Size,
     shown: Boolean,
     inset: Insets,
+    barAtFoot: Boolean,
     suspects: Set<String>,
     pressed: (String?) -> Unit,
     openMenu: (String?, Offset) -> Unit,
@@ -729,13 +733,20 @@ private fun Tile(
     val radius: Dp = if (filled && onStage) 0.dp else Theme.tileRadius
     val ground = if (filled && onStage) Color.Black else Theme.surface
     // And above the controls while they are out, where the bar is wide
-    // enough to reach the name at the foot of a filled stage, as it is on a
-    // phone: the name slides up with the bar and back down after it.
-    val lift = if (filled && onStage && shown && spot.width < 900) Plan.ISLAND - Plan.GAP else 0f
+    // enough to reach the name at the foot of a picture that runs under it,
+    // as it is on a phone: the name slides up with the bar and back down
+    // after it. Plan.swift's room lifts it only for a filled stage; the
+    // person filling a call of two runs under the bar as well, and their
+    // name was drawn half behind it, on the iPhone as here.
+    val underBar = barAtFoot && spot.bottom > size.height - Plan.ISLAND + 0.5f
+    val lift by animateFloatAsState(
+        if (underBar && shown && spot.width < 900) Plan.ISLAND - Plan.GAP else 0f,
+        if (shown) Theme.settle() else Theme.leave(), label = "lift",
+    )
     val edge = if (filled && onStage) {
         PaddingValues(start = inset.leading.dp, top = inset.top.dp, end = inset.trailing.dp, bottom = (inset.bottom + lift).dp)
     } else {
-        PaddingValues(0.dp)
+        PaddingValues(bottom = lift.dp)
     }
     // The card in the corner of a call of two.
     val floating = state.pin.pinned == null && room.spots.size == Plan.ALONE_TOGETHER && picture.id == ME
