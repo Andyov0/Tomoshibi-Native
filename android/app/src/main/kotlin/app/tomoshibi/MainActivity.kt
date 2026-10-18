@@ -2,52 +2,32 @@ package app.tomoshibi
 
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import android.util.Log
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.BasicText
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.snapshotFlow
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.activity.enableEdgeToEdge
 import androidx.lifecycle.lifecycleScope
 import app.tomoshibi.basics.Appearance
 import app.tomoshibi.basics.Localization
 import app.tomoshibi.core.CoreNative
 import app.tomoshibi.media.DeviceAccess
-import app.tomoshibi.media.RemoteVideo
 import app.tomoshibi.model.AppModel
-import app.tomoshibi.model.CallModel
 import app.tomoshibi.model.DebugLaunch
-import app.tomoshibi.model.Surface
+import app.tomoshibi.ui.TomoshibiApp
+import app.tomoshibi.ui.lobby.LobbyDebug
 import kotlinx.coroutines.launch
 
 private const val TAG = "Tomoshibi"
 
 /**
  * The app's one activity: loads the core, keeps the app's model for the life
- * of the process, and draws a placeholder for each of the model's screens
- * until the real ones are written.
+ * of the process, and draws the app (ui/App.kt). It turns round for itself
+ * (the manifest's configChanges), so that a Fold opened or closed in a call
+ * keeps the call, the composition and everything a screen has open.
  *
  * A debug build can be driven from adb as the Apple apps are from their
  * environment (TOMOSHIBI_*):
@@ -64,7 +44,10 @@ private const val TAG = "Tomoshibi"
  * Once running, `-e do <command>` on a further start does what a press would:
  * `leave`, `back`, `join <room>`, `prepare <room>`, `enter <room>`,
  * `signout`, `mic`, `camera`, `hand`, `say <text>`, `invite [name]`, `knock`,
- * `cancel`, `state`.
+ * `cancel`, `state`. `lobby` opens one part of the lobby (`scheduled`,
+ * `servers`, `start`, `join`, `again`, `settings`), `room` is typed into the
+ * start sheet's field, and `popover` opens one of a screen's popovers by its
+ * id, as TOMOSHIBI_DEBUG_LOBBY, _ROOM and _POPOVER do on Apple.
  */
 class MainActivity : ComponentActivity() {
     private lateinit var app: AppModel
@@ -75,8 +58,21 @@ class MainActivity : ComponentActivity() {
         Localization.install(this)
         Appearance.install(this)
         DeviceAccess.install(this)
+        // From edge to edge, the bars drawn light over the app's own dark
+        // ground: every screen keeps its controls inside the safe area, the
+        // display cutout and the keyboard included, and lets its pictures
+        // and its evening room run under the bars.
+        enableEdgeToEdge(SystemBarStyle.dark(AndroidColor.TRANSPARENT), SystemBarStyle.dark(AndroidColor.TRANSPARENT))
+        // The window gives way to the keyboard rather than being pushed up
+        // under it, so that the screens can keep a field and its button
+        // above it themselves (safeDrawing carries the keyboard's inset).
+        // Deprecated as a resize, which an edge-to-edge window does not do,
+        // and still what keeps the system from panning the window instead.
+        @Suppress("DEPRECATION")
+        window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
         app = Shell.app(this, intent)
-        setContent { Screens(app) }
+        if (BuildConfig.DEBUG) Debug.lobby(intent)
+        setContent { TomoshibiApp(app) }
         lifecycleScope.launch { app.start() }
         if (savedInstanceState == null) handle(intent, first = true)
     }
@@ -153,6 +149,13 @@ private object Debug {
         )
     }
 
+    /** The lobby's debug switches (ui/lobby `LobbyDebug`), from the first launch's extras. */
+    fun lobby(intent: Intent) {
+        LobbyDebug.open = intent.getStringExtra("lobby")
+        LobbyDebug.room = intent.getStringExtra("room")
+        LobbyDebug.popover = intent.getStringExtra("popover")
+    }
+
     suspend fun perform(app: AppModel, line: String) {
         val word = line.substringBefore(' ')
         val rest = line.substringAfter(' ', "")
@@ -192,99 +195,4 @@ private object Debug {
         return "screen=${app.screen.name.lowercase()} signedIn=${app.account != null} room=${app.room} problem=${app.problem}" +
             (if (call != null) " call=${call.state.name.lowercase()} mic=${call.microphoneOn} camera=${call.cameraOn} people=[$people] messages=${call.messages.size}" else "")
     }
-}
-
-private val plain = TextStyle(color = Color.White, fontSize = 15.sp)
-private val quiet = TextStyle(color = Color(0xFFB0B0B0), fontSize = 13.sp)
-private val press = TextStyle(color = Color(0xFFFFC46B), fontSize = 16.sp)
-
-/**
- * A placeholder for each screen, enough to drive the flow by hand; the real
- * screens come from the views being ported from the Apple apps, against the
- * same models.
- */
-@Composable
-private fun Screens(app: AppModel) {
-    val scope = rememberCoroutineScope()
-    LaunchedEffect(app) {
-        // The lobby's lists, whenever the lobby is reached.
-        snapshotFlow { app.screen to app.account?.name }.collect { (screen, _) ->
-            if (screen == AppModel.Screen.Lobby) app.lobby.refreshArrangements()
-        }
-    }
-    Box(Modifier.fillMaxSize().background(Color.Black)) {
-        Column(Modifier.safeDrawingPadding().padding(16.dp).fillMaxWidth().verticalScroll(rememberScrollState())) {
-            BasicText(app.screen.name, style = TextStyle(color = Color.White, fontSize = 22.sp))
-            Spacer(Modifier.height(8.dp))
-            when (app.screen) {
-                AppModel.Screen.Starting -> BasicText("…", style = quiet)
-                AppModel.Screen.Unreachable -> Press("Try again") { scope.launch { app.connect() } }
-                AppModel.Screen.Lobby -> {
-                    BasicText(app.account?.let { "Signed in as ${it.name}" } ?: "Not signed in", style = plain)
-                    for (recent in app.lobby.recentHere) Press(recent.room) { scope.launch { app.enter(recent.room) } }
-                    for (meeting in app.lobby.upcoming) BasicText("${meeting.room} at ${meeting.at}", style = quiet)
-                    if (app.account != null) Press("Sign out") { scope.launch { app.signOut() } }
-                }
-                AppModel.Screen.Prejoin -> {
-                    BasicText("Room ${app.room} as ${app.joiningName}", style = plain)
-                    Press(if (app.joining) "Joining…" else "Join") { scope.launch { app.join() } }
-                    if (app.canKnock) Press("Ask to be let in") { scope.launch { app.knock() } }
-                    Press("Back") { app.backToLobby() }
-                }
-                AppModel.Screen.Knocking -> {
-                    BasicText("Waiting to be let into ${app.room}", style = plain)
-                    Press("Stop") { app.stopKnocking() }
-                }
-                AppModel.Screen.Waiting -> {
-                    BasicText("Waiting for ${app.arrangement?.room ?: app.room}", style = plain)
-                    Press("Join") { scope.launch { app.goArranged() } }
-                    Press("Back") { app.stopWaiting() }
-                }
-                AppModel.Screen.Call -> app.call?.let { CallPlaceholder(it, app) } ?: BasicText("Moving to ${app.movingTo}", style = quiet)
-                AppModel.Screen.Ended -> {
-                    BasicText(app.ending.name, style = plain)
-                    Press("Join again") { scope.launch { app.join() } }
-                    Press("Back") { app.backToLobby() }
-                }
-            }
-            app.problem?.let {
-                Spacer(Modifier.height(12.dp))
-                BasicText(it, style = TextStyle(color = Color(0xFFFF8A80), fontSize = 14.sp))
-                if (app.problemStays) Press("Close") { app.problem = null }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CallPlaceholder(call: CallModel, app: AppModel) {
-    val scope = rememberCoroutineScope()
-    BasicText("${call.room}: ${call.state.name.lowercase()}", style = plain)
-    Row {
-        Press(if (call.microphoneOn) "Mute" else "Unmute") { scope.launch { app.toggleMicrophone() } }
-        Spacer(Modifier.padding(8.dp))
-        Press(if (call.cameraOn) "Camera off" else "Camera on") { scope.launch { runCatching { call.setCamera(!call.cameraOn) } } }
-        Spacer(Modifier.padding(8.dp))
-        Press("Leave") { scope.launch { app.leave() } }
-    }
-    for (person in call.people) {
-        BasicText(
-            "${CallModel.named(person.name, person.id)}${if (person.speaking) " (speaking)" else ""}${if (person.handUp) " (hand up)" else ""}",
-            style = plain,
-        )
-    }
-    val pictures = call.surfaces.filter { it.sid != null }
-    for (surface in pictures.take(2)) {
-        RemoteVideo(
-            call.call, surface.sid,
-            Modifier.fillMaxWidth().aspectRatio(if (surface.kind == Surface.Kind.Screen) 16f / 9 else 4f / 3).padding(vertical = 4.dp),
-        )
-    }
-    for (toast in call.toasts) BasicText(toast.title + (toast.detail?.let { " — $it" } ?: ""), style = quiet)
-    for (line in call.messages.takeLast(5)) BasicText("${line.name}: ${line.text}", style = quiet)
-}
-
-@Composable
-private fun Press(label: String, action: () -> Unit) {
-    BasicText(label, style = press, modifier = Modifier.clickable(onClick = action).padding(vertical = 8.dp))
 }
