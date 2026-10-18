@@ -73,6 +73,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.camera:camera-camera2:1.6.2")
     implementation("androidx.camera:camera-lifecycle:1.6.2")
+    // The picture of yourself before a call: CameraX's own view, which turns,
+    // mirrors and crops the preview the way the camera delivers it.
+    implementation("androidx.camera:camera-view:1.6.2")
     // The glass: a real backdrop blur (RenderEffect) on Android 12 and
     // later, a translucent fill of the same tone before it.
     implementation("dev.chrisbanes.haze:haze:2.0.1")

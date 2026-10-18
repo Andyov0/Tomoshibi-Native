@@ -396,6 +396,66 @@
       "zh-Hans": "从最近记录中移除 {room}",
       "zh-Hant": "從最近記錄中移除 {room}",
       "ja": "{room} を最近の履歴から削除"
+    },
+    "Front camera": {
+      "en": "Front camera",
+      "zh-Hans": "前置摄像头",
+      "zh-Hant": "前置鏡頭",
+      "ja": "前面カメラ"
+    },
+    "Back camera": {
+      "en": "Back camera",
+      "zh-Hans": "后置摄像头",
+      "zh-Hant": "後置鏡頭",
+      "ja": "背面カメラ"
+    },
+    "External camera": {
+      "en": "External camera",
+      "zh-Hans": "外接摄像头",
+      "zh-Hant": "外接攝影機",
+      "ja": "外部カメラ"
+    },
+    "Built-in microphone": {
+      "en": "Built-in microphone",
+      "zh-Hans": "内置麦克风",
+      "zh-Hant": "內建麥克風",
+      "ja": "内蔵マイク"
+    },
+    "Built-in speaker": {
+      "en": "Built-in speaker",
+      "zh-Hans": "内置扬声器",
+      "zh-Hant": "內建喇叭",
+      "ja": "内蔵スピーカー"
+    },
+    "Earpiece": {
+      "en": "Earpiece",
+      "zh-Hans": "听筒",
+      "zh-Hant": "聽筒",
+      "ja": "受話口"
+    },
+    "Headset microphone": {
+      "en": "Headset microphone",
+      "zh-Hans": "耳机麦克风",
+      "zh-Hant": "耳機麥克風",
+      "ja": "ヘッドセットのマイク"
+    },
+    "Wired headphones": {
+      "en": "Wired headphones",
+      "zh-Hans": "有线耳机",
+      "zh-Hant": "有線耳機",
+      "ja": "有線ヘッドホン"
+    },
+    "Bluetooth": {
+      "en": "Bluetooth",
+      "zh-Hans": "蓝牙",
+      "zh-Hant": "藍牙",
+      "ja": "Bluetooth"
+    },
+    "USB audio": {
+      "en": "USB audio",
+      "zh-Hans": "USB 音频",
+      "zh-Hant": "USB 音訊",
+      "ja": "USB オーディオ"
     }
   }
 }
