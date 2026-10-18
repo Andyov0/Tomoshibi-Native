@@ -13,6 +13,9 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Process
 import android.util.Log
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.sqrt
 import uniffi.tomoshibi_core.AudioInput
@@ -45,7 +48,8 @@ private const val FRAMES = RATE / 100
  * the call's session recorded from the first sound to the last, microphone
  * on or off, and music in a call sounded like a telephone call however still
  * the microphone was; the owner chose a short gap at each press of the
- * microphone over that (2026-10-17).
+ * microphone over that (2026-10-17). The earpiece is the one exception, a
+ * way out that only a call has (AudioRouting).
  *
  * [muted] plays nothing and only measures (a test's `mute`): the mixer keeps
  * its pace on the clock instead and logs each sound's level once a second,
@@ -92,7 +96,17 @@ class CallAudio(
     var chosenOutput: String? = null
         private set
 
+    /**
+     * Moved on whenever a microphone or a way out came or went, for a devices
+     * panel to list them again (the web's `devicechange`): snapshot state.
+     */
+    var devicesChanged by mutableIntStateOf(0)
+        private set
+
     val started: Boolean get() = output != null
+
+    /** Whether the microphone records with voice processing now, which is what makes the sound play as a call. */
+    private var recordingVoice = false
 
     private val main by lazy { Handler(Looper.getMainLooper()) }
     private val players = HashMap<String, RingSource>()
@@ -107,7 +121,27 @@ class CallAudio(
     /** Starts the mixer, if it is not already running. */
     fun start() {
         if (output != null) return
-        output = Output().also { it.start() }
+        output = Output().also {
+            it.preferred = routing.mediaDevice()
+            it.start()
+        }
+        routing.start {
+            devicesChanged++
+            reroute()
+        }
+    }
+
+    /**
+     * Plays as a call or as media, and out of the way the routing takes: as a
+     * call while the microphone records with voice processing, so that the
+     * echo canceller has its reference, or wherever only a call can reach
+     * (the earpiece); as media otherwise (AudioRouting says why).
+     */
+    private fun reroute() {
+        val asCall = recordingVoice || routing.needsCall
+        routing.communicating(asCall)
+        output?.voice = asCall
+        output?.preferred = if (asCall) null else routing.mediaDevice()
     }
 
     /** Plays a remote track of [channels] channels through a source of its own. */
@@ -183,21 +217,22 @@ class CallAudio(
         start()
         val record = openRecord()
         val capture = Capture(input, record, effects(record), SoundLevel())
-        routing.communicating(voiceProcessing)
+        // The mode before the recording starts: some devices attach their
+        // echo canceller to a voice recorder only when it opens in a call.
+        recordingVoice = voiceProcessing
+        reroute()
         try {
             capture.begin()
         } catch (fault: Throwable) {
             capture.release()
-            routing.communicating(false)
-            output?.voice = false
+            recordingVoice = false
+            reroute()
             throw fault
         }
         this.capture = capture
         microphone = input
         microphoneLevel = capture.level
-        // Played as a call from now on, so the echo canceller hears it.
-        output?.voice = voiceProcessing
-        Log.i(TAG, "microphone on, voice processing ${if (voiceProcessing) "on" else "off"}")
+        Log.i(TAG, "microphone on, voice processing ${if (voiceProcessing) "on" else "off"}, out through ${routing.current}")
     }
 
     fun stopMicrophone() {
@@ -205,8 +240,8 @@ class CallAudio(
         microphoneLevel = null
         capture?.stop()
         capture = null
-        output?.voice = false
-        routing.communicating(false)
+        recordingVoice = false
+        reroute()
     }
 
     /**
@@ -225,8 +260,9 @@ class CallAudio(
         val changed = input != chosenInput || original != originalSound
         chosenInput = input
         chosenOutput = output
+        routing.choose(output)
         originalSound = original
-        this.output?.preferred = routing.info(output, input = false)
+        reroute()
         if (changed) restartMicrophone()
     }
 
@@ -247,14 +283,14 @@ class CallAudio(
                 throw fault
             }
         } else {
-            val info = routing.info(device.id, input = false) ?: throw IllegalStateException("no such speakers")
+            if (!routing.choose(device.id)) throw IllegalStateException("no such speakers")
             chosenOutput = device.id
-            output?.preferred = info
+            reroute()
         }
     }
 
-    /** The microphone or speakers in use, or that would be used. */
-    fun current(input: Boolean): String? = if (input) chosenInput else chosenOutput
+    /** The microphone or way out in use, or that would be used: what a devices panel ticks. */
+    fun current(input: Boolean): String? = if (input) chosenInput else routing.current ?: chosenOutput
 
     /** The microphones or speakers somebody can pick. */
     fun devices(input: Boolean): List<AudioDevice> = routing.devices(input)
@@ -324,7 +360,8 @@ class CallAudio(
         microphoneLevel = null
         capture?.stop()
         capture = null
-        routing.communicating(false)
+        recordingVoice = false
+        routing.stop()
         for (source in players.values) source.ring.clear()
         players.clear()
         sources.clear()
@@ -370,7 +407,11 @@ class CallAudio(
                     val wait = next - System.nanoTime()
                     if (wait > 0) nap(wait / 1_000_000, (wait % 1_000_000).toInt()) else if (wait < -200_000_000L) next = System.nanoTime()
                 } else {
-                    if (track != null && (trackVoice != voice || trackPreferred !== preferred)) {
+                    // The same device is a fresh AudioDeviceInfo each time
+                    // the routing looks it up, so it is compared by its id:
+                    // by identity every reroute made the track again, a gap
+                    // in the sound at every press of the microphone.
+                    if (track != null && (trackVoice != voice || trackPreferred?.id != preferred?.id)) {
                         track.release()
                         track = null
                     }
