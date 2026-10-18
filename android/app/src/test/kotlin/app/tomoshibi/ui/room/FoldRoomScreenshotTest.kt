@@ -5,6 +5,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.test.core.app.ApplicationProvider
 import app.tomoshibi.basics.Appearance
@@ -226,7 +227,9 @@ class FoldRoomScreenshotTest(private val language: Language, private val held: H
         val call = chatted(room(3))
         call.apply(CallEvent.TrackPublished("p-mei", track("TR_p-mei_screen", MediaSource.SCREEN_SHARE)))
         RoomState.of(call).panel = RoomPanel.Messages
-        hinge = null
+        compose.runOnUiThread { hinge = null }
+        Snapshot.sendApplyNotifications()
+        compose.mainClock.advanceTimeByFrame()
         val app = app()
         compose.setContent {
             CompositionLocalProvider(LocalRoomPictures provides standInPictures, LocalHinge provides hinge, LocalCallCameras provides FakeCameras) { RoomView(app, call) }
@@ -235,12 +238,16 @@ class FoldRoomScreenshotTest(private val language: Language, private val held: H
         compose.waitForIdle()
         captureScreenRoboImage("$DIRECTORY/standing-0-flat-${language.code}.png")
         compose.mainClock.autoAdvance = false
-        hinge = TABLE_HINGE
+        compose.runOnUiThread { hinge = TABLE_HINGE }
+        Snapshot.sendApplyNotifications()
+        compose.mainClock.advanceTimeByFrame()
         compose.mainClock.advanceTimeBy(130)
         captureScreenRoboImage("$DIRECTORY/standing-1-moving-${language.code}.png")
         compose.mainClock.advanceTimeBy(600)
         captureScreenRoboImage("$DIRECTORY/standing-2-table-${language.code}.png")
-        hinge = null
+        compose.runOnUiThread { hinge = null }
+        Snapshot.sendApplyNotifications()
+        compose.mainClock.advanceTimeByFrame()
         compose.mainClock.advanceTimeBy(130)
         captureScreenRoboImage("$DIRECTORY/standing-3-laying-${language.code}.png")
         compose.mainClock.autoAdvance = true
