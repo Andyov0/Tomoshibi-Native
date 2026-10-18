@@ -192,6 +192,11 @@ object CallKeeper {
         return types and ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION != 0
     }
 
+    /** The notification put up again as it is, where the service runs. */
+    fun refresh() {
+        service?.let(::show)
+    }
+
     /** The projection has closed: the type goes. */
     fun unproject() {
         if (!projecting) return

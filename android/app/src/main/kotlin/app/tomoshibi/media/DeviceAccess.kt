@@ -129,7 +129,13 @@ object DeviceAccess {
     suspend fun notifications() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || notificationsAsked) return
         notificationsAsked = true
-        if (!ask(Manifest.permission.POST_NOTIFICATIONS)) Log.i(TAG, "notifications refused; the call goes on without one")
+        if (ask(Manifest.permission.POST_NOTIFICATIONS)) {
+            // Put up again: the one posted while the answer was out is not
+            // shown by the system once it is granted.
+            CallKeeper.refresh()
+        } else {
+            Log.i(TAG, "notifications refused; the call goes on without one")
+        }
     }
 
     private fun askNext() {
