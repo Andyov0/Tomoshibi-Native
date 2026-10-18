@@ -80,6 +80,12 @@ dependencies {
     // The SF Symbols the Swift views name, drawn as their nearest Material
     // Rounded icons (ui/kit/Symbols.kt).
     implementation("androidx.compose.material:material-icons-extended:1.7.8")
+    // The video watched together (feature/watch): files and playlists from
+    // where they are or relayed, as AVPlayer plays them on Apple. HLS is a
+    // module of its own; the relay's playlists say nothing in their address
+    // that names HLS, so the player is told what each one is.
+    implementation("androidx.media3:media3-exoplayer:1.11.1")
+    implementation("androidx.media3:media3-exoplayer-hls:1.11.1")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.robolectric:robolectric:4.17")
     testImplementation("androidx.compose.ui:ui-test-junit4")
