@@ -11,6 +11,7 @@ import app.tomoshibi.media.NoAudioRouting
 import app.tomoshibi.media.PictureInPicture
 import app.tomoshibi.media.Sharing
 import app.tomoshibi.model.AppModel
+import app.tomoshibi.feature.watch.withStillFeatures
 import app.tomoshibi.model.CallModel
 import app.tomoshibi.model.LobbyModel
 import app.tomoshibi.model.MemoryDefaults
@@ -190,12 +191,12 @@ fun fakeApp(
 /** An invitation as the deployment describes one, for a guest's join screen. */
 fun invitation(name: String? = null) = InviteInfo("design-review", name, null, Instant.now().plus(2, ChronoUnit.DAYS).toString(), null)
 
-/** A call to draw the room over, with its sound going nowhere. */
+/** A call to draw the room over, with its sound going nowhere, and watching together and the song desk made still. */
 fun fakeCall(audio: CallAudio): CallModel = CallModel(
     FakeCall(), FakeDeployment(), region = null, sealed = false,
     audio = audio, makeCamera = { error("no camera in a test") }, sharing = Sharing(), pictureInPicture = PictureInPicture(),
     context = Dispatchers.Unconfined,
-)
+).withStillFeatures()
 
 fun silentAudio() = CallAudio(NoAudioRouting, muted = true)
 

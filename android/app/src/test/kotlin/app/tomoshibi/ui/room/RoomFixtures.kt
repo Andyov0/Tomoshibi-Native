@@ -34,6 +34,7 @@ import uniffi.tomoshibi_protocol.MediaSource
 import uniffi.tomoshibi_protocol.Opening
 import uniffi.tomoshibi_protocol.Relay
 import uniffi.tomoshibi_protocol.RelayList
+import app.tomoshibi.feature.watch.withStillFeatures
 
 /*
  * A room with nobody really in it: the core stood in for by UniFFI's fake
@@ -92,12 +93,13 @@ internal class FakeDeployment(
 
 internal fun app(): AppModel = AppModel(MemoryDefaults(), MemorySecrets(), media = null, home = "https://meet.example/", context = Dispatchers.Main.immediate)
 
+/** A call with watching together and the song desk made still beforehand ([withStillFeatures]). */
 internal fun callModel(call: FakeCall = FakeCall(), deployment: FakeDeployment = FakeDeployment(), sealed: Boolean = false): CallModel =
     CallModel(
         call, deployment, region = null, sealed = sealed,
         audio = CallAudio(NoAudioRouting, muted = true), makeCamera = { error("no camera in a picture") },
         sharing = Sharing(), pictureInPicture = PictureInPicture(),
-    )
+    ).withStillFeatures()
 
 internal fun track(sid: String, source: MediaSource, kind: MediaKind = MediaKind.VIDEO, muted: Boolean = false, name: String = "") =
     TrackInfo(sid, kind, source, name, muted, 1280u, 720u, false, true)

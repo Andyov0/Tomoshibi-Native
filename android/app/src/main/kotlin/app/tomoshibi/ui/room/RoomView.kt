@@ -766,7 +766,9 @@ private fun Tile(
         Picture.Role.Watch -> {
             TileFrame(TileMarks("", unlabelled = true), press, Modifier.fillMaxSize(), compact = compact, selected = onStage,
                 expandable = false, radius = radius, ground = Color.Black, edge = edge,
-                content = { WatchStage(app, call, Modifier.fillMaxSize()) }, overlay = controls)
+                // The empty stage's "Add a video" and the controls' list of
+                // videos open the watch panel (WatchStageView's `openPanel`).
+                content = { WatchStage(app, call, Modifier.fillMaxSize(), openPanel = { state.panel = RoomPanel.Watch }) }, overlay = controls)
         }
         Picture.Role.Me -> {
             val speaking = steady(record.meSpeaking && call.microphoneOn)
