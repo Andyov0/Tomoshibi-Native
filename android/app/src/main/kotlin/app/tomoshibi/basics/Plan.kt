@@ -132,10 +132,13 @@ object Plan {
     }
 
     /** How many the filmstrip holds at this width; never fewer than one. */
-    fun stripCapacity(container: Size): Int {
-        val width = STRIP * aspect(container)
-        val usable = container.width - 2 * GAP + GAP
-        return max(1, floor(usable / (width + GAP)).toInt())
+    fun stripCapacity(container: Size): Int = stripCapacity(container.width, aspect(container))
+
+    /** The same for a strip [width] long whose pictures have [aspect], which is the window's and not the strip's. */
+    private fun stripCapacity(width: Float, aspect: Float): Int {
+        val picture = STRIP * aspect
+        val usable = width - 2 * GAP + GAP
+        return max(1, floor(usable / (picture + GAP)).toInt())
     }
 
     /** The other person filling the screen and the rest as cards down the trailing edge, the way every telephone draws a call of two. */
@@ -218,8 +221,13 @@ object Plan {
         val me = mine?.takeIf { it in pictures }
         val kept = if (me != null && me != onStage) listOf(me) else emptyList()
         val rest = pictures.filter { it != me && it != onStage }
+        // Counted at the window's own shape, which is the shape the strip's
+        // pictures are drawn at (focus). Plan.swift counts them at the shape
+        // of the width left between the arrows, and a window a little short
+        // of upright (840 by 1000) read as upright there: its strip was
+        // counted as narrow cards and drawn as wide ones, off both sides.
         fun places(width: Float): Int =
-            max(1, (if (onStage != null) stripCapacity(Size(width, container.height)) else TILES_PER_PAGE) - kept.size)
+            max(1, (if (onStage != null) stripCapacity(width, aspect(container)) else TILES_PER_PAGE) - kept.size)
         // A room that will page gives its arrows room, and the strip holds
         // what fits beside them.
         val paged = rest.size > places(container.width)

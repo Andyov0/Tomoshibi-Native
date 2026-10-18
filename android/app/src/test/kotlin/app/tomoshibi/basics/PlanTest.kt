@@ -170,6 +170,26 @@ class PlanTest {
         assertEquals(places + 1, room.spots.size)
     }
 
+    /**
+     * A strip that pages holds what fits beside the arrows at the window's
+     * own shape: counted at the width left between them, a window a little
+     * short of upright (an unfolded phone, 840 by 1000) read as upright, its
+     * strip counted as narrow upright cards and then drawn as wide ones,
+     * running off both sides.
+     */
+    @Test
+    fun aStripThatPagesStaysInsideItsWindow() {
+        for (size in listOf(Size(840f, 1000f), Size(700f, 820f), window, phone)) {
+            for (count in 3..12) {
+                val room = Plan.room(size, listOf("me", "stage") + ids(count), "me", "stage")
+                for (id in room.shown) {
+                    val spot = room.spots.getValue(id)
+                    assertTrue("$count in $size: $spot", spot.left >= -0.5f && spot.right <= size.width + 0.5f)
+                }
+            }
+        }
+    }
+
     @Test
     fun aPageThatNoLongerExistsShowsTheLastOne() {
         val room = Plan.room(window, listOf("me") + ids(10), "me", null, page = 7)
