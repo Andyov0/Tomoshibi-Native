@@ -11,3 +11,7 @@ core/libs/
 # The release signing key and its passwords live in the owner's vault.
 keystore.properties
 *.jks
+# Screenshot references are recorded on each machine (./gradlew :app:recordRoborazziDebug)
+# and looked at there, not committed: a set of them is 19 MB, the backdrop gradient
+# compressing badly, and every re-record would add as much again to the history.
+app/src/test/screenshots/
