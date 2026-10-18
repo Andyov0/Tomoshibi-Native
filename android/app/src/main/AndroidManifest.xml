@@ -6,6 +6,21 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
+    <!-- A Bluetooth headset's microphone on Android 10 and 11, which reach it
+         through SCO alone; from 12 the communication device is chosen without it. -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+
+    <!-- The call kept alive behind the screen (media/CallService.kt). The
+         call's own type rests on MANAGE_OWN_CALLS, a permission granted at
+         install that asks nothing of anybody; each device's type is added
+         only while that device is in use. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
@@ -13,14 +28,30 @@
         android:label="Tomoshibi"
         android:theme="@style/Theme.Tomoshibi"
         android:usesCleartextTraffic="true">
+        <!-- One activity for the whole task (singleTask): an invitation opened
+             from a browser or a chat app is handed to the activity already
+             holding the call rather than starting a second one in that app's
+             task, and the small window has exactly one activity to shrink. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTask"
+            android:supportsPictureInPicture="true"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name=".media.CallService"
+            android:exported="false"
+            android:foregroundServiceType="phoneCall|microphone|camera|mediaProjection" />
+
+        <!-- The ongoing call's notification and the small window's buttons. -->
+        <receiver
+            android:name=".media.CallActions"
+            android:exported="false" />
     </application>
 </manifest>

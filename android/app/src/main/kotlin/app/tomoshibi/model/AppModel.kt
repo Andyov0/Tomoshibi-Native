@@ -1147,13 +1147,21 @@ class AppModel(
          * The app's model for this process, made with what the device keeps.
          * [launch] is passed only by a debug build.
          */
-        fun create(context: Context, launch: DebugLaunch?, keepChoices: (Boolean) -> Unit = {}): AppModel = AppModel(
-            SharedDefaults(context),
-            KeystoreSecrets(context),
-            CallMedia(context, muted = BuildConfig.DEBUG && launch?.mute == true),
-            if (BuildConfig.DEBUG) launch else null,
-            keepChoices = keepChoices,
-        )
+        fun create(context: Context, launch: DebugLaunch?, keepChoices: (Boolean) -> Unit = {}): AppModel {
+            val media = CallMedia(context, muted = BuildConfig.DEBUG && launch?.mute == true)
+            return AppModel(
+                SharedDefaults(context),
+                KeystoreSecrets(context),
+                media,
+                if (BuildConfig.DEBUG) launch else null,
+                keepChoices = keepChoices,
+            // The media layer follows the model's calls from here on: the
+            // service that keeps a call alive behind the screen, its
+            // notification and the small window (CallMedia.follow). After
+            // the model is made, never from inside it, so a test's model has
+            // none of it.
+            ).also(media::follow)
+        }
 
         /** api.ts `explain`, for the room the person was trying. */
         fun explain(error: Throwable, room: String): String = when (error) {

@@ -55,6 +55,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.camera:camera-camera2:1.6.2")
     implementation("androidx.camera:camera-lifecycle:1.6.2")
+    // The call's notification (CallStyle) and its foreground service's types.
+    implementation("androidx.core:core:1.18.0")
     // The web's own segmenter for blurring what is behind somebody: the same
     // MediaPipe selfie model the web serves from its deployment (live/blur.ts),
     // bundled here under assets/segment for the same reason the web bundles
