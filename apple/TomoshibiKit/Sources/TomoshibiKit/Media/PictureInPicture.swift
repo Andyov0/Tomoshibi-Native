@@ -13,16 +13,17 @@ import TomoshibiCore
 /// own whose layer sits under the stage, because the system will only take a
 /// picture into a small window from a layer that is in a window already.
 ///
-/// It is fed only while it can be seen: from the moment the app is about to
-/// leave the front until it is back and the small window has closed. Fed all
-/// the time, it took every frame of a shared screen while lying under the
-/// room's opaque ground, where the compositor never drew it and so never let
-/// a frame go: on the owner's iPhone backboardd, which holds the layers'
-/// image queues, grew by about a 2224 by 1440 frame each thirtieth of a
-/// second and was killed at 3.45 GB seventeen seconds after a screen share
-/// began, taking the screen with it to the home screen (2026-10-17, read off
-/// the phone's log: the share's sound arriving at 12:18:28.8, the compositor
-/// enhancing the stage's picture alone from 12:18:29, the kill at 12:18:46).
+/// While the app is in front it is kept warm rather than fed: two frames a
+/// second, so that the small window has a picture the moment it is wanted.
+/// Fed nothing in front (the first answer to the screen share that took the
+/// phone down, 2026-10-17), the layer was empty when somebody went to the
+/// home screen and the system would not open the small window from it: the
+/// owner had to leave the app twice. Every frame goes to it from the moment
+/// the app is about to leave the front until it is back and the small window
+/// has closed, which it is made to as the app comes back, as a FaceTime call
+/// does; it stayed open over the call. (The phone itself was taken down by
+/// frames left in tokio threads' autorelease pools, core/src/call/remote.rs
+/// `drained`, not by this layer.)
 struct PictureInPictureHost: UIViewRepresentable {
     let call: Call
     let sid: String?
@@ -42,10 +43,11 @@ struct PictureInPictureHost: UIViewRepresentable {
     final class HostView: UIView, AVPictureInPictureSampleBufferPlaybackDelegate, AVPictureInPictureControllerDelegate {
         let renderer = VideoRenderer()
         private let call: Call
-        /// What the small window would show, and what the renderer is on now:
-        /// the same while it is fed, nil while it is not.
+        /// What the small window would show, what the renderer is on, and
+        /// whether every frame goes to it.
         private var sid: String?
         private var fed: String?
+        private var full = false
         private var controller: AVPictureInPictureController?
         private var away = UIApplication.shared.applicationState != .active
         private var watching: [NSObjectProtocol] = []
@@ -54,6 +56,8 @@ struct PictureInPictureHost: UIViewRepresentable {
             self.call = call
             super.init(frame: .zero)
             renderer.layer.videoGravity = .resizeAspect
+            renderer.show(atMostEvery: away ? 0 : 0.5)
+            full = away
             layer.addSublayer(renderer.layer)
             if AVPictureInPictureController.isPictureInPictureSupported() {
                 let source = AVPictureInPictureController.ContentSource(sampleBufferDisplayLayer: renderer.layer, playbackDelegate: self)
@@ -67,7 +71,12 @@ struct PictureInPictureHost: UIViewRepresentable {
                 MainActor.assumeIsolated { self?.away = true; self?.feed() }
             })
             watching.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.away = false; self?.feed() }
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.away = false
+                    if let controller = self.controller, controller.isPictureInPictureActive { controller.stopPictureInPicture() }
+                    self.feed()
+                }
             })
         }
 
@@ -87,20 +96,28 @@ struct PictureInPictureHost: UIViewRepresentable {
             feed()
         }
 
-        /// On the picture it would show while the app is away or the small
-        /// window is open, and on nothing otherwise.
+        /// On the picture it would show, every frame of it while the app is
+        /// away or the small window is open and two a second otherwise.
         private func feed() {
             let showing = away || controller?.isPictureInPictureActive == true
-            let next = showing ? sid : nil
-            guard next != fed else { return }
-            if let fed { VideoHub.existing(call)?.remove(renderer, from: fed) }
-            fed = next
-            Logger(subsystem: "app.tomoshibi", category: "video").notice("the small window's picture is \(next ?? "off", privacy: .public)")
-            if let next {
-                VideoHub.of(call).add(renderer, to: next)
-                VideoHub.existing(call)?.want((640, 360), for: renderer, on: next)
+            if sid != fed {
+                if let fed { VideoHub.existing(call)?.remove(renderer, from: fed) }
+                fed = sid
+                if let sid {
+                    VideoHub.of(call).add(renderer, to: sid)
+                    VideoHub.existing(call)?.want((640, 360), for: renderer, on: sid)
+                }
+                renderer.layer.sampleBufferRenderer.flush()
             }
-            renderer.layer.sampleBufferRenderer.flush()
+            guard showing != full else { return }
+            full = showing
+            renderer.show(atMostEvery: showing ? 0 : 0.5)
+            Logger(subsystem: "app.tomoshibi", category: "video").notice("the small window's picture is \(self.sid ?? "none", privacy: .public), \(showing ? "every frame" : "kept warm", privacy: .public)")
+        }
+
+        func pictureInPictureController(_ controller: AVPictureInPictureController,
+                                        restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completion: @escaping (Bool) -> Void) {
+            completion(true)
         }
 
         func pictureInPictureControllerDidStopPictureInPicture(_ controller: AVPictureInPictureController) {

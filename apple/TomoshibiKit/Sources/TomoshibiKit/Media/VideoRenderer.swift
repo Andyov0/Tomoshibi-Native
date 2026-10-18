@@ -22,6 +22,16 @@ public final class VideoRenderer: @unchecked Sendable {
     /// since (`enqueue`).
     private var lastTaken = CFAbsoluteTimeGetCurrent()
     private var turnedAway = 0
+    private var lastShown: CFAbsoluteTime = 0
+    private var interval: CFTimeInterval = 0
+
+    /// At most one frame in this many seconds, or every frame at zero: the
+    /// small window's renderer kept warm while the app is in front.
+    func show(atMostEvery seconds: CFTimeInterval) {
+        lock.lock()
+        interval = seconds
+        lock.unlock()
+    }
     private static let log = Logger(subsystem: "app.tomoshibi", category: "video")
 
     /// The size of the last frame and its rotation, for the view to fit the
@@ -41,6 +51,11 @@ public final class VideoRenderer: @unchecked Sendable {
     private func enqueue(_ buffer: CVPixelBuffer, rotation: Int) {
         lock.lock()
         defer { lock.unlock() }
+        if interval > 0 {
+            let now = CFAbsoluteTimeGetCurrent()
+            guard now - lastShown >= interval else { return }
+            lastShown = now
+        }
         let width = CVPixelBufferGetWidth(buffer), height = CVPixelBufferGetHeight(buffer)
         if format == nil || lastSize != (width, height) || !CMVideoFormatDescriptionMatchesImageBuffer(format!, imageBuffer: buffer) {
             var description: CMVideoFormatDescription?
