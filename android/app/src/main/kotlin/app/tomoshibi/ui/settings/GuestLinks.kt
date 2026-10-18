@@ -20,7 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import app.tomoshibi.ui.LocalAppScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,20 +70,24 @@ import java.time.ZoneId
 @Composable
 internal fun GuestLinksCard(app: AppModel, account: Account) {
     val platform = platform()
-    var typed by remember { mutableStateOf("") }
-    var scope by remember { mutableStateOf(account.scopes.firstOrNull() ?: "") }
-    var name by remember { mutableStateOf("") }
-    var from by remember { mutableStateOf<LocalDateTime?>(null) }
-    var until by remember { mutableStateOf<LocalDateTime?>(null) }
-    var busy by remember { mutableStateOf<String?>(null) }
-    var made by remember { mutableStateOf<MadeInvite?>(null) }
-    var shownLink by remember { mutableStateOf<MadeInvite?>(null) }
-    var said by remember { mutableStateOf<String?>(null) }
-    var shownSaid by remember { mutableStateOf("") }
-    var saidIsGood by remember { mutableStateOf(false) }
+    // Kept with the settings rather than the card (SettingsState), so that
+    // a link half made is still half made after the phone is folded.
+    var typed by rememberDraft("guest.typed") { "" }
+    var scope by rememberDraft("guest.scope") { account.scopes.firstOrNull() ?: "" }
+    var name by rememberDraft("guest.name") { "" }
+    var from by rememberDraft<LocalDateTime?>("guest.from") { null }
+    var until by rememberDraft<LocalDateTime?>("guest.until") { null }
+    var busy by rememberDraft<String?>("guest.busy") { null }
+    var made by rememberDraft<MadeInvite?>("guest.made") { null }
+    var shownLink by rememberDraft<MadeInvite?>("guest.shownLink") { null }
+    var said by rememberDraft<String?>("guest.said") { null }
+    var shownSaid by rememberDraft("guest.shownSaid") { "" }
+    var saidIsGood by rememberDraft("guest.saidIsGood") { false }
     made?.let { shownLink = it }
     said?.let { shownSaid = it }
-    val coroutines = rememberCoroutineScope()
+    // The app's scope: a link asked for just before the card is drawn again
+    // in the other layout must still be answered, and `busy` cleared.
+    val coroutines = LocalAppScope.current
     val clipboard = LocalClipboard.current
 
     // The room as the server will read it. An @ typed into the room half is

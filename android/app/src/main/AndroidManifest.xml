@@ -31,13 +31,24 @@
         <!-- One activity for the whole task (singleTask): an invitation opened
              from a browser or a chat app is handed to the activity already
              holding the call rather than starting a second one in that app's
-             task, and the small window has exactly one activity to shrink. -->
+             task, and the small window has exactly one activity to shrink.
+             It turns round for itself (configChanges): a Fold opened out of
+             its cover screen or folded onto it moves the window to the other
+             screen, which changes its size, its shape, its density and, the
+             two screens being different panels, its colour mode; any of them
+             left to the system made the activity again in the middle of a
+             call. Resizeable, said rather than left to the default the
+             target SDK implies: an activity that cannot be resized is moved
+             between the screens in size compatibility, letterboxed or made
+             again, rather than handed the new screen as a change it lays
+             itself out for. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
+            android:resizeableActivity="true"
             android:supportsPictureInPicture="true"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density">
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|colorMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

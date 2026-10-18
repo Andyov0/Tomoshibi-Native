@@ -135,7 +135,7 @@ fun <T> SegmentedChoice(
                     .padding(horizontal = 10.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                KitText(label, font = Font(12.5f, if (isChosen) Font.Semibold else Font.Regular), color = ink, lines = 1)
+                KitText(label, font = Font(12.5f, if (isChosen) Font.Semibold else Font.Regular), color = ink, lines = 1, fit = true)
             }
         }
     }
@@ -230,7 +230,9 @@ fun ChoiceRow(
                 .background(Color.White.copy(alpha = light))
                 .pressable(press, androidx.compose.ui.graphics.RectangleShape, on, Role.Button,
                     selected = if (checked) true else null, onClick = onClick)
-                .heightIn(min = 40.dp)
+                // A fingertip tall on a phone and the cover screen, where the
+                // rows of a list touch (Press.kt `fingertip`).
+                .heightIn(min = fingertip(40.dp))
                 .padding(horizontal = 14.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,

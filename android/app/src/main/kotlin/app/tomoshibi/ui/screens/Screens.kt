@@ -70,7 +70,13 @@ import app.tomoshibi.basics.say
 import app.tomoshibi.basics.t
 import app.tomoshibi.model.AppModel
 import app.tomoshibi.model.LobbyModel
+import app.tomoshibi.ui.Folded
+import app.tomoshibi.ui.KeptToOnePane
 import app.tomoshibi.ui.LocalAppScope
+import app.tomoshibi.ui.LocalHinge
+import app.tomoshibi.ui.LocalInHalf
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import app.tomoshibi.ui.kit.Appear
 import app.tomoshibi.ui.kit.Backdrop
 import app.tomoshibi.ui.kit.Capsule
@@ -119,23 +125,31 @@ internal fun CardScreen(width: Dp = 420.dp, content: @Composable ColumnScope.() 
     FloatingPopoverLayer(popovers) {
         Box(Modifier.fillMaxSize()) {
             Backdrop(Modifier.fillMaxSize().glassSource())
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .putsKeyboardAway()
-                    .verticalScroll(rememberScrollState())
-                    .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(horizontal = 16.dp, vertical = 60.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Box(Modifier.widthIn(max = width).fillMaxWidth().rise().glassPane(30.dp)) {
-                    ContentLayer {
-                        Column(
-                            Modifier.fillMaxWidth().padding(22.dp).animateContentSize(Theme.settle()),
-                            verticalArrangement = Arrangement.spacedBy(18.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            content = content,
-                        )
+            // On one half of a folded screen (ui/Fold.kt): the upper one on a
+            // table, the reading page of a book, rather than across the fold.
+            KeptToOnePane {
+                // Less room above and below on the upper half of a phone on
+                // a table, which is half a screen tall; a book's page is a
+                // screen tall and keeps it, clear of the language's button.
+                val half = LocalInHalf.current && LocalHinge.current?.vertical == false
+                Column(
+                    Modifier
+                        .fillMaxSize()
+                        .putsKeyboardAway()
+                        .verticalScroll(rememberScrollState())
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .padding(horizontal = 16.dp, vertical = if (half) 12.dp else 60.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(Modifier.widthIn(max = width).fillMaxWidth().rise().glassPane(30.dp)) {
+                        ContentLayer {
+                            Column(
+                                Modifier.fillMaxWidth().padding(22.dp).animateContentSize(Theme.settle()),
+                                verticalArrangement = Arrangement.spacedBy(18.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                content = content,
+                            )
+                        }
                     }
                 }
             }
@@ -157,30 +171,53 @@ internal fun PaneScreen(app: AppModel, content: @Composable ColumnScope.(wide: B
     FloatingPopoverLayer(popovers) {
         BoxWithConstraints(Modifier.fillMaxSize()) {
             if (maxWidth >= 600.dp) {
-                // The Mac's join screen: a card of 560 points with the
-                // picture inside it.
                 Box(Modifier.fillMaxSize()) {
                     Backdrop(Modifier.fillMaxSize().glassSource())
-                    Column(
-                        Modifier
-                            .fillMaxSize()
-                            .putsKeyboardAway()
-                            .verticalScroll(rememberScrollState())
-                            .windowInsetsPadding(WindowInsets.safeDrawing)
-                            .padding(horizontal = 16.dp, vertical = 60.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Box(Modifier.widthIn(max = 560.dp).fillMaxWidth().rise().glassPane(30.dp)) {
-                            ContentLayer {
-                                Column(
-                                    Modifier.fillMaxWidth().padding(22.dp).animateContentSize(Theme.settle()),
-                                    verticalArrangement = Arrangement.spacedBy(18.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                ) { content(true) }
+                    Folded(
+                        // The Mac's join screen: a card of 560 points with the
+                        // picture inside it.
+                        flat = {
+                            Column(
+                                Modifier
+                                    .fillMaxSize()
+                                    .putsKeyboardAway()
+                                    .verticalScroll(rememberScrollState())
+                                    .windowInsetsPadding(WindowInsets.safeDrawing)
+                                    .padding(horizontal = 16.dp, vertical = 60.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) { JoinCard(content) }
+                            LanguageMenu(Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp))
+                        },
+                        // Folded, the picture of yourself on one side of the
+                        // hinge and the card on the other: on a table both
+                        // on the upper half, above the keyboard; in a book a
+                        // page each. A picture of a face is the one thing
+                        // that may not lie across a fold.
+                        lead = {
+                            Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(12.dp).rise()) {
+                                CameraStage(app, Modifier.matchParentSize(), cornerRadius = 24.dp)
+                                DeviceSwitches(
+                                    app,
+                                    Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp).glassSurface(Capsule).padding(6.dp),
+                                    size = 44.dp,
+                                )
+                                LanguageMenu(Modifier.align(Alignment.TopEnd).padding(12.dp))
                             }
-                        }
-                    }
-                    LanguageMenu(Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp))
+                        },
+                        form = {
+                            CompositionLocalProvider(LocalPictureBeside provides true) {
+                                Column(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .putsKeyboardAway()
+                                        .verticalScroll(rememberScrollState())
+                                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                                        .padding(12.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) { JoinCard(content) }
+                            }
+                        },
+                    )
                 }
             } else {
                 CameraStage(app, Modifier.fillMaxSize().glassSource())
@@ -199,6 +236,23 @@ internal fun PaneScreen(app: AppModel, content: @Composable ColumnScope.(wide: B
         }
     }
 }
+
+/** The wide join screen's card of glass, 560 points at most, with the screen's own content in it. */
+@Composable
+private fun JoinCard(content: @Composable ColumnScope.(wide: Boolean) -> Unit) {
+    Box(Modifier.widthIn(max = 560.dp).fillMaxWidth().rise().glassPane(30.dp)) {
+        ContentLayer {
+            Column(
+                Modifier.fillMaxWidth().padding(22.dp).animateContentSize(Theme.settle()),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) { content(true) }
+        }
+    }
+}
+
+/** Whether the picture of yourself is drawn beside the card, on the other side of a hinge, rather than in it. */
+private val LocalPictureBeside = compositionLocalOf { false }
 
 /** The plainer screens' heading (`Heading`). */
 @Composable
@@ -330,6 +384,8 @@ fun PreJoinScreen(app: AppModel) {
  */
 @Composable
 private fun JoinPicture(app: AppModel, wide: Boolean) {
+    // Drawn beside the card, on the other side of the hinge (PaneScreen).
+    if (wide && LocalPictureBeside.current) return
     if (wide) {
         Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
             CameraStage(app, Modifier.matchParentSize(), cornerRadius = 20.dp)
@@ -733,9 +789,13 @@ fun StartingScreen() {
     val alpha by breathing.animateFloat(0.55f, 1f, infiniteRepeatable(tween(1100, easing = EaseInOut), RepeatMode.Reverse), label = "mark")
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Backdrop(Modifier.fillMaxSize())
-        Column(verticalArrangement = Arrangement.spacedBy(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Mark(Modifier.alpha(alpha), size = 56.dp)
-            MediaSpinner(size = 16f, tint = Theme.muted)
+        // In the middle of the half that is looked at, not of the screen,
+        // which on a phone standing on a table is the hinge.
+        KeptToOnePane(contentAlignment = Alignment.Center) {
+            Column(verticalArrangement = Arrangement.spacedBy(18.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                Mark(Modifier.alpha(alpha), size = 56.dp)
+                MediaSpinner(size = 16f, tint = Theme.muted)
+            }
         }
     }
 }
@@ -751,15 +811,17 @@ fun MovingOverlay(to: String) {
     Box(Modifier.fillMaxSize().background(Theme.background.copy(alpha = 0.8f)).clearAndSetSemantics {
         contentDescription = if (named.isEmpty()) t("Moving this meeting") else t("Moving this meeting to {name}", mapOf("name" to named))
     }, contentAlignment = Alignment.Center) {
-        Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            MediaSpinner(size = 18f, tint = Theme.muted)
-            KitText(
-                if (named.isEmpty()) t("Moving this meeting") else t("Moving this meeting to {name}", mapOf("name" to named)),
-                font = Font(14f, Font.Medium),
-                align = TextAlign.Center,
-            )
-            // The one thing worth saying: nobody has to do anything.
-            KitText(t("You will be back in a moment."), font = Font(12f), color = Theme.muted, align = TextAlign.Center)
+        KeptToOnePane(contentAlignment = Alignment.Center) {
+            Column(Modifier.padding(horizontal = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                MediaSpinner(size = 18f, tint = Theme.muted)
+                KitText(
+                    if (named.isEmpty()) t("Moving this meeting") else t("Moving this meeting to {name}", mapOf("name" to named)),
+                    font = Font(14f, Font.Medium),
+                    align = TextAlign.Center,
+                )
+                // The one thing worth saying: nobody has to do anything.
+                KitText(t("You will be back in a moment."), font = Font(12f), color = Theme.muted, align = TextAlign.Center)
+            }
         }
     }
 }

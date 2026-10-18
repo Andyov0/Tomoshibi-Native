@@ -59,6 +59,8 @@ import app.tomoshibi.basics.Theme
 import app.tomoshibi.basics.readingLocale
 import app.tomoshibi.basics.t
 import app.tomoshibi.model.AppModel
+import app.tomoshibi.ui.KeptToOnePane
+import app.tomoshibi.ui.Pane
 import app.tomoshibi.ui.kit.Capsule
 import app.tomoshibi.ui.kit.ContentLayer
 import app.tomoshibi.ui.kit.Font
@@ -103,6 +105,9 @@ object LobbyDebug {
     var open: String? = null
     var room: String? = null
     var popover: String? = null
+
+    /** The section the settings open at when `open` is `settings` (`general`, `media`, `watching`, `music`, `account`, `about`). */
+    var section: String? = null
 
     fun sheet(open: String?): MeetingMode? =
         when (open) {
@@ -189,6 +194,8 @@ fun ProblemToast(app: AppModel, modifier: Modifier = Modifier, clearance: Dp = 2
     }
     val density = LocalDensity.current
     val below = with(density) { clearance.roundToPx() }
+    // At the foot of one page of a book rather than across the two (ui/Fold.kt).
+    KeptToOnePane(pane = Pane.Foot) {
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
         // Glass slid in from below the screen and faded on its own layer, so
         // that its shadow is not cut off square while it moves (Glass.kt).
@@ -225,6 +232,7 @@ fun ProblemToast(app: AppModel, modifier: Modifier = Modifier, clearance: Dp = 2
                 }
             }
         }
+    }
     }
 }
 

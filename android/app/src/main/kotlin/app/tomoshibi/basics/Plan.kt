@@ -246,6 +246,36 @@ object Plan {
         return Room(spots, showing, pages, shown)
     }
 
+    /**
+     * The filmstrip on its own, along the top of [container], for a stage
+     * drawn somewhere else: a foldable standing on a table puts the stage on
+     * its upper half and keeps the rest of the call, the strip with it, on
+     * the lower half it is touched on. Paged as [room] pages the strip
+     * beneath a stage, this participant's own picture on every page.
+     */
+    fun strip(container: Size, pictures: List<String>, mine: String?, stage: String, page: Int = 0): Room {
+        val me = mine?.takeIf { it in pictures && it != stage }
+        val kept = listOfNotNull(me)
+        val rest = pictures.filter { it != me && it != stage }
+        val aspect = aspect(container)
+        fun places(width: Float): Int = max(1, stripCapacity(width, aspect) - kept.size)
+        val paged = rest.size > places(container.width)
+        val per = places(if (paged) container.width - 2 * PAGER_RESERVE else container.width)
+        val pages = max(1, (rest.size + per - 1) / per)
+        val showing = min(max(0, page), pages - 1)
+        val start = showing * per
+        val shown = kept + rest.subList(min(start, rest.size), min(rest.size, start + per))
+        val spots = LinkedHashMap<String, Rect>()
+        val width = STRIP * aspect
+        val total = shown.size * width + (shown.size - 1) * GAP
+        val left = (container.width - total) / 2
+        for ((index, id) in shown.withIndex()) spots[id] = rect(left + index * (width + GAP), GAP, width, STRIP)
+        return Room(spots, showing, pages, shown)
+    }
+
+    /** How tall [strip] is with the gap above and below it. */
+    const val STRIP_BAND = STRIP + 2 * GAP
+
     private fun rect(x: Float, y: Float, width: Float, height: Float) = Rect(Offset(x, y), Size(width, height))
 }
 

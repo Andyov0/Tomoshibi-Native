@@ -222,15 +222,22 @@ fun RoundButton(
         Motion.hover(), label = "fill",
     )
     val edge by animateFloatAsState(if (lit) 0.12f else 0f, Motion.hover(), label = "edge")
+    // Pressed over a fingertip in a narrow window, drawn at its own size (fingertip).
     Box(
         modifier
             .alpha(if (!on) 0.3f else if (faint) 0.45f else 1f)
-            .size(size)
-            .background(fill, CircleShape)
-            .border(1.dp, Color.White.copy(alpha = edge), CircleShape)
+            .size(fingertip(size))
             .pressable(press, CircleShape, on, Role.Button, label, onClick = onClick),
         contentAlignment = Alignment.Center,
-    ) { Symbol(symbol, size = size.value * 0.43f, weight = Font.Semibold, tint = ink) }
+    ) {
+        Box(
+            Modifier
+                .size(size)
+                .background(fill, CircleShape)
+                .border(1.dp, Color.White.copy(alpha = edge), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) { Symbol(symbol, size = size.value * 0.43f, weight = Font.Semibold, tint = ink) }
+    }
 }
 
 /** What a pill is for: most answer, one says yes in the colour, one cannot be undone. */

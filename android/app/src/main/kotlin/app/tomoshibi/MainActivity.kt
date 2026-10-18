@@ -45,7 +45,8 @@ private const val TAG = "Tomoshibi"
  * `leave`, `back`, `join <room>`, `prepare <room>`, `enter <room>`,
  * `signout`, `mic`, `camera`, `hand`, `say <text>`, `invite [name]`, `knock`,
  * `cancel`, `state`. `lobby` opens one part of the lobby (`scheduled`,
- * `servers`, `start`, `join`, `again`, `settings`), `room` is typed into the
+ * `servers`, `start`, `join`, `again`, `settings`), `section` the section the
+ * settings open at (`account`, `media`, ...), `room` is typed into the
  * start sheet's field, and `popover` opens one of a screen's popovers by its
  * id, as TOMOSHIBI_DEBUG_LOBBY, _ROOM and _POPOVER do on Apple.
  */
@@ -154,6 +155,7 @@ private object Debug {
         LobbyDebug.open = intent.getStringExtra("lobby")
         LobbyDebug.room = intent.getStringExtra("room")
         LobbyDebug.popover = intent.getStringExtra("popover")
+        LobbyDebug.section = intent.getStringExtra("section")
     }
 
     suspend fun perform(app: AppModel, line: String) {

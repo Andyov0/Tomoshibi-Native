@@ -6,6 +6,12 @@ import androidx.compose.animation.core.rememberTransition
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.input.pointer.pointerInput
@@ -42,6 +48,9 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import app.tomoshibi.basics.Theme
+import app.tomoshibi.ui.Hinge
+import app.tomoshibi.ui.LEAST_HALF
+import app.tomoshibi.ui.LocalHinge
 
 // The app's own popovers (Kit.swift `Popovers`, `glassPopover`;
 // Kit+Controls.swift `barPopover`; Kit+Settings.swift `floatingPopover`).
@@ -127,9 +136,10 @@ fun GlassPopover(
     panel: @Composable () -> Unit,
     anchor: @Composable () -> Unit,
 ) {
-    Box(modifier) {
+    val at = remember { AnchorAt() }
+    Box(modifier.onGloballyPositioned { at.bounds = it.boundsInWindow() }) {
         anchor()
-        PopoverPanel(id, popovers, Placement.Hang(edge == PopoverEdge.Top, alignment), width, panel)
+        PopoverPanel(id, popovers, Placement.Hang(edge == PopoverEdge.Top, alignment), width, at, panel)
     }
 }
 
@@ -151,9 +161,10 @@ fun BarPopover(
     panel: @Composable () -> Unit,
     anchor: @Composable () -> Unit,
 ) {
-    Box(modifier) {
+    val at = remember { AnchorAt() }
+    Box(modifier.onGloballyPositioned { at.bounds = it.boundsInWindow() }) {
         anchor()
-        PopoverPanel(id, popovers, Placement.Bar(axis == BarAxis.Vertical, place == BarPopoverPlace.End), width, panel)
+        PopoverPanel(id, popovers, Placement.Bar(axis == BarAxis.Vertical, place == BarPopoverPlace.End), width, at, panel)
     }
 }
 
@@ -173,9 +184,10 @@ fun FloatingPopover(
     panel: @Composable () -> Unit,
     anchor: @Composable () -> Unit,
 ) {
-    Box(modifier) {
+    val at = remember { AnchorAt() }
+    Box(modifier.onGloballyPositioned { at.bounds = it.boundsInWindow() }) {
         anchor()
-        PopoverPanel(id, popovers, Placement.Floating(edge == PopoverEdge.Bottom, alignment), width, panel)
+        PopoverPanel(id, popovers, Placement.Floating(edge == PopoverEdge.Bottom, alignment), width, at, panel)
     }
 }
 
@@ -212,8 +224,39 @@ private class Grows {
     var origin by mutableStateOf(TransformOrigin(0.5f, 1f))
 }
 
+/**
+ * Where a popover's control is in the window, written as it is placed and
+ * read only as the popover opens: kept out of the snapshot, so that a
+ * control scrolling with its page does not draw its closed popover again on
+ * every frame of the scroll.
+ */
+private class AnchorAt {
+    var bounds: Rect? = null
+}
+
+/**
+ * The part of a window [window] pixels a popover opened from a control at
+ * [x], [y] may use: the whole window, or while a foldable's hinge divides it
+ * the half the control is on, so that a menu off the controls on the lower
+ * half of a phone standing on a table does not run up across the fold, nor
+ * one off the first page of a book across onto the second.
+ */
+internal fun paneAround(hinge: Hinge?, window: IntSize, x: Float, y: Float, least: Float): IntRect {
+    val whole = IntRect(0, 0, window.width, window.height)
+    hinge ?: return whole
+    return if (hinge.vertical) {
+        if (hinge.left < least || window.width - hinge.right < least) whole
+        else if (x < (hinge.left + hinge.right) / 2) IntRect(0, 0, hinge.left.toInt(), window.height)
+        else IntRect(hinge.right.toInt(), 0, window.width, window.height)
+    } else {
+        if (hinge.top < least || window.height - hinge.bottom < least) whole
+        else if (y < (hinge.top + hinge.bottom) / 2) IntRect(0, 0, window.width, hinge.top.toInt())
+        else IntRect(0, hinge.bottom.toInt(), window.width, window.height)
+    }
+}
+
 @Composable
-private fun PopoverPanel(id: String, popovers: Popovers, placement: Placement, width: Dp, panel: @Composable () -> Unit) {
+private fun PopoverPanel(id: String, popovers: Popovers, placement: Placement, width: Dp, at: AnchorAt, panel: @Composable () -> Unit) {
     val open = popovers.open == id
     // Kept in the composition after it closes, until its departure has
     // played: a popover that is simply gone on the next frame is the one
@@ -224,9 +267,18 @@ private fun PopoverPanel(id: String, popovers: Popovers, placement: Placement, w
 
     val density = LocalDensity.current
     val window = LocalWindowInfo.current.containerSize
-    val room = with(density) { window.width.toDp() } - 20.dp
+    val hinge = LocalHinge.current
+    val least = with(density) { LEAST_HALF.dp.toPx() }
+    val anchor = at.bounds
+    // The half of a folded window the control is in, which the popover
+    // keeps to, as wide and as tall as that half lets it be; where the
+    // panel is taller than that it scrolls, which a menu the height of the
+    // cover screen turned on its side needed as well.
+    val pane = paneAround(hinge, window, anchor?.center?.x ?: 0f, anchor?.center?.y ?: 0f, least)
+    val room = with(density) { pane.width.toDp() } - 20.dp
+    val tallest = with(density) { pane.height.toDp() } - 20.dp
     val grows = remember { Grows() }
-    val position = remember(placement, density) { PopoverPosition(placement, density, grows) }
+    val position = remember(placement, density, hinge, least) { PopoverPosition(placement, density, grows) { a, size -> paneAround(hinge, size, a.center.x.toFloat(), a.center.y.toFloat(), least) } }
     Popup(
         popupPositionProvider = position,
         onDismissRequest = { if (popovers.open == id) popovers.close() },
@@ -277,7 +329,9 @@ private fun PopoverPanel(id: String, popovers: Popovers, placement: Placement, w
                         }
                     },
                 cornerRadius = 18.dp,
-            ) { panel() }
+            ) {
+                Box(Modifier.heightIn(max = if (tallest > 0.dp) tallest else Dp.Infinity).verticalScroll(rememberScrollState())) { panel() }
+            }
         }
     }
 }
@@ -286,6 +340,8 @@ private class PopoverPosition(
     private val placement: Placement,
     private val density: Density,
     private val grows: Grows,
+    /** The part of the window a popover off a control at these bounds keeps to. */
+    private val paneFor: (IntRect, IntSize) -> IntRect,
 ) : PopupPositionProvider {
     override fun calculatePosition(
         anchorBounds: IntRect,
@@ -299,6 +355,7 @@ private class PopoverPosition(
         val h = popupContentSize.height - room * 2
         val margin = with(density) { 10.dp.roundToPx() }
         val a = anchorBounds
+        val pane = paneFor(a, windowSize)
         fun aligned(alignment: PopoverAlignment): Int {
             val leading = if (layoutDirection == LayoutDirection.Ltr) a.left else a.right - w
             val trailing = if (layoutDirection == LayoutDirection.Ltr) a.right - w else a.left
@@ -331,8 +388,8 @@ private class PopoverPosition(
                 x = aligned(placement.alignment)
                 val below = a.bottom + gap
                 val above = a.top - gap - h
-                val fitsBelow = below + h <= windowSize.height - margin
-                val fitsAbove = above >= margin
+                val fitsBelow = below + h <= pane.bottom - margin
+                val fitsAbove = above >= pane.top + margin
                 y = if (placement.below) {
                     if (fitsBelow || !fitsAbove) below else above
                 } else {
@@ -340,8 +397,8 @@ private class PopoverPosition(
                 }
             }
         }
-        x = x.coerceIn(margin, maxOf(margin, windowSize.width - w - margin))
-        y = y.coerceIn(margin, maxOf(margin, windowSize.height - h - margin))
+        x = x.coerceIn(pane.left + margin, maxOf(pane.left + margin, pane.right - w - margin))
+        y = y.coerceIn(pane.top + margin, maxOf(pane.top + margin, pane.bottom - h - margin))
         // Grown from the control's side of the panel, and from where along
         // that side the control is, so that it seems to come out of it.
         val besides = placement is Placement.Bar && placement.beside

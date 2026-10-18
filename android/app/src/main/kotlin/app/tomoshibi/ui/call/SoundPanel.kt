@@ -49,6 +49,7 @@ import app.tomoshibi.ui.kit.keepDeparting
 import app.tomoshibi.ui.kit.panelCard
 import app.tomoshibi.ui.kit.pressable
 import app.tomoshibi.ui.kit.rememberPress
+import app.tomoshibi.ui.kit.fingertip
 import uniffi.tomoshibi_protocol.MediaSource
 import kotlin.math.roundToInt
 
@@ -159,21 +160,29 @@ private fun SoundRow(feature: HostFeature, person: Person, sound: Sound, name: S
             val press = rememberPress()
             val label = if (setting.blocked) t("Unmute {name}", mapOf("name" to name)) else t("Mute {name}", mapOf("name" to name))
             val fill by animateColorAsState(Color.White.copy(alpha = if (setting.blocked) 0.16f else 0.06f), Theme.settle(), label = "fill")
+            // Pressed over a fingertip on a phone and the cover screen, beside
+            // a slider that would otherwise take the presses meant for it.
             Box(
                 Modifier
-                    .size(28.dp)
-                    .background(fill, CircleShape)
-                    .border(1.dp, fill, CircleShape)
+                    .size(fingertip(28.dp))
                     .pressable(press, CircleShape, true, Role.Button, label, selected = if (setting.blocked) true else null) {
                         feature.setBlocked(person, sound, !setting.blocked)
                     },
                 contentAlignment = Alignment.Center,
             ) {
-                SwappingSymbol(
-                    if (setting.blocked) "speaker.slash.fill" else "speaker.wave.2.fill",
-                    size = 11.5f, weight = Font.Semibold,
-                    tint = if (setting.blocked) Theme.foreground else Theme.muted,
-                )
+                Box(
+                    Modifier
+                        .size(28.dp)
+                        .background(fill, CircleShape)
+                        .border(1.dp, fill, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    SwappingSymbol(
+                        if (setting.blocked) "speaker.slash.fill" else "speaker.wave.2.fill",
+                        size = 11.5f, weight = Font.Semibold,
+                        tint = if (setting.blocked) Theme.foreground else Theme.muted,
+                    )
+                }
             }
             // Disabled rather than hidden while blocked: nothing is arriving
             // to be made louder, and a slider that moves while the sound

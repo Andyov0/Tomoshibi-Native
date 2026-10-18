@@ -115,13 +115,18 @@ import app.tomoshibi.ui.kit.ToastStack
 import app.tomoshibi.ui.kit.glassFade
 import app.tomoshibi.ui.kit.glassLayer
 import app.tomoshibi.ui.kit.glassSource
+import app.tomoshibi.ui.kit.holdsPresses
 import app.tomoshibi.ui.kit.keepDeparting
+import app.tomoshibi.ui.kit.narrowWindow
 import app.tomoshibi.ui.kit.rounded
 import app.tomoshibi.ui.music.MusicPanel
 import app.tomoshibi.ui.settings.DevicesPanel
 import app.tomoshibi.ui.watch.WatchPanel
 import app.tomoshibi.ui.watch.WatchStage
 import app.tomoshibi.ui.watch.watchShowing
+import app.tomoshibi.ui.LocalHinge
+import app.tomoshibi.ui.Posture
+import app.tomoshibi.ui.settled
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -258,6 +263,9 @@ private fun Room(app: AppModel, call: CallModel, state: RoomState, host: HostFea
     val inset = if (filled) state.deviceInsets else Insets()
     val popovers = state.popovers
 
+    // Where the hinge is, if the phone is half open (ui/Fold.kt).
+    val hinge = LocalHinge.current
+
     HidesSystemBars(filled)
     BackHandler {
         when {
@@ -289,19 +297,28 @@ private fun Room(app: AppModel, call: CallModel, state: RoomState, host: HostFea
     ) {
         val whole = Size(max(0f, maxWidth.value - frame.leading - frame.trailing), max(0f, maxHeight.value - frame.top - frame.bottom))
         val placement = Appearance.shared.controlsPlacement
+        // A phone standing on a table keeps its controls along the foot of
+        // the lower half, which is where it is touched: a column down the
+        // side would run across the hinge.
+        val standing = hinge != null && !hinge.vertical
         // Down the side only where the screen is tall enough to hold a
         // column (useRoomFor.ts); a shape that does not fit is not the thing
         // somebody chose.
-        val side = placement == ControlsPlacement.Side && whole.height >= Plan.SIDE_NEEDS
+        val side = placement == ControlsPlacement.Side && whole.height >= Plan.SIDE_NEEDS && !standing
         // A lane for the controls, and the reason nothing else has to know
         // about them: the room is narrower by it, so the pictures, the panels
         // and the cards on the right all keep out of it (Room.tsx `aside`).
         // Not while the stage fills the screen, which is the whole screen.
         val lane = if (side && !filled) Plan.SIDE_LANE else 0f
-        val size = Size(max(0f, whole.width - lane), whole.height)
-        val island = if (side) Plan.GAP else Plan.ISLAND
+        val absoluteLeft = if (direction == LayoutDirection.Ltr) frame.leading else frame.trailing
+        val fold = RoomFold.of(hinge, density, direction, absoluteLeft, frame.top, whole.width - lane, whole.height)
+        // On a table with the keyboard over the lower half, the room is the
+        // upper half, laid out flat.
+        val size = Size(max(0f, whole.width - lane), (fold as? RoomFold.Above)?.top ?: whole.height)
         val pictures = pictures(call, record)
-        val room = Plan.room(size, pictures.map { it.id }, ME, state.pin.pinned, filled, state.page, island)
+        val shape = RoomShape.of(size, fold, state.panel != null, filled, side, pinned = state.pin.pinned != null)
+        val island = shape.island
+        val room = shape.arrange(pictures.map { it.id }, ME, state.pin.pinned, filled, state.page)
         // The controls may step aside when the setting says so, and whenever
         // the stage fills the screen, and come back on any sign of somebody:
         // the same rule for both, because fullscreen used to hide them
@@ -330,27 +347,34 @@ private fun Room(app: AppModel, call: CallModel, state: RoomState, host: HostFea
 
         Box(Modifier.padding(frame.padding).size(whole.width.dp, whole.height.dp)) {
             Box(Modifier.size(size.width.dp, size.height.dp)) {
-                Content(app, call, state, host, record, pictures, room, size, island, shown, inset, barAtFoot = !side)
+                Content(app, call, state, host, record, pictures, room, shape, shown, inset, barAtFoot = !side)
             }
             // Along the foot, or down the side for "At the side", sliding
-            // from its edge as the placement changes.
+            // from its edge as the placement changes. Along the foot of the
+            // whole room, of the lower half on a table, of the first page of
+            // a book, moving there as the phone is stood up or opened.
             val shift by animateDpAsState(if (shown) 0.dp else 110.dp, if (shown) Theme.settle() else Theme.leave(), label = "controls")
             val seen by animateFloatAsState(if (shown) 1f else 0f, if (shown) Theme.settle() else Theme.leave(), label = "seen")
             val offers = offers(call, host)
-            AnimatedVisibility(
-                !side,
-                Modifier.align(Alignment.BottomCenter),
-                enter = slideInVertically(Theme.settle()) { it },
-                exit = slideOutVertically(Theme.leave()) { it },
-            ) {
-                ControlBar(
-                    app, call, state.panel, { state.panel = it }, offers, popovers, BarAxis.Horizontal, whole.width.dp,
-                    Modifier
-                        .padding(bottom = (20 + inset.bottom).dp)
-                        .offset(y = shift)
-                        .glassLayer({ seen })
-                        .then(if (shown) Modifier else Modifier.clearAndSetSemantics {}),
-                )
+            // Without the lane: the bar along the foot is centred on the
+            // whole width, as it was before the fold.
+            val along = if (shape.posture == Posture.Book) shape.bar else Rect(0f, 0f, whole.width, size.height)
+            val bar = along.settled("bar")
+            Box(Modifier.at(bar), contentAlignment = Alignment.BottomCenter) {
+                AnimatedVisibility(
+                    !side,
+                    enter = slideInVertically(Theme.settle()) { it },
+                    exit = slideOutVertically(Theme.leave()) { it },
+                ) {
+                    ControlBar(
+                        app, call, state.panel, { state.panel = it }, offers, popovers, BarAxis.Horizontal, along.width.dp,
+                        Modifier
+                            .padding(bottom = (20 + if (bar.bottom >= whole.height - 0.5f) inset.bottom else 0f).dp)
+                            .offset(y = shift)
+                            .glassLayer({ seen })
+                            .then(if (shown) Modifier else Modifier.clearAndSetSemantics {}),
+                    )
+                }
             }
             AnimatedVisibility(
                 side,
@@ -437,15 +461,6 @@ private fun unmeasured(quality: LinkQuality): ConnectionReading = ConnectionRead
     share = null, ownAddress = null, holding = null, measured = false,
 )
 
-/**
- * Beside the call where the screen has room for it, and on a screen that has
- * none (a phone held upright) the width of the screen inside the same twelve
- * points on either side (RoomView.swift `panelWidth`).
- */
-internal fun panelWidth(size: Size): Float {
-    val beside = min(360f, size.width - 32)
-    return if (size.width < beside + 24 + 172 + 22) max(0f, size.width - 24) else beside
-}
 
 // The room
 
@@ -458,8 +473,7 @@ private fun Content(
     record: StageRecord,
     pictures: List<Picture>,
     room: Plan.Room,
-    size: Size,
-    island: Float,
+    shape: RoomShape,
     shown: Boolean,
     inset: Insets,
     barAtFoot: Boolean,
@@ -467,13 +481,16 @@ private fun Content(
     val filled = state.filled
     val panel = state.panel
     val myShare = mySharePicture(call)
-    val narrow = size.width < panelWidth(size) + 24 + 172 + 22
+    val narrow = shape.panelBelowRow()
     // The list of who is watching moves beside an open panel rather than
     // going behind it, and on a screen with no room beside one it shrinks to
     // the eye and the count in the row at the top, which the panel then
     // starts below.
     val watchersInRow = myShare && panel != null && narrow
     val suspects = suspects(call)
+    val panelWidth = shape.openPanelWidth()
+    // Where the bar is, for the pictures running under it to lift their names.
+    val bar = if (barAtFoot && shape.posture != Posture.Tabletop) shape.bar else null
 
     fun fill() {
         if (state.pin.pinned == null) return
@@ -548,16 +565,25 @@ private fun Content(
                 },
         )
 
-        Tiles(app, call, state, host, record, pictures, room, size, shown, inset, barAtFoot, suspects, ::pressed, ::openMenu, ::fill, ::unfill)
+        Tiles(app, call, state, host, record, pictures, room, shape, shown, inset, bar, suspects, ::pressed, ::openMenu, ::fill, ::unfill)
 
         CallOverlay(host)
 
-        Pager(state, room, size, island)
+        Pager(state, room, shape)
 
+        val furniture = shape.furniture.settled("furniture")
         GlassFade(!filled || shown) {
             Row(
-                Modifier.padding(start = (14 + inset.leading).dp, top = (12 + inset.top).dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Modifier
+                    .offset(furniture.left.dp, furniture.top.dp)
+                    .padding(
+                        start = (14 + if (shape.furniture.left == 0f) inset.leading else 0f).dp,
+                        top = (12 + if (shape.furniture.top == 0f) inset.top else 0f).dp,
+                    ),
+                // Far enough apart on a phone and the cover screen for the
+                // signal, a capsule 33 points wide, to be pressed over a
+                // fingertip without the room's name beside it taking the press.
+                horizontalArrangement = Arrangement.spacedBy(if (narrowWindow()) 16.dp else 8.dp),
                 verticalAlignment = Alignment.Top,
             ) {
                 RoomTitle(call)
@@ -580,11 +606,14 @@ private fun Content(
 
         val alone = call.people.isEmpty() && state.pin.pinned == null && !state.aloneDismissed && !filled &&
             call.state == CallState.CONNECTED && record.joining != null
+        // At the foot of the pictures, above the controls; on a table at the
+        // foot of the lower half, and in a book in the middle of the empty
+        // second page.
         Box(
             Modifier
-                .size(size.width.dp, max(0f, size.height - island - 2).dp)
+                .at(shape.alone.settled("alone"))
                 .padding(horizontal = 16.dp),
-            contentAlignment = Alignment.BottomCenter,
+            contentAlignment = if (shape.aloneCentred) Alignment.Center else Alignment.BottomCenter,
         ) {
             GlassAppear(alone) {
                 EmptyRoomCard(
@@ -596,10 +625,10 @@ private fun Content(
         }
 
         val notice = call.notice
-        Box(Modifier.fillMaxWidth().padding(top = 48.dp), contentAlignment = Alignment.TopCenter) {
+        Box(Modifier.offset(furniture.left.dp, furniture.top.dp).width(furniture.width.dp).padding(top = 48.dp), contentAlignment = Alignment.TopCenter) {
             GlassAppear(notice != null) { Notice(notice ?: "") }
         }
-        Box(Modifier.fillMaxWidth().padding(top = 12.dp), contentAlignment = Alignment.TopCenter) {
+        Box(Modifier.offset(furniture.left.dp, furniture.top.dp).width(furniture.width.dp).padding(top = 12.dp), contentAlignment = Alignment.TopCenter) {
             GlassAppear(call.state != CallState.CONNECTED) {
                 Notice(if (call.state == CallState.RECONNECTING) t("Reconnecting…") else t("Connecting…"))
             }
@@ -608,35 +637,45 @@ private fun Content(
         // Who has our share open, to the right of the pictures and below the
         // stage's corner (Room.tsx: top-16 right-3), beside a panel when one
         // is open.
-        val watchersTop by animateDpAsState(if (panel == null) 58.dp else 12.dp, Theme.settle(), label = "watchers")
-        val watchersEnd by animateDpAsState(if (panel == null) 14.dp else (panelWidth(size) + 24 + 8).dp, Theme.settle(), label = "watchers")
-        Box(Modifier.align(Alignment.TopEnd).padding(top = watchersTop, end = watchersEnd)) {
-            GlassAppear(myShare && !watchersInRow && (!filled || shown)) { WatchersCard(call) }
+        // Beside a panel open over the same part of the room; in a book the
+        // panel has a page of its own and the card stays on the other.
+        val besideWatchers = panel != null && shape.watchers == shape.panel
+        val watchersTop by animateDpAsState(if (panel == null || !besideWatchers) shape.watchersTop.dp else 12.dp, Theme.settle(), label = "watchers")
+        val watchersEnd by animateDpAsState(if (besideWatchers) (panelWidth + 24 + 8).dp else 14.dp, Theme.settle(), label = "watchers")
+        Box(Modifier.at(shape.watchers.settled("watchers")), contentAlignment = Alignment.TopEnd) {
+            Box(Modifier.padding(top = watchersTop, end = watchersEnd)) {
+                GlassAppear(myShare && !watchersInRow && (!filled || shown)) { WatchersCard(call) }
+            }
         }
 
-        Panel(app, call, state, host, size, narrow, inset)
+        Panel(app, call, state, host, shape, inset)
 
         // Always there, so each card leaves with its own animation.
-        SaidColumn(
-            call.arriving.map { SaidLine(it.id, it.identity, it.name, it.text) },
-            Modifier
-                .align(Alignment.BottomStart)
-                .widthIn(max = min(320f, size.width - 32).dp)
-                .padding(start = 12.dp, bottom = (Plan.ISLAND + 8).dp),
-            onBounds = { state.saidBounds = it },
-        )
+        val corner = shape.corner.settled("corner")
+        Box(Modifier.at(corner), contentAlignment = Alignment.BottomStart) {
+            SaidColumn(
+                call.arriving.map { SaidLine(it.id, it.identity, it.name, it.text) },
+                Modifier
+                    .widthIn(max = min(320f, corner.width - 32).dp)
+                    .padding(start = 12.dp, bottom = (Plan.ISLAND + 8).dp),
+                onBounds = { state.saidBounds = it },
+            )
+        }
 
         // The corner for what the call says, drawn after the panels so a tall
         // panel never covers them: beside an open panel where the screen
         // leaves room for both, over it where it does not (a phone), since a
         // toast is brief and a panel is not.
-        val beside = panel != null && size.width - panelWidth(size) - 48 >= 280
-        val toastsEnd by animateDpAsState(if (beside) (panelWidth(size) + 24 + 8).dp else 16.dp, Theme.settle(), label = "toasts")
-        ToastStack(
-            call,
-            Modifier.align(Alignment.BottomEnd).padding(end = toastsEnd, bottom = (Plan.ISLAND + 8).dp),
-            saidBounds = state.saidBounds,
-        )
+        val beside = panel != null && shape.toasts == shape.panel && shape.toasts.width - panelWidth - 48 >= 280
+        val toastsEnd by animateDpAsState(if (beside) (panelWidth + 24 + 8).dp else 16.dp, Theme.settle(), label = "toasts")
+        val toastsClear by animateDpAsState(shape.toastsClear.dp, Theme.settle(), label = "toasts")
+        Box(Modifier.at(shape.toasts.settled("toasts")), contentAlignment = Alignment.BottomEnd) {
+            ToastStack(
+                call,
+                Modifier.padding(end = toastsEnd, bottom = toastsClear),
+                saidBounds = state.saidBounds,
+            )
+        }
 
         Menu(call, state, host, record, pictures, ::fill, ::unfill)
     }
@@ -665,10 +704,10 @@ private fun Tiles(
     record: StageRecord,
     pictures: List<Picture>,
     room: Plan.Room,
-    size: Size,
+    shape: RoomShape,
     shown: Boolean,
     inset: Insets,
-    barAtFoot: Boolean,
+    bar: Rect?,
     suspects: Set<String>,
     pressed: (String?) -> Unit,
     openMenu: (String?, Offset) -> Unit,
@@ -698,7 +737,7 @@ private fun Tiles(
                 enter = Theme.arrive,
                 exit = Theme.depart,
             ) {
-                Tile(app, call, state, host, record, picture, spot, room, size, shown, inset, barAtFoot, suspects, pressed, openMenu, fill, unfill)
+                Tile(app, call, state, host, record, picture, spot, room, shape, shown, inset, bar, suspects, pressed, openMenu, fill, unfill)
             }
         }
     }
@@ -714,10 +753,10 @@ private fun Tile(
     picture: Picture,
     spot: Rect,
     room: Plan.Room,
-    size: Size,
+    shape: RoomShape,
     shown: Boolean,
     inset: Insets,
-    barAtFoot: Boolean,
+    bar: Rect?,
     suspects: Set<String>,
     pressed: (String?) -> Unit,
     openMenu: (String?, Offset) -> Unit,
@@ -738,7 +777,7 @@ private fun Tile(
     // after it. Plan.swift's room lifts it only for a filled stage; the
     // person filling a call of two runs under the bar as well, and their
     // name was drawn half behind it, on the iPhone as here.
-    val underBar = barAtFoot && spot.bottom > size.height - Plan.ISLAND + 0.5f
+    val underBar = bar != null && spot.left < bar.right && spot.right > bar.left && spot.bottom > bar.bottom - Plan.ISLAND + 0.5f
     val lift by animateFloatAsState(
         if (underBar && shown && spot.width < 900) Plan.ISLAND - Plan.GAP else 0f,
         if (shown) Theme.settle() else Theme.leave(), label = "lift",
@@ -753,7 +792,7 @@ private fun Tile(
     // The top left of a picture there is under the room's name and the
     // signal, so a hand raised there was drawn behind them; it goes beside
     // the name instead.
-    val cornered = furniture(call).overlaps(Rect(spot.left, spot.top, spot.left + 44, spot.top + 44))
+    val cornered = furniture(call).translate(shape.furniture.topLeft).overlaps(Rect(spot.left, spot.top, spot.left + 44, spot.top + 44))
     val press = { pressed(picture.id) }
     // The finger's place in the room, in pixels, for the menu to open
     // beside it: the tile says where in itself it was pressed.
@@ -874,14 +913,20 @@ private fun counterpart(call: CallModel, picture: Picture): Pair<String, Surface
  * is showing, at the top, below the row there where the two would meet.
  */
 @Composable
-private fun androidx.compose.foundation.layout.BoxScope.Pager(state: RoomState, room: Plan.Room, size: Size, island: Float) {
+private fun androidx.compose.foundation.layout.BoxScope.Pager(state: RoomState, room: Plan.Room, shape: RoomShape) {
     val paging = room.pages > 1 && !state.filled
-    val strip = if (state.pin.pinned != null) room.shown.firstNotNullOfOrNull { room.spots[it]?.center?.y } else null
-    val middle = strip ?: ((size.height - island) / 2)
+    val stripLevel = if (state.pin.pinned != null) room.shown.firstNotNullOfOrNull { room.spots[it]?.center?.y } else null
+    // The arrows either side of what they page: the strip, wherever it is
+    // (the lower half of a phone on a table), the grid otherwise, which in a
+    // book runs over both pages.
+    val span = shape.strip ?: shape.second?.let { Rect(shape.stage.left, shape.stage.top, it.right, it.bottom) } ?: shape.stage
+    val middle = stripLevel ?: (span.top + (span.height - shape.island) / 2)
+    val across = span.settled("pager")
+    val level by animateFloatAsState(middle, Theme.settle(), label = "pager")
     Row(
         Modifier
-            .width(size.width.dp)
-            .offset(y = (middle - 19).dp)
+            .offset(x = across.left.dp, y = (level - 19).dp)
+            .width(across.width.dp)
             .padding(horizontal = 10.dp),
     ) {
         GlassAppear(paging) {
@@ -892,35 +937,64 @@ private fun androidx.compose.foundation.layout.BoxScope.Pager(state: RoomState, 
             PageArrow("chevron.right", t("Next page"), { state.page = (room.page + 1) % room.pages })
         }
     }
-    Box(Modifier.align(Alignment.TopCenter).padding(top = if (size.width < 560) 52.dp else 15.dp)) {
-        GlassAppear(paging) { PageIndicator(room.page, room.pages) }
+    // Which page, at the top of the pictures, below the room's name where
+    // the two would meet. On a foldable, beside what is paged rather than on
+    // the stage: under the strip on the lower half of a phone on a table,
+    // and at the foot of a book's second page, level with the controls at
+    // the foot of the first, where it covers nobody's picture.
+    val band = shape.strip
+    val second = shape.second
+    val under = when {
+        second != null -> second
+        band != null -> Rect(band.left, band.top, band.right, band.bottom + 40f)
+        else -> null
+    }
+    val over = (under ?: shape.stage).settled("indicator")
+    val clearOfName = over.width < 560
+    Box(Modifier.at(over), contentAlignment = if (under != null) Alignment.BottomCenter else Alignment.TopCenter) {
+        Box(
+            if (under == null) Modifier.padding(top = if (clearOfName) 52.dp else 15.dp)
+            else Modifier.padding(bottom = if (second != null) 35.dp else 4.dp),
+        ) {
+            GlassAppear(paging) { PageIndicator(room.page, room.pages) }
+        }
     }
 }
 
 // Panels
 
 @Composable
-private fun androidx.compose.foundation.layout.BoxScope.Panel(
+private fun Panel(
     app: AppModel,
     call: CallModel,
     state: RoomState,
     host: HostFeature,
-    size: Size,
-    narrow: Boolean,
+    shape: RoomShape,
     inset: Insets,
 ) {
-    val width = panelWidth(size)
+    val narrow = shape.panelBelowRow()
+    val covers = shape.panelCovers()
+    val width by animateFloatAsState(shape.openPanelWidth(), Theme.settle(), label = "panel")
     // Never taller than the space above the controls: a panel that grows
     // past it covers the buttons that close it.
-    val tallest = max(160f, size.height - Plan.ISLAND - 24 - (if (narrow) 38 else 0))
+    val tallest by animateFloatAsState(shape.panelTallest(), Theme.settle(), label = "panel")
+    // In the room's corner, under the system's bar where the stage fills the
+    // screen; on the lower half of a phone on a table, below the hinge; in
+    // a book, the second page.
+    val area = shape.panel.settled("panel")
+    val clear by animateDpAsState(((if (narrow) 38 else 0) + if (shape.panel.top == 0f) inset.top else 0f).dp, Theme.settle(), label = "panel")
+    // The same composition wherever it moves, which is what keeps a
+    // message half typed, the watch panel's page and what was pasted into
+    // it, and the music panel's search, as the phone is stood up or laid
+    // flat: only this box's place changes.
+    Box(Modifier.at(area), contentAlignment = Alignment.TopEnd) {
     AnimatedContent(
         state.panel,
         Modifier
-            .align(Alignment.TopEnd)
             .padding(12.dp)
             // Below the row at the top wherever it cannot stand beside it:
             // over it, the panel hid the room's name and its signal.
-            .padding(top = ((if (narrow) 38 else 0) + inset.top).dp),
+            .padding(top = clear),
         transitionSpec = { Theme.slideIn togetherWith Theme.slideOut },
         contentAlignment = Alignment.TopEnd,
         label = "panel",
@@ -938,11 +1012,19 @@ private fun androidx.compose.foundation.layout.BoxScope.Panel(
                 // dark under its glass: through the glass alone the edges of
                 // the pictures beneath ran across the panel.
                 .clip(rounded(22f))
-                .background(Theme.background.copy(alpha = if (narrow) 0.72f else 0f), rounded(22f))
+                .background(Theme.background.copy(alpha = if (covers) 0.72f else 0f), rounded(22f))
+                // A press on the panel is the panel's: one on its heading
+                // put the picture under it on the stage.
+                .holdsPresses()
                 .verticalScroll(rememberScrollState()),
         ) {
             when (open) {
-                RoomPanel.Messages -> ChatPanel(call, close)
+                // A book gives the conversation a page of its own, and it
+                // runs down the page rather than stopping a third of the way.
+                RoomPanel.Messages -> ChatPanel(
+                    call, close,
+                    tallest = if (shape.posture == Posture.Book) maxOf(ChatTallest.value, tallest - 150f).dp else ChatTallest,
+                )
                 RoomPanel.Sound -> SoundPanel(host, close)
                 RoomPanel.Watch -> WatchPanel(app, call, close)
                 RoomPanel.Music -> MusicPanel(app, call, close)
@@ -950,6 +1032,7 @@ private fun androidx.compose.foundation.layout.BoxScope.Panel(
                 RoomPanel.Devices -> DevicesPanel(app, call, close)
             }
         }
+    }
     }
 }
 

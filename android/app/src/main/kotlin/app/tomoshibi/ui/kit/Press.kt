@@ -31,6 +31,13 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.testTag
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.tomoshibi.basics.Theme
 import kotlinx.coroutines.launch
@@ -43,6 +50,45 @@ import kotlinx.coroutines.launch
 // focus does for a keyboard on the iPad, a ring in the person's colour does
 // here, drawn only while a keyboard or a remote has moved focus onto the
 // control: Compose gives a clickable focus only outside touch mode.
+
+/** The least a control should be pressed by, Android's own: 48 points, a fingertip. */
+internal val Fingertip = 48.dp
+
+/** Narrower than this, the window is a phone's or the Fold's cover screen, held in one hand and pressed with a thumb. */
+private val NarrowWindow = 600.dp
+
+/** Whether the app's window is a phone's: a phone's, or the cover screen of a Fold. */
+@Composable
+internal fun narrowWindow(): Boolean =
+    with(LocalDensity.current) { LocalWindowInfo.current.containerSize.width.toDp() } < NarrowWindow
+
+/**
+ * How large a control drawn [drawn] across is pressed at: a fingertip in a
+ * narrow window, and the size it is drawn at in a wide one, which keeps the
+ * iPad's and the Mac's spacing. The control is still drawn at its own size
+ * inside that, as the iPhone draws it. Compose's own reach beyond a small
+ * control (the view configuration's minimum touch target) is not enough
+ * here: it gives way to any neighbour nearer than a fingertip, and in a row
+ * of the small round buttons a panel lines up beside a name every neighbour
+ * was nearer.
+ */
+@Composable
+internal fun fingertip(drawn: Dp): Dp = if (narrowWindow()) maxOf(drawn, Fingertip) else drawn
+
+/**
+ * Every press made on this is this's, never what lies under it: a bar of
+ * controls or a panel floating over the call's pictures, which took a press
+ * that landed between two buttons, or on a panel's heading, and put the
+ * picture under it on the stage. Holding the press here also lets Compose
+ * give it to whichever control in here is within a fingertip of it, which a
+ * picture under a gap between two buttons, pressed directly, always beat.
+ */
+internal fun Modifier.holdsPresses(): Modifier = this
+    .semantics { testTag = HOLDS_PRESSES }
+    .pointerInput(Unit) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false) } }
+
+/** Says, to a test looking for controls a fingertip apart, where presses are held. */
+internal const val HOLDS_PRESSES = "holds.presses"
 
 /** The state a control is drawn from: pressed, and under a pointer. */
 internal class Press(val source: MutableInteractionSource, pressedState: State<Boolean>, hoveredState: State<Boolean>) {

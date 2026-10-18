@@ -80,6 +80,8 @@ import app.tomoshibi.ui.kit.pressable
 import app.tomoshibi.ui.kit.putsKeyboardAway
 import app.tomoshibi.ui.kit.rememberPopovers
 import app.tomoshibi.ui.kit.rememberPress
+import app.tomoshibi.ui.kit.fingertip
+import app.tomoshibi.ui.kit.narrowWindow
 import app.tomoshibi.ui.kit.rounded
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -104,7 +106,9 @@ fun MeetingRow(one: Meeting, app: AppModel, modifier: Modifier = Modifier) {
         ) { Symbol(if (one.started) "video.fill" else "calendar", size = 15f, tint = if (one.started) Theme.tally else Theme.muted) }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             KitText(one.room, font = Font(14f, Font.Semibold), lines = 1)
-            KitText(meetingWhen(one, app), font = Font(12f), color = Theme.muted, lines = 1)
+            // When, and where, on two lines where a phone or the cover screen
+            // leaves it less than a line beside the row's buttons.
+            KitText(meetingWhen(one, app), font = Font(12f), color = Theme.muted, lines = if (narrowWindow()) 2 else 1)
         }
         if (one.started) {
             KitText(
@@ -428,7 +432,7 @@ private fun MeetingList(app: AppModel, draft: ScheduleDraft, wide: Boolean, modi
                                 // there), which leaves the row room for its
                                 // time beside the two buttons kept.
                                 SwipeRow(t("Cancel meeting"), "xmark", { scope.launch { app.lobby.cancel(one)?.let { app.problem = it } } }) { closeFirst ->
-                                    MeetingLine(app, one, draft, cancel = false, Modifier.height(60.dp), closeFirst)
+                                    MeetingLine(app, one, draft, cancel = false, Modifier.heightIn(min = 60.dp), closeFirst)
                                 }
                             }
                             if (one.id != arrangements.lastOrNull()?.id) RowRule(leading = if (wide) 0.dp else 60.dp)
@@ -467,7 +471,9 @@ private fun MeetingLine(
     val context = LocalContext.current
     Row(
         modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        // The row's buttons carry their own fingertip's margin in a narrow
+        // window (RowCircle), which is the spacing there.
+        horizontalArrangement = Arrangement.spacedBy(if (narrowWindow()) 0.dp else 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         MeetingRow(
@@ -502,14 +508,22 @@ private fun MeetingLine(
 @Composable
 private fun RowCircle(symbol: String, label: String, destructive: Boolean = false, action: () -> Unit) {
     val press = rememberPress()
+    // Pressed over a fingertip on a phone and the Fold's cover screen, where
+    // three of them stood six points apart (kit `fingertip`).
     Box(
         Modifier
-            .size(32.dp)
-            .background(Color.White.copy(alpha = if (press.pressed) 0.14f else 0.07f), CircleShape)
-            .border(1.dp, Color.White.copy(alpha = 0.09f), CircleShape)
+            .size(fingertip(32.dp))
             .pressable(press, CircleShape, true, Role.Button, label, onClick = action),
         contentAlignment = Alignment.Center,
-    ) { SwappingSymbol(symbol, size = 12f, weight = Font.Semibold, tint = if (destructive) Theme.danger else Theme.foreground) }
+    ) {
+        Box(
+            Modifier
+                .size(32.dp)
+                .background(Color.White.copy(alpha = if (press.pressed) 0.14f else 0.07f), CircleShape)
+                .border(1.dp, Color.White.copy(alpha = 0.09f), CircleShape),
+            contentAlignment = Alignment.Center,
+        ) { SwappingSymbol(symbol, size = 12f, weight = Font.Semibold, tint = if (destructive) Theme.danger else Theme.foreground) }
+    }
 }
 
 /**

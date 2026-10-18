@@ -122,7 +122,7 @@ fun GlassField(
                     keyboardActions = KeyboardActions(onDone = { onSubmit() }),
                     decorationBox = { field ->
                         Box(contentAlignment = Alignment.CenterStart) {
-                            if (text.isEmpty()) KitText(prompt, font = font, color = Theme.muted, lines = 1)
+                            if (text.isEmpty()) KitText(prompt, font = font, color = Theme.muted, lines = 1, fit = true)
                             field()
                         }
                     },
@@ -276,7 +276,7 @@ fun MediaField(
             keyboardActions = KeyboardActions(onGo = { onSubmit() }),
             decorationBox = { field ->
                 Box(contentAlignment = Alignment.CenterStart) {
-                    if (text.isEmpty()) KitText(prompt, font = font, color = Theme.muted, lines = 1)
+                    if (text.isEmpty()) KitText(prompt, font = font, color = Theme.muted, lines = 1, fit = true)
                     field()
                 }
             },

@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.tomoshibi.basics.Localization
 import app.tomoshibi.basics.Theme
@@ -101,7 +102,9 @@ fun MonthCalendar(
                 KitText(shown.atDay(1).format(DateTimeFormatter.ofPattern(pattern, locale)), font = Font(14f, Font.Semibold), lines = 1)
             }
             Spacer(Modifier.weight(1f))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // A fingertip apart on a phone and the cover screen, where the two
+            // small circles were each pressed over less than forty points.
+            Row(horizontalArrangement = Arrangement.spacedBy(if (narrowWindow()) 20.dp else 8.dp)) {
                 for (step in listOf(-1L, 1L)) {
                     val target = month.plusMonths(step)
                     val allowed = if (step < 0) earliest?.let { !target.isBefore(YearMonth.from(it)) } ?: true
@@ -139,14 +142,20 @@ fun MonthCalendar(
             // under its own weekday.
             val lead = Math.floorMod(shown.atDay(1).dayOfWeek.value - first.value, 7)
             val cells: List<LocalDate?> = List(lead) { null } + (1..shown.lengthOfMonth()).map { shown.atDay(it) }
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            // On a phone and the cover screen the days are as tall as they are
+            // wide, which seven a row across a card there makes 44 points, the
+            // most the width leaves for a fingertip; thirty points tall with
+            // four between them, a press between two weeks went to either.
+            val narrow = narrowWindow()
+            val tall = if (narrow) 44.dp else 30.dp
+            Column(verticalArrangement = Arrangement.spacedBy(if (narrow) 0.dp else 4.dp)) {
                 for (week in cells.chunked(7)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(if (narrow) 0.dp else 2.dp)) {
                         for (index in 0 until 7) {
                             val date = week.getOrNull(index)
-                            Box(Modifier.weight(1f).heightIn(min = 30.dp), contentAlignment = Alignment.Center) {
+                            Box(Modifier.weight(1f).heightIn(min = tall), contentAlignment = Alignment.Center) {
                                 if (date != null) {
-                                    DayCell(date, day, today, earliest, latest, locale) { chosen ->
+                                    DayCell(date, day, today, earliest, latest, locale, tall) { chosen ->
                                         onDayChange(chosen.atTime(day.hour, day.minute))
                                     }
                                 }
@@ -167,6 +176,7 @@ private fun DayCell(
     earliest: LocalDateTime?,
     latest: LocalDateTime?,
     locale: Locale,
+    tall: Dp,
     choose: (LocalDate) -> Unit,
 ) {
     val chosen = date == day.toLocalDate()
@@ -185,7 +195,7 @@ private fun DayCell(
     Box(
         Modifier
             .fillMaxWidth()
-            .heightIn(min = 30.dp)
+            .heightIn(min = tall)
             .pressable(
                 press, CircleShape, allowed, Role.Button,
                 date.format(DateTimeFormatter.ofLocalizedDate(FormatStyle.FULL).withLocale(locale)),

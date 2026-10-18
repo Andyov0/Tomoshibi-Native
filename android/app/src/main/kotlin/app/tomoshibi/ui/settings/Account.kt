@@ -26,7 +26,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import app.tomoshibi.ui.LocalAppScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -86,8 +86,8 @@ val AppModel.avatarAddress: String?
 
 @Composable
 internal fun AccountSettings(app: AppModel) {
-    var said by remember { mutableStateOf<String?>(null) }
-    var kept by remember { mutableStateOf("") }
+    var said by rememberDraft<String?>("account.said") { null }
+    var kept by rememberDraft("account.kept") { "" }
     said?.let { kept = it }
     Column(verticalArrangement = Arrangement.spacedBy(22.dp)) {
         // Signing out takes the page's cards away, and they leave rather
@@ -126,8 +126,11 @@ internal fun AccountSettings(app: AppModel) {
 
 @Composable
 private fun Profile(app: AppModel, account: Account, say: (String?) -> Unit) {
-    var picturing by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    var picturing by rememberDraft("account.picturing") { false }
+    // The app's scope rather than the page's: the page drawn again in the
+    // other layout (a Fold opened out) keeps the flag, and a picture still
+    // on its way would have left it set for good, cancelled with the page.
+    val scope = LocalAppScope.current
     val platform = platform()
     // The system's photo picker, which needs no permission and shows only
     // the pictures, as the iPhone's PhotosPicker does.
@@ -352,14 +355,17 @@ internal fun permissionSymbol(one: String): String = when (one) {
  * web counts `next.length`, which is what a Kotlin string's length counts too.
  * Neither field is kept in the saved state of the screen: a passphrase
  * written into a bundle would outlive the page on the device's storage.
+ * They are kept in the settings' own state (SettingsState), in memory and
+ * for as long as the settings are open, so that folding the phone halfway
+ * through changing it does not empty both fields.
  */
 @Composable
 private fun Passphrase(app: AppModel, say: (String?) -> Unit) {
-    var current by remember { mutableStateOf("") }
-    var next by remember { mutableStateOf("") }
-    var changing by remember { mutableStateOf(false) }
-    var changed by remember { mutableStateOf(false) }
-    val scope = rememberCoroutineScope()
+    var current by rememberDraft("passphrase.current") { "" }
+    var next by rememberDraft("passphrase.next") { "" }
+    var changing by rememberDraft("passphrase.changing") { false }
+    var changed by rememberDraft("passphrase.changed") { false }
+    val scope = LocalAppScope.current
     val ready = passphraseReady(current, next, changing)
     val change = {
         if (passphraseReady(current, next, changing)) {

@@ -65,6 +65,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.min
 import app.tomoshibi.basics.Theme
 import app.tomoshibi.ui.LocalHinge
+import app.tomoshibi.ui.LocalInHalf
+import app.tomoshibi.ui.Pane
+import androidx.compose.runtime.CompositionLocalProvider
+import app.tomoshibi.ui.inPane
+import app.tomoshibi.ui.pane
+import app.tomoshibi.ui.settled
+import androidx.compose.ui.platform.LocalLayoutDirection
 import app.tomoshibi.ui.kit.Capsule
 import app.tomoshibi.ui.kit.ContinuousShape
 import kotlinx.coroutines.CancellationException
@@ -244,24 +251,18 @@ fun DialogHost(
             dismiss()
         }
         BoxWithConstraints(Modifier.fillMaxSize()) {
-            // The part of the window the sheet is centred in.
-            var left = 0.dp
-            var top = 0.dp
-            var right = maxWidth
-            var bottom = maxHeight
-            if (hinge != null) {
-                with(density) {
-                    if (hinge.vertical) left = hinge.right.toDp() else bottom = hinge.top.toDp()
-                }
-            }
-            val areaWidth = right - left
-            val areaHeight = bottom - top
+            // The part of the window the sheet is centred in, moving there
+            // as the phone is folded; the bars and the keyboard counted only
+            // where they fall in it, so that a keyboard come up over the
+            // lower half of a phone on a table leaves the sheet the upper.
+            val area = hinge.pane(maxWidth.value, maxHeight.value, density, LocalLayoutDirection.current, Pane.Reading).settled("dialog")
+            val areaWidth = area.width.dp
+            val inHalf = area.width < maxWidth.value - 0.5f || area.height < maxHeight.value - 0.5f
             Box(
                 Modifier
-                    .absoluteOffset(left, top)
-                    .size(areaWidth, areaHeight)
+                    .inPane(area, maxWidth.value, maxHeight.value)
                     .windowInsetsPadding(WindowInsets.safeDrawing)
-                    .padding(24.dp),
+                    .padding(if (inHalf) 12.dp else 24.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 AnimatedVisibility(
@@ -279,7 +280,7 @@ fun DialogHost(
                             .background(Theme.surface)
                             // A press inside is the sheet's, never the dimmed window's.
                             .pointerInput(Unit) { detectTapGestures { } },
-                    ) { content() }
+                    ) { CompositionLocalProvider(LocalInHalf provides inHalf) { content() } }
                 }
             }
         }

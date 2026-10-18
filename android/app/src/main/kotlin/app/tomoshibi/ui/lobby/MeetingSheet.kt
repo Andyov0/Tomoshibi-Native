@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -60,6 +61,8 @@ import app.tomoshibi.basics.say
 import app.tomoshibi.basics.t
 import app.tomoshibi.model.AppModel
 import app.tomoshibi.ui.LocalAppScope
+import app.tomoshibi.ui.LocalHinge
+import app.tomoshibi.ui.LocalInHalf
 import app.tomoshibi.ui.kit.Capsule
 import app.tomoshibi.ui.kit.ContentLayer
 import app.tomoshibi.ui.kit.FloatingPopover
@@ -236,20 +239,38 @@ fun MeetingSheet(app: AppModel, draft: MeetingDraft, close: () -> Unit, wide: Bo
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         Header(draft, ::cancel, wide = true)
-                        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f)) {
-                            CameraStage(app, Modifier.matchParentSize(), cornerRadius = 20.dp)
-                            DeviceSwitches(
-                                app,
-                                Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .padding(bottom = 12.dp)
-                                    .glassSurface(Capsule)
-                                    .padding(6.dp),
-                                size = 38.dp,
-                            )
+                        val picture = @Composable { pictureModifier: Modifier ->
+                            Box(pictureModifier.aspectRatio(16f / 9f)) {
+                                CameraStage(app, Modifier.matchParentSize(), cornerRadius = 20.dp)
+                                DeviceSwitches(
+                                    app,
+                                    Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .padding(bottom = 12.dp)
+                                        .glassSurface(Capsule)
+                                        .padding(6.dp),
+                                    size = 38.dp,
+                                )
+                            }
                         }
-                        Form(app, draft, ::go)
-                        Footer(app, draft, ::go, ::cancel, close, wide = true)
+                        // Above the hinge of a phone standing on a table the
+                        // sheet is half a screen tall, and the picture over
+                        // the form left the form below the sheet's edge: the
+                        // two side by side there, the picture beside the
+                        // field it is the picture for.
+                        if (LocalInHalf.current && LocalHinge.current?.vertical == false) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                                picture(Modifier.weight(1f))
+                                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                                    Form(app, draft, ::go)
+                                    Footer(app, draft, ::go, ::cancel, close, wide = true)
+                                }
+                            }
+                        } else {
+                            picture(Modifier.fillMaxWidth())
+                            Form(app, draft, ::go)
+                            Footer(app, draft, ::go, ::cancel, close, wide = true)
+                        }
                     }
                 }
             }
@@ -309,8 +330,12 @@ private fun Form(app: AppModel, draft: MeetingDraft, go: () -> Unit) {
     Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         // The scope half of a name completes from the account's own
         // (ScopedRoomInput.tsx), in both directions as on the web.
+        // Starting, what the field may be left as is said under it rather
+        // than in it, as the schedule's form says it: a sentence as a field's
+        // prompt was cut off after five words on a phone, and on the Fold's
+        // cover screen after three, in every language.
         ScopedRoomField(
-            prompt = if (draft.starting) t("Name it yourself, or leave it blank for one nobody has used.") else t("Room name or invite link"),
+            prompt = if (draft.starting) t("Room name") else t("Room name or invite link"),
             text = draft.room,
             onTextChange = { draft.room = it },
             scopes = app.account?.scopes ?: emptyList(),
@@ -318,6 +343,17 @@ private fun Form(app: AppModel, draft: MeetingDraft, go: () -> Unit) {
             focusOnAppear = LobbyDebug.room != null,
             onSubmit = go,
         )
+        AnimatedVisibility(
+            draft.starting,
+            enter = expandVertically(Theme.settle()) + fadeIn(Theme.settle()),
+            exit = shrinkVertically(Theme.leave()) + fadeOut(Theme.leave()),
+        ) {
+            KitText(
+                t("Name it yourself, or leave it blank for one nobody has used."),
+                Modifier.padding(horizontal = 6.dp),
+                font = Font(12f), color = Theme.muted,
+            )
+        }
         OptionsCard(app, draft.sealing, { draft.sealing = it }, serverId = "sheet.server")
     }
 }
@@ -463,6 +499,9 @@ fun ScopedRoomField(
                     if (capsule) Modifier.glassSurface(Capsule)
                     else Modifier.background(Color.Black.copy(alpha = 0.24f), rounded(16f)).border(1.dp, Color.White.copy(alpha = 0.10f), rounded(16f)),
                 )
+                // The whole box takes the keyboard, as MediaField's does: the
+                // words in it are twenty points of a box fifty tall.
+                .clickable(interactionSource = null, indication = null) { runCatching { focus.requestFocus() } }
                 .padding(horizontal = if (capsule) 18.dp else 14.dp),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalAlignment = Alignment.CenterVertically,
