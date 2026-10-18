@@ -20,8 +20,7 @@ private const val TAG = "Tomoshibi"
  * mixer's 48 kHz, which is heard but is not lossless for a 44.1 kHz source,
  * and it has no fade at the edges of a stream. The Apple version fades the
  * level in and out over the stream's own rate, and plays at the stream's own
- * rate through the engine. Also to do: the duck for music while somebody
- * talks (`setDuck`).
+ * rate through the engine.
  */
 class LosslessPlayback(private val audio: CallAudio) : LosslessSink {
     private val main by lazy { Handler(Looper.getMainLooper()) }
@@ -29,6 +28,8 @@ class LosslessPlayback(private val audio: CallAudio) : LosslessSink {
     private val streams = HashMap<String, Stream>()
     /** The listener's level per stream, kept for streams that start after it was set. */
     private val levels = HashMap<String, Float>()
+    /** The duck per music stream, kept the same way. */
+    private val ducks = HashMap<String, Float>()
 
     override fun onLossless(identity: String, music: Boolean, samples: List<Float>, rate: UInt, channels: UInt) {
         val key = key(identity, music)
@@ -41,6 +42,7 @@ class LosslessPlayback(private val audio: CallAudio) : LosslessSink {
             } else {
                 val made = Stream(key, rate, channels)
                 made.volume = levels[key] ?: 1f
+                made.duck = ducks[key] ?: 1f
                 streams[key] = made
                 if (existing != null) audio.detachLater(existing)
                 made to true
@@ -64,6 +66,21 @@ class LosslessPlayback(private val audio: CallAudio) : LosslessSink {
         synchronized(lock) {
             levels[key] = level.coerceIn(0f, 1f)
             streams[key]?.volume = level.coerceIn(0f, 1f)
+        }
+    }
+
+    /**
+     * The song desk's dip under speech for one person's music (duck.ts;
+     * lossless-receiver.ts `levelOf`, which plays the lossless stream at the
+     * level its Opus track would have): on the stream, and on any that starts
+     * later. Without it the music arriving losslessly, which is all of it from
+     * a browser that offers the stream, never made way for a voice.
+     */
+    fun setDuck(identity: String, factor: Float) {
+        val key = key(identity, music = true)
+        synchronized(lock) {
+            ducks[key] = factor.coerceIn(0f, 1f)
+            streams[key]?.duck = factor.coerceIn(0f, 1f)
         }
     }
 
