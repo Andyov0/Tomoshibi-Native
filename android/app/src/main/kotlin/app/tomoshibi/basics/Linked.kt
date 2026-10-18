@@ -1,4 +1,4 @@
-package app.tomoshibi.model
+package app.tomoshibi.basics
 
 /**
  * Text with its addresses found, so that a message can be drawn with them
