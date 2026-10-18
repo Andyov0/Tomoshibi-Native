@@ -51,6 +51,36 @@ extern "C" {
     fn CVPixelBufferRetain(buffer: *mut c_void) -> *mut c_void;
 }
 
+#[link(name = "objc")]
+extern "C" {
+    fn objc_autoreleasePoolPush() -> *mut c_void;
+    fn objc_autoreleasePoolPop(pool: *mut c_void);
+}
+
+/// Runs `work` inside an autorelease pool of its own and drains it.
+///
+/// A picture is taken out of WebRTC through Objective-C (the decoder's
+/// RTCCVPixelBuffer, unwrapped in webrtc-sys) and handed to the app, whose
+/// display layer is Objective-C too, all on a tokio worker thread. Such a
+/// thread has no autorelease pool that is ever drained, so whatever those
+/// calls autoreleased stayed for the life of the thread, and with it the
+/// decoded frame it held: every frame of every remote picture. On the
+/// owner's iPhone a shared screen (2224 by 1440, about 4.8 MB a frame at
+/// thirty a second) took the app, the decoder and the compositor past
+/// 3 GB each in seventeen seconds, and the compositor was killed for it,
+/// twice, with the screen going back to the home screen (2026-10-17); a
+/// camera's smaller frames went the same way, only more slowly.
+fn drained<T>(work: impl FnOnce() -> T) -> T {
+    // SAFETY: a pool pushed here is popped here, on the same thread, after
+    // everything that could have used it.
+    unsafe {
+        let pool = objc_autoreleasePoolPush();
+        let out = work();
+        objc_autoreleasePoolPop(pool);
+        out
+    }
+}
+
 const RATE: i32 = 48_000;
 
 enum Wanted {
@@ -133,7 +163,7 @@ fn flow(wanted: &Wanted, track: RemoteTrack) -> Option<JoinHandle<()>> {
             let mut stream = NativeVideoStream::new(video.rtc_track());
             Some(tokio::spawn(async move {
                 while let Some(frame) = stream.next().await {
-                    sink.on_frame(picture(&frame.buffer, frame.rotation, frame.timestamp_us));
+                    drained(|| sink.on_frame(picture(&frame.buffer, frame.rotation, frame.timestamp_us)));
                 }
             }))
         }
