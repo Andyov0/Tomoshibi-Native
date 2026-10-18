@@ -237,6 +237,16 @@ class AppModel(
      */
     val deviceMemory = DeviceMemory(if (rehearsal) null else this.defaults)
 
+    /**
+     * The choices a call reads that have no model of their own (the watch
+     * ceiling, the music's quality and ducking, the devices last picked):
+     * one for the app, as on Apple, so that the settings and a call read and
+     * write the same values rather than copies that disagree.
+     */
+    val preferences: CallPreferences by lazy {
+        CallPreferences(keeps = !rehearsal, defaults = this.defaults, deviceDefaults = deviceMemory.defaults)
+    }
+
     private var startWithMicrophoneState by mutableStateOf(deviceMemory.joining.microphone)
     private var startWithCameraState by mutableStateOf(deviceMemory.joining.camera)
     /**
