@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.compose.runtime.snapshotFlow
+import app.tomoshibi.BuildConfig
 import app.tomoshibi.basics.Localization
 import app.tomoshibi.basics.t
 import app.tomoshibi.model.AppModel
@@ -63,6 +64,7 @@ class CallMedia(context: Context, val muted: Boolean = false) {
         Thermal.install(context)
         CallKeeper.openApp = { control -> openApp(control) }
         CallKeeper.onControl = { control -> scope.launch { perform(app, control) } }
+        if (BuildConfig.DEBUG) MediaDebug.install(context, app)
         scope.launch {
             snapshotFlow { app.call to (app.movingTo != null) }.collectLatest { (call, moving) ->
                 if (call == null) {
