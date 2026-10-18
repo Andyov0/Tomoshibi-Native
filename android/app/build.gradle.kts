@@ -31,6 +31,13 @@ android {
         // extracted and nothing in it may be stripped twice.
         jniLibs { useLegacyPackaging = false }
     }
+
+    testOptions {
+        // The models log what they do through android.util.Log, which the
+        // JVM's stub of the platform otherwise answers with an exception;
+        // nothing a test asserts on goes through the platform.
+        unitTests.isReturnDefaultValues = true
+    }
 }
 
 dependencies {
@@ -42,4 +49,10 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.camera:camera-camera2:1.6.2")
     implementation("androidx.camera:camera-lifecycle:1.6.2")
+
+    testImplementation("junit:junit:4.13.2")
+    // The platform's org.json is a stub on the JVM; the records the web
+    // writes (devices, hearing) are read with the real one in tests.
+    testImplementation("org.json:json:20250517")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.11.0")
 }
