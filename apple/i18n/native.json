@@ -205,6 +205,12 @@
       "zh-Hant": "準備好了就從左邊開始一個會議。",
       "ja": "準備ができたらサイドバーから始めましょう。"
     },
+    "Start one from below when you are ready.": {
+      "en": "Start one from below when you are ready.",
+      "zh-Hans": "准备好了就从下面开始一个会议。",
+      "zh-Hant": "準備好了就從下面開始一個會議。",
+      "ja": "準備ができたら下から始めましょう。"
+    },
     "Join as {name}": {
       "en": "Join as {name}",
       "zh-Hans": "以 {name} 的身份加入",

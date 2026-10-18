@@ -659,7 +659,7 @@ private fun SidebarLobby(app: AppModel, account: Account, state: LobbyState) {
 
 /** The section the sidebar has chosen: home's picture and greeting, the arranged meetings, or the servers. */
 @Composable
-private fun ChosenSection(app: AppModel, account: Account, state: LobbyState) {
+private fun ChosenSection(app: AppModel, account: Account, state: LobbyState, onTable: Boolean = false) {
     val density = LocalDensity.current
     // One identity for each section, so a section arrives with its own
     // transition rather than as one view changing what is in it, which
@@ -673,7 +673,7 @@ private fun ChosenSection(app: AppModel, account: Account, state: LobbyState) {
         label = "section",
     ) { place ->
         when (place) {
-            Place.Home -> HomeStage(app, account)
+            Place.Home -> HomeStage(app, account, onTable)
             Place.Scheduled -> ScheduleView(app, account, state.schedule, wide = true, close = { state.place = Place.Home })
             Place.Servers -> ServersView(app, wide = true, back = { state.place = Place.Home })
         }
@@ -703,7 +703,7 @@ private fun DeskLobby(app: AppModel, account: Account, state: LobbyState) {
             Appear(state.place == Place.Home, Modifier.fillMaxSize(), enter = fadeIn(Theme.settle()), exit = fadeOut(Theme.leave())) {
                 CameraStage(app, Modifier.fillMaxSize().glassSource(1f))
             }
-            ChosenSection(app, account, state)
+            ChosenSection(app, account, state, onTable = true)
         }
         Box(Modifier.inPane(lower, width, height)) {
             Desk(
@@ -968,11 +968,13 @@ private fun AccountMenu(app: AppModel, account: Account, state: LobbyState) {
  * will arrive, and the server where there is a choice.
  */
 @Composable
-private fun HomeStage(app: AppModel, account: Account) {
+private fun HomeStage(app: AppModel, account: Account, onTable: Boolean) {
     Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
         Column(Modifier.padding(start = 36.dp, top = 56.dp, end = 24.dp).rise(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             ShadowedText(t("Hello, {name}", mapOf("name" to account.name)), Font(34f, Font.Bold), Theme.foreground)
-            ShadowedText(t("Start one from the sidebar when you are ready."), Font(15f), Color.White.copy(alpha = 0.78f))
+            // On a table the sidebar's contents are below the hinge (DeskLobby).
+            val start = if (onTable) t("Start one from below when you are ready.") else t("Start one from the sidebar when you are ready.")
+            ShadowedText(start, Font(15f), Color.White.copy(alpha = 0.78f))
         }
         // The capsule is the glass, and the switches inside it are drawn
         // plain, so that nothing is glass on glass.

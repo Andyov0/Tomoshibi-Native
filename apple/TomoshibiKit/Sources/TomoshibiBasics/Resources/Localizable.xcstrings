@@ -16771,6 +16771,36 @@
         }
       }
     },
+    "Start one from below when you are ready." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start one from below when you are ready."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "準備ができたら下から始めましょう。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "准备好了就从下面开始一个会议。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "準備好了就從下面開始一個會議。"
+          }
+        }
+      }
+    },
     "Start one from the sidebar when you are ready." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,

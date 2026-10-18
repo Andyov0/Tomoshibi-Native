@@ -60,12 +60,11 @@ fun CameraStage(app: AppModel, modifier: Modifier = Modifier, cornerRadius: Dp =
  * One camera for all of them, and only the latest fed. Each picture had a
  * camera of its own on Apple (`@State private var preview = CameraCapture()`),
  * and the start sheet over the lobby opened a second while the lobby's card
- * still held the first. Here that is worse than a frozen card: CameraX's
- * camera provider is one for the process, and the media layer's stop
- * unbinds everything bound to it, so a preview stopped late took the
- * camera away from whatever had started since, the call's own included. So
- * the preview stops the moment a join is under way, before the call can
- * turn its camera on, and never again after that until it is wanted.
+ * still held the first. Here one camera is opened once: a phone opens a
+ * camera for one user at a time, and a second preview, or the call's own
+ * camera, would wait on the first or take it. So the preview stops the
+ * moment a join is under way, before the call can turn its camera on, and
+ * never again after that until it is wanted.
  */
 internal object SelfViews {
     /** The pictures on screen, the one drawn last at the end: only that one is fed. */

@@ -4,7 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.os.SystemClock
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -72,8 +71,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import androidx.core.app.PictureInPictureModeChangedInfo
-import androidx.core.util.Consumer
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -235,7 +232,7 @@ fun RoomView(app: AppModel, call: CallModel, modifier: Modifier = Modifier) {
     val record = remember(call) { StageRecord.of(call) }
     GlassBackdrop {
         FloatingPopoverLayer(state.popovers) {
-            if (inPictureInPicture()) {
+            if (call.pictureInPicture.inSmallWindow) {
                 SmallWindow(call, state, modifier)
             } else {
                 Room(app, call, state, host, record, modifier)
@@ -1202,26 +1199,6 @@ private fun Context.activity(): Activity? {
         context = context.baseContext
     }
     return null
-}
-
-/**
- * Whether the activity is in the small window.
- *
- * Hook for the media engineer's PictureInPicture (media/PictureInPicture.kt),
- * which says only whether the window can be opened and which picture it
- * would show, not whether it is open: until it does, the room asks the
- * activity itself, which says so whichever part of the app opened it.
- */
-@Composable
-private fun inPictureInPicture(): Boolean {
-    val activity = LocalContext.current.activity() as? ComponentActivity ?: return false
-    var inside by remember(activity) { mutableStateOf(activity.isInPictureInPictureMode) }
-    DisposableEffect(activity) {
-        val listener = Consumer<PictureInPictureModeChangedInfo> { inside = it.isInPictureInPictureMode }
-        activity.addOnPictureInPictureModeChangedListener(listener)
-        onDispose { activity.removeOnPictureInPictureModeChangedListener(listener) }
-    }
-    return inside
 }
 
 /**
