@@ -1,5 +1,6 @@
 package app.tomoshibi.ui.lobby
 
+import app.tomoshibi.model.host.standInRules
 import android.content.Context
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.layout.Box
@@ -56,6 +57,7 @@ class NavigationBehaviourTest {
 
     @Before
     fun setUp() {
+        standInRules()
         val context = ApplicationProvider.getApplicationContext<Context>()
         Localization.install(context).choose(Language.En)
         Appearance.install(context).keeps = false
@@ -86,7 +88,7 @@ class NavigationBehaviourTest {
 
     @Test
     fun backInTheLobbyIsTheSystemsAndLeavesTheApp() {
-        compose.setContent { TomoshibiApp(fakeApp()) }
+        compose.setContent { TestApp(fakeApp()) }
         settle()
         assertFalse("nothing in the lobby may hold Back with nothing open", backIsTaken)
     }
@@ -94,7 +96,7 @@ class NavigationBehaviourTest {
     @Test
     fun backClosesTheStartSheetAndCallsOffItsJoin() {
         LobbyDebug.open = "start"
-        compose.setContent { TomoshibiApp(fakeApp()) }
+        compose.setContent { TestApp(fakeApp()) }
         settle()
         compose.onNodeWithText("Start new meeting").assertExists()
         assertTrue(backIsTaken)
@@ -106,7 +108,7 @@ class NavigationBehaviourTest {
     @Test
     fun backClosesTheScheduleSheet() {
         LobbyDebug.open = "scheduled"
-        compose.setContent { TomoshibiApp(fakeApp()) }
+        compose.setContent { TestApp(fakeApp()) }
         settle()
         compose.onNodeWithText("Arrange").assertExists()
         back()
@@ -116,7 +118,7 @@ class NavigationBehaviourTest {
     @Test
     fun backTakesThePushedServerPageAway() {
         LobbyDebug.open = "servers"
-        compose.setContent { TomoshibiApp(fakeApp()) }
+        compose.setContent { TestApp(fakeApp()) }
         settle()
         compose.onNodeWithText("Measure again").assertExists()
         back()
@@ -127,7 +129,7 @@ class NavigationBehaviourTest {
     fun backOnTheJoinScreenGoesBackToTheLobby() {
         val app = fakeApp(screen = Screen.Prejoin)
         app.room = "design-review"
-        compose.setContent { TomoshibiApp(app) }
+        compose.setContent { TestApp(app) }
         settle()
         back()
         assertEquals(Screen.Lobby, app.screen)
@@ -139,7 +141,7 @@ class NavigationBehaviourTest {
         val made = silentAudio().also { audio = it }
         val call = fakeCall(made)
         app.stage("call", call)
-        compose.setContent { TomoshibiApp(app) }
+        compose.setContent { TestApp(app) }
         settle()
         assertTrue("Back in a call must be held, or the activity finishes and leaves the call", backIsTaken)
         back()
@@ -150,7 +152,7 @@ class NavigationBehaviourTest {
     @Test
     fun aRecentRoomOpensAgainAndAsksWhetherItIsLive() {
         val app = fakeApp()
-        compose.setContent { TomoshibiApp(app) }
+        compose.setContent { TestApp(app) }
         settle()
         compose.onNodeWithText("friday-standup").performClick()
         settle()
@@ -161,7 +163,7 @@ class NavigationBehaviourTest {
     @Test
     fun aRecentRoomSwipedAllTheWayIsForgotten() {
         val app = fakeApp()
-        compose.setContent { TomoshibiApp(app) }
+        compose.setContent { TestApp(app) }
         settle()
         compose.onNodeWithText("friday-standup").performTouchInput { swipeLeft(startX = right - 4f, endX = left - 200f, durationMillis = 300) }
         settle()
@@ -172,7 +174,7 @@ class NavigationBehaviourTest {
     @Test
     fun aShortSwipeOnlyShowsRemove() {
         val app = fakeApp()
-        compose.setContent { TomoshibiApp(app) }
+        compose.setContent { TestApp(app) }
         settle()
         compose.onNodeWithText("friday-standup").performTouchInput { swipeLeft(startX = right - 10f, endX = right - 260f, durationMillis = 400) }
         settle()
@@ -185,7 +187,7 @@ class NavigationBehaviourTest {
     @Test
     fun aPressOnASheetIsTheSheets() {
         LobbyDebug.open = "settings"
-        compose.setContent { TomoshibiApp(fakeApp()) }
+        compose.setContent { TestApp(fakeApp()) }
         settle()
         // On nothing in particular on the sheet, over the lobby's own Start
         // button and the dimming that closes the sheet when it is pressed.
@@ -205,7 +207,7 @@ class NavigationBehaviourTest {
         var wide by mutableStateOf(false)
         val app = fakeApp()
         compose.setContent {
-            Box(Modifier.width(if (wide) 840.dp else 412.dp).fillMaxHeight()) { TomoshibiApp(app) }
+            Box(Modifier.width(if (wide) 840.dp else 412.dp).fillMaxHeight()) { TestApp(app) }
         }
         settle()
         compose.onNodeWithContentDescription("Room name or invite link").performTextInput("team-sync")
