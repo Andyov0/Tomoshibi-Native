@@ -67,6 +67,8 @@ class CameraCapture(context: Context) {
     private var analysis: ImageAnalysis? = null
     private var preview: Preview? = null
     private var previewSurface: Preview.SurfaceProvider? = null
+    /** The use cases this capture has bound, which are all it may unbind. */
+    private var own: List<androidx.camera.core.UseCase> = emptyList()
     private var orientation: OrientationEventListener? = null
     /** The bound camera's state, watched for a camera taken away under the call. */
     private var watched: androidx.lifecycle.LiveData<CameraState>? = null
@@ -125,6 +127,10 @@ class CameraCapture(context: Context) {
     /** Told on the main thread when a camera that was running stops under the call (another app took it). */
     var onFailure: ((Throwable) -> Unit)? = null
 
+    /** Frames sent since the capture was made, for a debug build's log. */
+    @Volatile internal var sent = 0
+        private set
+
     /** The cameras somebody can pick, front first. */
     fun cameras(): List<CameraChoice> {
         val manager = context.getSystemService(CameraManager::class.java) ?: return emptyList()
@@ -174,13 +180,11 @@ class CameraCapture(context: Context) {
         input = into
         val analysis = analysis ?: makeAnalysis().also { analysis = it }
         val preview = previewSurface?.let { surface -> (preview ?: Preview.Builder().build().also { preview = it }).also { it.surfaceProvider = surface } }
-        provider.unbindAll()
+        unbindOwn(provider)
         lifecycle.resume()
-        val bound = if (preview != null) {
-            provider.bindToLifecycle(lifecycle, selector, analysis, preview)
-        } else {
-            provider.bindToLifecycle(lifecycle, selector, analysis)
-        }
+        val cases = listOfNotNull(analysis, preview)
+        val bound = provider.bindToLifecycle(lifecycle, selector, *cases.toTypedArray())
+        own = cases
         // A camera another app holds, or one the system takes away mid-call,
         // is said by the camera's state rather than by the bind.
         watched?.removeObservers(lifecycle)
@@ -215,9 +219,24 @@ class CameraCapture(context: Context) {
         watched = null
         orientation?.disable()
         orientation = null
-        provider?.unbindAll()
+        provider?.let(::unbindOwn)
         lifecycle.pause()
         device = null
+    }
+
+    /**
+     * Takes this capture's own use cases off the camera, and nothing else.
+     * The provider is the process's, shared with every other capture: it
+     * unbound everything once, and a join screen's picture of oneself
+     * stopped a moment after the call's camera started took the call's
+     * camera away with it. Two captures may hold the camera at once that
+     * way, each on its own lifecycle; CameraX runs the one started last and
+     * gives the camera back to the other when that one stops.
+     */
+    private fun unbindOwn(provider: ProcessCameraProvider) {
+        if (own.isEmpty()) return
+        provider.unbind(*own.toTypedArray())
+        own = emptyList()
     }
 
     /** Stops for good: the call is over. */
@@ -328,6 +347,7 @@ class CameraCapture(context: Context) {
                     input.pushPlanes(y, u, v, py.rowStride.toUInt(), pu.rowStride.toUInt(), pu.pixelStride.toUInt(),
                         image.width.toUInt(), image.height.toUInt(), stamp / 1000, image.imageInfo.rotationDegrees.toUInt())
                 }
+                sent = frames + 1
                 if (++frames % 150 == 0) {
                     Log.i(TAG, "camera sent $frames frames ${image.width}x${image.height}${if (halve) " halved" else ""} turned ${image.imageInfo.rotationDegrees}")
                 }
