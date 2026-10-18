@@ -32,6 +32,12 @@ android {
         jniLibs { useLegacyPackaging = false }
     }
 
+    androidResources {
+        // The segmentation model is mapped from the APK as it lies, which a
+        // compressed asset cannot be.
+        noCompress += "tflite"
+    }
+
     testOptions {
         // The models log what they do through android.util.Log, which the
         // JVM's stub of the platform otherwise answers with an exception;
@@ -49,6 +55,15 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.camera:camera-camera2:1.6.2")
     implementation("androidx.camera:camera-lifecycle:1.6.2")
+    // The web's own segmenter for blurring what is behind somebody: the same
+    // MediaPipe selfie model the web serves from its deployment (live/blur.ts),
+    // bundled here under assets/segment for the same reason the web bundles
+    // it, which is that Google's storage does not answer from the mainland.
+    // Chosen over ML Kit's selfie segmentation, which needs Play services,
+    // reports its use to Google through Firebase's transport, and has been a
+    // beta since 2022; 1.0.0 rather than 1.1 because 1.1 also brings an LLM
+    // runtime nothing here uses.
+    implementation("com.google.mediapipe:tasks-vision:1.0.0")
 
     testImplementation("junit:junit:4.13.2")
     // The platform's org.json is a stub on the JVM; the records the web
