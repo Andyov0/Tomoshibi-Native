@@ -29,6 +29,8 @@ class RemoteVideoView(context: Context) : TextureView(context), TextureView.Surf
     private var attached = false
     private var shape = Triple(0, 0, 0)
     private val main = Handler(Looper.getMainLooper())
+    /** Asks again when the device grows hot or cools, while the view is in a window. */
+    private var thermal: AutoCloseable? = null
 
     /** Whether the picture fills the view, cropping, rather than fitting whole inside it. */
     var fill = false
@@ -73,7 +75,27 @@ class RemoteVideoView(context: Context) : TextureView(context), TextureView.Surf
                 }
             }
         })
-        if (width > 0 && height > 0) VideoHub.of(call).want(this, sid, width, height)
+        ask()
+    }
+
+    /**
+     * Tells the hub the size this view draws its picture at, which is the
+     * layer the server is asked for, by [PictureDensity]'s rule.
+     */
+    private fun ask() {
+        val call = call ?: return
+        val sid = sid ?: return
+        if (!attached || width <= 0 || height <= 0) return
+        val metrics = resources.displayMetrics
+        val (w, h) = PictureDensity.asked(width, height, metrics.density,
+            phone = resources.configuration.smallestScreenWidthDp < 600, hot = Thermal.hot)
+        VideoHub.existing(call)?.want(this, sid, w, h)
+    }
+
+    override fun onAttachedToWindow() {
+        super.onAttachedToWindow()
+        Thermal.install(context)
+        thermal = Thermal.watch { ask() }
     }
 
     private fun release() {
@@ -85,9 +107,7 @@ class RemoteVideoView(context: Context) : TextureView(context), TextureView.Surf
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
-        val call = call
-        val sid = sid
-        if (attached && call != null && sid != null && w > 0 && h > 0) VideoHub.existing(call)?.want(this, sid, w, h)
+        ask()
         fit()
     }
 
@@ -118,8 +138,36 @@ class RemoteVideoView(context: Context) : TextureView(context), TextureView.Surf
     override fun onSurfaceTextureUpdated(texture: SurfaceTexture) {}
 
     override fun onDetachedFromWindow() {
+        thermal?.close()
+        thermal = null
         release()
         super.onDetachedFromWindow()
+    }
+}
+
+/**
+ * The size a picture is asked of the server at, from the size its view is
+ * drawn at in device pixels.
+ *
+ * The web asks at the view's points times the screen's density (room.ts
+ * `adaptiveStream: { pixelDensity: "screen" }`), which on a phone of density
+ * three asked a stage of 440 by 285 points for 1320 by 854: more than the
+ * 1112 by 720 rung, so the phone was sent the 1080 rung at sixty frames,
+ * decoded and drew all of it, and grew hot (the owner's iPhone,
+ * 2026-10-17). So a phone asks at twice its points at most, which is also
+ * livekit-client's own default where no density is named
+ * (RemoteVideoTrack.ts `getPixelDensity`); a tablet keeps the screen's. Any
+ * device the system calls severely hot asks at its points alone, a quarter
+ * of the pixels again, until it cools (Thermal).
+ */
+object PictureDensity {
+    fun asked(widthPx: Int, heightPx: Int, density: Float, phone: Boolean, hot: Boolean): Pair<Int, Int> {
+        if (density <= 0f) return widthPx to heightPx
+        var wanted = density
+        if (phone) wanted = minOf(wanted, 2f)
+        if (hot) wanted = minOf(wanted, 1f)
+        val scale = wanted / density
+        return Math.round(widthPx * scale) to Math.round(heightPx * scale)
     }
 }
 
