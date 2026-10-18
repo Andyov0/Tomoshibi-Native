@@ -39,17 +39,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -137,37 +142,104 @@ enum class SettingsTopic(val symbol: String) {
 private val WIDE = 600.dp
 
 /**
+ * Where the settings are and what is half typed in them, kept by whoever
+ * opened them rather than by the layout drawing them: a Fold folded or
+ * opened out with the settings showing changes the phone's list for the
+ * wide sidebar (and the lobby's sheet for its dialog), and everything kept
+ * inside one of those went with it, the section somebody was in, the link
+ * being made and the passphrase half changed. Here they outlive the change
+ * of layout, as the activity outlives the change of screen (the manifest's
+ * configChanges). Nothing in it is written anywhere: it lives as long as
+ * the settings are open, as the Swift sheet's @State does, and a passphrase
+ * in it never reaches a saved bundle.
+ */
+@Stable
+class SettingsState(opening: SettingsTopic? = null) {
+    /**
+     * The section open: on a phone the page drilled into, null for the
+     * list; on a wide screen the one beside the sidebar, null for the first.
+     * One value for both, so that folding keeps the section in front.
+     */
+    var topic by mutableStateOf(opening)
+
+    /** What the pages have typed and chosen (`rememberDraft`), by name. */
+    internal val drafts = HashMap<String, MutableState<*>>()
+
+    /** How far each page was scrolled, by name, so that the page drawn again opens where the other left it. */
+    internal val scrolls = HashMap<String, Int>()
+}
+
+/** The settings' state, for the pages' drafts to keep themselves in. */
+internal val LocalSettingsState = staticCompositionLocalOf<SettingsState?> { null }
+
+/**
+ * A page's own `remember { mutableStateOf(...) }`, kept in the settings'
+ * state under [key] while there is one, so that it survives the page being
+ * drawn again in the other layout. Drawn without the settings around it (a
+ * test of one card), it is an ordinary remember.
+ */
+@Composable
+internal fun <T> rememberDraft(key: String, initial: () -> T): MutableState<T> {
+    val state = LocalSettingsState.current
+    @Suppress("UNCHECKED_CAST")
+    return if (state == null) {
+        remember { mutableStateOf(initial()) }
+    } else {
+        remember(state, key) { state.drafts.getOrPut(key) { mutableStateOf(initial()) } as MutableState<T> }
+    }
+}
+
+/**
+ * A page's scroll, starting where the same page last was in either layout
+ * and remembered as it moves. Each layout has its own: two lists sharing one
+ * scroll while the one cross-fades into the other each clamped it to its own
+ * length.
+ */
+@Composable
+internal fun rememberPageScroll(key: String): ScrollState {
+    val state = LocalSettingsState.current
+    val scroll = rememberScrollState(state?.scrolls?.get(key) ?: 0)
+    if (state != null) {
+        LaunchedEffect(scroll, state, key) { snapshotFlow { scroll.value }.collect { state.scrolls[key] = it } }
+    }
+    return scroll
+}
+
+/**
  * The settings: on a phone a full page with its own close, a list of the
  * sections that drills into each; on a wide screen a sidebar of sections
  * beside the chosen one. Back goes from a section to the list, and from the
- * list closes.
+ * list closes. [state] is kept by whoever opens them (the lobby's
+ * LobbyState), so that it outlives a change between the two.
  */
 @Composable
-fun SettingsView(app: AppModel, close: () -> Unit, modifier: Modifier = Modifier) {
-    SettingsView(app, close, modifier, opening = null)
-}
-
-/** The settings opened at [opening], for a test to look at one section without a finger. */
-@Composable
-internal fun SettingsView(app: AppModel, close: () -> Unit, modifier: Modifier, opening: SettingsTopic?) {
+fun SettingsView(app: AppModel, close: () -> Unit, modifier: Modifier = Modifier, state: SettingsState = remember { SettingsState() }) {
     val preferences = app.preferences
     KeepFresh(preferences)
     ProvideSettingsPlatform {
         val popovers = rememberPopovers()
         FloatingPopoverLayer(popovers) {
-            GlassBackdrop {
-                BoxWithConstraints(modifier.fillMaxSize()) {
-                    Box(Modifier.matchParentSize().background(Theme.background))
-                    Backdrop(Modifier.matchParentSize().glassSource())
-                    if (maxWidth >= WIDE) {
-                        WideSettings(app, preferences, close, opening) { popovers.close() }
-                    } else {
-                        PhoneSettings(app, preferences, close, opening) { popovers.close() }
+            CompositionLocalProvider(LocalSettingsState provides state) {
+                GlassBackdrop {
+                    BoxWithConstraints(modifier.fillMaxSize()) {
+                        Box(Modifier.matchParentSize().background(Theme.background))
+                        Backdrop(Modifier.matchParentSize().glassSource())
+                        if (maxWidth >= WIDE) {
+                            WideSettings(app, preferences, state, close) { popovers.close() }
+                        } else {
+                            PhoneSettings(app, preferences, state, close) { popovers.close() }
+                        }
                     }
                 }
             }
         }
     }
+}
+
+/** The settings opened at [opening], for a test to look at one section without a finger. */
+@Composable
+internal fun SettingsView(app: AppModel, close: () -> Unit, modifier: Modifier, opening: SettingsTopic?) {
+    SettingsView(app, close, modifier, remember { SettingsState(opening) })
 }
 
 /**
@@ -195,13 +267,13 @@ private fun KeepFresh(preferences: CallPreferences) {
 private fun PhoneSettings(
     app: AppModel,
     preferences: CallPreferences,
+    state: SettingsState,
     close: () -> Unit,
-    opening: SettingsTopic?,
     closePopovers: () -> Unit,
 ) {
-    var open by rememberSaveable { mutableStateOf(opening) }
+    val open = state.topic
     LaunchedEffect(open) { closePopovers() }
-    BackHandler { if (open != null) open = null else close() }
+    BackHandler { if (state.topic != null) state.topic = null else close() }
     val shift = with(LocalDensity.current) { 60.dp.roundToPx() }
     AnimatedContent(
         open,
@@ -222,9 +294,9 @@ private fun PhoneSettings(
         label = "drill",
     ) { topic ->
         if (topic == null) {
-            Home(app, preferences, close) { open = it }
+            Home(app, preferences, close) { state.topic = it }
         } else {
-            Drilled(topic, app, preferences) { open = null }
+            Drilled(topic, app, preferences) { state.topic = null }
         }
     }
 }
@@ -238,7 +310,7 @@ private fun Home(app: AppModel, preferences: CallPreferences, close: () -> Unit,
         Column(
             Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(rememberPageScroll("list"))
                 .windowInsetsPadding(PhoneInsets)
                 .padding(horizontal = 16.dp)
                 .padding(bottom = 30.dp)
@@ -318,7 +390,7 @@ private fun TopicRow(one: SettingsTopic, summary: String, last: Boolean, onClick
             SectionTile(one.symbol, lit = true, size = 32f)
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 KitText(one.title, font = Font(16f, Font.Medium), color = Theme.foreground, lines = 1)
-                KitText(summary, font = Font(12.5f), color = Theme.muted, lines = 1)
+                KitText(summary, font = Font(12.5f), color = Theme.muted, lines = 2)
             }
             Spacer(Modifier.width(6.dp))
             Chevron()
@@ -367,7 +439,7 @@ private fun Drilled(topic: SettingsTopic, app: AppModel, preferences: CallPrefer
                     if (travelled > far) back()
                 }
             }
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(rememberPageScroll(topic.name))
             .windowInsetsPadding(PhoneInsets)
             .padding(horizontal = 16.dp)
             .padding(bottom = 34.dp)
@@ -391,16 +463,16 @@ private fun Drilled(topic: SettingsTopic, app: AppModel, preferences: CallPrefer
 private fun WideSettings(
     app: AppModel,
     preferences: CallPreferences,
+    state: SettingsState,
     close: () -> Unit,
-    opening: SettingsTopic?,
     closePopovers: () -> Unit,
 ) {
-    var section by rememberSaveable { mutableStateOf(opening ?: SettingsTopic.General) }
+    val section = state.topic ?: SettingsTopic.General
     LaunchedEffect(section) { closePopovers() }
     BackHandler { close() }
     val rise = with(LocalDensity.current) { 10.dp.roundToPx() }
     Row(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-        Sidebar(app, section, close, Modifier.width(256.dp).fillMaxHeight().padding(10.dp)) { section = it }
+        Sidebar(app, section, close, Modifier.width(256.dp).fillMaxHeight().padding(10.dp)) { state.topic = it }
         AnimatedContent(
             section,
             Modifier.weight(1f).fillMaxHeight(),
@@ -410,7 +482,7 @@ private fun WideSettings(
             label = "section",
         ) { topic ->
             Column(
-                Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                Modifier.fillMaxSize().verticalScroll(rememberPageScroll(topic.name)),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 ContentLayer {
@@ -443,8 +515,13 @@ private fun Sidebar(app: AppModel, section: SettingsTopic, close: () -> Unit, mo
             KitText(t("Settings"), Modifier.weight(1f), font = Font(21f, Font.Bold), lines = 1)
             CloseButton(t("Close"), close, Modifier.testTag("settings.close"))
         }
-        SidebarRows(section, choose)
-        Spacer(Modifier.weight(1f).heightIn(min = 12.dp))
+        // The sections scroll where the window is shorter than they are:
+        // above the hinge of a phone standing on a table the settings are
+        // half a screen tall, and the last sections and the account went
+        // under the window's edge.
+        Column(Modifier.weight(1f).padding(bottom = 12.dp).verticalScroll(rememberScrollState())) {
+            SidebarRows(section, choose)
+        }
         AnimatedVisibility(account != null, enter = Theme.arrive, exit = Theme.depart) {
             val shown = remember { mutableStateOf(account) }
             if (account != null) shown.value = account
