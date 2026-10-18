@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
@@ -17,7 +19,50 @@ android {
         ndk { abiFilters += "arm64-v8a" }
     }
 
+    // The release key lives in the owner's vault; keystore.properties (not
+    // committed) says where, and the password is read from its own file
+    // there rather than written into any build file. Without it a release
+    // build is unsigned, which is enough to see that it builds.
+    val signing = rootProject.file("keystore.properties").takeIf { it.exists() }?.let { file ->
+        // Read as UTF-8: Properties alone reads ISO-8859-1, and the vault's path
+        // is not ASCII.
+        Properties().apply { file.reader(Charsets.UTF_8).use { load(it) } }
+    }
+    signingConfigs {
+        if (signing != null) {
+            create("release") {
+                storeFile = file(signing.getProperty("storeFile"))
+                val password = file(signing.getProperty("passwordFile")).readText().trim()
+                storePassword = password
+                keyAlias = signing.getProperty("keyAlias")
+                keyPassword = password
+                storeType = "PKCS12"
+            }
+        }
+    }
+
     buildTypes {
+        release {
+            // R8 shrinks the Compose, Media3 and icon libraries to what is
+            // used; the core module's consumer rules keep what JNA, UniFFI and
+            // WebRTC's JNI find by name.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (signing != null) signingConfig = signingConfigs.getByName("release")
+        }
+        // The release build's shrinking on a debuggable build: a release
+        // build talks to the production deployment and nothing else, so
+        // whether R8 kept everything the core finds by name (JNA's
+        // structures, UniFFI's callbacks, WebRTC's Java classes) is checked
+        // here, against a local server, before a release goes out.
+        create("shrunk") {
+            initWith(getByName("debug"))
+            isMinifyEnabled = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            matchingFallbacks += "debug"
+            applicationIdSuffix = ".shrunk"
+        }
         debug {
             // `-PkitGallery`: a debug build installed beside the app rather
             // than over it, to look at the UI kit's gallery on a device where

@@ -50,3 +50,12 @@ jni = "0.21"
 livekit = { path = "vendor/livekit" }
 livekit-signaling = { path = "vendor/livekit-signaling" }
 libwebrtc = { path = "vendor/libwebrtc" }
+
+# The release build's optimisation for a core that still talks to the
+# deployment it is given: a release core admits only HOME (protocol
+# api::admitted, gated on debug_assertions), so measuring a phone's heat and
+# load against a local deployment needs a build that is fast and is not
+# release. Never shipped.
+[profile.local]
+inherits = "release"
+debug-assertions = true

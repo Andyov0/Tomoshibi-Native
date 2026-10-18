@@ -15,8 +15,14 @@
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 CORE="$HERE/../core"
+#   android/build-core.sh local      # optimised, but talks to the server it is given
 PROFILE=${1:-debug}
-FLAG=""; [ "$PROFILE" = release ] && FLAG="--release"
+case "$PROFILE" in
+    debug) FLAG="" ;;
+    release) FLAG="--release" ;;
+    local) FLAG="--profile local" ;;
+    *) echo "build-core.sh: debug, release or local" >&2; exit 2 ;;
+esac
 export PATH="/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin:$PATH"
 export ANDROID_HOME=${ANDROID_HOME:-$HOME/Library/Android/sdk}
 export ANDROID_NDK_HOME=${ANDROID_NDK_HOME:-$ANDROID_HOME/ndk/27.2.12479018}
