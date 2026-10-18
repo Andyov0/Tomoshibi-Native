@@ -7,7 +7,10 @@
 //! decoder produced, retained once for the app to take, so nothing is copied
 //! on the way to the screen. Sound arrives as 10 ms of 48 kHz PCM.
 
-use std::{collections::HashMap, ffi::c_void, sync::Arc, sync::Mutex};
+use std::{collections::HashMap, sync::Arc, sync::Mutex};
+
+#[cfg(target_vendor = "apple")]
+use std::ffi::c_void;
 
 use futures_util::StreamExt;
 use livekit::{
@@ -41,16 +44,27 @@ pub trait VideoSink: Send + Sync {
     fn on_frame(&self, frame: RemoteFrame);
 }
 
+/// A remote sound as little-endian bytes: `AudioSink` for bindings that
+/// would box every sample of a `Vec<i16>` (Kotlin's turn a second of a voice
+/// into forty-eight thousand objects).
+#[uniffi::export(with_foreign)]
+pub trait PcmSink: Send + Sync {
+    /// Interleaved 16-bit samples, two bytes each, least significant first.
+    fn on_pcm(&self, pcm: Vec<u8>, sample_rate: u32, channels: u32);
+}
+
 #[uniffi::export(with_foreign)]
 pub trait AudioSink: Send + Sync {
     /// Interleaved 16-bit samples.
     fn on_audio(&self, samples: Vec<i16>, sample_rate: u32, channels: u32);
 }
 
+#[cfg(target_vendor = "apple")]
 extern "C" {
     fn CVPixelBufferRetain(buffer: *mut c_void) -> *mut c_void;
 }
 
+#[cfg(target_vendor = "apple")]
 #[link(name = "objc")]
 extern "C" {
     fn objc_autoreleasePoolPush() -> *mut c_void;
@@ -70,6 +84,7 @@ extern "C" {
 /// 3 GB each in seventeen seconds, and the compositor was killed for it,
 /// twice, with the screen going back to the home screen (2026-10-17); a
 /// camera's smaller frames went the same way, only more slowly.
+#[cfg(target_vendor = "apple")]
 fn drained<T>(work: impl FnOnce() -> T) -> T {
     // SAFETY: a pool pushed here is popped here, on the same thread, after
     // everything that could have used it.
@@ -81,11 +96,21 @@ fn drained<T>(work: impl FnOnce() -> T) -> T {
     }
 }
 
+/// Nothing to drain where no Objective-C runs on the thread.
+#[cfg(not(target_vendor = "apple"))]
+fn drained<T>(work: impl FnOnce() -> T) -> T {
+    work()
+}
+
 const RATE: i32 = 48_000;
 
 enum Wanted {
     Video(Arc<dyn VideoSink>),
     Audio(Arc<dyn AudioSink>, u32),
+    Pcm(Arc<dyn PcmSink>, u32),
+    /// Android: drawn by the core straight into the app's surfaces.
+    #[cfg(target_os = "android")]
+    Windows(Arc<super::window::Windows>),
 }
 
 struct Entry {
@@ -105,6 +130,37 @@ impl Sinks {
 
     pub(super) fn attach_audio(&self, sid: &str, sink: Arc<dyn AudioSink>, track: Option<RemoteTrack>, channels: u32) {
         self.attach(sid, Wanted::Audio(sink, channels), track);
+    }
+
+    pub(super) fn attach_pcm(&self, sid: &str, sink: Arc<dyn PcmSink>, track: Option<RemoteTrack>, channels: u32) {
+        self.attach(sid, Wanted::Pcm(sink, channels), track);
+    }
+
+    /// Adds a surface to those this picture is drawn into, keeping the
+    /// others: a picture can be on the stage and in a tile at once.
+    #[cfg(target_os = "android")]
+    pub(super) fn attach_window(&self, sid: &str, window: super::window::Window, track: Option<RemoteTrack>) {
+        let entries = self.entries.lock().unwrap();
+        if let Some(Entry { wanted: Wanted::Windows(windows), .. }) = entries.get(sid) {
+            windows.add(window);
+            return;
+        }
+        let windows = Arc::new(super::window::Windows::default());
+        windows.add(window);
+        drop(entries);
+        self.attach(sid, Wanted::Windows(windows), track);
+    }
+
+    /// Takes one surface away; the picture stops flowing with the last.
+    #[cfg(target_os = "android")]
+    pub(super) fn detach_window(&self, sid: &str, window: u64) {
+        let empty = match self.entries.lock().unwrap().get(sid) {
+            Some(Entry { wanted: Wanted::Windows(windows), .. }) => windows.remove(window),
+            _ => false,
+        };
+        if empty {
+            self.detach(sid);
+        }
     }
 
     fn attach(&self, sid: &str, wanted: Wanted, track: Option<RemoteTrack>) {
@@ -176,6 +232,26 @@ fn flow(wanted: &Wanted, track: RemoteTrack) -> Option<JoinHandle<()>> {
                 }
             }))
         }
+        (Wanted::Pcm(sink, channels), RemoteTrack::Audio(audio)) => {
+            let (sink, channels) = (sink.clone(), *channels);
+            let mut stream = NativeAudioStream::new(audio.rtc_track(), RATE, channels as i32);
+            Some(tokio::spawn(async move {
+                while let Some(frame) = stream.next().await {
+                    let pcm = frame.data.iter().flat_map(|sample| sample.to_le_bytes()).collect();
+                    sink.on_pcm(pcm, frame.sample_rate, frame.num_channels);
+                }
+            }))
+        }
+        #[cfg(target_os = "android")]
+        (Wanted::Windows(windows), RemoteTrack::Video(video)) => {
+            let windows = windows.clone();
+            let mut stream = NativeVideoStream::new(video.rtc_track());
+            Some(tokio::spawn(async move {
+                while let Some(frame) = stream.next().await {
+                    windows.draw(&frame.buffer, frame.rotation);
+                }
+            }))
+        }
         _ => None,
     }
 }
@@ -189,6 +265,7 @@ fn picture(buffer: &Box<dyn VideoBuffer>, rotation: VideoRotation, timestamp_us:
     };
     let (width, height) = (buffer.width(), buffer.height());
 
+    #[cfg(target_vendor = "apple")]
     if let Some(native) = buffer.as_native() {
         let pixels = native.get_cv_pixel_buffer();
         if !pixels.is_null() {

@@ -8,6 +8,9 @@ pub use tomoshibi_protocol::runtime;
 
 pub mod call;
 
+#[cfg(target_os = "android")]
+mod android;
+
 /// The core's own version, which the apps show beside theirs so that a report
 /// says which core it came from.
 #[uniffi::export]

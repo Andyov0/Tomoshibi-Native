@@ -144,12 +144,12 @@ pub struct CallOptions {
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error, uniffi::Error)]
 pub enum CallError {
-    #[error("could not connect: {message}")]
-    Connect { message: String },
-    #[error("could not publish: {message}")]
-    Publish { message: String },
+    #[error("could not connect: {detail}")]
+    Connect { detail: String },
+    #[error("could not publish: {detail}")]
+    Publish { detail: String },
     #[error("no such track: {sid}")]
     NoSuchTrack { sid: String },
-    #[error("{message}")]
-    Failed { message: String },
+    #[error("{detail}")]
+    Failed { detail: String },
 }

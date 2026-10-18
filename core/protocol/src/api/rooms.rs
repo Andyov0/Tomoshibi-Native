@@ -657,7 +657,7 @@ impl Deployment {
             let instant = |ms: Option<i64>| match ms {
                 None => Ok(String::new()),
                 Some(ms) => iso_from_ms(ms).ok_or_else(|| ProtocolError::Invalid {
-                    message: "that time is out of range".into(),
+                    detail: "that time is out of range".into(),
                 }),
             };
             // In the order the account page writes them; `json!` would sort them.

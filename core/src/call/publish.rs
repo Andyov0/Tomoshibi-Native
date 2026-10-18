@@ -11,9 +11,11 @@
 
 use std::{
     borrow::Cow,
-    ffi::c_void,
     sync::{Arc, Mutex},
 };
+
+#[cfg(target_vendor = "apple")]
+use std::ffi::c_void;
 
 use livekit::{
     options::{AudioEncoding, TrackPublishOptions, VideoCodec, VideoEncoding, VideoPreset},
@@ -22,7 +24,7 @@ use livekit::{
         audio_frame::AudioFrame,
         audio_source::{native::NativeAudioSource, AudioSourceOptions, RtcAudioSource},
         rtp_parameters::DegradationPreference,
-        video_frame::{native::NativeBuffer, VideoFrame, VideoRotation},
+        video_frame::{I420Buffer, VideoFrame, VideoRotation},
         video_source::{native::NativeVideoSource, RtcVideoSource, VideoResolution},
     },
 };
@@ -89,7 +91,7 @@ fn audio_options(kind: SoundKind) -> (String, u32, TrackPublishOptions) {
 }
 
 fn camera_options(width: u32, height: u32) -> Result<TrackPublishOptions, CallError> {
-    let plan = camera_publish(width, height).map_err(|e| CallError::Publish { message: e.to_string() })?;
+    let plan = camera_publish(width, height).map_err(|e| CallError::Publish { detail: e.to_string() })?;
     Ok(TrackPublishOptions {
         source: TrackSource::Camera,
         video_codec: VideoCodec::H264,
@@ -144,6 +146,14 @@ impl AudioInput {
     /// Interleaved samples at 48 kHz, in the channel count this input was
     /// published with.
     pub fn push(&self, samples: Vec<i16>) {
+        let _ = self.feed.send(samples);
+    }
+
+    /// The same as `push`, the samples as little-endian bytes. Kotlin's
+    /// bindings carry a `Vec<i16>` as a list of boxed shorts, forty-eight
+    /// thousand objects a second for a microphone; bytes cross as one array.
+    pub fn push_pcm(&self, pcm: Vec<u8>) {
+        let samples = pcm.chunks_exact(2).map(|pair| i16::from_le_bytes([pair[0], pair[1]])).collect();
         let _ = self.feed.send(samples);
     }
 
@@ -247,21 +257,60 @@ impl VideoInput {
         self.sid.clone()
     }
 
-    /// `pixel_buffer` is a CVPixelBufferRef the caller has retained once
-    /// (`Unmanaged.passRetained(buffer).toOpaque()`); the core releases it.
-    /// `rotation` is clockwise degrees: 0, 90, 180 or 270.
-    pub fn push(&self, pixel_buffer: u64, timestamp_us: i64, rotation: u32) {
-        if pixel_buffer == 0 {
+    /// A picture in three planes, as Android's camera and screen give them
+    /// (YUV_420_888): a full-size luma plane and two half-size chroma planes,
+    /// each chroma sample `chroma_step` bytes from the next. A step of one is
+    /// planar I420; a step of two is the interleaved layout most phones use
+    /// underneath, where `u` and `v` are two views of one buffer. Copied into
+    /// an I420 picture for the encoder, which on Android takes memory rather
+    /// than a texture (webrtc-sys android.cpp makes its factory without an
+    /// EGL context).
+    #[allow(clippy::too_many_arguments)]
+    pub fn push_planes(
+        &self,
+        y: Vec<u8>,
+        u: Vec<u8>,
+        v: Vec<u8>,
+        y_stride: u32,
+        chroma_stride: u32,
+        chroma_step: u32,
+        width: u32,
+        height: u32,
+        timestamp_us: i64,
+        rotation: u32,
+    ) {
+        let (cw, ch) = ((width + 1) / 2, (height + 1) / 2);
+        if width == 0
+            || height == 0
+            || chroma_step == 0
+            || y.len() < ((height - 1) * y_stride + width) as usize
+            || u.len() < ((ch - 1) * chroma_stride + (cw - 1) * chroma_step + 1) as usize
+            || v.len() < ((ch - 1) * chroma_stride + (cw - 1) * chroma_step + 1) as usize
+        {
             return;
         }
-        let buffer = unsafe { NativeBuffer::from_cv_pixel_buffer(pixel_buffer as *mut c_void) };
-        let rotation = match rotation {
-            90 => VideoRotation::VideoRotation90,
-            180 => VideoRotation::VideoRotation180,
-            270 => VideoRotation::VideoRotation270,
-            _ => VideoRotation::VideoRotation0,
-        };
-        self.source.capture_frame(&VideoFrame { rotation, timestamp_us, frame_metadata: None, buffer });
+        let mut buffer = I420Buffer::new(width, height);
+        let (sy, su, sv) = buffer.strides();
+        let (dy, du, dv) = buffer.data_mut();
+        for row in 0..height {
+            let from = (row * y_stride) as usize;
+            let to = (row * sy) as usize;
+            dy[to..to + width as usize].copy_from_slice(&y[from..from + width as usize]);
+        }
+        for (source, destination, stride) in [(&u, du, su), (&v, dv, sv)] {
+            for row in 0..ch {
+                let from = (row * chroma_stride) as usize;
+                let to = (row * stride) as usize;
+                if chroma_step == 1 {
+                    destination[to..to + cw as usize].copy_from_slice(&source[from..from + cw as usize]);
+                } else {
+                    for column in 0..cw as usize {
+                        destination[to + column] = source[from + column * chroma_step as usize];
+                    }
+                }
+            }
+        }
+        self.source.capture_frame(&VideoFrame { rotation: turned(rotation), timestamp_us, frame_metadata: None, buffer });
     }
 
     pub fn set_muted(&self, muted: bool) {
@@ -279,13 +328,40 @@ impl VideoInput {
     }
 }
 
+#[cfg(target_vendor = "apple")]
+#[uniffi::export]
+impl VideoInput {
+    /// `pixel_buffer` is a CVPixelBufferRef the caller has retained once
+    /// (`Unmanaged.passRetained(buffer).toOpaque()`); the core releases it.
+    /// `rotation` is clockwise degrees: 0, 90, 180 or 270.
+    pub fn push(&self, pixel_buffer: u64, timestamp_us: i64, rotation: u32) {
+        if pixel_buffer == 0 {
+            return;
+        }
+        let buffer = unsafe {
+            livekit::webrtc::video_frame::native::NativeBuffer::from_cv_pixel_buffer(pixel_buffer as *mut c_void)
+        };
+        self.source.capture_frame(&VideoFrame { rotation: turned(rotation), timestamp_us, frame_metadata: None, buffer });
+    }
+}
+
+/// Clockwise degrees as WebRTC names them; anything else is upright.
+fn turned(rotation: u32) -> VideoRotation {
+    match rotation {
+        90 => VideoRotation::VideoRotation90,
+        180 => VideoRotation::VideoRotation180,
+        270 => VideoRotation::VideoRotation270,
+        _ => VideoRotation::VideoRotation0,
+    }
+}
+
 async fn unpublish(call: &Call, sid: &str) -> Result<(), CallError> {
     call.room
         .local_participant()
         .unpublish_track(&TrackSid::try_from(sid.to_string()).map_err(|_| CallError::NoSuchTrack { sid: sid.into() })?)
         .await
         .map(|_| ())
-        .map_err(|e| CallError::Failed { message: e.to_string() })
+        .map_err(|e| CallError::Failed { detail: e.to_string() })
 }
 
 #[uniffi::export]
@@ -314,7 +390,7 @@ impl Call {
                 .local_participant()
                 .publish_track(LocalTrack::Audio(track.clone()), options)
                 .await
-                .map_err(|e| CallError::Publish { message: e.to_string() })?;
+                .map_err(|e| CallError::Publish { detail: e.to_string() })?;
 
             let (feed, mut fed) = mpsc::unbounded_channel::<Vec<i16>>();
             tokio::spawn(async move {
@@ -372,7 +448,7 @@ impl Call {
                 .local_participant()
                 .publish_track(LocalTrack::Video(track.clone()), options)
                 .await
-                .map_err(|e| CallError::Publish { message: e.to_string() })?;
+                .map_err(|e| CallError::Publish { detail: e.to_string() })?;
             let sid = publication.sid().to_string();
             if let VideoKind::Screen { fps, quality } = kind {
                 self.strain.started(sid.clone(), track.clone(), quality, fps);

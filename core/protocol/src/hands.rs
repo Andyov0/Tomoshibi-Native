@@ -147,7 +147,7 @@ pub fn reaction_payload(what: String) -> Result<Vec<u8>, ProtocolError> {
     if REACTIONS.contains(&what.as_str()) {
         Ok(what.into_bytes())
     } else {
-        Err(ProtocolError::Invalid { message: format!("{what:?} is not one of the reactions") })
+        Err(ProtocolError::Invalid { detail: format!("{what:?} is not one of the reactions") })
     }
 }
 

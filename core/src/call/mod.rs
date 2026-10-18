@@ -15,6 +15,8 @@ mod publish;
 mod remote;
 mod strain;
 mod types;
+#[cfg(target_os = "android")]
+mod window;
 
 use std::{
     collections::HashMap,
@@ -36,8 +38,10 @@ use tokio::sync::mpsc::UnboundedReceiver;
 
 pub use lossless::LosslessSink;
 pub use publish::{AudioInput, VideoInput, VideoKind};
-pub use remote::{AudioSink, RemoteFrame, VideoSink};
+pub use remote::{AudioSink, PcmSink, RemoteFrame, VideoSink};
 pub use types::*;
+#[cfg(target_os = "android")]
+pub use window::PictureShape;
 
 use crate::runtime::on_core;
 
@@ -124,7 +128,7 @@ impl Call {
 
         let (room, events) = Room::connect(&options.url, &options.token, room_options)
             .await
-            .map_err(|e| CallError::Connect { message: e.to_string() })?;
+            .map_err(|e| CallError::Connect { detail: e.to_string() })?;
 
         let call = Arc::new(Call {
             room,
@@ -358,7 +362,7 @@ impl Call {
                 .send_chat_message(text, None, None)
                 .await
                 .map(|_| ())
-                .map_err(|e| CallError::Failed { message: e.to_string() })
+                .map_err(|e| CallError::Failed { detail: e.to_string() })
         })
         .await
     }
@@ -384,7 +388,7 @@ impl Call {
                 .local_participant()
                 .publish_data(packet)
                 .await
-                .map_err(|e| CallError::Failed { message: e.to_string() })
+                .map_err(|e| CallError::Failed { detail: e.to_string() })
         })
         .await
     }
@@ -400,7 +404,7 @@ impl Call {
                 .local_participant()
                 .set_attributes(merged)
                 .await
-                .map_err(|e| CallError::Failed { message: e.to_string() })
+                .map_err(|e| CallError::Failed { detail: e.to_string() })
         })
         .await
     }
@@ -500,12 +504,18 @@ impl Call {
     pub fn attach_audio(&self, sid: String, sink: Arc<dyn AudioSink>) {
         let _core = crate::runtime::enter();
         let publication = self.publication(&sid);
-        let channels = match publication.as_ref().map(|p| (p.source(), p.name())) {
-            Some((TrackSource::ScreenshareAudio, _)) | Some((TrackSource::Unknown, _)) => 2,
-            _ => 1,
-        };
+        let channels = sound_channels(publication.as_ref());
         let track = publication.and_then(|p| p.track());
         self.sinks.attach_audio(&sid, sink, track, channels);
+    }
+
+    /// `attach_audio` with the samples as bytes (`PcmSink`).
+    pub fn attach_pcm(&self, sid: String, sink: Arc<dyn PcmSink>) {
+        let _core = crate::runtime::enter();
+        let publication = self.publication(&sid);
+        let channels = sound_channels(publication.as_ref());
+        let track = publication.and_then(|p| p.track());
+        self.sinks.attach_pcm(&sid, sink, track, channels);
     }
 
     pub fn detach(&self, sid: String) {
@@ -564,5 +574,37 @@ fn describe_local_track(publication: &LocalTrackPublication) -> TrackInfo {
         height,
         simulcast: publication.simulcasted(),
         subscribed: false,
+    }
+}
+
+/// A screen's sound and the music are stereo; a voice is mono.
+fn sound_channels(publication: Option<&RemoteTrackPublication>) -> u32 {
+    match publication.map(|p| p.source()) {
+        Some(TrackSource::ScreenshareAudio) | Some(TrackSource::Unknown) => 2,
+        _ => 1,
+    }
+}
+
+#[cfg(target_os = "android")]
+#[uniffi::export]
+impl Call {
+    /// Draws this remote video into `window`, an ANativeWindow pointer from
+    /// `CoreNative.windowFromSurface`, beside any other window it is already
+    /// drawn into. The core takes over the reference and releases it when the
+    /// window is detached or the call ends; `shape` hears the picture's size
+    /// and turn whenever they change.
+    pub fn attach_video_window(&self, sid: String, window: u64, shape: Arc<dyn PictureShape>) {
+        let _core = crate::runtime::enter();
+        if window == 0 {
+            return;
+        }
+        let track = self.publication(&sid).and_then(|p| p.track());
+        self.sinks.attach_window(&sid, window::Window::new(window, shape), track);
+    }
+
+    /// Stops drawing into one window, releasing it.
+    pub fn detach_video_window(&self, sid: String, window: u64) {
+        let _core = crate::runtime::enter();
+        self.sinks.detach_window(&sid, window);
     }
 }

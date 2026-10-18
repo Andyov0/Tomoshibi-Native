@@ -436,7 +436,7 @@ async fn nothing_answering_is_a_network_failure() {
             Some(s("a-token")),
         )
         .await;
-    let Err(ProtocolError::Network { message }) = joined else {
+    let Err(ProtocolError::Network { detail: message }) = joined else {
         panic!("{joined:?}")
     };
     // Said without the address, which carries the invite.

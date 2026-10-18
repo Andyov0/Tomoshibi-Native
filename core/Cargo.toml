@@ -40,6 +40,10 @@ serde_json = "1"
 futures-util = "0.3"
 thiserror = "2"
 
+# The same JNI crate libwebrtc's Android initialisation takes its JavaVM from.
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+
 # Two LiveKit crates carry small changes this project needs, each marked
 # "Tomoshibi:" where it is made. See vendor/README.md.
 [patch.crates-io]

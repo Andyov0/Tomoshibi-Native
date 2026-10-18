@@ -132,7 +132,7 @@ fn a_damaged_packet_decodes_as_it_does_in_the_browser() {
         };
 
         match (unpack(&packet), case["error"].as_str()) {
-            (Err(ProtocolError::Unexpected { message }), Some(expected)) => {
+            (Err(ProtocolError::Unexpected { detail: message }), Some(expected)) => {
                 assert_eq!(message, expected, "{name}");
                 refused += 1;
             }

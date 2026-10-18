@@ -139,12 +139,12 @@ pub struct RelayTiming {
 /// the reserved relays and the addresses are in the answer.
 pub async fn fetch(client: &reqwest::Client, base: &url::Url) -> Result<RelayList, ProtocolError> {
     if base.cannot_be_a_base() {
-        return Err(ProtocolError::Invalid { message: format!("{base} cannot hold a path") });
+        return Err(ProtocolError::Invalid { detail: format!("{base} cannot hold a path") });
     }
 
     let endpoint = base
         .join("/api/relays")
-        .map_err(|fault| ProtocolError::Invalid { message: fault.to_string() })?;
+        .map_err(|fault| ProtocolError::Invalid { detail: fault.to_string() })?;
 
     let response = match client
         .get(endpoint)

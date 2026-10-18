@@ -165,7 +165,7 @@ impl Deployment {
             .read_timeout(Duration::from_secs(110))
             .build()
             .map_err(|fault| ProtocolError::Unexpected {
-                message: format!("the HTTP client would not start: {fault}"),
+                detail: format!("the HTTP client would not start: {fault}"),
             })?;
 
         Ok(Arc::new(Self {
@@ -322,12 +322,12 @@ impl Deployment {
 }
 
 fn invalid(message: String) -> ProtocolError {
-    ProtocolError::Invalid { message }
+    ProtocolError::Invalid { detail: message }
 }
 
 pub(crate) fn unexpected(message: impl Into<String>) -> ProtocolError {
     ProtocolError::Unexpected {
-        message: message.into(),
+        detail: message.into(),
     }
 }
 
@@ -432,7 +432,7 @@ fn network(fault: reqwest::Error) -> ProtocolError {
         cause = inner.source();
     }
 
-    ProtocolError::Network { message }
+    ProtocolError::Network { detail: message }
 }
 
 /// What came back, whole.

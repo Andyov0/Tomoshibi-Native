@@ -145,7 +145,7 @@ fn to_int32(x: f64) -> i32 {
 
 fn invalid(why: impl Into<String>) -> ProtocolError {
     ProtocolError::Invalid {
-        message: why.into(),
+        detail: why.into(),
     }
 }
 
@@ -153,7 +153,7 @@ fn invalid(why: impl Into<String>) -> ProtocolError {
 /// client's `Malformed`, so a log from either end reads the same.
 fn malformed(why: impl std::fmt::Display) -> ProtocolError {
     ProtocolError::Unexpected {
-        message: format!("not a lossless packet: {why}"),
+        detail: format!("not a lossless packet: {why}"),
     }
 }
 

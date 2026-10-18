@@ -104,7 +104,7 @@ impl Deployment {
     ) -> Result<Arrangement, ProtocolError> {
         on_core(async move {
             let at = iso_from_ms(at_ms).ok_or_else(|| ProtocolError::Invalid {
-                message: "that time is out of range".into(),
+                detail: "that time is out of range".into(),
             })?;
             let body = serde_json::to_string(&Arranging {
                 room: &room,

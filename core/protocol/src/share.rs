@@ -226,7 +226,7 @@ pub struct CameraPublish {
 pub fn camera_publish(width: u32, height: u32) -> Result<CameraPublish, crate::ProtocolError> {
     if width == 0 || height == 0 {
         return Err(crate::ProtocolError::Invalid {
-            message: "a camera is published at the size it was captured, and this one has none".into(),
+            detail: "a camera is published at the size it was captured, and this one has none".into(),
         });
     }
 

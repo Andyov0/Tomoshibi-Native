@@ -34,7 +34,7 @@ async fn live() -> Option<Arc<Deployment>> {
     let deployment = Deployment::new(base.clone()).unwrap();
     match deployment.clone().deployment_info().await {
         Ok(_) => Some(deployment),
-        Err(ProtocolError::Network { message }) => {
+        Err(ProtocolError::Network { detail: message }) => {
             eprintln!("skipped: no deployment answering at {base} ({message})");
             None
         }
