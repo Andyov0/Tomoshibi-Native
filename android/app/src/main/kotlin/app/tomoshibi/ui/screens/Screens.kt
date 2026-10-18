@@ -28,7 +28,6 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
@@ -93,6 +92,7 @@ import app.tomoshibi.ui.kit.putsKeyboardAway
 import app.tomoshibi.ui.kit.rememberPopovers
 import app.tomoshibi.ui.kit.rememberPress
 import app.tomoshibi.ui.kit.rounded
+import app.tomoshibi.ui.lobby.AtTheFoot
 import app.tomoshibi.ui.lobby.CameraStage
 import app.tomoshibi.ui.lobby.DeviceSwitches
 import app.tomoshibi.ui.lobby.Mark
@@ -184,15 +184,7 @@ internal fun PaneScreen(app: AppModel, content: @Composable ColumnScope.(wide: B
                 }
             } else {
                 CameraStage(app, Modifier.fillMaxSize().glassSource())
-                val room = maxHeight
-                Column(
-                    Modifier
-                        .fillMaxSize()
-                        .putsKeyboardAway()
-                        .windowInsetsPadding(WindowInsets.safeDrawing)
-                        .verticalScroll(rememberScrollState()),
-                ) {
-                    Column(Modifier.fillMaxWidth().heightIn(min = room), verticalArrangement = Arrangement.Bottom) {
+                AtTheFoot(Modifier.putsKeyboardAway()) {
                         Box(Modifier.padding(10.dp).fillMaxWidth().rise().glassPane(34.dp)) {
                             ContentLayer {
                                 Column(
@@ -202,7 +194,6 @@ internal fun PaneScreen(app: AppModel, content: @Composable ColumnScope.(wide: B
                                 ) { content(false) }
                             }
                         }
-                    }
                 }
             }
         }

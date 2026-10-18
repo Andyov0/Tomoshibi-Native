@@ -29,7 +29,12 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -277,6 +282,24 @@ fun DialogHost(
                     ) { content() }
                 }
             }
+        }
+    }
+}
+
+/**
+ * What sits at the foot of the screen, inside the bars, the cutout and the
+ * keyboard, and scrolls where it is taller than the room left there: the
+ * phone's join pane and start sheet (Screens.swift `PaneScreen`). Measured
+ * inside the insets: measured against the whole screen, the pane was as tall
+ * as the screen with the bars still to come off it, and its last button sat
+ * under the navigation bar until it was scrolled.
+ */
+@Composable
+fun AtTheFoot(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
+    BoxWithConstraints(modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+        val room = maxHeight
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            Column(Modifier.fillMaxWidth().heightIn(min = room), verticalArrangement = Arrangement.Bottom, content = content)
         }
     }
 }

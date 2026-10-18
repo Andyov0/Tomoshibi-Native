@@ -96,15 +96,16 @@ import uniffi.tomoshibi_protocol.validRoomName
  * do on Apple (Lobby.swift `LobbyDebug`): the launch's `lobby` (`scheduled`,
  * `servers`, `start`, `join`, `again` or `settings`), `room` (typed into the
  * start and join sheet's field) and `popover` extras. Set by MainActivity from
- * a debug launch only.
+ * a debug launch only; the part of the lobby is opened by the first lobby
+ * drawn and then forgotten (LobbyState).
  */
 object LobbyDebug {
     var open: String? = null
     var room: String? = null
     var popover: String? = null
 
-    val sheet: MeetingMode?
-        get() = when (open) {
+    fun sheet(open: String?): MeetingMode? =
+        when (open) {
             "start" -> MeetingMode.Start
             "join" -> MeetingMode.Join("")
             "again" -> MeetingMode.Again(room ?: "")

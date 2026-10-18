@@ -122,15 +122,20 @@ enum class Place { Home, Scheduled, Servers }
  */
 @Stable
 class LobbyState(sealingWord: String) {
+    // A debug launch's part of the lobby opens the first lobby only: read
+    // again by the lobby a call came back to, it opened the start sheet over
+    // it once more after the test had left the call.
+    private val opened = LobbyDebug.open.also { LobbyDebug.open = null }
+
     var place by mutableStateOf(
-        when (LobbyDebug.open) {
+        when (opened) {
             "scheduled" -> Place.Scheduled
             "servers" -> Place.Servers
             else -> Place.Home
         },
     )
-    var sheet by mutableStateOf(LobbyDebug.sheet?.let { MeetingDraft(it, sealingWord) })
-    var settings by mutableStateOf(LobbyDebug.open == "settings")
+    var sheet by mutableStateOf(LobbyDebug.sheet(opened)?.let { MeetingDraft(it, sealingWord) })
+    var settings by mutableStateOf(opened == "settings")
     var typed by mutableStateOf("")
     val schedule = ScheduleDraft()
     val popovers = Popovers()
