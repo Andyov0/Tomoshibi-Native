@@ -42,6 +42,30 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- tomoshibi://<deployment>/?invite=T#/room and its kin
+                 (AppModel.open, OpenedLink). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="tomoshibi" />
+            </intent-filter>
+            <!-- The deployment's own invitation and meeting links, which are
+                 all at its root (`/?invite=T#/room`, `/?meeting=T#/room`);
+                 the query and the room are not matched by an intent filter,
+                 so nothing more precise than the root can be said here.
+                 Opened without asking only once the deployment serves
+                 /.well-known/assetlinks.json naming this package and its
+                 signing key; until then Android offers the app beside the
+                 browser. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" />
+                <data android:host="meet.example.com" />
+                <data android:path="/" />
+            </intent-filter>
         </activity>
 
         <service
