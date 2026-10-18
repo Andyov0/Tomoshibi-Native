@@ -51,7 +51,7 @@ struct DevicesPanel: View {
             }
         }
         .padding(16)
-        .glassPane(cornerRadius: 22)
+        .glassShell(cornerRadius: 22)
         .animation(Theme.settle, value: lists.microphones)
         .animation(Theme.settle, value: lists.speakers)
         .animation(Theme.settle, value: lists.cameras)

@@ -1,3 +1,4 @@
+import os
 import SwiftUI
 import TomoshibiBasics
 
@@ -22,17 +23,114 @@ enum GlassSupport {
         #endif
     }()
 
+    /// TOMOSHIBI_ALL_GLASS, in a debug build, draws glass in the content
+    /// layer too, as the apps did before it, to set the two side by side.
+    static let everywhere: Bool = {
+        #if DEBUG
+        ProcessInfo.processInfo.environment["TOMOSHIBI_ALL_GLASS"] != nil
+        #else
+        false
+        #endif
+    }()
+
     static var available: Bool {
         if #available(macOS 26.0, iOS 26.0, *) { return !forcedFallback }
         return false
     }
 }
 
+// Glass for the controls and navigation, not for what they are over.
+//
+// Apple's guidance (Human Interface Guidelines, Materials): "Liquid Glass
+// forms a distinct functional layer for controls and navigation elements
+// ... that floats above the content layer", "Don't use Liquid Glass in the
+// content layer ... use standard materials for elements in the content
+// layer", and "Use Liquid Glass effects sparingly"; and SwiftUI's "Applying
+// Liquid Glass to custom views": "Creating too many Liquid Glass effect
+// containers and applying too many effects to views outside of containers
+// can degrade performance. Limit the use of Liquid Glass effects onscreen at
+// the same time." The apps had glass everywhere: every card of the lobby and
+// the settings, every button and field on those cards (glass on glass), and
+// the name on every picture of a call, each one worked out again from the
+// moving video under it on every frame. The owner found too much of it, and
+// a phone in a call hot (2026-10-17).
+//
+// So a part of the screen is marked as content (`contentLayer()`), and every
+// surface drawn inside it, the cards, buttons, fields and switches that all
+// come through `glassSurface`, is drawn as a plain surface instead: a light
+// translucent fill and a hairline, with no glass, no blur and no shadow. What
+// is left as glass is what floats over the content: the call's bar and the
+// row above it, the sidebars, the window's own controls, and the shell of a
+// panel or sheet over a call (whose insides are content again).
+private struct ContentLayerKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
+extension EnvironmentValues {
+    var inContentLayer: Bool {
+        get { self[ContentLayerKey.self] }
+        set { self[ContentLayerKey.self] = newValue }
+    }
+}
+
+/// A content-layer surface: what `glassSurface` draws inside `contentLayer()`.
+private struct PlainSurface<S: Shape>: ViewModifier {
+    let shape: S
+    let tint: Color?
+
+    func body(content: Content) -> some View {
+        content
+            .background(shape.fill(tint ?? Color.white.opacity(0.07)))
+            .overlay(shape.stroke(Color.white.opacity(tint == nil ? 0.09 : 0), lineWidth: 1))
+    }
+}
+
+/// `glassSurface`, deciding by the layer it is drawn in.
+private struct LayeredSurface<S: Shape>: ViewModifier {
+    let shape: S
+    let tint: Color?
+    let interactive: Bool
+    @Environment(\.inContentLayer) private var inContent
+
+    func body(content: Content) -> some View {
+        if inContent && !GlassSupport.everywhere {
+            content.modifier(PlainSurface(shape: shape, tint: tint))
+        } else {
+            content.liquidGlass(shape, tint: tint, interactive: interactive)
+        }
+    }
+}
+
 extension View {
+    /// Marks this part of the screen as content: surfaces inside it are plain.
+    func contentLayer() -> some View {
+        environment(\.inContentLayer, true)
+    }
+
+    /// A control floating over content inside a content layer (a button over
+    /// a picture), which is glass again.
+    func controlLayer() -> some View {
+        environment(\.inContentLayer, false)
+    }
+
     /// Glass in `shape`, tinted where it says something (the primary action,
-    /// leaving), interactive where it is pressed.
-    @ViewBuilder
+    /// leaving), interactive where it is pressed; a plain surface instead
+    /// inside `contentLayer()`.
     func glassSurface<S: Shape>(_ shape: S, tint: Color? = nil, interactive: Bool = false) -> some View {
+        modifier(LayeredSurface(shape: shape, tint: tint, interactive: interactive))
+    }
+
+    @ViewBuilder
+    fileprivate func liquidGlass<S: Shape>(_ shape: S, tint: Color?, interactive: Bool) -> some View {
+        #if DEBUG
+        liquidGlassDrawn(shape, tint: tint, interactive: interactive).modifier(GlassCount())
+        #else
+        liquidGlassDrawn(shape, tint: tint, interactive: interactive)
+        #endif
+    }
+
+    @ViewBuilder
+    fileprivate func liquidGlassDrawn<S: Shape>(_ shape: S, tint: Color?, interactive: Bool) -> some View {
         if #available(macOS 26.0, iOS 26.0, *), !GlassSupport.forcedFallback {
             // A tint alone is barely there on macOS 27's glass, and dark text
             // on it could not be read: the primary button looked grey. Where
@@ -68,18 +166,68 @@ extension View {
     /// the same tap with the glass turned off did. The Mac's glass lets them
     /// through. Behind the content, the glass is the same glass and touches
     /// go to what is drawn over it.
-    @ViewBuilder
     func glassBacking<S: Shape>(_ shape: S) -> some View {
-        if #available(macOS 26.0, iOS 26.0, *), !GlassSupport.forcedFallback {
-            background { Color.clear.glassEffect(Glass.regular, in: shape) }
-        } else {
-            glassSurface(shape)
-        }
+        modifier(GlassBacking(shape: shape))
     }
 
     /// A larger pane of glass: a sidebar, a sheet, a panel beside a call.
     func glassPane(cornerRadius: CGFloat = 22) -> some View {
         glassSurface(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+
+    /// A panel, sheet or menu floating over the content: glass itself, and
+    /// content inside, so that nothing in it is glass on glass ("avoid ...
+    /// layering Liquid Glass elements on top of each other", Adopting Liquid
+    /// Glass). Glass wherever it is put, even inside a content layer.
+    func glassShell(cornerRadius: CGFloat = 22) -> some View {
+        contentLayer()
+            .glassPane(cornerRadius: cornerRadius)
+            .controlLayer()
+    }
+}
+
+#if DEBUG
+/// TOMOSHIBI_DEBUG_GLASS_COUNT: how many pieces of glass are on the screen,
+/// logged under the app's `glass` category whenever it settles, to count what
+/// the content layer took away.
+private struct GlassCount: ViewModifier {
+    @MainActor static var live = 0
+    @MainActor static var pending: Task<Void, Never>?
+    static let on = ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_GLASS_COUNT"] != nil
+
+    func body(content: Content) -> some View {
+        if Self.on {
+            content
+                .onAppear { Self.live += 1; Self.report() }
+                .onDisappear { Self.live -= 1; Self.report() }
+        } else {
+            content
+        }
+    }
+
+    @MainActor static func report() {
+        pending?.cancel()
+        pending = Task {
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            Logger(subsystem: "app.tomoshibi", category: "glass").notice("GLASS live \(live, privacy: .public)")
+        }
+    }
+}
+#endif
+
+private struct GlassBacking<S: Shape>: ViewModifier {
+    let shape: S
+    @Environment(\.inContentLayer) private var inContent
+
+    func body(content: Content) -> some View {
+        if inContent && !GlassSupport.everywhere {
+            content.modifier(PlainSurface(shape: shape, tint: nil))
+        } else if #available(macOS 26.0, iOS 26.0, *), !GlassSupport.forcedFallback {
+            content.background { Color.clear.glassEffect(Glass.regular, in: shape) }
+        } else {
+            content.liquidGlass(shape, tint: nil, interactive: false)
+        }
     }
 }
 
@@ -111,6 +259,7 @@ struct GlassButtonStyle: ButtonStyle {
     var prominent = false
     var destructive = false
     @Environment(\.isEnabled) private var enabled
+    @Environment(\.inContentLayer) private var inContent
 
     func makeBody(configuration: Configuration) -> some View {
         let tint: Color? = destructive ? Theme.danger : prominent ? Theme.tally : nil
@@ -133,7 +282,10 @@ struct GlassButtonStyle: ButtonStyle {
         }
         .foregroundStyle(ink)
         .font(.system(size: 13.5, weight: .semibold))
-        .scaleEffect(configuration.isPressed && !GlassSupport.available ? 0.96 : 1)
+        // Glass answers a press itself; a plain surface (no glass, or the
+        // content layer) is pressed down a little instead.
+        .scaleEffect(configuration.isPressed && (!GlassSupport.available || inContent) ? 0.96 : 1)
+        .brightness(configuration.isPressed && inContent ? 0.06 : 0)
         .opacity(enabled ? 1 : 0.45)
         .animation(Theme.settle, value: configuration.isPressed)
         .animation(Theme.settle, value: enabled)

@@ -210,7 +210,13 @@ private struct NameLabel: View {
         }
         .padding(.horizontal, compact ? 5 : 7)
         .padding(.vertical, compact ? 2 : 3.5)
-        .glassSurface(Capsule())
+        // Over the picture, a dimming rather than glass: one piece of glass
+        // on every tile was worked out again from the moving video beneath it
+        // on every frame, which is what Apple's guidance says to limit, and a
+        // name on a picture is content. The dark fill is what the guidance
+        // gives for legibility over rich content.
+        .background(Capsule().fill(Color.black.opacity(0.5)))
+        .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 0.5))
         .animation(Theme.settle, value: marks)
     }
 }
@@ -327,7 +333,7 @@ struct ShareCardFace: View {
                     .font(.system(size: compact ? 15 : 22, weight: .medium))
                     .foregroundStyle(Theme.foreground.opacity(0.9))
                     .frame(width: compact ? 30 : 48, height: compact ? 30 : 48)
-                    .glassSurface(Circle())
+                    .background(Circle().fill(Color.white.opacity(0.08)))
                 Text(t("{name} is sharing", ["name": name]))
                     .font(.system(size: compact ? 11 : 13.5, weight: .semibold))
                     .foregroundStyle(Theme.foreground)

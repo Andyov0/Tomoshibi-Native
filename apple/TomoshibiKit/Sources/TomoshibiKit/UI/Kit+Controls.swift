@@ -54,7 +54,7 @@ struct ControlPopover<Panel: View>: ViewModifier {
             let anchor: UnitPoint = edge == .top ? (place == .end ? .bottomTrailing : .bottom) : (place == .end ? .bottomTrailing : .trailing)
             panel()
                 .frame(width: width)
-                .glassPane(cornerRadius: 18)
+                .glassShell(cornerRadius: 18)
                 .fixedSize(horizontal: false, vertical: true)
                 // Clear of the bar's own edge as well as the control's: the
                 // bar's padding is seven points.

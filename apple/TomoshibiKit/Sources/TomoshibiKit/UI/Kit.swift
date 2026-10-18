@@ -56,7 +56,7 @@ struct GlassPopover<Panel: View>: ViewModifier {
             if popovers.open == id {
                 panel()
                     .frame(width: width)
-                    .glassPane(cornerRadius: 18)
+                    .glassShell(cornerRadius: 18)
                     .fixedSize(horizontal: false, vertical: true)
                     .alignmentGuide(edge == .top ? VerticalAlignment.top : VerticalAlignment.bottom) { d in
                         edge == .top ? d[.bottom] + 12 : d[.top] - 12

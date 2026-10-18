@@ -256,7 +256,7 @@ extension View {
     /// content keeps the glass's edge and light and gives the words a ground.
     func mediaPanelGlass(cornerRadius: CGFloat = 22) -> some View {
         background(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(Theme.background.opacity(0.68)))
-            .glassPane(cornerRadius: cornerRadius)
+            .glassShell(cornerRadius: cornerRadius)
     }
 }
 

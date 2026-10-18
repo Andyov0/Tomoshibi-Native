@@ -276,6 +276,7 @@ public struct SettingsView: View {
                 ScrollViewReader { reader in
                     ScrollView {
                         page(section)
+                            .contentLayer()
                             .frame(maxWidth: 620, alignment: .leading)
                             .padding(.horizontal, 28)
                             .padding(.top, 44)
@@ -457,6 +458,7 @@ public struct SettingsView: View {
             .padding(.bottom, 30)
         }
         .scrollIndicators(.never)
+        .contentLayer()
     }
 
     private var chevron: some View {
@@ -489,6 +491,7 @@ public struct SettingsView: View {
                 .padding(.top, 22)
                 .padding(.bottom, 18)
                 page(one)
+                    .contentLayer()
                 Color.clear.frame(height: 1).id("end")
             }
             // Held to the screen's width whatever a row inside would like,

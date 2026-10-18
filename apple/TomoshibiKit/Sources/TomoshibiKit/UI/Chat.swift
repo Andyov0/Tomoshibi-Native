@@ -40,7 +40,7 @@ struct ChatPanel: View {
                 .padding(.top, 4)
                 .padding(.bottom, 10)
         }
-        .glassPane(cornerRadius: 22)
+        .glassShell(cornerRadius: 22)
         .animation(Theme.settle, value: model.messages.isEmpty)
     }
 

@@ -117,6 +117,7 @@ private struct CardScreen<Content: View>: View {
             Backdrop()
             ScrollView {
                 VStack(spacing: 18) { content }
+                    .contentLayer()
                     .padding(22)
                     .frame(maxWidth: width)
                     .glassPane(cornerRadius: 30)
@@ -149,6 +150,7 @@ private struct PaneScreen<Content: View>: View {
                     VStack(spacing: 0) {
                         Spacer(minLength: 0)
                         VStack(spacing: 16) { content }
+                            .contentLayer()
                             .padding(18)
                             .glassPane(cornerRadius: 34)
                             .padding(10)

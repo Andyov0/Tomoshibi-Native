@@ -597,6 +597,7 @@ struct MacLobby: View {
             // is in it is one view changing, and the transition below never
             // played, so a section arrived as a cut.
             .id(section ?? .home)
+            .contentLayer()
             .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 10)).animation(Theme.settle),
                                     removal: .opacity.animation(Theme.leave)))
             .animation(Theme.settle, value: section)
@@ -918,6 +919,9 @@ struct PhoneLobby: View {
             }
             .scrollIndicators(.never)
             .putsKeyboardAway()
+            // The page is content; the join bar below floats over it as a
+            // toolbar does, and stays glass.
+            .contentLayer()
             .background(Color.black.ignoresSafeArea())
             .navigationTitle("Tomoshibi")
             .toolbar {
@@ -1080,6 +1084,7 @@ struct MeetingSheet: View {
             }
             .padding(20)
             .frame(width: 560)
+            .contentLayer()
             .background(Backdrop().opacity(0.55))
             #else
             ZStack(alignment: .bottom) {
@@ -1091,7 +1096,7 @@ struct MeetingSheet: View {
                     footer
                 }
                 .padding(18)
-                .glassPane(cornerRadius: 34)
+                .glassShell(cornerRadius: 34)
                 .padding(10)
             }
             .putsKeyboardAway()
@@ -1619,6 +1624,7 @@ struct ScheduleView: View {
             #endif
         }
         .scrollIndicators(.never)
+        .contentLayer()
         #if os(iOS)
         .background(Backdrop().opacity(0.6).ignoresSafeArea())
         .putsKeyboardAway()
