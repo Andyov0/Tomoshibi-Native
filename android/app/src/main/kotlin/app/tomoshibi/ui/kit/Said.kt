@@ -37,61 +37,13 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.unit.dp
+import app.tomoshibi.basics.Linked
 import app.tomoshibi.basics.Theme
-import java.util.regex.Pattern
-
-/**
- * Text with its addresses found, so that a message can be drawn with them
- * pressable (components/room/Linked.tsx; Linked.swift).
- *
- * The commonest thing anybody types during a call is an address. The rules
- * are the web's, so that one message is linked the same way in a browser and
- * here: only a complete address, over http or https (guessing at bare hosts
- * turns "e.g. see chapter 3" into a link nobody meant, and a false link is
- * worse than a missed one), with trailing punctuation left out, because a
- * sentence that ends in an address has a full stop after it.
- */
-object Linked {
-    sealed interface Piece {
-        data class Words(val text: String) : Piece
-        data class Link(val href: String) : Piece
-    }
-
-    /**
-     * The web's `URLS`, `/\bhttps?:\/\/[^\s<>()[\]{}]+[^\s<>()[\]{}.,;:!?'"]/gi`,
-     * with its `\b` written out: in JavaScript without the `u` flag a word
-     * character is ASCII, so an address straight after Chinese or Japanese
-     * text, with no space, is still found. The web's `\s` is every Unicode
-     * space, written out here because Java's is ASCII alone and an address
-     * before an ideographic space would otherwise swallow the words after it.
-     */
-    private const val SPACE = "\\u0009-\\u000D\\u0020\\u0085\\u00A0\\u1680\\u2000-\\u200A\\u2028\\u2029\\u202F\\u205F\\u3000\\uFEFF"
-    private val addresses = Pattern.compile(
-        "(?<![A-Za-z0-9_])https?://[^$SPACE<>()\\[\\]{}]+[^$SPACE<>()\\[\\]{}.,;:!?'\"]",
-        Pattern.CASE_INSENSITIVE,
-    )
-
-    /** `text` cut into its words and its addresses, in order; joined again they are `text` exactly. */
-    fun pieces(text: String): List<Piece> {
-        val pieces = ArrayList<Piece>()
-        val matcher = addresses.matcher(text)
-        var at = 0
-        while (matcher.find()) {
-            if (matcher.start() > at) pieces.add(Piece.Words(text.substring(at, matcher.start())))
-            pieces.add(Piece.Link(matcher.group()))
-            at = matcher.end()
-        }
-        if (at < text.length) pieces.add(Piece.Words(text.substring(at)))
-        return pieces
-    }
-
-    /** The addresses alone. */
-    fun links(text: String): List<String> = pieces(text).mapNotNull { (it as? Piece.Link)?.href }
-}
 
 /**
  * A message with its addresses pressable, in the person's colour and
- * underlined (Chat.swift `LinkedText`); a press opens the address.
+ * underlined (Chat.swift `LinkedText`); a press opens the address. Which
+ * words are an address is basics' [Linked], the web's rule.
  */
 @Composable
 fun LinkedText(
@@ -107,7 +59,7 @@ fun LinkedText(
         buildAnnotatedString {
             for (piece in Linked.pieces(text)) {
                 when (piece) {
-                    is Linked.Piece.Words -> append(piece.text)
+                    is Linked.Piece.Text -> append(piece.text)
                     is Linked.Piece.Link -> withLink(LinkAnnotation.Url(piece.href, style)) { append(piece.href) }
                 }
             }

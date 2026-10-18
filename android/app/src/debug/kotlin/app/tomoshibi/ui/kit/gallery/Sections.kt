@@ -21,9 +21,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableDoubleStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import app.tomoshibi.basics.Theme
 import app.tomoshibi.basics.t
+import app.tomoshibi.model.CallToast
 import app.tomoshibi.ui.kit.AccountAvatar
 import app.tomoshibi.ui.kit.BarAxis
 import app.tomoshibi.ui.kit.BarButton
@@ -107,10 +108,7 @@ import app.tomoshibi.ui.kit.SettingsRow
 import app.tomoshibi.ui.kit.SettingsSection
 import app.tomoshibi.ui.kit.SignalBadge
 import app.tomoshibi.ui.kit.Symbol
-import app.tomoshibi.ui.kit.Toast
-import app.tomoshibi.ui.kit.ToastKind
 import app.tomoshibi.ui.kit.ToastStack
-import app.tomoshibi.ui.kit.Toasts
 import app.tomoshibi.ui.kit.WrappingRow
 import app.tomoshibi.ui.kit.glassPane
 import app.tomoshibi.ui.kit.glassSurface
@@ -590,30 +588,26 @@ private fun MediaPage() = Page {
 
 @Composable
 private fun ToastsPage(options: GalleryOptions) {
-    val scope = rememberCoroutineScope()
-    val piled = remember { Toasts(scope) }
-    val spread = remember { Toasts(scope) }
-    LaunchedEffect(Unit) {
-        fun fill(toasts: Toasts) {
-            toasts.announce(Toast(t("{name} joined", mapOf("name" to "Mei Lin")), lasts = null, closable = false))
-            toasts.announce(Toast(t("That could not be done. Try again."), kind = ToastKind.Failure, lasts = null, actionTitle = t("Try again")))
-            toasts.announce(
-                Toast(t("{name} left", mapOf("name" to "Andy")), detail = t("Leave this call to open that link."),
-                    kind = ToastKind.Signal, lasts = null),
-            )
-        }
-        fill(piled)
-        fill(spread)
+    // Notices as a call keeps them, in a list of the page's own: the gallery
+    // has no call, and the corner only draws what it is handed.
+    val said = remember {
+        mutableStateListOf(
+            CallToast(t("{name} joined", mapOf("name" to "Mei Lin")), lasts = null, closable = false),
+            CallToast(t("That could not be done. Try again."), kind = CallToast.Kind.Failure, lasts = null, actionTitle = t("Try again")),
+            CallToast(t("{name} left", mapOf("name" to "Andy")), detail = t("Leave this call to open that link."),
+                kind = CallToast.Kind.Signal, lasts = null),
+        )
     }
+    val gone: (Long) -> Unit = { id -> said.removeAll { it.id == id } }
     Page {
         Demo("Piled: the newest in front, two peeking above it") {
             Box(Modifier.fillMaxWidth().height(110.dp), contentAlignment = Alignment.BottomEnd) {
-                ToastStack(piled, spread = options.spreadToasts)
+                ToastStack(said, act = gone, dismiss = gone, hold = {}, spread = options.spreadToasts)
             }
         }
         Demo("Spread, as a tap on the corner spreads it") {
             Box(Modifier.fillMaxWidth().height(260.dp), contentAlignment = Alignment.BottomEnd) {
-                ToastStack(spread, spread = true)
+                ToastStack(said, act = gone, dismiss = gone, hold = {}, spread = true)
             }
         }
     }

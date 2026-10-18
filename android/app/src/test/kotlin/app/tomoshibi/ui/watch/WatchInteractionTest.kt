@@ -36,6 +36,7 @@ import app.tomoshibi.ui.music.MusicPanelContent
 import kotlinx.coroutines.Dispatchers
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import app.tomoshibi.model.host.standInRules
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -60,6 +61,7 @@ class WatchInteractionTest {
 
     @Before
     fun setUp() {
+        standInRules()
         Localization.install(ApplicationProvider.getApplicationContext<Context>()).choose(Language.En)
     }
 

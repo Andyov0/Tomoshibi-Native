@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.tomoshibi.BuildConfig
+import app.tomoshibi.basics.NoticeTimes
 import app.tomoshibi.basics.t
 import app.tomoshibi.media.CallMedia
 import java.net.URI
@@ -236,6 +237,16 @@ class AppModel(
      * owner's next call starting that way.
      */
     val deviceMemory = DeviceMemory(if (rehearsal) null else this.defaults)
+
+    /**
+     * The choices a call reads that have no model of their own (the watch
+     * ceiling, the music's quality and ducking, the devices last picked):
+     * one for the app, as on Apple, so that the settings and a call read and
+     * write the same values rather than copies that disagree.
+     */
+    val preferences: CallPreferences by lazy {
+        CallPreferences(keeps = !rehearsal, defaults = this.defaults, deviceDefaults = deviceMemory.defaults)
+    }
 
     private var startWithMicrophoneState by mutableStateOf(deviceMemory.joining.microphone)
     private var startWithCameraState by mutableStateOf(deviceMemory.joining.camera)

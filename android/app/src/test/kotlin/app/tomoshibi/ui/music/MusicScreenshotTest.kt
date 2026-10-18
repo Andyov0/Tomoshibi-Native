@@ -32,6 +32,7 @@ import app.tomoshibi.ui.kit.glassSource
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.Dispatchers
+import app.tomoshibi.model.host.standInRules
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -77,6 +78,7 @@ class MusicScreenshotTest(private val language: Language, private val width: Int
 
     @Before
     fun setUp() {
+        standInRules()
         RuntimeEnvironment.setQualifiers("w${width}dp-h900dp-hdpi")
         val context = ApplicationProvider.getApplicationContext<Context>()
         Localization.install(context).choose(language)

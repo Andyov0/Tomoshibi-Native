@@ -52,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import app.tomoshibi.basics.Theme
 import app.tomoshibi.basics.t
+import app.tomoshibi.feature.music.SongDesk
 import app.tomoshibi.feature.watch.ExoBackend
 import app.tomoshibi.feature.watch.WatchEngine
 import app.tomoshibi.feature.watch.WatchInfo
@@ -82,19 +83,26 @@ import uniffi.tomoshibi_protocol.WatchVideo
  * (WatchFeature.swift `onStage`): the web lists the watched video as a
  * picture whenever a show is believed, with or without a video in it
  * (surface.ts `surfaces`), and its tile says nothing is playing until there
- * is. Reading it makes the call's show, which then follows the room.
+ * is.
+ *
+ * The room asks this from the first time it draws, before any panel is
+ * opened, which is when the Swift room makes both features
+ * (RoomView.swift's initialiser makes WatchFeature and MusicFeature): so
+ * this makes the call's show and its song desk, each of which then follows
+ * the room and puts what it offers the bar in the call's parts. Made later,
+ * the desk would turn nobody's music down under speech until somebody
+ * opened its panel.
  */
-fun watchShowing(call: CallModel): Boolean = WatchEngine.of(call).onStage
+fun watchShowing(call: CallModel): Boolean {
+    SongDesk.of(call)
+    return WatchEngine.of(call).onStage
+}
 
-/**
- * Whether the control bar offers the watch button (Room.tsx ~295): to whoever
- * can start a show, and to everybody once there is one, to see what is on and
- * add to it. Never in a sealed call, where watching together is not offered.
- */
-fun watchOffered(call: CallModel): Boolean = WatchEngine.of(call).let { !it.sealed && (it.ready || it.onStage) }
+/** Whether the control bar offers the watch button; see [WatchEngine.offer]. */
+fun watchOffered(call: CallModel): Boolean = WatchEngine.of(call).offer.offered
 
 /** Whether the show is playing, for the dot on the button while the panel is closed. */
-fun watchPlaying(call: CallModel): Boolean = WatchEngine.of(call).show?.playing == true
+fun watchPlaying(call: CallModel): Boolean = WatchEngine.of(call).offer.playing
 
 /**
  * The video everybody is watching, drawn on the stage (WatchStageView.swift;

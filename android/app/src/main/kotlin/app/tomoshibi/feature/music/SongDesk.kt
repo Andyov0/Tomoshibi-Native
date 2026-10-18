@@ -15,6 +15,7 @@ import app.tomoshibi.model.Rehearsal
 import app.tomoshibi.model.Sound
 import app.tomoshibi.model.host.Hearing
 import app.tomoshibi.model.quietly
+import app.tomoshibi.ui.room.BarOffer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
@@ -346,6 +347,21 @@ class SongDesk internal constructor(
 
     /** Music arriving from somebody whose desk is not heard here, which still has a volume (MusicPanel.tsx `player`). */
     val player: Person? get() = if (state == null) call.people.firstOrNull { it.musicTrack != null } else null
+
+    /**
+     * What the control bar offers (MusicFeature.swift `available`,
+     * `playing`; Room.tsx ~280): the panel to somebody who can reach the
+     * library, before there is any music; to everybody once there is a desk
+     * or music to turn down or ask for; and while the panel is open, so the
+     * button that opened it is there to close it after the music has
+     * stopped. A sealed call is no exception: the desk there plays for its
+     * holder alone, and everybody else gets a volume for the music.
+     */
+    val offer: BarOffer = object : BarOffer {
+        override val offered: Boolean
+            get() = libraries != null || state != null || playingHere || panelOpen || call.people.any { it.musicTrack != null }
+        override val playing: Boolean get() = state?.now != null || playingHere || player != null
+    }
 
     private fun end() {
         over = true
@@ -789,9 +805,12 @@ class SongDesk internal constructor(
          */
         const val LOSSLESS_KEY = "meet-live.lossless"
 
-        /** The call's desk, made the first time anybody asks for it. */
+        /** The call's desk, made the first time anybody asks for it, with what it offers the control bar beside it (BarOffer.MUSIC). */
         fun of(call: CallModel): SongDesk =
-            call.parts[PART] as? SongDesk ?: SongDesk(call, CoreDeskMachinery).also { call.parts[PART] = it }
+            call.parts[PART] as? SongDesk ?: SongDesk(call, CoreDeskMachinery).also { desk ->
+                call.parts[PART] = desk
+                call.parts[BarOffer.MUSIC] = desk.offer
+            }
 
         /**
          * The song desk's music, in either form (sound.ts `isMusic`,

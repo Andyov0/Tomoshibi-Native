@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.tomoshibi.model.CallModel
 import app.tomoshibi.model.quietly
+import app.tomoshibi.ui.room.BarOffer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
@@ -183,6 +184,18 @@ class WatchEngine internal constructor(
     /** The application's context, from the first of the feature's views on screen; see [CoreWatchMachinery]. */
     fun lend(context: Context) {
         (machinery as? CoreWatchMachinery)?.let { if (it.context == null) it.context = context.applicationContext }
+    }
+
+    /**
+     * What the control bar offers (WatchFeature.swift `offered`, `playing`;
+     * Room.tsx ~295): the button to whoever can start a show, and to
+     * everybody once there is one, to see what is on and add to it; never in
+     * a sealed call; and a dot on it while the show plays. Read from Compose
+     * state, so the bar redraws as these change.
+     */
+    val offer: BarOffer = object : BarOffer {
+        override val offered: Boolean get() = !sealed && (ready || onStage)
+        override val playing: Boolean get() = show?.playing == true
     }
 
     // MARK: The call
@@ -572,8 +585,14 @@ class WatchEngine internal constructor(
         /** The longest link a show reads, in UTF-16 units, as the web's field allows. */
         const val LINK_LENGTH = 2000
 
-        /** The call's show, made the first time anybody asks for it. */
+        /**
+         * The call's show, made the first time anybody asks for it, with what
+         * it offers the control bar beside it (BarOffer.WATCH).
+         */
         fun of(call: CallModel): WatchEngine =
-            call.parts[PART] as? WatchEngine ?: WatchEngine(call, CoreWatchMachinery()).also { call.parts[PART] = it }
+            call.parts[PART] as? WatchEngine ?: WatchEngine(call, CoreWatchMachinery()).also { engine ->
+                call.parts[PART] = engine
+                call.parts[BarOffer.WATCH] = engine.offer
+            }
     }
 }

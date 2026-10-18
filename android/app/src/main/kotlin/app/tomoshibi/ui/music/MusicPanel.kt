@@ -99,12 +99,10 @@ import uniffi.tomoshibi_protocol.MusicTrack
  * other, and everybody else gets a volume for it. Reading it makes the call's
  * desk, which from then on follows the room and turns music down under speech.
  */
-fun musicAvailable(call: CallModel): Boolean = SongDesk.of(call).let { desk ->
-    desk.libraries != null || desk.state != null || desk.playingHere || desk.panelOpen || call.people.any { it.musicTrack != null }
-}
+fun musicAvailable(call: CallModel): Boolean = SongDesk.of(call).offer.offered
 
 /** Whether music is playing from anybody, for a control that wants to light up (Room.tsx `playing`). */
-fun musicPlaying(call: CallModel): Boolean = SongDesk.of(call).let { desk -> desk.state?.now != null || desk.playingHere || desk.player != null }
+fun musicPlaying(call: CallModel): Boolean = SongDesk.of(call).offer.playing
 
 /**
  * The music panel: the song desk, and the library to choose from

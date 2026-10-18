@@ -13,7 +13,9 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
+import app.tomoshibi.model.host.standInRules
 import org.junit.After
+import org.junit.Before
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -41,6 +43,12 @@ class SongDeskTest {
     private val machinery = TestDeskMachinery()
     private val desk get() = machinery.desk
     private val audio = CallAudio(NoAudioRouting, muted = true)
+
+    /** The sound panel's record files a setting by the identity's signature, which is the core's to read. */
+    @Before
+    fun standIn() {
+        standInRules()
+    }
 
     @After
     fun stopTheMixer() {

@@ -6,6 +6,8 @@ import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.tomoshibi.basics.NoticeClock
+import app.tomoshibi.basics.NoticeTimes
 import app.tomoshibi.basics.t
 import app.tomoshibi.media.AudioDevice
 import app.tomoshibi.media.CallAudio
@@ -233,7 +235,7 @@ class CallModel internal constructor(
     private val toastActions = HashMap<Long, () -> Unit>()
     private val toastClocks = HashMap<Long, NoticeClock>()
     private val toastTimers = HashMap<Long, Job>()
-    /** What a toast's `attachment` names, drawn under its words: a composable, kept as Any so the model needs no UI. */
+    /** What a toast's `attachment` names, drawn under its words: the kit's ToastAttachment, kept as Any so the model needs no UI. */
     val attachments = HashMap<String, Any>()
 
     /** Says [toast]; one with an action calls it when its button is pressed. */

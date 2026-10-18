@@ -4,7 +4,10 @@ import app.tomoshibi.media.CallAudio
 import app.tomoshibi.media.NoAudioRouting
 import app.tomoshibi.media.PictureInPicture
 import app.tomoshibi.media.Sharing
+import app.tomoshibi.feature.music.SongDesk
+import app.tomoshibi.feature.music.TestDeskMachinery
 import app.tomoshibi.model.CallModel
+import app.tomoshibi.ui.room.BarOffer
 import kotlin.coroutines.CoroutineContext
 import uniffi.tomoshibi_core.Call
 import uniffi.tomoshibi_core.LosslessSink
@@ -247,3 +250,15 @@ internal fun video(key: String, ticket: String = "t-$key", by: String = "Ada", d
 
 internal fun show(now: WatchVideo?, queue: List<WatchVideo> = emptyList(), playing: Boolean = true, position: Double = 0.0) =
     WatchShow("g-ada", "Ada", now, queue, playing, position, 1u)
+
+/**
+ * The call's two layered features made still, for a picture or a test of the
+ * room drawn without the core: the room makes the show and the song desk the
+ * first time it draws (watchShowing), and theirs would be the core's theatre
+ * and desk, which a computer's JVM cannot load.
+ */
+internal fun CallModel.withStillFeatures(): CallModel {
+    parts[WatchEngine.PART] = WatchEngine(this, TestMachinery(), live = false).also { parts[BarOffer.WATCH] = it.offer }
+    parts[SongDesk.PART] = SongDesk(this, TestDeskMachinery(), live = false).also { parts[BarOffer.MUSIC] = it.offer }
+    return this
+}

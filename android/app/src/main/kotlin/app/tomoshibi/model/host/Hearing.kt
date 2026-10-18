@@ -9,7 +9,6 @@ import app.tomoshibi.model.HearingFiling
 import app.tomoshibi.model.HearingSetting
 import app.tomoshibi.model.Rehearsal
 import app.tomoshibi.model.Sound
-import uniffi.tomoshibi_protocol.signatureOf
 
 /**
  * The sound panel's record for this app, kept where the web keeps it and
@@ -55,11 +54,7 @@ class Hearing(private val defaults: Defaults?) {
          * call only (hearing.ts `filing`).
          */
         fun filing(identity: String): HearingFiling {
-            val signature = try {
-                signatureOf(identity)
-            } catch (_: Throwable) {
-                null
-            }
+            val signature = CrateRules.signature(identity)
             if (signature != null && signature.proven) return HearingFiling(signature.trip, keeps = true)
             return HearingFiling(identity, keeps = false)
         }
