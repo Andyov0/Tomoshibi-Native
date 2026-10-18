@@ -107,27 +107,41 @@ class Sharing(context: Context? = null) {
     private var store: Defaults? = null
     private var loading = false
 
+    // The menu's choices are snapshot state, so the share menu redraws from
+    // them as it does from everything else here, rather than keeping copies.
+    private var qualityState by mutableStateOf(ShareQuality.AUTO)
+    private var fpsState by mutableIntStateOf(60)
+    private var withSoundState by mutableStateOf(true)
+    private var losslessState by mutableStateOf(true)
+
     /** The size chosen in the menu, kept between calls. */
-    var quality: ShareQuality = ShareQuality.AUTO
+    var quality: ShareQuality
+        get() = qualityState
         set(value) {
-            field = value
+            qualityState = value
             if (!loading) store?.set(QUALITY_KEY, shorterSide(value).toString())
         }
 
     /** The rate chosen in the menu, kept between calls; [rate] is what is sent. */
-    var fps: Int = 60
+    var fps: Int
+        get() = fpsState
         set(value) {
-            field = value
+            fpsState = value
             if (!loading) store?.set(RATE_KEY, value.toString())
         }
 
     /** Whether the shared thing's sound goes too. On by default: a share of a video with no sound is the complaint that started all of this. */
-    var withSound = true
+    var withSound: Boolean
+        get() = withSoundState
+        set(value) {
+            withSoundState = value
+        }
 
     /** Whether sound shared alone goes losslessly as well: on unless turned off. */
-    var lossless = true
+    var lossless: Boolean
+        get() = losslessState
         set(value) {
-            field = value
+            losslessState = value
             if (!loading) store?.set(LOSSLESS_KEY, if (value) null else "off")
         }
 

@@ -30,7 +30,7 @@ private const val TAG = "Tomoshibi"
  * and CallMedia follows it into [sid].
  *
  * On Android the whole activity goes into the small window, so the room view
- * reads [showing] and, while it is true, draws only [sid], full size, through
+ * reads [inSmallWindow] and, while it is true, draws only [sid], full size, through
  * a RemoteVideo like any tile's; the window's size is then the view's, which
  * is what the hub asks the server for. The window itself, its shape and its
  * buttons are [CallWindow]'s.
@@ -45,8 +45,13 @@ class PictureInPicture {
         this.sid = sid
     }
 
-    /** Whether the app is in the small window now, which the room view draws as the stage alone. */
-    val showing: Boolean get() = CallWindow.inPictureInPicture
+    /**
+     * Whether the app is in the small window now, which the room view draws
+     * as the stage alone: snapshot state, followed from the activity's own
+     * picture-in-picture changes (CallWindow), so the room need not ask the
+     * activity.
+     */
+    val inSmallWindow: Boolean get() = CallWindow.inPictureInPicture
 
     /** Whether the small window can be opened here. */
     val available: Boolean get() = CallWindow.supported
