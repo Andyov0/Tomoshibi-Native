@@ -43,6 +43,7 @@ import androidx.compose.material.icons.rounded.CloseFullscreen
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.Code
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.ContentPaste
 import androidx.compose.material.icons.rounded.CoPresent
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Dns
@@ -213,6 +214,8 @@ private val symbols: Map<String, SfSymbol> by lazy {
     "crown" to SfSymbol({ CrownOutline }, 1.500f, 1.140f, 0.120f, 0.090f, 1.270f, 0.950f),
     "crown.fill" to SfSymbol({ Crown }, 1.500f, 1.140f, 0.120f, 0.090f, 1.270f, 0.950f),
     "doc.on.doc" to SfSymbol({ Icons.Rounded.ContentCopy }, 1.240f, 1.410f, 0.120f, 0.090f, 1.010f, 1.220f),
+    // The paste control's, measured as the others; its frame and ink are doc.on.doc's.
+    "doc.on.clipboard" to SfSymbol({ Icons.Rounded.ContentPaste }, 1.240f, 1.410f, 0.120f, 0.090f, 1.010f, 1.220f),
     "door.left.hand.closed" to SfSymbol({ Icons.Rounded.DoorFront }, 0.990f, 1.220f, 0.120f, 0.090f, 0.760f, 1.030f),
     "door.left.hand.open" to SfSymbol({ Icons.Rounded.MeetingRoom }, 0.990f, 1.220f, 0.120f, 0.090f, 0.760f, 1.030f),
     "ellipsis" to SfSymbol({ Icons.Rounded.MoreHoriz }, 1.100f, 0.370f, 0.090f, 0.090f, 0.900f, 0.180f),

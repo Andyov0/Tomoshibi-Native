@@ -73,6 +73,12 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.camera:camera-camera2:1.6.2")
     implementation("androidx.camera:camera-lifecycle:1.6.2")
+    // The picture of yourself before a call: CameraX's own view, which turns,
+    // mirrors and crops the preview the way the camera delivers it.
+    implementation("androidx.camera:camera-view:1.6.2")
+    // Where a foldable's hinge is, so that a sheet or a column of the wide
+    // lobby does not lie across it while the phone is half open.
+    implementation("androidx.window:window:1.5.1")
     // The glass: a real backdrop blur (RenderEffect) on Android 12 and
     // later, a translucent fill of the same tone before it.
     implementation("dev.chrisbanes.haze:haze:2.0.1")
