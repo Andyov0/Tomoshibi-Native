@@ -103,14 +103,21 @@ class Localization private constructor(
 
     val followsSystem: Boolean get() = !chosen
 
+    /**
+     * Whether a choice is written down: a test driving the app shows its
+     * choice while it runs and keeps none, since what it would write over
+     * is the owner's.
+     */
+    var keeps = true
+
     fun choose(language: Language) {
-        preferences?.edit()?.putString(STORAGE_KEY, language.code)?.apply()
+        if (keeps) preferences?.edit()?.putString(STORAGE_KEY, language.code)?.apply()
         chosen = true
         this.language = language
     }
 
     fun followSystem() {
-        preferences?.edit()?.remove(STORAGE_KEY)?.apply()
+        if (keeps) preferences?.edit()?.remove(STORAGE_KEY)?.apply()
         chosen = false
         language = Language.detect(Language.systemPreferences())
     }
@@ -235,3 +242,10 @@ fun t(phrase: String, values: Map<String, Any?>? = null): String = Localization.
 fun say(text: String): String = Localization.shared.say(text)
 
 fun phraseSegments(phrase: String): List<PhraseSegment> = Localization.shared.segments(phrase)
+
+/**
+ * The locale of the language on screen, for formatting dates and numbers in
+ * it: the web sets the document's `lang` as the language changes, and a
+ * time written in English inside a Japanese sentence reads wrongly.
+ */
+fun readingLocale(): Locale = Localization.shared.language.locale
