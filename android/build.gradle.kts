@@ -5,4 +5,6 @@ plugins {
     // the Compose compiler are the same version.
     id("org.jetbrains.kotlin.android") version "2.4.21" apply false
     id("org.jetbrains.kotlin.plugin.compose") version "2.4.21" apply false
+    // JVM screenshots of the UI kit, drawn by Robolectric's native graphics.
+    id("io.github.takahirom.roborazzi") version "1.76.0" apply false
 }
