@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The shared rules, held to the cases the other platforms hold their ports
+    to (Android's src/test/.../basics, Apple's TomoshibiBasicsTests), case
+    for case, so that a room is laid out the same on all three:
+
+        dotnet test windows\Tomoshibi.Tests
+
+    No Windows App SDK and no core: these run wherever .NET does.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Tomoshibi.Basics\Tomoshibi.Basics.csproj" />
+  </ItemGroup>
+</Project>
