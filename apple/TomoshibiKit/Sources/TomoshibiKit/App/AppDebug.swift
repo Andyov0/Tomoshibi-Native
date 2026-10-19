@@ -275,6 +275,8 @@ enum AppDebug {
             "relayChoice=\(app.relayChoice ?? "auto")",
             "lastJoinRelay=\(app.lastJoinRelay.map { $0.isEmpty ? "\"\"" : $0 } ?? "none")",
             "joinsAnswered=\(app.joinsAnswered)",
+            "arrivedByLink=\(app.arrivedByLink)",
+            "pickerAtTheDoor=\(app.offersRelayChoiceAtTheDoor)",
             "moving=\(app.movingTo ?? "no")",
             "problem=\(app.problem ?? "none")",
             "switchingMicrophone=\(app.switchingMicrophone)",

@@ -353,9 +353,13 @@ fun PreJoinScreen(app: AppModel) {
                 linkWindow(app)?.let { Note(it) }
             }
         }
-        // Where the call is held, only for somebody who has not already
-        // chosen it in the lobby, and only where there is a choice.
-        OptionsCard(app, sealing, { sealing = it }, serverId = "prejoin.server", offerServer = app.account == null)
+        // Where the call is held, for somebody who did not come through the
+        // lobby, whose own picker they never saw: an invitation's link,
+        // signed in or not, or nobody signed in at all; and only where there
+        // is a choice (AppModel `offersRelayChoiceAtTheDoor`). It was offered
+        // only to somebody signed out, so a member opening an invitation
+        // could not choose.
+        OptionsCard(app, sealing, { sealing = it }, serverId = "prejoin.server", offerServer = app.offersRelayChoiceAtTheDoor)
         ProblemSlot(app)
         GlassButton(
             ::join,
@@ -665,7 +669,10 @@ fun WaitingScreen(app: AppModel) {
             // it (Waiting.tsx: "Nothing is asked until there is one").
             IdentityBox(app.name, { app.name = it }, app.passphrase, { app.passphrase = it }, nameOnly = true)
         }
-        OptionsCard(app, sealing, { sealing = it }, serverId = "waiting.server", offerServer = false)
+        // A meeting's link is never the lobby's join, so the picker is here
+        // as on the join screen; it had none, and whoever opened one could
+        // not choose where the meeting they were early for would be held.
+        OptionsCard(app, sealing, { sealing = it }, serverId = "waiting.server", offerServer = app.offersRelayChoiceAtTheDoor)
         WaitingState(app, now) {
             if (!sealing) app.sealingWord = ""
             scope.launch { app.goArranged() }

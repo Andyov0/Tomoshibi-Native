@@ -249,6 +249,31 @@ class NavigationScreenshotTest(private val language: Language) {
         shoot("prejoin-invited", app)
     }
 
+    /**
+     * Signed in and come by an invitation's link: the server picker is on
+     * the join screen, as it is for somebody signed out, since neither saw
+     * the lobby's.
+     */
+    @Test
+    fun prejoinInvitedSignedIn() {
+        val app = fakeApp(screen = Screen.Prejoin)
+        app.stage("invitation", invitation(name = null))
+        app.stage("arrivedByLink", true)
+        app.room = "design-review"
+        shoot("prejoin-invited-signed-in", app)
+    }
+
+    /** The picker opened on the join screen: Automatic, the readings, the relay out of service greyed. */
+    @Test
+    fun prejoinServers() {
+        LobbyDebug.popover = "prejoin.server"
+        val app = fakeApp(signedIn = false, screen = Screen.Prejoin)
+        app.stage("invitation", invitation(name = "Grace"))
+        app.stage("arrivedByLink", true)
+        app.room = "design-review"
+        shoot("prejoin-servers", app)
+    }
+
     @Test
     fun prejoinRefused() {
         val app = fakeApp(screen = Screen.Prejoin)
@@ -265,22 +290,27 @@ class NavigationScreenshotTest(private val language: Language) {
         shoot("knocking", app)
     }
 
-    @Test
-    fun waiting() {
+    // The waiting screen is only ever reached by a meeting's link, so these
+    // stand where `open` leaves the model, with the server picker on it.
+    private fun waitingApp(): AppModel {
         val app = fakeApp(screen = Screen.Waiting)
         val soon = Arrangement("m9", "design-review", Instant.now().plusSeconds(3 * 3600).toString(), null, false, false, null, null, false, null)
         app.stage("arrangement", soon)
+        app.stage("arrivedByLink", true)
         app.room = "design-review"
-        shoot("waiting", app)
+        return app
     }
 
+    @Test
+    fun waiting() = shoot("waiting", waitingApp())
+
     @Test @Config(qualifiers = WIDE)
-    fun waitingWide() {
-        val app = fakeApp(screen = Screen.Waiting)
-        val soon = Arrangement("m9", "design-review", Instant.now().plusSeconds(3 * 3600).toString(), null, false, false, null, null, false, null)
-        app.stage("arrangement", soon)
-        app.room = "design-review"
-        shoot("waiting", app, wide = true)
+    fun waitingWide() = shoot("waiting", waitingApp(), wide = true)
+
+    @Test
+    fun waitingServers() {
+        LobbyDebug.popover = "waiting.server"
+        shoot("waiting-servers", waitingApp())
     }
 
     // In and out.

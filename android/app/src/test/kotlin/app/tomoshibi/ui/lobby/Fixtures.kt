@@ -91,6 +91,13 @@ class FakeDeployment(private val arranged: List<Arrangement> = emptyList()) : De
         asked += room
         return live
     }
+
+    /** Every invitation is good, for the room the link names. */
+    override suspend fun inviteInfo(token: String): InviteInfo = InviteInfo("design-review", null, null, null, null)
+
+    /** Every meeting's link is for one arranged three hours from now that has not begun. */
+    override suspend fun arranged(token: String): Arrangement =
+        Arrangement("m9", "design-review", Instant.now().plusSeconds(3 * 3600).toString(), null, false, false, null, token, false, null)
 }
 
 /** A call with nobody in it, for the screens that are drawn over one. */

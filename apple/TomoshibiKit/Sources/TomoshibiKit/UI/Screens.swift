@@ -399,24 +399,7 @@ struct PreJoinScreen: View {
             }
             .animation(Theme.settle, value: app.passphrase.isEmpty)
         }
-        VStack(spacing: 0) {
-            // Where the call is held, only for somebody who has not already
-            // chosen it in the lobby, and only where there is a choice.
-            if app.account == nil, app.offersRelayChoice {
-                HStack(spacing: 12) {
-                    Image(systemName: "server.rack").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.muted).frame(width: 18)
-                    Text(t("Server")).font(.system(size: 14))
-                    Spacer(minLength: 8)
-                    ServerMenu(app: app, compact: true, id: "prejoin.server")
-                }
-                .padding(.horizontal, 14).frame(minHeight: 48)
-                Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
-            }
-            SealControl(on: $sealing, word: $app.sealingWord)
-                .padding(.horizontal, 14).padding(.vertical, 12)
-        }
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.22)))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.08)))
+        OptionsCard(app: app, sealing: $sealing, server: "prejoin.server")
         if let problem = app.problem {
             ProblemLine(app: app, text: problem)
         }
@@ -525,6 +508,46 @@ private struct RoomHeading: View {
         guard app.info?.joinedBy == .anyone, scopeOf(name: room).isEmpty, !room.isEmpty,
               let base = app.deployment?.baseUrl() else { return nil }
         return (base.hasSuffix("/") ? base : base + "/") + "#/" + room
+    }
+}
+
+/// Where the call is held, where it is offered, and whether it is sealed, as
+/// one card under the identity: what the join screens ask before a call.
+///
+/// The server row is the lobby's own picker (`ServerMenu`), with the lobby's
+/// "Automatic", its readings and its greyed relays out of service, for
+/// somebody who reached this screen without passing it
+/// (`AppModel.offersRelayChoiceAtTheDoor`): opened from an invitation or a
+/// meeting's link, they had no way to choose, and a machine picked in the
+/// lobby is the one it says. It comes and goes with the screens' curves:
+/// the deployment's relays arrive after the screen does, and the row slid in
+/// with nothing animating it, the card jumping taller under the fields.
+private struct OptionsCard: View {
+    @Bindable var app: AppModel
+    @Binding var sealing: Bool
+    let server: String
+
+    var body: some View {
+        VStack(spacing: 0) {
+            if app.offersRelayChoiceAtTheDoor {
+                VStack(spacing: 0) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "server.rack").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.muted).frame(width: 18)
+                        Text(t("Server")).font(.system(size: 14))
+                        Spacer(minLength: 8)
+                        ServerMenu(app: app, compact: true, id: server)
+                    }
+                    .padding(.horizontal, 14).frame(minHeight: 48)
+                    Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
+                }
+                .transition(Theme.arrive)
+            }
+            SealControl(on: $sealing, word: $app.sealingWord)
+                .padding(.horizontal, 14).padding(.vertical, 12)
+        }
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.22)))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.08)))
+        .animation(Theme.settle, value: app.offersRelayChoiceAtTheDoor)
     }
 }
 
@@ -712,12 +735,7 @@ struct WaitingScreen: View {
             // it (Waiting.tsx: "Nothing is asked until there is one").
             IdentityBox(name: $app.name, passphrase: $app.passphrase, nameOnly: true)
         }
-        VStack(spacing: 0) {
-            SealControl(on: $sealing, word: $app.sealingWord)
-                .padding(.horizontal, 14).padding(.vertical, 12)
-        }
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.22)))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.08)))
+        OptionsCard(app: app, sealing: $sealing, server: "waiting.server")
         // The host's button comes alive when the window opens, without
         // anybody reloading anything: a clock, every thirty seconds.
         TimelineView(.periodic(from: .now, by: 30)) { timeline in
