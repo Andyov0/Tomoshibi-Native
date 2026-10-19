@@ -451,15 +451,72 @@ impl PeerTransport {
             || codec.starts_with("H265/90000")
     }
 
-    fn munge_x_google_start_bitrate(sdp: &str, start_bitrate_kbps: u32) -> String {
-        // Detect what line ending the original SDP uses
+    /// Tomoshibi: the hint goes only on the m-sections that send video.
+    ///
+    /// In single PC mode the same offer carries every remote video this
+    /// participant receives, each in a recvonly m-section, and the hint was
+    /// written on those as well. The changed fmtp is a change of receive
+    /// codecs to libwebrtc, which tears every running VideoReceiveStream down
+    /// and makes it again the moment the first camera is published; a packet
+    /// arriving in that gap takes libwebrtc's unsignalled-SSRC path
+    /// (`ReCreateDefaultReceiveStream`), which fails to add the stream (it
+    /// exists) and then sets that SSRC's sink to the channel's default sink,
+    /// null for a signalled receiver. The picture went on being decoded and
+    /// was handed to nobody for the rest of the call: one remote camera in
+    /// four stayed black on Windows when the app joined three cameras and
+    /// published its own, and the same core does the same on every platform.
+    /// The hint is a sender's (it seeds the Call's bandwidth estimate), so a
+    /// receiving section loses nothing by going without it.
+    ///
+    /// Payload types are a section's own, so each sending section is
+    /// rewritten from its own rtpmap lines.
+    pub(crate) fn munge_x_google_start_bitrate(sdp: &str, start_bitrate_kbps: u32) -> String {
         let uses_crlf = sdp.contains("\r\n");
         let eol = if uses_crlf { "\r\n" } else { "\n" };
-
-        // Split preserving the intended line ending style
         let lines: Vec<&str> =
             if uses_crlf { sdp.split("\r\n").collect() } else { sdp.split('\n').collect() };
 
+        // The session part, then one group per m-section.
+        let mut sections: Vec<Vec<&str>> = vec![Vec::new()];
+        for line in lines {
+            if line.trim().starts_with("m=") {
+                sections.push(Vec::new());
+            }
+            sections.last_mut().unwrap().push(line);
+        }
+
+        let mut out: Vec<String> = Vec::new();
+        for section in sections {
+            if Self::sends_video(&section) {
+                out.extend(Self::munge_start_bitrate_section(section, start_bitrate_kbps));
+            } else {
+                out.extend(section.into_iter().map(str::to_string));
+            }
+        }
+
+        // Re-join using same EOL, and ensure trailing EOL (some parsers are picky)
+        let mut munged = out.join(eol);
+        // A split of text ending in its EOL leaves an empty last line, which the
+        // join turned back into that EOL.
+        if !munged.ends_with(eol) {
+            munged.push_str(eol);
+        }
+        munged
+    }
+
+    /// Tomoshibi: whether this m-section is video that this side sends: a
+    /// sendonly or sendrecv section, or one with no direction, which is
+    /// sendrecv.
+    fn sends_video(section: &[&str]) -> bool {
+        let Some(first) = section.first() else { return false };
+        if !first.trim().starts_with("m=video ") {
+            return false;
+        }
+        !section.iter().any(|line| matches!(line.trim(), "a=recvonly" | "a=inactive"))
+    }
+
+    /// One sending video m-section with the hint written on each of its codecs.
+    fn munge_start_bitrate_section(lines: Vec<&str>, start_bitrate_kbps: u32) -> Vec<String> {
         // 1) Find all video codec payload types (VP8, VP9, AV1, H264, H265)
         let mut target_pts: Vec<&str> = Vec::new();
         for line in &lines {
@@ -474,7 +531,7 @@ impl PeerTransport {
             }
         }
         if target_pts.is_empty() {
-            return sdp.to_string();
+            return lines.into_iter().map(str::to_string).collect();
         }
 
         // 2) Rewrite fmtp lines (minimal mutation)
@@ -543,12 +600,7 @@ impl PeerTransport {
             }
         }
 
-        // Re-join using same EOL, and ensure trailing EOL (some parsers are picky)
-        let mut munged = final_out.join(eol);
-        if !munged.ends_with(eol) {
-            munged.push_str(eol);
-        }
-        munged
+        final_out
     }
 
     pub async fn create_and_send_offer(&self, options: OfferOptions) -> EngineResult<()> {

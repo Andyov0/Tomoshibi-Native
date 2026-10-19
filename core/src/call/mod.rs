@@ -520,6 +520,34 @@ impl Call {
         self.sinks.attach_pcm(&sid, sink, track, channels);
     }
 
+    /// The receiving side's statistics for one remote track (`ReceiveReport`),
+    /// or None when it is not subscribed or WebRTC has nothing to say yet.
+    pub async fn receive_report(self: Arc<Self>, sid: String) -> Option<ReceiveReport> {
+        on_core(async move {
+            let track = self.publication(&sid)?.track()?;
+            let stats = track.get_stats().await.ok()?;
+            stats.into_iter().find_map(|stat| match stat {
+                livekit::webrtc::stats::RtcStats::InboundRtp(inbound) => Some(ReceiveReport {
+                    packets: inbound.received.packets_received,
+                    bytes: inbound.inbound.bytes_received,
+                    frames_received: inbound.inbound.frames_received,
+                    frames_decoded: inbound.inbound.frames_decoded,
+                    key_frames_decoded: inbound.inbound.key_frames_decoded,
+                    pli: inbound.inbound.pli_count,
+                    fir: inbound.inbound.fir_count,
+                    nack: inbound.inbound.nack_count,
+                    width: inbound.inbound.frame_width,
+                    height: inbound.inbound.frame_height,
+                    ssrc: inbound.stream.ssrc,
+                    mid: inbound.inbound.mid,
+                    decoder: inbound.inbound.decoder_implementation,
+                }),
+                _ => None,
+            })
+        })
+        .await
+    }
+
     pub fn detach(&self, sid: String) {
         let _core = crate::runtime::enter();
         self.sinks.detach(&sid);

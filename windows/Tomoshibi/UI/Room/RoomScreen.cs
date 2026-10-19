@@ -541,5 +541,23 @@ internal sealed class RoomScreen : Screen
     {
         var pictures = _tiles.Values.Where(t => t.Picture != null).Select(t => $"video {t.Picture!.Sid} drawn={t.Picture.FramesDrawn}{(t.Picture.Whole ? " whole" : "")}");
         Log.Line($"stats {string.Join("; ", pictures.Append(Call.Reading()))}");
+        if (App.Launch.LogFile != null) _ = Receiving();
+    }
+
+    /// <summary>
+    /// What WebRTC itself has received of each picture, beside what was
+    /// drawn of it: a picture that never comes is told apart from one whose
+    /// packets arrive and do not decode, and from one never sent at all.
+    /// Only for a launch that writes a log.
+    /// </summary>
+    private async Task Receiving()
+    {
+        foreach (var sid in _tiles.Values.Where(t => t.Picture != null).Select(t => t.Picture!.Sid).ToList())
+        {
+            var r = await Call.Core.ReceiveReport(sid);
+            Log.Line(r == null
+                ? $"receive {sid} none"
+                : $"receive {sid} packets={r.Packets} bytes={r.Bytes} frames={r.FramesReceived} decoded={r.FramesDecoded} keys={r.KeyFramesDecoded} pli={r.Pli} fir={r.Fir} nack={r.Nack} {r.Width}x{r.Height} ssrc={r.Ssrc} mid={r.Mid} {r.Decoder}");
+        }
     }
 }

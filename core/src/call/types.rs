@@ -123,6 +123,28 @@ pub enum CallEvent {
     Connection { reading: tomoshibi_protocol::quality::ConnectionReading },
 }
 
+/// What WebRTC's receiver for one remote track has seen (its `inbound-rtp`
+/// statistics), for a debug log: a picture that never comes is told apart
+/// from one whose packets arrive and do not decode, and from one the media
+/// server never sent, by whether packets are counted at all, and how often
+/// this side asked for a fresh picture (`pli`, `fir`) while it waited.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct ReceiveReport {
+    pub packets: u64,
+    pub bytes: u64,
+    pub frames_received: u64,
+    pub frames_decoded: u32,
+    pub key_frames_decoded: u32,
+    pub pli: u32,
+    pub fir: u32,
+    pub nack: u32,
+    pub width: u32,
+    pub height: u32,
+    pub ssrc: u32,
+    pub mid: String,
+    pub decoder: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct IceServer {
     pub url: String,

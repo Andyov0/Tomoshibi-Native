@@ -52,6 +52,15 @@ mod reconnect_strategy;
 mod rtc_events;
 mod rtc_session;
 
+/// Tomoshibi: the offer's start-bitrate rewrite, reachable from the core's
+/// tests (core/tests/start_bitrate.rs), which hold it to the sections that
+/// send video. This crate's own tests cannot run where it is vendored: they
+/// need dev-dependencies a crate outside the workspace does not get.
+#[doc(hidden)]
+pub fn munge_start_bitrate(sdp: &str, start_bitrate_kbps: u32) -> String {
+    peer_transport::PeerTransport::munge_x_google_start_bitrate(sdp, start_bitrate_kbps)
+}
+
 // Re-exported to preserve the public `rtc_engine::RECONNECT_*` paths.
 pub use reconnect_strategy::{
     RECONNECT_ATTEMPTS, RECONNECT_BACKOFF_MULTIPLIER, RECONNECT_BASE_DELAY, RECONNECT_MAX_DELAY,
