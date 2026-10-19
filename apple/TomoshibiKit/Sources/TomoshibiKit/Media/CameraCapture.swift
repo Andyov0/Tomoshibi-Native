@@ -25,8 +25,17 @@ public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
     /// which way is up for this camera, and the connection is turned to match.
     private var rotation: AVCaptureDevice.RotationCoordinator?
     private var rotationWatch: NSKeyValueObservation?
+    /// Which of a virtual camera's cameras is streaming, said in the log as
+    /// it changes: on an iPhone Duo the front camera moves between the inner
+    /// and the outer display's as the phone opens and closes, and that is
+    /// the one thing about a fold the call's picture cannot show.
+    private var constituentWatch: NSKeyValueObservation?
     #endif
-    /// What this device sends, by the web's rule for its kind.
+    /// What this device sends, by the web's rule for its kind. The kind is
+    /// the device's and not the window's, on purpose: an iPhone Duo opened
+    /// out is a phone with a large screen, sending from a phone's uplink and
+    /// battery, and the web holds a hand-held to the small size whatever its
+    /// window (room.ts `handheld`).
     public static let size: TomoshibiCore.CameraCapture = {
         #if os(iOS)
         return cameraCapture(device: UIDevice.current.userInterfaceIdiom == .pad ? .tablet : .phone)
@@ -122,14 +131,34 @@ public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
     }
 
     /// The camera used when nothing was picked: the front one on a phone or
-    /// a tablet, the system's default on a Mac.
-    private static func fallback() -> AVCaptureDevice? {
+    /// a tablet, the system's default on a Mac. The join screen's preview and
+    /// the settings' preview start from it too, so that all three show the
+    /// camera the call will send.
+    static func fallback() -> AVCaptureDevice? {
         #if os(iOS)
-        return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) ?? AVCaptureDevice.default(for: .video)
+        return frontCamera() ?? AVCaptureDevice.default(for: .video)
         #else
         return AVCaptureDevice.default(for: .video)
         #endif
     }
+
+    #if os(iOS)
+    /// The camera that films whoever holds the phone, found the way Apple
+    /// documents for an iPhone Duo (AVKit, "Choosing a camera by the
+    /// direction it faces"): a discovery of the wide and ultra wide types at
+    /// the front. On an iPhone with one display that is the front wide-angle
+    /// camera it has always been. On a Duo it is the virtual front camera,
+    /// which streams from the camera above whichever display the app is on
+    /// and moves between them itself as the phone is opened and closed, so a
+    /// call folded or unfolded part way keeps sending the person holding it
+    /// rather than whatever the other display's camera faces. Its two
+    /// physical cameras are left alone: following them across a fold would
+    /// be the app's work, for a picture a call sends at 640 by 360 anyway.
+    static func frontCamera() -> AVCaptureDevice? {
+        AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera, .builtInUltraWideCamera],
+                                         mediaType: .video, position: .front).devices.first
+    }
+    #endif
 
     /// Whether one's own picture from this camera is shown mirrored
     /// (live/facing.ts): a camera that films its owner is, because an
@@ -199,6 +228,14 @@ public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         session.commitConfiguration()
         self.device = device
         preferred = device.uniqueID
+        #if os(iOS)
+        constituentWatch = device.isVirtualDevice
+            ? device.observe(\.activePrimaryConstituent, options: [.initial, .new]) { device, _ in
+                Logger(subsystem: "app.tomoshibi", category: "camera").notice(
+                    "the camera \(device.localizedName, privacy: .public) streams from \(device.activePrimaryConstituent?.localizedName ?? "none yet", privacy: .public)")
+            }
+            : nil
+        #endif
         queue.sync { self.input = input }
         let session = self.session
         queue.async { session.startRunning() }
