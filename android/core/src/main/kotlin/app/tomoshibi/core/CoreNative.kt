@@ -2,6 +2,9 @@ package app.tomoshibi.core
 
 import android.content.Context
 import android.view.Surface
+import com.sun.jna.Callback
+import com.sun.jna.CallbackThreadInitializer
+import com.sun.jna.Native
 
 /**
  * The few calls into the core that carry Java objects, which JNA cannot, and
@@ -35,4 +38,17 @@ object CoreNative {
     external fun windowFromSurface(surface: Surface): Long
 
     external fun releaseWindow(window: Long)
+
+    /** Attached for good, never detached on return; a daemon, as a thread the core made should not hold the VM. */
+    private val attached = CallbackThreadInitializer(true, false, "tomoshibi-core")
+
+    /**
+     * Called by every callback object in the generated bindings as it is
+     * made (android/keep-attached.py says why): a thread JNA attaches for it
+     * stays attached until it ends, so that JNA never detaches a thread
+     * WebRTC has since attached for itself.
+     */
+    fun keepAttached(callback: Callback) {
+        Native.setCallbackThreadInitializer(callback, attached)
+    }
 }

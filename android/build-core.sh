@@ -69,6 +69,8 @@ mkdir -p "$JNI"
 GEN="$MODULE/src/main/java"
 rm -rf "$GEN/uniffi"
 "$CORE/target/aarch64-apple-darwin/debug/uniffi-bindgen" generate --library "$LIB" --language kotlin --no-format --out-dir "$GEN"
+# JNA must not detach threads WebRTC has attached (keep-attached.py says how that crashed).
+python3 "$(dirname "$0")/keep-attached.py" "$GEN"/uniffi/*/*.kt
 
 # WebRTC's Java classes (livekit.org.webrtc.*), which its Android codec
 # factories call through JNI; they come with the prebuilt WebRTC download.
