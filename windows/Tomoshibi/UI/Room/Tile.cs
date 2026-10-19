@@ -50,6 +50,7 @@ internal sealed class RemotePicture : Grid
     private bool? _fill;
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _glimpses;
     private bool _behindShown;
+    private bool _glimpseSaid;
 
     private sealed class Shape(RemotePicture tile) : PictureShape
     {
@@ -104,14 +105,26 @@ internal sealed class RemotePicture : Grid
     /// </summary>
     private void Detach()
     {
+        // Moved rather than taken away: XAML may raise the new place's
+        // Loaded before the old place's Unloaded, and then the Attach finds
+        // the panel still attached and does nothing, and this would let the
+        // picture go for good, leaving the tile black for the rest of the
+        // call.
+        if (IsLoaded) return;
         _glimpses?.Stop();
+        // Shown again from the start when it is attached again.
+        _behindShown = false;
         if (_id == 0) return;
         _call.DetachVideoPanel(Sid, _id);
         _id = 0;
         var timer = DispatcherQueue.CreateTimer();
         timer.Interval = TimeSpan.FromMilliseconds(300);
         timer.IsRepeating = false;
-        timer.Tick += (_, _) => ComCalls.SetSwapChain(_panel, IntPtr.Zero);
+        // Not over a swap chain attached again meanwhile.
+        timer.Tick += (_, _) =>
+        {
+            if (_id == 0) ComCalls.SetSwapChain(_panel, IntPtr.Zero);
+        };
         timer.Start();
     }
 
@@ -126,22 +139,37 @@ internal sealed class RemotePicture : Grid
     {
         if (_id == 0 || ActualWidth <= 0 || ActualHeight <= 0) return;
         var (w, h) = ((float)ActualWidth, (float)ActualHeight);
+        var (placeW, placeH) = (w, h);
         // A shared screen is read, and is shown whole.
         var fill = _camera && Framing.Fills(_picture.Width, _picture.Height, w, h);
         var was = _fill;
         _fill = fill;
+        // Shown whole, the panel is the picture's own shape in the middle of
+        // the place, and the blurred glimpse is what is around it: the swap
+        // chain is opaque, and a panel the size of the place drew black
+        // bars over the glimpse behind it.
+        if (!fill && _picture.Width > 0 && _picture.Height > 0)
+        {
+            var fit = Math.Min(w / _picture.Width, h / _picture.Height);
+            (w, h) = (MathF.Max(1, MathF.Round(_picture.Width * fit)), MathF.Max(1, MathF.Round(_picture.Height * fit)));
+        }
+        _panel.Width = fill ? double.NaN : w;
+        _panel.Height = fill ? double.NaN : h;
         _call.PlaceVideoPanel(Sid, _id, w, h, fill);
         var scale = XamlRoot?.RasterizationScale ?? 1.0;
         try
         {
-            _call.RequestVideoSize(Sid, (uint)(w * scale), (uint)(h * scale));
+            // The place's size, whatever the framing: a picture framed whole
+            // is filled again with a press, and asked for at the smaller
+            // size it would come back blurred until the sender's next layer.
+            _call.RequestVideoSize(Sid, (uint)(placeW * scale), (uint)(placeH * scale));
         }
         catch (CallException fault)
         {
             // A track gone between the last layout and this one.
             Log.Line($"no size asked for {Sid}: {fault.Message}");
         }
-        if (was != null && was != fill) Settle(fill, w, h);
+        if (was != null && was != fill) Settle(fill, placeW, placeH, w, h);
         if (was != fill) Log.Line($"framing {Sid}: {(fill ? "fills" : "whole")}");
         ShowBehind(!fill && _camera);
     }
@@ -151,13 +179,15 @@ internal sealed class RemotePicture : Grid
     /// the next frame, and the panel's visual eases from the old scale to it
     /// over 0.32 s about the middle, so that the picture is seen to settle.
     /// </summary>
-    private void Settle(bool fill, float w, float h)
+    private void Settle(bool fill, float placeW, float placeH, float panelW, float panelH)
     {
-        var ratio = Framing.FillOverWhole(_picture.Width, _picture.Height, w, h);
+        var ratio = Framing.FillOverWhole(_picture.Width, _picture.Height, placeW, placeH);
         if (ratio <= 1.001f) return;
         var visual = ElementCompositionPreview.GetElementVisual(_panel);
         var compositor = visual.Compositor;
-        visual.CenterPoint = new Vector3(w / 2, h / 2, 0);
+        // About the panel's own middle, which is the place's: the panel is
+        // the place filled, or the picture's shape centred in it.
+        visual.CenterPoint = new Vector3(panelW / 2, panelH / 2, 0);
         // To whole: it was larger. To fill: it was smaller.
         var from = fill ? 1 / ratio : ratio;
         var scale = compositor.CreateVector3KeyFrameAnimation();
@@ -200,11 +230,15 @@ internal sealed class RemotePicture : Grid
         {
             glimpse = _call.VideoPanelGlimpse(Sid, 48);
         }
-        catch (Exception)
+        catch (Exception fault)
         {
+            if (!_glimpseSaid) Log.Line($"no glimpse of {Sid}: {fault.Message}");
+            _glimpseSaid = true;
             glimpse = null;
         }
         if (glimpse == null) return;
+        if (!_glimpseSaid) Log.Line($"glimpse of {Sid}: {glimpse.Width}x{glimpse.Height}");
+        _glimpseSaid = true;
         var bitmap = new WriteableBitmap((int)glimpse.Width, (int)glimpse.Height);
         var pixels = Blur.Box(glimpse.Bgra, (int)glimpse.Width, (int)glimpse.Height, 2);
         using (var stream = bitmap.PixelBuffer.AsStream()) stream.Write(pixels, 0, pixels.Length);
@@ -402,6 +436,30 @@ internal sealed class Tile : Grid
     }
 
     public Rect Spot => _spot;
+
+    private float _lift;
+
+    /// <summary>
+    /// The name raised by this much above the foot of the picture
+    /// (RoomView.kt <c>lift</c>): above the controls while
+    /// they are out, for a picture that runs under them, and back down after
+    /// them, over the settle curve up and the leave curve down. The person
+    /// filling a call of two runs under the bar, and their name was drawn
+    /// below it.
+    /// </summary>
+    public void Lift(float by)
+    {
+        if (Math.Abs(by - _lift) < 0.5f) return;
+        var up = by > _lift;
+        _lift = by;
+        ElementCompositionPreview.SetIsTranslationEnabled(_plate, true);
+        var visual = ElementCompositionPreview.GetElementVisual(_plate);
+        var compositor = visual.Compositor;
+        var move = compositor.CreateVector3KeyFrameAnimation();
+        move.InsertKeyFrame(1f, new Vector3(0, -by, 0), up ? Motion.SettleCurve(compositor) : Motion.LeaveCurve(compositor));
+        move.Duration = up ? Motion.Settle : Motion.Leave;
+        visual.StartAnimation("Translation", move);
+    }
 
     /// <summary>Brings the tile up to date: whose, what picture, which marks.</summary>
     public void Show(

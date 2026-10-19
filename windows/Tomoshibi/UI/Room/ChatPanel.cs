@@ -99,6 +99,7 @@ internal sealed class ChatPanel : Grid
     private readonly Tap _send;
     private readonly StackPanel _failed;
     private readonly TextBlock _counter;
+    private readonly Grid _under;
     private int _shown;
 
     public ChatPanel(CallModel call, Action close, double tallest)
@@ -161,16 +162,16 @@ internal sealed class ChatPanel : Grid
         _box.LostFocus += (_, _) => composer.BorderBrush = Ink.White(0.09f);
         _counter = K.Text("", 10.5, ink: Ink.Muted, tabular: true);
         _failed = K.Row(5, K.Symbol("exclamationmark.circle.fill", 11, Ink.Danger), K.Text(T("That could not be sent."), 11, ink: Ink.Danger));
-        var under = K.Line(0, K.Flex(_failed), K.Fixed(_counter));
-        under.Padding = new Thickness(8, 4, 8, 0);
-        under.Arrives();
+        _under = K.Line(0, K.Flex(_failed), K.Fixed(_counter));
+        _under.Padding = new Thickness(8, 4, 8, 0);
+        _under.Arrives();
 
         var column = K.Column(0,
             Panels.Heading(T("Messages"), "bubble.left.and.bubble.right.fill", T("Close messages"), close),
             Panels.Rule(),
             _empty,
             _scroller,
-            K.Column(0, composer, under).Pad(10, 4, 10, 10));
+            K.Column(0, composer, _under).Pad(10, 4, 10, 10));
         Children.Add(K.Glass(column, 22));
         Update();
         // The box takes the keyboard a moment after the panel arrives.
@@ -213,6 +214,8 @@ internal sealed class ChatPanel : Grid
         var length = _box.Text.Length;
         _counter.Text = length > 1800 ? $"{length}/{ChatRules.Longest}" : "";
         _counter.Foreground = length >= ChatRules.Longest ? Ink.Tally : Ink.Muted;
+        // Under the box only while it has something to say.
+        _under.Visibility = _call.ChatFailed || length > 1800 ? Visibility.Visible : Visibility.Collapsed;
         var messages = _call.Messages;
         _empty.Visibility = messages.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         _scroller.Visibility = messages.Count == 0 ? Visibility.Collapsed : Visibility.Visible;

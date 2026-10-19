@@ -292,9 +292,14 @@ internal sealed class CallModel : Observable, IDisposable
 
     public IReadOnlyList<Surface> Surfaces => People.SelectMany(person =>
     {
+        // A picture is drawn once its track is subscribed, not when it is
+        // first listed: a panel attached to a track the core had not yet
+        // subscribed to was sometimes never fed, the participant's list
+        // reaching the app before the subscription's track did, and the
+        // tile stayed black for the whole call.
         var camera = person.Track(MediaSource.Camera);
-        var list = new List<Surface> { new(person.Id + "/camera", person, Surface.Kinds.Camera, camera is { Muted: false } ? camera.Sid : null) };
-        if (person.Track(MediaSource.ScreenShare) is { } screen) list.Add(new Surface(person.Id + "/screen", person, Surface.Kinds.Screen, screen.Sid));
+        var list = new List<Surface> { new(person.Id + "/camera", person, Surface.Kinds.Camera, camera is { Muted: false, Subscribed: true } ? camera.Sid : null) };
+        if (person.Track(MediaSource.ScreenShare) is { } screen) list.Add(new Surface(person.Id + "/screen", person, Surface.Kinds.Screen, screen.Subscribed ? screen.Sid : null));
         return list;
     }).ToList();
 

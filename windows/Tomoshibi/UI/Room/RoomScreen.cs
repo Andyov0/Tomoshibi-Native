@@ -253,7 +253,7 @@ internal sealed class RoomScreen : Screen
         _pin = _pin.Update(ids, shares);
         if (_pin.Pinned == null && _filled) Unfill();
         var size = new Size((float)ActualWidth, (float)ActualHeight);
-        var room = Plan.ForRoom(size, ids, "me/camera", _pin.Pinned, _filled, _page, Plan.Island);
+        var room = Planned(ids);
         _page = room.Page;
 
         // Pictures that have gone fade out where they were.
@@ -279,6 +279,28 @@ internal sealed class RoomScreen : Screen
         _bar.Fit(ActualWidth);
         LayPager(room, size);
         LayPanel(size);
+        LiftNames();
+    }
+
+    /// <summary>
+    /// Raises the name on each picture that runs under the controls while
+    /// they are out (RoomView.kt <c>underBar</c>), where the bar is wide
+    /// enough to reach it: not on a picture wider than 900, whose name is
+    /// clear of a bar in its middle.
+    /// </summary>
+    private void LiftNames()
+    {
+        if (_bar == null) return;
+        var barWidth = _bar.ActualWidth > 0 ? _bar.ActualWidth : ControlBar.FullLength;
+        var left = (ActualWidth - barWidth) / 2;
+        var right = left + barWidth;
+        var bottom = ActualHeight - 20;
+        foreach (var tile in _tiles.Values)
+        {
+            var spot = tile.Spot;
+            var under = spot.Left < right && spot.Left + spot.Width > left && spot.Top + spot.Height > bottom - Plan.Island + 0.5;
+            tile.Lift(under && _barShown && spot.Width < 900 ? Plan.Island - Plan.Gap : 0);
+        }
     }
 
     private void ShowTile(Tile tile, string id, Dictionary<string, Surface> surfaces)
@@ -330,9 +352,32 @@ internal sealed class RoomScreen : Screen
         _pageText!.Text = $"{room.Page + 1} / {room.Pages}";
     }
 
+    /// <summary>
+    /// The shared planner's room, below the title bar: the window's caption
+    /// buttons are over its top 32, and a grid of several, which the planner
+    /// starts at the very top when its rows fill the height, had its first
+    /// row's names and presses under them. A picture the planner gives the
+    /// whole window (one filled, or the other person's in a call of two) is
+    /// still the whole window, under the caption buttons as the phone's is
+    /// under its status bar.
+    /// </summary>
+    private Plan.Room Planned(IReadOnlyList<string> ids)
+    {
+        var top = (float)Shared.TitleBar;
+        var below = new Size((float)ActualWidth, (float)Math.Max(0, ActualHeight - top));
+        var room = Plan.ForRoom(below, ids, "me/camera", _pin.Pinned, _filled, _page, Plan.Island);
+        var spots = new OrderedDictionary<string, Rect>();
+        foreach (var (id, spot) in room.Spots)
+        {
+            var whole = spot.Top <= 0.5f && spot.Left <= 0.5f && spot.Width >= below.Width - 0.5f;
+            spots[id] = whole ? spot with { Top = 0, Height = spot.Height + top } : spot with { Top = spot.Top + top };
+        }
+        return room with { Spots = spots };
+    }
+
     private void Turn(int by)
     {
-        var room = Plan.ForRoom(new Size((float)ActualWidth, (float)ActualHeight), Pictures(out _), "me/camera", _pin.Pinned, _filled, _page, Plan.Island);
+        var room = Planned(Pictures(out _));
         _page = (room.Page + by + room.Pages) % room.Pages;
         Lay();
     }
@@ -488,6 +533,7 @@ internal sealed class RoomScreen : Screen
     {
         _barShown = shown;
         if (_barHost != null) _barHost.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
+        LiftNames();
         if (_top != null && _filled) _top.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
     }
 

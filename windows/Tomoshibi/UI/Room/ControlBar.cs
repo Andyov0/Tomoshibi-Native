@@ -106,6 +106,7 @@ internal sealed class ControlBar : Grid
         }
         _leave = new Tap(K.Symbol("phone.down.fill", 16, Ink.Brush(Basics.Theme.DangerForeground)), Look.Destructive, Size, label: T("Leave"));
         _leave.Width = compact ? 52 : 56;
+        _leave.Padding = new Thickness(0);
         _leave.Named(T("Leave"), "bar.leave");
         _leave.Click += (_, _) => OpenLeave();
         _row.Children.Add(_leave);
@@ -173,6 +174,7 @@ internal sealed class ControlBar : Grid
     {
         _hand = new Tap(K.Symbol("hand.raised.fill", 16), Look.Bar, Size);
         _hand.Width = 40;
+        _hand.Padding = new Thickness(0);
         _hand.CornerRadius = new CornerRadius(22, 0, 0, 22);
         _hand.Named(T("Raise your hand"), "bar.hand");
         _hand.Click += async (_, _) =>
@@ -200,8 +202,8 @@ internal sealed class ControlBar : Grid
         foreach (var what in CallModel.ReactionChoices)
         {
             var glyph = new TextBlock { Text = what, FontSize = 20, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-            var tap = new Tap(glyph, Look.Clear, 34) { Width = 36, CornerRadius = new CornerRadius(8) };
-            tap.Named(what);
+            var tap = new Tap(glyph, Look.Clear, 34, padding: 0) { Width = 36, CornerRadius = new CornerRadius(8) };
+            tap.Named(what, "reaction." + CallModel.ReactionChoices.ToList().IndexOf(what));
             tap.Click += (_, _) =>
             {
                 _call.React(what);
