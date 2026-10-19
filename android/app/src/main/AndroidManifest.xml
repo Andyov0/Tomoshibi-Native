@@ -25,6 +25,7 @@
     <uses-feature android:name="android.hardware.camera" android:required="false" />
 
     <application
+        android:icon="@mipmap/launcher"
         android:label="Tomoshibi"
         android:theme="@style/Theme.Tomoshibi"
         android:usesCleartextTraffic="true">

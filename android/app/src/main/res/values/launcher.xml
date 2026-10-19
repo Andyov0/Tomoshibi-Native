@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The icon's ground: the darkest of the warm neutrals, as on the iPhone. -->
+    <color name="launcher_ground">#FF0F0E0D</color>
+</resources>

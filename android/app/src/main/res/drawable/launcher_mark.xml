@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The app's mark, as on the iPhone and the Mac (apple/icon/make-icon.swift,
+     from the web client's favicon): a room of pictures, one of them live, in
+     the one hue the interface spends. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="1.9350"
+        android:scaleY="1.9350"
+        android:translateX="23.0400"
+        android:translateY="23.0400">
+        <path
+            android:fillColor="#FF55524E"
+            android:pathData="M8,8 H13 A2,2 0 0 1 15,10 V13 A2,2 0 0 1 13,15 H8 A2,2 0 0 1 6,13 V10 A2,2 0 0 1 8,8 Z M19,8 H24 A2,2 0 0 1 26,10 V13 A2,2 0 0 1 24,15 H19 A2,2 0 0 1 17,13 V10 A2,2 0 0 1 19,8 Z M8,17 H13 A2,2 0 0 1 15,19 V22 A2,2 0 0 1 13,24 H8 A2,2 0 0 1 6,22 V19 A2,2 0 0 1 8,17 Z" />
+        <path
+            android:fillColor="#FFFFA23B"
+            android:pathData="M19,17 H24 A2,2 0 0 1 26,19 V22 A2,2 0 0 1 24,24 H19 A2,2 0 0 1 17,22 V19 A2,2 0 0 1 19,17 Z" />
+    </group>
+</vector>
