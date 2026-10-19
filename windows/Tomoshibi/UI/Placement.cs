@@ -76,13 +76,26 @@ internal static class Placement
     private static bool OnSomeDisplay(Kept kept)
     {
         if (kept.Width < 200 || kept.Height < 200) return false;
-        foreach (var display in DisplayArea.FindAll())
+        try
         {
-            var area = display.WorkArea;
-            var visibleX = Math.Min(kept.X + kept.Width, area.X + area.Width) - Math.Max(kept.X, area.X);
-            var visibleY = Math.Min(kept.Y + kept.Height, area.Y + area.Height) - Math.Max(kept.Y, area.Y);
-            if (visibleX >= 120 && visibleY >= 80) return true;
+            // By index: the list FindAll hands back cannot be enumerated
+            // from C# (an InvalidCastException out of the projection's
+            // enumerator), which ended the app at its second start, the
+            // first with a place to come back to.
+            var displays = DisplayArea.FindAll();
+            for (var i = 0; i < displays.Count; i++)
+            {
+                var area = displays[i].WorkArea;
+                var visibleX = Math.Min(kept.X + kept.Width, area.X + area.Width) - Math.Max(kept.X, area.X);
+                var visibleY = Math.Min(kept.Y + kept.Height, area.Y + area.Height) - Math.Max(kept.Y, area.Y);
+                if (visibleX >= 120 && visibleY >= 80) return true;
+            }
+            return false;
         }
-        return false;
+        catch (Exception)
+        {
+            // Opened in the middle of the screen instead.
+            return false;
+        }
     }
 }
