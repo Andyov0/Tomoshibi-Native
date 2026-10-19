@@ -1,16 +1,43 @@
 package app.tomoshibi.media
 
+import android.animation.ValueAnimator
 import android.content.Context
+import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.os.Handler
 import android.os.Looper
 import android.view.Surface
 import android.view.TextureView
+import android.view.animation.PathInterpolator
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import app.tomoshibi.basics.Framing
+import app.tomoshibi.basics.Theme
 import app.tomoshibi.core.CoreNative
+import kotlinx.coroutines.delay
 import uniffi.tomoshibi_core.Call
 import uniffi.tomoshibi_core.PictureShape
 
@@ -32,8 +59,12 @@ class RemoteVideoView(context: Context) : TextureView(context), TextureView.Surf
     /** Asks again when the device grows hot or cools, while the view is in a window. */
     private var thermal: AutoCloseable? = null
 
-    /** Whether the picture fills the view, cropping, rather than fitting whole inside it. */
-    var fill = false
+    /**
+     * A camera, which fills the view when its shape is near enough the
+     * view's (Framing) and is otherwise shown whole; anything else, a shared
+     * screen, is always shown whole.
+     */
+    var camera = false
         set(value) {
             field = value
             fit()
@@ -41,6 +72,16 @@ class RemoteVideoView(context: Context) : TextureView(context), TextureView.Surf
 
     /** Told on the main thread when the picture's size or turn changes: width, height, clockwise degrees. */
     var onShape: ((Int, Int, Int) -> Unit)? = null
+
+    /** Told on the main thread when a camera starts or stops being shown whole, for what is drawn behind it. */
+    var onWhole: ((Boolean) -> Unit)? = null
+
+    /** Whether the picture is meant to fill, as last decided; null before its shape is known. */
+    private var fills: Boolean? = null
+
+    /** How far from whole (0) to filling (1) the picture is drawn, moved by [framing] when [fills] changes. */
+    private var filling = 1f
+    private var framing: ValueAnimator? = null
 
     init {
         surfaceTextureListener = this
@@ -103,6 +144,11 @@ class RemoteVideoView(context: Context) : TextureView(context), TextureView.Surf
         if (attached && call != null) VideoHub.existing(call)?.detach(this)
         attached = false
         shape = Triple(0, 0, 0)
+        framing?.cancel()
+        framing = null
+        if (fills == false) onWhole?.invoke(false)
+        fills = null
+        filling = 1f
     }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
@@ -111,13 +157,49 @@ class RemoteVideoView(context: Context) : TextureView(context), TextureView.Surf
         fit()
     }
 
-    /** The picture upright, whole or filling, in the middle of the view. */
+    /**
+     * Decides whether the picture fills the view or is shown whole, and
+     * draws it so. A change of mind once the picture is showing is drawn as
+     * a move from the one to the other, not a jump; the first decision, and
+     * a change of the view's size, take effect at once.
+     */
     private fun fit() {
         val (w, h, turn) = shape
         if (w == 0 || h == 0 || width == 0 || height == 0) return
         val turned = turn == 90 || turn == 270
         val (pw, ph) = if (turned) h.toFloat() to w.toFloat() else w.toFloat() to h.toFloat()
-        val scale = if (fill) maxOf(width / pw, height / ph) else minOf(width / pw, height / ph)
+        val wanted = camera && Framing.fills(pw, ph, width.toFloat(), height.toFloat())
+        val before = fills
+        if (wanted != before) {
+            fills = wanted
+            framing?.cancel()
+            val to = if (wanted) 1f else 0f
+            if (before == null) {
+                filling = to
+            } else {
+                framing = ValueAnimator.ofFloat(filling, to).apply {
+                    duration = 320
+                    interpolator = PathInterpolator(0.2f, 0.9f, 0.3f, 1f)
+                    addUpdateListener {
+                        filling = it.animatedValue as Float
+                        draw()
+                    }
+                    start()
+                }
+            }
+            if (!wanted || before == false) onWhole?.invoke(!wanted)
+        }
+        draw()
+    }
+
+    /** The picture upright in the middle of the view, [filling] of the way from whole to filling it. */
+    private fun draw() {
+        val (w, h, turn) = shape
+        if (w == 0 || h == 0 || width == 0 || height == 0) return
+        val turned = turn == 90 || turn == 270
+        val (pw, ph) = if (turned) h.toFloat() to w.toFloat() else w.toFloat() to h.toFloat()
+        val whole = minOf(width / pw, height / ph)
+        val scale = whole + (maxOf(width / pw, height / ph) - whole) * filling
         val m = Matrix()
         val cx = width / 2f
         val cy = height / 2f
@@ -127,6 +209,22 @@ class RemoteVideoView(context: Context) : TextureView(context), TextureView.Surf
         m.postRotate(turn.toFloat(), cx, cy)
         m.postScale(scale, scale, cx, cy)
         setTransform(m)
+    }
+
+    /**
+     * The picture as it is now, upright and a few dozen pixels across, for
+     * the blur behind it: read back from the surface, which holds the frame
+     * as decoded, before this view's turn and scale.
+     */
+    fun glimpse(): Bitmap? {
+        val (w, h, turn) = shape
+        if (!isAvailable || w == 0 || h == 0) return null
+        val scale = GLIMPSE / maxOf(w, h).toFloat()
+        val small = getBitmap(maxOf(1, Math.round(w * scale)), maxOf(1, Math.round(h * scale))) ?: return null
+        if (turn == 0) return small
+        val upright = Bitmap.createBitmap(small, 0, 0, small.width, small.height, Matrix().apply { postRotate(turn.toFloat()) }, true)
+        small.recycle()
+        return upright
     }
 
     override fun onSurfaceTextureAvailable(texture: SurfaceTexture, width: Int, height: Int) = attach()
@@ -142,6 +240,11 @@ class RemoteVideoView(context: Context) : TextureView(context), TextureView.Surf
         thermal = null
         release()
         super.onDetachedFromWindow()
+    }
+
+    private companion object {
+        /** The glimpse's longer side, in pixels: blurred over a whole tile, more would not show. */
+        const val GLIMPSE = 48
     }
 }
 
@@ -174,16 +277,57 @@ object PictureDensity {
 /**
  * A remote picture in Compose: [sid] of [call], drawn by the core. The view is
  * made once for the composable's life and handed whatever it is to show.
+ *
+ * A [camera] shown whole (Framing) is not given bars: the rest of the tile is
+ * the same picture, filling it, blurred and darkened, as a telephone shows a
+ * caller who turned theirs on its side. It is a glimpse taken about once a
+ * second, crossfaded from the last, not the video again, and it is there
+ * only while the picture is whole.
  */
 @Composable
-fun RemoteVideo(call: Call, sid: String?, modifier: Modifier = Modifier, fill: Boolean = false) {
-    AndroidView(
-        factory = { RemoteVideoView(it) },
-        update = {
-            it.fill = fill
-            it.show(call, sid)
-        },
-        onRelease = { it.show(null, null) },
-        modifier = modifier,
-    )
+fun RemoteVideo(call: Call, sid: String?, modifier: Modifier = Modifier, camera: Boolean = false) {
+    var view by remember { mutableStateOf<RemoteVideoView?>(null) }
+    var whole by remember { mutableStateOf(false) }
+    var glimpse by remember { mutableStateOf<ImageBitmap?>(null) }
+    LaunchedEffect(view, whole) {
+        val shown = view ?: return@LaunchedEffect
+        while (whole) {
+            shown.glimpse()?.let { glimpse = it.asImageBitmap() }
+            delay(GLIMPSE_EVERY)
+        }
+    }
+    val behind by animateFloatAsState(if (whole && glimpse != null) 1f else 0f, if (whole) Theme.settle() else Theme.leave(), label = "behind")
+    Box(modifier) {
+        if (behind > 0f) {
+            Box(Modifier.fillMaxSize().graphicsLayer { alpha = behind }) {
+                Crossfade(glimpse, Modifier.fillMaxSize(), animationSpec = tween(GLIMPSE_FADE), label = "glimpse") { image ->
+                    if (image != null) {
+                        Image(
+                            image, null,
+                            Modifier.fillMaxSize().blur(28.dp, BlurredEdgeTreatment.Rectangle),
+                            contentScale = ContentScale.Crop,
+                            filterQuality = FilterQuality.Low,
+                        )
+                    }
+                }
+                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.35f)))
+            }
+        }
+        AndroidView(
+            factory = { context -> RemoteVideoView(context).also { made -> made.onWhole = { whole = it }; view = made } },
+            update = {
+                it.camera = camera
+                it.show(call, sid)
+            },
+            onRelease = {
+                it.show(null, null)
+                view = null
+            },
+            modifier = Modifier.fillMaxSize(),
+        )
+    }
 }
+
+/** How often the blur behind a picture shown whole is taken again, and how long one fades into the next. */
+private const val GLIMPSE_EVERY = 1000L
+private const val GLIMPSE_FADE = 600

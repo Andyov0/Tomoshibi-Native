@@ -114,12 +114,12 @@ data class TileMarks(
  * stand-ins of its own.
  */
 class RoomPictures(
-    val remote: @Composable (call: CallModel, sid: String, fill: Boolean, modifier: Modifier) -> Unit,
+    val remote: @Composable (call: CallModel, sid: String, camera: Boolean, modifier: Modifier) -> Unit,
     val self: @Composable (call: CallModel, modifier: Modifier) -> Unit,
 ) {
     companion object {
         val live = RoomPictures(
-            remote = { call, sid, fill, modifier -> RemoteVideo(call.call, sid, modifier, fill) },
+            remote = { call, sid, camera, modifier -> RemoteVideo(call.call, sid, modifier, camera) },
             self = { call, modifier -> SelfView(call, modifier) },
         )
     }
@@ -383,9 +383,10 @@ internal fun steady(value: Boolean, holdMillis: Long = 700): Boolean {
 /**
  * A picture that belongs to somebody else: their camera, or their screen on
  * the stage (components/room/SurfaceTile.tsx; `SurfacePicture`). A camera
- * fills its tile, because a face is fine cropped at the edges and wrong
- * letterboxed; a screen is shown whole, because cropping hides whatever was
- * at the edge.
+ * fills its tile when its shape is near the tile's, because a face is fine
+ * cropped at the edges, and is shown whole on a blur of itself when it is
+ * the other way round, which cropped it to its middle (Framing); a screen is
+ * always shown whole, because cropping hides whatever was at the edge.
  */
 @Composable
 internal fun SurfacePicture(surface: Surface, call: CallModel, compact: Boolean = false) {

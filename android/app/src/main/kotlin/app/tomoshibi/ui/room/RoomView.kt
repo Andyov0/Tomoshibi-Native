@@ -1211,11 +1211,11 @@ private fun SmallWindow(call: CallModel, state: RoomState, modifier: Modifier) {
     val pictures = LocalRoomPictures.current
     val staged = call.surfaces.firstOrNull { it.id == state.pin.pinned && it.sid != null }
     val sid = staged?.sid ?: call.pictureInPictureSid
-    val fills = (staged ?: call.surfaces.firstOrNull { it.sid == sid })?.kind == Surface.Kind.Camera
+    val camera = (staged ?: call.surfaces.firstOrNull { it.sid == sid })?.kind == Surface.Kind.Camera
     Box(modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
         AnimatedContent(sid, transitionSpec = { fadeIn(Theme.settle()) togetherWith fadeOut(Theme.leave()) }, label = "small") { shown ->
             if (shown != null) {
-                pictures.remote(call, shown, fills, Modifier.fillMaxSize())
+                pictures.remote(call, shown, camera, Modifier.fillMaxSize())
             } else {
                 val other = call.people.firstOrNull()
                 Avatar(other?.name ?: call.localName, other?.id ?: call.localIdentity)
