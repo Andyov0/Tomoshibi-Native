@@ -24,6 +24,16 @@ public struct AppRoot: View {
     public var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
+                // The whole window, for a rehearsed fold to be drawn down its
+                // middle (FoldDebug).
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
+                    FoldDebug.window = frame.size
+                    #if os(iOS) && DEBUG
+                    // Again on a window that moved: the app moved to another
+                    // display can be in a scene of its own.
+                    DebugTraits.apply()
+                    #endif
+                }
             switch app.screen {
             case .starting:
                 StartingScreen().transition(Theme.arrive)
@@ -70,6 +80,9 @@ public struct AppRoot: View {
         // The colour the person chose, for every control the system draws.
         .tint(appearance.accent.color)
         .task {
+            #if os(iOS) && DEBUG
+            DebugTraits.apply()
+            #endif
             await app.start()
             #if os(macOS) && DEBUG
             DebugWindow.size()
@@ -91,6 +104,30 @@ public struct AppRoot: View {
         .environment(\.locale, localization.language.locale)
     }
 }
+
+#if os(iOS) && DEBUG
+/// TOMOSHIBI_DEBUG_COMPACT=1, honoured only when a test drives the app
+/// (TOMOSHIBI_BASE set), makes the scene compact both ways, as the iPhone
+/// Duo's outer display is on its side and when it is set down as a tent. The
+/// Duo simulator turns only from Device Hub's own controls, and the resizable
+/// display the app is moved to for the other shapes is regular at 678 x 466,
+/// so this is how those screens are laid out at the outer display's size
+/// without them. On the window rather than in SwiftUI's environment, so the
+/// sheets and full-screen covers presented in it are compact too; on the
+/// scene, the window worked its size class out from its size regardless.
+enum DebugTraits {
+    static func apply() {
+        let environment = ProcessInfo.processInfo.environment
+        guard environment["TOMOSHIBI_BASE"] != nil, environment["TOMOSHIBI_DEBUG_COMPACT"] != nil else { return }
+        for case let scene as UIWindowScene in UIApplication.shared.connectedScenes {
+            for window in scene.windows {
+                window.traitOverrides.horizontalSizeClass = .compact
+                window.traitOverrides.verticalSizeClass = .compact
+            }
+        }
+    }
+}
+#endif
 
 #if os(macOS) && DEBUG
 /// TOMOSHIBI_DEBUG_WINDOW=<width>x<height> sizes the main window, for a test
@@ -127,6 +164,9 @@ private struct CardScreen<Content: View>: View {
             }
             .scrollIndicators(.never)
             .rise()
+            // A card centred on a Duo held half open sat across its fold; it
+            // keeps to the page it is read on, or above a fold across it.
+            .keptToOneSide(.reading)
         }
         .overlay(alignment: .topTrailing) { LanguageMenu().padding(16) }
         .floatingPopoverLayer(popovers)
@@ -136,31 +176,67 @@ private struct CardScreen<Content: View>: View {
 
 /// The join screens on the phone: the picture of yourself filling the
 /// screen, and a pane of glass at its foot that scrolls where it is taller
-/// than the room left above the keyboard.
-private struct PaneScreen<Content: View>: View {
+/// than the room left above the keyboard. The pane's heading (the room, the
+/// microphone and the camera) and its form come apart, to stand side by side
+/// on a short screen.
+private struct PaneScreen<Heading: View, Content: View>: View {
     @Bindable var app: AppModel
+    @ViewBuilder var heading: Heading
     @ViewBuilder var content: Content
     @State private var popovers = Popovers()
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.verticalSizeClass) private var heightClass
+    /// Centred on a short screen too (a phone on its side, the Duo's outer
+    /// display on its side or as a tent), where across the foot the pane was
+    /// as wide as the screen and taller than it.
+    private var wide: Bool { sizeClass == .regular || heightClass == .compact }
+    /// A short screen, where the pane stacked was half as tall again as the
+    /// screen, its Join out of sight below the fields: the heading stands
+    /// beside the form there. One layout either way, so that turning the
+    /// phone keeps the name being typed and the keyboard.
+    private var short: Bool { heightClass == .compact }
+    #else
+    private let wide = true
+    private let short = false
+    #endif
 
     var body: some View {
         ZStack {
             CameraStage(app: app).ignoresSafeArea()
             GeometryReader { geometry in
                 ScrollView {
+                    // At the foot of a phone, where the thumb is; in the
+                    // middle of a wide screen at a card's width, where across
+                    // the foot of an opened Duo the pane was a bar the width
+                    // of the screen. The same pane either way, so a fold
+                    // keeps the name half typed into it.
                     VStack(spacing: 0) {
                         Spacer(minLength: 0)
-                        VStack(spacing: 16) { content }
-                            .contentLayer()
-                            .padding(18)
-                            .glassPane(cornerRadius: 34)
-                            .padding(10)
+                        let layout = short ? AnyLayout(HStackLayout(alignment: .center, spacing: 24))
+                                           : AnyLayout(VStackLayout(spacing: 16))
+                        layout {
+                            VStack(spacing: 16) { heading }
+                                .frame(maxWidth: short ? 260 : nil)
+                            VStack(spacing: 16) { content }
+                        }
+                        .padding(18)
+                        .concentricGlassShell(minimum: 34)
+                        .frame(maxWidth: wide ? (short ? 720 : 520) : .infinity)
+                        .padding(10)
+                        .animation(Theme.settle, value: short)
+                        if wide { Spacer(minLength: 0) }
                     }
-                    .frame(minHeight: geometry.size.height)
+                    // As wide as the screen, for the pane to stand in its
+                    // middle: the scroll view puts narrower content at its
+                    // leading edge.
+                    .frame(maxWidth: .infinity, minHeight: geometry.size.height)
                 }
                 .scrollIndicators(.never)
                 .scrollDismissesKeyboard(.interactively)
             }
             .rise()
+            .keptToOneSide(.reading)
         }
         .floatingPopoverLayer(popovers)
         .onAppear { popovers.openFromDebug() }
@@ -258,9 +334,27 @@ struct PreJoinScreen: View {
 
     var body: some View {
         #if os(macOS)
-        CardScreen(width: 560) { animated }
+        CardScreen(width: 560) {
+            heading
+            animated
+        }
         #else
-        PaneScreen(app: app) { animated }
+        PaneScreen(app: app) { heading } content: { animated }
+        #endif
+    }
+
+    /// What you are invited to, and the picture and the sound you go in with.
+    @ViewBuilder
+    private var heading: some View {
+        RoomHeading(app: app, room: app.room, door: door)
+        #if os(macOS)
+        CameraStage(app: app, cornerRadius: 20)
+            .aspectRatio(16 / 9, contentMode: .fit)
+            .overlay(alignment: .bottom) {
+                DeviceSwitches(app: app, size: 38).padding(6).glassSurface(Capsule()).padding(.bottom, 12)
+            }
+        #else
+        DeviceSwitches(app: app, size: 52)
         #endif
     }
 
@@ -278,16 +372,6 @@ struct PreJoinScreen: View {
 
     @ViewBuilder
     private var content: some View {
-        RoomHeading(app: app, room: app.room, door: door)
-        #if os(macOS)
-        CameraStage(app: app, cornerRadius: 20)
-            .aspectRatio(16 / 9, contentMode: .fit)
-            .overlay(alignment: .bottom) {
-                DeviceSwitches(app: app, size: 38).padding(6).glassSurface(Capsule()).padding(.bottom, 12)
-            }
-        #else
-        DeviceSwitches(app: app, size: 52)
-        #endif
         if app.account == nil {
             VStack(spacing: 8) {
                 // Somebody on an invitation has a name to choose and nothing
@@ -579,9 +663,27 @@ struct WaitingScreen: View {
 
     var body: some View {
         #if os(macOS)
-        CardScreen(width: 560) { animated }
+        CardScreen(width: 560) {
+            heading
+            animated
+        }
         #else
-        PaneScreen(app: app) { animated }
+        PaneScreen(app: app) { heading } content: { animated }
+        #endif
+    }
+
+    /// The meeting's room, and the picture and the sound you will go in with.
+    @ViewBuilder
+    private var heading: some View {
+        Heading(title: app.room, mono: true)
+        #if os(macOS)
+        CameraStage(app: app, cornerRadius: 20)
+            .aspectRatio(16 / 9, contentMode: .fit)
+            .overlay(alignment: .bottom) {
+                DeviceSwitches(app: app, size: 38).padding(6).glassSurface(Capsule()).padding(.bottom, 12)
+            }
+        #else
+        DeviceSwitches(app: app, size: 52)
         #endif
     }
 
@@ -598,16 +700,6 @@ struct WaitingScreen: View {
 
     @ViewBuilder
     private var content: some View {
-        Heading(title: app.room, mono: true)
-        #if os(macOS)
-        CameraStage(app: app, cornerRadius: 20)
-            .aspectRatio(16 / 9, contentMode: .fit)
-            .overlay(alignment: .bottom) {
-                DeviceSwitches(app: app, size: 38).padding(6).glassSurface(Capsule()).padding(.bottom, 12)
-            }
-        #else
-        DeviceSwitches(app: app, size: 52)
-        #endif
         if app.account == nil {
             // A guest with no saved name gives one here; the button waits for
             // it (Waiting.tsx: "Nothing is asked until there is one").
