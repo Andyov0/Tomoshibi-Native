@@ -4,82 +4,10 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Tomoshibi">
-
-    <Grid x:Name="Root" Background="{StaticResource Background}">
-
-        <!-- Before a call: who is joining which room. -->
-        <Grid x:Name="JoinScreen">
-            <Border
-                Width="420"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Padding="28"
-                Background="{StaticResource Surface}"
-                BorderBrush="{StaticResource Border}"
-                BorderThickness="1"
-                CornerRadius="16">
-                <StackPanel Spacing="14">
-                    <TextBlock
-                        FontSize="26"
-                        FontWeight="SemiBold"
-                        Foreground="{StaticResource Foreground}"
-                        Text="Tomoshibi" />
-                    <TextBox x:Name="NameBox" Header="Your name" />
-                    <TextBox x:Name="RoomBox" Header="Room" />
-                    <PasswordBox x:Name="PassphraseBox" Header="Passphrase" />
-                    <StackPanel Orientation="Horizontal" Spacing="16">
-                        <CheckBox x:Name="MicBox" Content="Microphone" />
-                        <CheckBox x:Name="CameraBox" Content="Camera" />
-                    </StackPanel>
-                    <Button
-                        x:Name="JoinButton"
-                        HorizontalAlignment="Stretch"
-                        Background="{StaticResource Tally}"
-                        Click="OnJoin"
-                        Content="Join"
-                        Foreground="{StaticResource TallyForeground}" />
-                    <TextBlock
-                        x:Name="JoinStatus"
-                        Foreground="{StaticResource Muted}"
-                        TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-        </Grid>
-
-        <!-- In a call: the pictures, and the bar under them. -->
-        <Grid x:Name="CallScreen" Visibility="Collapsed">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
-            <TextBlock
-                x:Name="CallTitle"
-                Margin="16,12,16,0"
-                Foreground="{StaticResource Muted}" />
-            <Grid x:Name="Stage" Grid.Row="1" Margin="12" />
-            <TextBlock
-                x:Name="Alone"
-                Grid.Row="1"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center"
-                Foreground="{StaticResource Muted}"
-                Text="Nobody else is here yet" />
-            <StackPanel
-                Grid.Row="2"
-                Margin="0,0,0,16"
-                HorizontalAlignment="Center"
-                Orientation="Horizontal"
-                Spacing="10">
-                <ToggleButton x:Name="MicToggle" Click="OnMicrophone" Content="Microphone" />
-                <ToggleButton x:Name="CameraToggle" Click="OnCamera" Content="Camera" />
-                <Button
-                    x:Name="LeaveButton"
-                    Background="{StaticResource Danger}"
-                    Click="OnLeave"
-                    Content="Leave"
-                    Foreground="White" />
-            </StackPanel>
-        </Grid>
-    </Grid>
+    <!--
+        The screens, what lies over them, and the title bar's strip, all made
+        in code (MainWindow.xaml.cs): the screens are the other apps' ports,
+        built as their Compose and SwiftUI are, from the model.
+    -->
+    <Grid x:Name="Root" />
 </Window>

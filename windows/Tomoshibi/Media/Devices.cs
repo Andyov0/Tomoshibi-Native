@@ -21,21 +21,33 @@ internal sealed class CameraFeed : IDisposable
 {
     private readonly MediaCapture _capture;
     private readonly MediaFrameReader _reader;
-    private readonly VideoInput _input;
+    /// <summary>Where the frames go; set when the camera is published, null while it only shows a picture of yourself.</summary>
+    public volatile VideoInput? Input;
     public long FramesPushed;
+    private long _arrived;
 
-    private CameraFeed(MediaCapture capture, MediaFrameReader reader, VideoInput input)
+    /// <summary>A picture of yourself, as BGRA rows, about ten times a second, on the reader's thread.</summary>
+    public event Action<byte[], int, int>? Previewed;
+
+    private CameraFeed(MediaCapture capture, MediaFrameReader reader, VideoInput? input)
     {
         _capture = capture;
         _reader = reader;
-        _input = input;
+        Input = input;
         _reader.FrameArrived += Arrived;
     }
 
-    /// <summary>The first colour camera, at the size closest to the one asked for; null when there is none.</summary>
-    public static async Task<(MediaCapture Capture, MediaFrameSource Source, uint Width, uint Height)?> Open(uint width, uint height)
+    /// <summary>
+    /// The camera last picked where it is still there, otherwise the first
+    /// colour camera, at the size closest to the one asked for; null when
+    /// there is none.
+    /// </summary>
+    public static async Task<(MediaCapture Capture, MediaFrameSource Source, uint Width, uint Height)?> Open(uint width, uint height, string? preferred = null)
     {
-        foreach (var group in await MediaFrameSourceGroup.FindAllAsync())
+        var groups = (await MediaFrameSourceGroup.FindAllAsync())
+            .OrderByDescending(g => preferred != null && g.SourceInfos.Any(s => s.DeviceInformation?.Id == preferred))
+            .ToList();
+        foreach (var group in groups)
         {
             var info = group.SourceInfos.FirstOrDefault(s => s.SourceKind == MediaFrameSourceKind.Color);
             if (info == null) continue;
@@ -59,7 +71,7 @@ internal sealed class CameraFeed : IDisposable
         return null;
     }
 
-    public static async Task<CameraFeed> Start(MediaCapture capture, MediaFrameSource source, VideoInput input)
+    public static async Task<CameraFeed> Start(MediaCapture capture, MediaFrameSource source, VideoInput? input)
     {
         var reader = await capture.CreateFrameReaderAsync(source, MediaEncodingSubtypes.Nv12);
         reader.AcquisitionMode = MediaFrameReaderAcquisitionMode.Realtime;
@@ -74,6 +86,18 @@ internal sealed class CameraFeed : IDisposable
         using var frame = reader.TryAcquireLatestFrame();
         var bitmap = frame?.VideoMediaFrame?.SoftwareBitmap;
         if (bitmap == null) return;
+        if (Previewed is { } previewed && Interlocked.Increment(ref _arrived) % 3 == 0)
+        {
+            using var bgra = SoftwareBitmap.Convert(bitmap, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);
+            var pixels = new byte[bgra.PixelWidth * bgra.PixelHeight * 4];
+            bgra.CopyToBuffer(System.Runtime.InteropServices.WindowsRuntime.WindowsRuntimeBufferExtensions.AsBuffer(pixels));
+            previewed(pixels, bgra.PixelWidth, bgra.PixelHeight);
+        }
+        if (Input is not { } input)
+        {
+            bitmap.Dispose();
+            return;
+        }
         using var nv12 = bitmap.BitmapPixelFormat == BitmapPixelFormat.Nv12 ? null : SoftwareBitmap.Convert(bitmap, BitmapPixelFormat.Nv12);
         var picture = nv12 ?? bitmap;
         using var buffer = picture.LockBuffer(BitmapBufferAccessMode.Read);
@@ -87,7 +111,7 @@ internal sealed class CameraFeed : IDisposable
         // its first byte and V at its second, each a step of two from the next.
         var v = uv.AsSpan(1).ToArray();
         var micros = (long)(frame!.SystemRelativeTime ?? TimeSpan.Zero).TotalMicroseconds;
-        _input.PushPlanes(y, uv, v, (uint)luma.Stride, (uint)chroma.Stride, 2, (uint)picture.PixelWidth, (uint)picture.PixelHeight, micros, 0);
+        input.PushPlanes(y, uv, v, (uint)luma.Stride, (uint)chroma.Stride, 2, (uint)picture.PixelWidth, (uint)picture.PixelHeight, micros, 0);
         Interlocked.Increment(ref FramesPushed);
         bitmap.Dispose();
     }
@@ -122,7 +146,7 @@ internal sealed class MicrophoneFeed : IDisposable
         _graph.QuantumStarted += Quantum;
     }
 
-    public static async Task<MicrophoneFeed?> Start(AudioInput input)
+    public static async Task<MicrophoneFeed?> Start(AudioInput input, string? deviceId = null)
     {
         var settings = new AudioGraphSettings(AudioRenderCategory.Communications)
         {
@@ -137,7 +161,22 @@ internal sealed class MicrophoneFeed : IDisposable
             Log.Line($"no audio graph for the microphone: {made.Status}");
             return null;
         }
-        var device = await made.Graph.CreateDeviceInputNodeAsync(MediaCategory.Communications, format);
+        // The microphone last picked where it is still there; the system's otherwise.
+        Windows.Devices.Enumeration.DeviceInformation? chosen = null;
+        if (deviceId != null)
+        {
+            try
+            {
+                chosen = await Windows.Devices.Enumeration.DeviceInformation.CreateFromIdAsync(deviceId);
+            }
+            catch (Exception)
+            {
+                chosen = null;
+            }
+        }
+        var device = chosen != null
+            ? await made.Graph.CreateDeviceInputNodeAsync(MediaCategory.Communications, format, chosen)
+            : await made.Graph.CreateDeviceInputNodeAsync(MediaCategory.Communications, format);
         if (device.Status != AudioDeviceNodeCreationStatus.Success)
         {
             Log.Line($"no microphone: {device.Status}");

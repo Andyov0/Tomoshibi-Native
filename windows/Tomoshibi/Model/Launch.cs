@@ -2,14 +2,18 @@ namespace Tomoshibi.Model;
 
 /// <summary>
 /// What a test asked of this launch, from the environment: the same
-/// TOMOSHIBI_* switches the Apple apps read (AppModel.start) and Android takes
-/// as intent extras (DebugLaunch). Nothing here is ever kept.
+/// TOMOSHIBI_* switches the Apple apps read (AppModel.start) and Android
+/// takes as intent extras (DebugLaunch). Nothing here is ever kept.
 ///
-/// A launch that names no deployment never goes anywhere by itself. The apps
-/// open on the home deployment when none is given, and a test launch that
-/// forgot its base has reached it before; so autojoin, signing in and every
-/// other automatic step need TOMOSHIBI_BASE, and without it the app only
-/// waits for a person.
+/// Only a debug build reads them: a release build is for the home
+/// deployment and nothing else (the core's release profile admits no other
+/// address), and it has no switches somebody could set to reach anything
+/// else or to change what it captures.
+///
+/// A launch that names no deployment goes to the home deployment like the
+/// release app, and every automatic step (autojoin, signing in, a link, a
+/// screen to open on) is ignored: a test launch that forgot its base has
+/// reached the production fleet before.
 /// </summary>
 public sealed record Launch
 {
@@ -17,7 +21,7 @@ public sealed record Launch
     public string? Base { get; init; }
 
     /// <summary>The name shown to the room (TOMOSHIBI_NAME).</summary>
-    public string Name { get; init; } = "Native App";
+    public string? Name { get; init; }
 
     /// <summary>Signs in as this account first (TOMOSHIBI_SIGNIN=name:file), the passphrase read from the file to keep it off the command line.</summary>
     public string? SignInName { get; init; }
@@ -32,6 +36,28 @@ public sealed record Launch
     /// <summary>Straight into this room (TOMOSHIBI_AUTOJOIN).</summary>
     public string? Autojoin { get; init; }
 
+    /// <summary>To this room's join screen (TOMOSHIBI_PREPARE).</summary>
+    public string? Prepare { get; init; }
+
+    /// <summary>A link to open, as if the system had handed it over (TOMOSHIBI_OPEN): an invitation or an arranged meeting.</summary>
+    public string? Open { get; init; }
+
+    /// <summary>Opens on the ending screen for this reason (TOMOSHIBI_ENDED=left|closed|removed|lost), for pictures of it.</summary>
+    public string? Ended { get; init; }
+
+    /// <summary>Speaks this language for the launch without keeping it (TOMOSHIBI_LANGUAGE=en|zh-Hans|zh-Hant|ja).</summary>
+    public string? Language { get; init; }
+
+    /// <summary>The window's size in device-independent pixels (TOMOSHIBI_WINDOW=WIDTHxHEIGHT), for pictures at a phone's width and a laptop's.</summary>
+    public (int Width, int Height)? Window { get; init; }
+
+    /// <summary>
+    /// Something to open over the screen (TOMOSHIBI_SHOW): settings,
+    /// settings:&lt;section&gt;, start, join, schedule, servers, account, or in
+    /// a call chat, devices, leave, reactions. Android's LobbyDebug.
+    /// </summary>
+    public string? Show { get; init; }
+
     /// <summary>
     /// Plays nothing and only measures what arrives (TOMOSHIBI_MUTE): a test
     /// browser's fake microphone beeps once a second, and an app in the same
@@ -39,20 +65,20 @@ public sealed record Launch
     /// </summary>
     public bool Mute { get; init; }
 
-    /// <summary>Joins with the microphone published (TOMOSHIBI_MIC).</summary>
+    /// <summary>Joins with the microphone on (TOMOSHIBI_MIC); off otherwise, so that a test asks for nothing it did not mean to.</summary>
     public bool Microphone { get; init; }
 
-    /// <summary>Joins with the camera published (TOMOSHIBI_CAMERA).</summary>
+    /// <summary>Joins with the camera on (TOMOSHIBI_CAMERA).</summary>
     public bool Camera { get; init; }
 
     /// <summary>
     /// Where the camera and microphone come from (TOMOSHIBI_SOURCE):
     /// <c>synthetic</c>, a generated picture and tone, or <c>devices</c>, the
     /// real ones through Windows.Media.Capture and an audio graph. Synthetic
-    /// unless asked: in a virtual machine the real devices may be the host's,
-    /// and a test must never capture the person sitting at it.
+    /// in every test: in a virtual machine the real devices may be the
+    /// host's, and a test must never capture the person sitting at it.
     /// </summary>
-    public bool RealDevices { get; init; }
+    public bool RealDevices { get; init; } = true;
 
     /// <summary>A file the measurements are written to (TOMOSHIBI_DEBUG_LOG).</summary>
     public string? LogFile { get; init; }
@@ -60,12 +86,36 @@ public sealed record Launch
     /// <summary>Leaves the call and quits after this many seconds (TOMOSHIBI_DEBUG_QUIT_AFTER).</summary>
     public int? QuitAfterSeconds { get; init; }
 
+    /// <summary>
+    /// A test is driving the app (a debug build given a deployment of its
+    /// own), and nothing it does is kept: not the name, the passphrase, the
+    /// session, the identity, the language or the colour (Android's
+    /// AppModel.rehearsal). The tests run the very app somebody uses, and
+    /// what they would write over is the owner's.
+    /// </summary>
+    public bool Rehearsal => Base != null;
+
     public static Launch FromEnvironment()
     {
+#if DEBUG
         static string? Get(string name)
         {
             var value = Environment.GetEnvironmentVariable(name);
             return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+        }
+
+        var baseUrl = Get("TOMOSHIBI_BASE");
+        var logFile = Get("TOMOSHIBI_DEBUG_LOG");
+        (int, int)? window = null;
+        if (Get("TOMOSHIBI_WINDOW") is { } size && size.Split('x') is [var w, var h] && int.TryParse(w, out var width) && int.TryParse(h, out var height))
+        {
+            window = (width, height);
+        }
+        // Everything below drives the app by itself, and only a launch that
+        // says where to drive it to may.
+        if (baseUrl == null)
+        {
+            return new Launch { LogFile = logFile, Window = window, Mute = Get("TOMOSHIBI_MUTE") != null };
         }
 
         string? signInName = null, signInFile = null;
@@ -77,19 +127,30 @@ public sealed record Launch
 
         return new Launch
         {
-            Base = Get("TOMOSHIBI_BASE"),
-            Name = Get("TOMOSHIBI_NAME") ?? "Native App",
+            Base = baseUrl,
+            Name = Get("TOMOSHIBI_NAME"),
             SignInName = signInName,
             SignInPassphraseFile = signInFile,
             Passphrase = Get("TOMOSHIBI_PASSPHRASE"),
             SealingWord = Get("TOMOSHIBI_SEALING_WORD"),
             Autojoin = Get("TOMOSHIBI_AUTOJOIN"),
+            Prepare = Get("TOMOSHIBI_PREPARE"),
+            Open = Get("TOMOSHIBI_OPEN"),
+            Ended = Get("TOMOSHIBI_ENDED"),
+            Language = Get("TOMOSHIBI_LANGUAGE"),
+            Window = window,
+            Show = Get("TOMOSHIBI_SHOW"),
             Mute = Get("TOMOSHIBI_MUTE") != null,
             Microphone = Get("TOMOSHIBI_MIC") != null,
             Camera = Get("TOMOSHIBI_CAMERA") != null,
+            // Synthetic unless asked: a test given a deployment of its own
+            // never reaches a real device by forgetting a switch.
             RealDevices = string.Equals(Get("TOMOSHIBI_SOURCE"), "devices", StringComparison.OrdinalIgnoreCase),
-            LogFile = Get("TOMOSHIBI_DEBUG_LOG"),
+            LogFile = logFile,
             QuitAfterSeconds = int.TryParse(Get("TOMOSHIBI_DEBUG_QUIT_AFTER"), out var seconds) && seconds > 0 ? seconds : null,
         };
+#else
+        return new Launch();
+#endif
     }
 }
