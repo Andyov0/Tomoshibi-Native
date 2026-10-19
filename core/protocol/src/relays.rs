@@ -16,9 +16,10 @@
 //!   whatever comes back first (the upgrade, the refusal, or an error) is the
 //!   answer;
 //! - each relay is timed in [`ROUNDS`] rounds, one after another, every relay
-//!   at once; a reading is the median of the rounds that answered, a round is
-//!   given 1.5 s, and a round that goes unanswered is the relay's last; over UDP
-//!   a relay that answered fewer than [`QUORUM`] rounds has not answered;
+//!   at once, each round given 1.5 s; a reading is the median of the rounds
+//!   that answered, and a relay that answered fewer than [`QUORUM`] has not
+//!   answered, whichever way it was timed, so its rounds stop at its third
+//!   miss; over UDP the first relay out stops everybody's UDP rounds;
 //! - the fastest wins and ties go to the earlier relay in the list; the winner
 //!   is trusted for five minutes, and [`forget`] drops it when a call is lost.
 //!
@@ -52,10 +53,9 @@ use crate::ProtocolError;
 ///
 /// This sits between somebody pressing join and their call starting. A relay
 /// that has not answered in a second and a half is not the one to hold a
-/// conversation on, and one that is down must cost no more than this: a
-/// round that runs out ends that relay's measurement ([`ROUNDS`]), so a dead
-/// relay costs one of these per kind of reading, as it did when there was
-/// only one round.
+/// conversation on. A round that runs out is a round the relay missed, and a
+/// relay that is down is given up on at its third ([`QUORUM`]), so it costs
+/// three of these over each kind of reading rather than five.
 pub const PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
 
 /// How many times each relay is timed, one round after another (the owner's
@@ -73,14 +73,16 @@ pub const PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
 /// relay's five round trips and not the sum of everybody's.
 pub const ROUNDS: usize = 5;
 
-/// How many of the [`ROUNDS`] a relay has to answer over UDP to have a reading
-/// there at all.
+/// How many of the [`ROUNDS`] a relay has to answer to have a reading at all,
+/// over UDP and over the socket alike (relays.ts, `ENOUGH`).
 ///
 /// The median of one or two answers is the single reading this replaced, and
-/// a probe that drops more than it answers is a broken probe port, which the
-/// all-or-nothing rule in [`measure`] exists to make visible: a relay short of
-/// this sends the whole list to the signalling socket. Over the socket any
-/// answer is a reading, because there is no slower way left to fall back to.
+/// a relay that drops more than half of what it is sent is not one to put a
+/// call on however quick the rounds that came back. Over UDP a relay short of
+/// this is a broken probe port, which the all-or-nothing rule in [`measure`]
+/// exists to make visible: it sends the whole list to the signalling socket.
+/// It is also what bounds the wait: once a relay has missed three it cannot
+/// reach three answers, and is not asked again.
 pub const QUORUM: usize = 3;
 
 /// How long a choice is trusted before it is measured again (relays.ts,
@@ -399,41 +401,49 @@ async fn measure(list: &[Relay]) -> Vec<(String, Option<Duration>)> {
     answered(list, join_all(list.iter().map(over_signalling)).await)
 }
 
-/// Up to [`ROUNDS`] readings taken one after another, ending at the first
-/// round that brings none.
+/// Up to [`ROUNDS`] readings taken one after another (relays.ts, `inRounds`),
+/// the rounds that answered, in order.
 ///
-/// A round that brought nothing was refused outright or ran the whole
-/// [`PROBE_TIMEOUT`], retransmissions and all, without an answer: that relay
-/// is down or too far to hold a call on. Waiting out four more of them would
-/// put six seconds between somebody and their call for a relay that cannot
-/// win, where the single reading cost a dead relay one timeout; ending there
-/// keeps that. It also means that over UDP the first [`QUORUM`] rounds have
-/// to answer, which a working probe does: a round is three requests.
+/// A round that brings nothing (refused outright, or the whole
+/// [`PROBE_TIMEOUT`] with its retransmissions and no answer) is a miss and the
+/// next round is taken all the same, since one lost round is not a relay
+/// that is down. At the third miss the relay can no longer reach [`QUORUM`]
+/// answers, and is not asked again: a dead relay costs three timeouts, not
+/// five.
 async fn rounds<F, R>(mut round: F) -> Vec<Duration>
 where
     F: FnMut() -> R,
     R: Future<Output = Option<Duration>>,
 {
     let mut took = Vec::with_capacity(ROUNDS);
+    let mut missed = 0;
 
     for _ in 0..ROUNDS {
         match round().await {
             Some(one) => took.push(one),
-            None => break,
+            None => {
+                missed += 1;
+                if missed > ROUNDS - QUORUM {
+                    break;
+                }
+            }
         }
     }
 
     took
 }
 
-/// The median of the rounds that answered, where at least `quorum` did.
+/// The median of the rounds that answered, where at least [`QUORUM`] did
+/// (relays.ts, `reading`).
 ///
-/// The middle one of an odd number; of an even number (four, when the fifth
-/// round went unanswered), the mean of the middle two, as a median is
-/// ordinarily taken, so that neither of them alone decides. The web takes it
+/// Of the rounds that answered rather than of all five with the misses
+/// counted as slow: a miss is no reading, and a relay that answered four
+/// times in thirty milliseconds and once not at all is a thirty-millisecond
+/// relay that dropped a packet. The middle one of an odd number; of four, the
+/// mean of the middle two, which is what a median of four is. The web takes it
 /// the same way, so a browser and an app on one network rank alike.
-fn reading(took: &[Duration], quorum: usize) -> Option<Duration> {
-    if took.is_empty() || took.len() < quorum {
+fn reading(took: &[Duration]) -> Option<Duration> {
+    if took.len() < QUORUM {
         return None;
     }
 
@@ -463,7 +473,7 @@ fn report(name: &str, over: &str, took: &[Duration], made: Option<Duration>) {
         None => "no reading".to_owned(),
     };
 
-    eprintln!("tomoshibi relays: {name} over {over}: {} of {ROUNDS} answered [{rounds}] ms, {made}", took.len());
+    eprintln!("tomoshibi relays: {name} over {over}: {} answered [{rounds}] ms, {made}", took.len());
 }
 
 /// Pairs readings with names the way the web's `Map` does: one entry per name,
@@ -492,7 +502,8 @@ fn answered(list: &[Relay], took: Vec<Option<Duration>>) -> Vec<(String, Option<
 /// is no reading, as before.
 ///
 /// Every relay is then timed at once, and the moment one of them cannot have
-/// a reading the rest are dropped: the list is going to the signalling socket
+/// a reading the rest are dropped, rounds in flight and all (relays.ts,
+/// `inRounds` with `together`): the list is going to the signalling socket
 /// whatever they say, and their remaining rounds would only delay that.
 async fn over_udp(list: &[Relay]) -> Option<Vec<Duration>> {
     let targets = join_all(list.iter().map(|relay| async move {
@@ -518,8 +529,8 @@ async fn over_udp(list: &[Relay]) -> Option<Vec<Duration>> {
 }
 
 /// One relay's reading over UDP: its rounds, each a new binding request from
-/// a new socket, as each of the web's rounds is a new peer connection; the
-/// median where it answered at least [`QUORUM`] of them.
+/// a new socket, as each of the web's rounds is a new peer connection, and
+/// their [`reading`].
 ///
 /// Each round is timed from just before its request is sent to its answer.
 async fn over_udp_to(name: &str, target: SocketAddr) -> Option<Duration> {
@@ -530,7 +541,7 @@ async fn over_udp_to(name: &str, target: SocketAddr) -> Option<Duration> {
     })
     .await;
 
-    let made = reading(&took, QUORUM);
+    let made = reading(&took);
     report(name, "udp", &took, made);
     made
 }
@@ -543,7 +554,9 @@ async fn over_udp_to(name: &str, target: SocketAddr) -> Option<Duration> {
 /// relay without an address, or with one a browser would not open a socket to,
 /// has no reading, as the browser's constructor throwing gives none. Every
 /// round is a connection of its own (the prober keeps none), as each of the
-/// web's is a new WebSocket.
+/// web's is a new WebSocket, and the rounds come to their [`reading`] as they
+/// do over UDP; one relay out here stops nobody else, there being no other
+/// way left to time them.
 async fn over_signalling(relay: &Relay) -> Option<Duration> {
     let target = signalling(relay.url.as_deref()?)?;
     // Built before the clock starts: the first build loads the system's
@@ -560,7 +573,7 @@ async fn over_signalling(relay: &Relay) -> Option<Duration> {
     })
     .await;
 
-    let made = reading(&took, 1);
+    let made = reading(&took);
     report(&relay.name, "signalling", &took, made);
     made
 }
@@ -912,25 +925,20 @@ mod tests {
     fn a_reading_is_the_median_of_the_rounds_that_answered() {
         let ms = Duration::from_millis;
 
-        assert_eq!(reading(&[ms(180), ms(31), ms(30), ms(33), ms(29)], QUORUM), Some(ms(31)));
-        assert_eq!(reading(&[ms(40), ms(10), ms(30), ms(20)], QUORUM), Some(ms(25)));
-        assert_eq!(reading(&[ms(90), ms(12), ms(11)], QUORUM), Some(ms(12)));
-        assert_eq!(reading(&[ms(7)], 1), Some(ms(7)));
-        assert_eq!(reading(&[ms(9), ms(4)], 1), Some(Duration::from_micros(6500)));
+        assert_eq!(reading(&[ms(180), ms(31), ms(30), ms(33), ms(29)]), Some(ms(31)));
+        assert_eq!(reading(&[ms(40), ms(10), ms(30), ms(20)]), Some(ms(25)));
+        assert_eq!(reading(&[ms(90), ms(12), ms(11)]), Some(ms(12)));
     }
 
     #[test]
-    fn over_udp_fewer_than_three_answers_are_no_reading() {
+    fn fewer_than_three_answers_are_no_reading() {
         let ms = Duration::from_millis;
 
         assert_eq!(QUORUM, 3);
-        assert_eq!(reading(&[ms(10), ms(11)], QUORUM), None);
-        assert_eq!(reading(&[ms(10)], QUORUM), None);
-        assert_eq!(reading(&[], QUORUM), None);
-        assert!(reading(&[ms(10), ms(11), ms(12)], QUORUM).is_some());
-
-        // Over the socket any answer is one, and none is none.
-        assert_eq!(reading(&[], 1), None);
+        assert_eq!(reading(&[ms(10), ms(11)]), None);
+        assert_eq!(reading(&[ms(10)]), None);
+        assert_eq!(reading(&[]), None);
+        assert!(reading(&[ms(10), ms(11), ms(12)]).is_some());
     }
 
     /// Runs `rounds` over answers given in order (`None` is a round that
@@ -949,17 +957,22 @@ mod tests {
     }
 
     #[test]
-    fn five_rounds_one_after_another_and_none_after_one_that_went_unanswered() {
+    fn five_rounds_and_none_after_the_third_miss() {
         let ms = Duration::from_millis;
 
         // Five, and not a sixth however many more would answer.
         let every = [Some(5), Some(6), Some(7), Some(8), Some(9), Some(10), Some(11)];
         assert_eq!(ran(&every), (vec![ms(5), ms(6), ms(7), ms(8), ms(9)], ROUNDS));
 
-        // A relay that stops answering is not asked again: what it answered
-        // stands, and the round that ran out was its last.
-        assert_eq!(ran(&[Some(5), Some(6), Some(7), None, Some(9)]), (vec![ms(5), ms(6), ms(7)], 4));
-        assert_eq!(ran(&[None, Some(6), Some(7), Some(8), Some(9)]), (vec![], 1));
+        // A missed round is not the end: the next is taken, the first round
+        // included, which is the one most likely to be lost.
+        assert_eq!(ran(&[None, Some(6), Some(7), Some(8), Some(9)]), (vec![ms(6), ms(7), ms(8), ms(9)], ROUNDS));
+        assert_eq!(ran(&[Some(5), None, Some(7), None, Some(9)]), (vec![ms(5), ms(7), ms(9)], ROUNDS));
+
+        // At the third miss three answers are out of reach, and the relay is
+        // not asked again.
+        assert_eq!(ran(&[None, None, Some(7), None, Some(9)]), (vec![ms(7)], 4));
+        assert_eq!(ran(&[None, None, None, Some(8), Some(9)]), (vec![], 3));
     }
 
     #[test]

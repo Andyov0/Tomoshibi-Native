@@ -59,6 +59,9 @@ enum Answer {
     Redirect(Duration),
     /// Takes the connection and never says anything.
     Never,
+    /// Refuses the first this many connections after the delay, as a relay
+    /// does, and says nothing to any after them.
+    RefuseFirst(usize, Duration),
 }
 
 /// A relay's signalling port: every byte each connection sent, in order.
@@ -106,7 +109,8 @@ impl Socket {
 
                         let (delay, response): (Duration, &[u8]) = match answer {
                             Answer::Never => continue,
-                            Answer::Refuse(delay) => (
+                            Answer::RefuseFirst(first, _) if at >= first => continue,
+                            Answer::Refuse(delay) | Answer::RefuseFirst(_, delay) => (
                                 delay,
                                 b"HTTP/1.1 401 Unauthorized\r\ncontent-type: text/plain\r\ncontent-length: 13\r\nconnection: close\r\n\r\nmissing token",
                             ),
@@ -153,7 +157,7 @@ async fn closed() -> SocketAddr {
 
 /// A relay's STUN probe, built as internal/rtc/stun.go builds it: every
 /// datagram it was sent and when, and an answer to binding requests after
-/// `delay`, skipping the first `ignore` of them. `None` never answers.
+/// `delay`, skipping the first `ignore` datagrams. `None` never answers.
 struct Stun {
     address: SocketAddr,
     datagrams: Arc<Mutex<Vec<(Instant, Vec<u8>)>>>,
@@ -161,12 +165,13 @@ struct Stun {
 
 impl Stun {
     async fn start(delay: Option<Duration>, ignore: usize) -> Stun {
-        Stun::answering(move |count| if count <= ignore { None } else { delay }).await
+        Stun::answering(move |count, _| if count <= ignore { None } else { delay }).await
     }
 
-    /// One that answers the `count`th datagram it is sent (from 1) after
-    /// what `answer` says, or not at all.
-    async fn answering(answer: impl Fn(usize) -> Option<Duration> + Send + 'static) -> Stun {
+    /// One that answers the `count`th datagram it is sent (from 1), which
+    /// belongs to the `round`th transaction it has seen (from 1; a resent
+    /// request is the same round), after what `answer` says, or not at all.
+    async fn answering(answer: impl Fn(usize, usize) -> Option<Duration> + Send + 'static) -> Stun {
         let socket = Arc::new(UdpSocket::bind("127.0.0.1:0").await.unwrap());
         let address = socket.local_addr().unwrap();
         let datagrams = Arc::new(Mutex::new(Vec::<(Instant, Vec<u8>)>::new()));
@@ -174,6 +179,7 @@ impl Stun {
         let log = datagrams.clone();
         tokio::spawn(async move {
             let mut buffer = [0u8; 1500];
+            let mut rounds: Vec<Vec<u8>> = Vec::new();
             while let Ok((read, from)) = socket.recv_from(&mut buffer).await {
                 let packet = buffer[..read].to_vec();
                 let count = {
@@ -181,8 +187,16 @@ impl Stun {
                     log.push((Instant::now(), packet.clone()));
                     log.len()
                 };
+                let id = packet.get(8..20).map(<[u8]>::to_vec).unwrap_or_default();
+                let round = match rounds.iter().position(|seen| *seen == id) {
+                    Some(at) => at + 1,
+                    None => {
+                        rounds.push(id);
+                        rounds.len()
+                    }
+                };
 
-                let Some(delay) = answer(count) else { continue };
+                let Some(delay) = answer(count, round) else { continue };
                 let Some(reply) = binding(&packet, from) else { continue };
 
                 let socket = socket.clone();
@@ -325,14 +339,14 @@ async fn names_nothing_when_no_relay_answers_and_gives_up_at_the_timeout() {
     assert_eq!(relays::fastest(&[at("shanghai", &sh), at("hongkong", &hk)]).await, None);
     let took = started.elapsed();
 
-    // All at once and each bounded: one and a half seconds, not three, and
-    // not however long a dead relay would keep a person waiting. Not five
-    // of them either: a round that ran out is a relay's last.
-    assert!(took >= ms(1450), "gave up after {took:?}");
-    assert!(took < ms(2200), "waited {took:?}");
+    // All at once and each bounded: three rounds of a second and a half for
+    // both together, not twice that, and not five rounds: at the third miss
+    // three answers are out of reach (relays.ts, `inRounds`).
+    assert!(took >= ms(4450), "gave up after {took:?}");
+    assert!(took < ms(5200), "waited {took:?}");
 
-    // Both were tried, once each.
-    assert_eq!((sh.count(), hk.count()), (1, 1));
+    // Both were tried, three times each.
+    assert_eq!((sh.count(), hk.count()), (3, 3));
 }
 
 #[tokio::test]
@@ -616,7 +630,7 @@ async fn a_slow_first_round_does_not_decide_the_reading() {
     let _turn = TURN.lock().await;
     relays::forget();
 
-    let sh_stun = Stun::answering(|count| Some(if count == 1 { ms(200) } else { ms(5) })).await;
+    let sh_stun = Stun::answering(|count, _| Some(if count == 1 { ms(200) } else { ms(5) })).await;
     let hk_stun = Stun::start(Some(ms(40)), 0).await;
 
     let offered = [
@@ -638,7 +652,7 @@ async fn a_quick_round_does_not_decide_the_reading_either() {
     let _turn = TURN.lock().await;
     relays::forget();
 
-    let sh_stun = Stun::answering(|count| Some(if count == 1 { ms(5) } else { ms(90) })).await;
+    let sh_stun = Stun::answering(|count, _| Some(if count == 1 { ms(5) } else { ms(90) })).await;
     let hk_stun = Stun::start(Some(ms(40)), 0).await;
 
     let offered = [
@@ -690,7 +704,7 @@ async fn a_relay_answering_fewer_than_three_rounds_over_udp_sends_everybody_over
     let _turn = TURN.lock().await;
     relays::forget();
 
-    let sh_stun = Stun::answering(|count| (count <= 2).then_some(ms(5))).await;
+    let sh_stun = Stun::answering(|_, round| (round <= 2).then_some(ms(5))).await;
     let hk_stun = Stun::start(Some(ms(50)), 0).await;
     let sh = Socket::start(Answer::Refuse(ms(150))).await;
     let hk = Socket::start(Answer::Refuse(ms(5))).await;
@@ -703,8 +717,8 @@ async fn a_relay_answering_fewer_than_three_rounds_over_udp_sends_everybody_over
     settle().await;
     assert_eq!((sh.count(), hk.count()), (relays::ROUNDS, relays::ROUNDS));
 
-    // Two rounds answered and a third that was not, and nothing after it.
-    assert_eq!(sh_stun.transactions().len(), 3);
+    // Two rounds answered and three that were not, the third of them its last.
+    assert_eq!(sh_stun.transactions().len(), 5);
 }
 
 #[tokio::test]
@@ -712,7 +726,7 @@ async fn three_rounds_answered_over_udp_are_a_reading() {
     let _turn = TURN.lock().await;
     relays::forget();
 
-    let sh_stun = Stun::answering(|count| (count <= 3).then_some(ms(5))).await;
+    let sh_stun = Stun::answering(|_, round| (round <= 3).then_some(ms(5))).await;
     let hk_stun = Stun::start(Some(ms(50)), 0).await;
     let sh = Socket::start(Answer::Refuse(ms(150))).await;
     let hk = Socket::start(Answer::Refuse(ms(5))).await;
@@ -724,11 +738,53 @@ async fn three_rounds_answered_over_udp_are_a_reading() {
     assert_eq!(relays::fastest(&offered).await.as_deref(), Some("shanghai"));
     settle().await;
 
-    // Still over UDP: no socket to either, and the fourth round, unanswered,
-    // was Shanghai's last.
+    // Still over UDP: no socket to either, and all five rounds asked, two
+    // misses being one short of giving up.
     assert_eq!((sh.count(), hk.count()), (0, 0));
-    assert_eq!(sh_stun.transactions().len(), 4);
+    assert_eq!(sh_stun.transactions().len(), relays::ROUNDS);
     assert_eq!(hk_stun.transactions().len(), relays::ROUNDS);
+}
+
+// The round most likely to go missing is the first, and missing it is not
+// being down: the relay that answers the other four keeps its reading, and
+// with it the list keeps to UDP.
+#[tokio::test]
+async fn a_missed_first_round_is_not_the_end_of_a_relay() {
+    let _turn = TURN.lock().await;
+    relays::forget();
+
+    let sh_stun = Stun::answering(|_, round| (round > 1).then_some(ms(5))).await;
+    let hk_stun = Stun::start(Some(ms(40)), 0).await;
+    let sh = Socket::start(Answer::Refuse(ms(150))).await;
+    let hk = Socket::start(Answer::Refuse(ms(5))).await;
+
+    let offered = [
+        Relay { probe: Some(sh_stun.probe()), ..at("shanghai", &sh) },
+        Relay { probe: Some(hk_stun.probe()), ..at("hongkong", &hk) },
+    ];
+    assert_eq!(relays::fastest(&offered).await.as_deref(), Some("shanghai"));
+    settle().await;
+    assert_eq!((sh.count(), hk.count()), (0, 0));
+    assert_eq!(sh_stun.transactions().len(), relays::ROUNDS);
+}
+
+// Over the socket as over UDP, a relay must answer three of its five: one
+// that answered twice, however quickly, has no reading and is not chosen.
+#[tokio::test]
+async fn over_the_socket_two_answers_are_no_reading_either() {
+    let _turn = TURN.lock().await;
+    relays::forget();
+
+    let sh = Socket::start(Answer::RefuseFirst(2, ms(5))).await;
+    let hk = Socket::start(Answer::Refuse(ms(150))).await;
+
+    let read = relays::timings(&[at("shanghai", &sh), at("hongkong", &hk)]).await;
+    assert_eq!(read[0].millis, None, "two answers of five were a reading");
+    assert!(read[1].millis.is_some());
+
+    // Asked five times: two answers, and the third miss its last round.
+    settle().await;
+    assert_eq!(sh.count(), relays::ROUNDS);
 }
 
 // The two kinds of reading are not the same number: one round trip over UDP,
@@ -774,15 +830,50 @@ async fn measures_everybody_over_the_socket_when_one_probe_is_silent() {
     settle().await;
     assert_eq!((sh.count(), hk.count()), (relays::ROUNDS, relays::ROUNDS));
 
-    // The silent probe was asked again while it was given time, and only ever
-    // with the same request: its first round was its last.
+    // The silent probe was asked three times, each round's request sent
+    // again while it was given time, and only ever unchanged.
     let asked = sh_stun.datagrams();
-    assert!(asked.len() >= 2, "never retransmitted: {asked:?}");
-    assert!(asked.iter().all(|datagram| *datagram == asked[0]), "the request changed: {asked:?}");
+    assert_eq!(sh_stun.transactions().len(), 3, "rounds asked: {asked:?}");
+    assert!(asked.len() >= 6, "never retransmitted: {asked:?}");
+    for id in sh_stun.transactions() {
+        let sent: Vec<&Vec<u8>> = asked.iter().filter(|datagram| datagram[8..20] == id).collect();
+        assert!(sent.len() >= 2 && sent.iter().all(|datagram| *datagram == sent[0]), "a round's request changed: {sent:?}");
+    }
 
-    // One timeout for the silent probe and five quick rounds over the socket,
-    // not five timeouts.
-    assert!(took < ms(3200), "waited {took:?}");
+    // Three timeouts for the silent probe, which stopped the other's UDP
+    // rounds too, and then five quick rounds over the socket: not five
+    // timeouts, and not the UDP rounds of everybody else waited out.
+    assert!(took >= ms(4450), "fell back after {took:?}");
+    assert!(took < ms(6000), "waited {took:?}");
+}
+
+// Once one relay is out over UDP the list is going to the socket whatever the
+// rest answer, so their remaining UDP rounds are not waited for (relays.ts,
+// `inRounds` with `together`): here a slow relay's fifth round would have
+// ended at six seconds.
+#[tokio::test]
+async fn the_first_relay_out_over_udp_stops_the_others_rounds() {
+    let _turn = TURN.lock().await;
+    relays::forget();
+
+    let sh_stun = Stun::start(None, 0).await;
+    let hk_stun = Stun::start(Some(ms(1200)), 0).await;
+    let sh = Socket::start(Answer::Refuse(ms(5))).await;
+    let hk = Socket::start(Answer::Refuse(ms(5))).await;
+
+    let offered = [
+        Relay { probe: Some(sh_stun.probe()), ..at("shanghai", &sh) },
+        Relay { probe: Some(hk_stun.probe()), ..at("hongkong", &hk) },
+    ];
+    let started = Instant::now();
+    relays::timings(&offered).await;
+    let took = started.elapsed();
+
+    // Hong Kong was on its fourth round when Shanghai missed its third.
+    assert_eq!(hk_stun.transactions().len(), 4);
+    assert!(took < ms(5500), "waited {took:?}");
+    settle().await;
+    assert_eq!((sh.count(), hk.count()), (relays::ROUNDS, relays::ROUNDS));
 }
 
 // UDP loses packets. The browser's STUN client sends the same request again,
