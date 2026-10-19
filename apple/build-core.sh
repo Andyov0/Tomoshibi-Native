@@ -35,6 +35,8 @@ GEN=$(mktemp -d)
 # and the protocol crate today). All the Swift goes into the one package
 # target, so types from either crate are visible to the other's bindings, and
 # the C modules share one module.modulemap in the XCFramework's headers.
+# The folder holds only what this writes, so a fresh checkout has none.
+mkdir -p "$OUT/Sources/TomoshibiCore"
 rm -f "$OUT"/Sources/TomoshibiCore/*.generated.swift
 for swift in "$GEN"/*.swift; do
     name=$(basename "$swift" .swift)
