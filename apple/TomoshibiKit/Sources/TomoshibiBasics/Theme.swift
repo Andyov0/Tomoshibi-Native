@@ -1,3 +1,4 @@
+import QuartzCore
 import SwiftUI
 
 /// The apps' palette and motion.
@@ -31,8 +32,17 @@ public enum Theme {
 
     /// Arrivals decelerate into place; departures need no such courtesy
     /// (--ease-settle and --ease-leave).
-    public static let settle = Animation.timingCurve(0.2, 0.9, 0.3, 1, duration: 0.32)
-    public static let leave = Animation.timingCurve(0.4, 0, 1, 1, duration: 0.2)
+    public static let settle = Animation.timingCurve(0.2, 0.9, 0.3, 1, duration: settleSeconds)
+    public static let leave = Animation.timingCurve(0.4, 0, 1, 1, duration: leaveSeconds)
+
+    /// The same two curves for Core Animation, for what moves inside a layer
+    /// SwiftUI does not draw: a remote picture going from filling its place
+    /// to being shown whole and back (VideoSurface), which is a layer's
+    /// scale and a layer's opacity under a view SwiftUI only places.
+    public static let settleSeconds: Double = 0.32
+    public static let leaveSeconds: Double = 0.2
+    public static var settleTiming: CAMediaTimingFunction { CAMediaTimingFunction(controlPoints: 0.2, 0.9, 0.3, 1) }
+    public static var leaveTiming: CAMediaTimingFunction { CAMediaTimingFunction(controlPoints: 0.4, 0, 1, 1) }
 
     /// Every appearance and disappearance uses these: the person who owns this
     /// product does not accept a view that simply pops in or out.

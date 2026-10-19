@@ -2,6 +2,7 @@
 import AVKit
 import os
 import SwiftUI
+import TomoshibiBasics
 import TomoshibiCore
 
 /// The call in a small window when the app goes to the background: whatever
@@ -24,20 +25,27 @@ import TomoshibiCore
 /// does; it stayed open over the call. (The phone itself was taken down by
 /// frames left in tokio threads' autorelease pools, core/src/call/remote.rs
 /// `drained`, not by this layer.)
+///
+/// A camera there fills the small window or is shown whole by the two shapes,
+/// as it is in its tile (Framing), with the window's size as the system
+/// reports it; a shared screen is shown whole. There is no blurred copy
+/// behind a camera shown whole in the small window: the system draws that
+/// window from this one layer and nothing else.
 struct PictureInPictureHost: UIViewRepresentable {
     let call: Call
     let sid: String?
+    var camera = false
 
     func makeUIView(context: Context) -> HostView {
         HostView(call: call)
     }
 
     func updateUIView(_ view: HostView, context: Context) {
-        view.follow(sid)
+        view.follow(sid, camera: camera)
     }
 
     static func dismantleUIView(_ view: HostView, coordinator: ()) {
-        view.follow(nil)
+        view.follow(nil, camera: false)
     }
 
     final class HostView: UIView, AVPictureInPictureSampleBufferPlaybackDelegate, AVPictureInPictureControllerDelegate {
@@ -48,6 +56,11 @@ struct PictureInPictureHost: UIViewRepresentable {
         private var sid: String?
         private var fed: String?
         private var full = false
+        /// Whether the picture is a camera, its shape, and the small
+        /// window's size, for whether it fills the window.
+        private var camera = false
+        private var picture = CGSize.zero
+        private var smallWindow = CGSize.zero
         private var controller: AVPictureInPictureController?
         private var away = UIApplication.shared.applicationState != .active
         private var watching: [NSObjectProtocol] = []
@@ -57,6 +70,14 @@ struct PictureInPictureHost: UIViewRepresentable {
             super.init(frame: .zero)
             renderer.layer.videoGravity = .resizeAspect
             renderer.show(atMostEvery: away ? 0 : 0.5)
+            renderer.onPictureSize = { [weak self] size in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        self?.picture = size
+                        self?.reframe()
+                    }
+                }
+            }
             full = away
             layer.addSublayer(renderer.layer)
             if AVPictureInPictureController.isPictureInPictureSupported() {
@@ -91,9 +112,16 @@ struct PictureInPictureHost: UIViewRepresentable {
             renderer.layer.frame = bounds
         }
 
-        func follow(_ next: String?) {
+        func follow(_ next: String?, camera: Bool) {
             sid = next
+            self.camera = camera
             feed()
+            reframe()
+        }
+
+        private func reframe() {
+            let fill = camera && Framing.fills(picture: picture, in: smallWindow)
+            renderer.layer.videoGravity = fill ? .resizeAspectFill : .resizeAspect
         }
 
         /// On the picture it would show, every frame of it while the app is
@@ -131,6 +159,8 @@ struct PictureInPictureHost: UIViewRepresentable {
         }
         func pictureInPictureControllerIsPlaybackPaused(_ controller: AVPictureInPictureController) -> Bool { false }
         func pictureInPictureController(_ controller: AVPictureInPictureController, didTransitionToRenderSize newRenderSize: CMVideoDimensions) {
+            smallWindow = CGSize(width: Int(newRenderSize.width), height: Int(newRenderSize.height))
+            reframe()
             guard let sid else { return }
             VideoHub.existing(call)?.want((Int(newRenderSize.width), Int(newRenderSize.height)), for: renderer, on: sid)
         }
