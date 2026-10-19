@@ -77,6 +77,12 @@ struct ControlBar: View {
 
     private var layoutAxis: Axis { ControlDebug.axis ?? axis }
 
+    /// What a column has to give the bar standing in it at its compact size,
+    /// forty-point buttons in a capsule: the width, and the height of the
+    /// seven buttons the compact bar keeps with the More menu among them.
+    static let columnWidth: CGFloat = 50
+    static let columnHeight: CGFloat = 340
+
     var body: some View {
         Group {
             // The whole bar where it fits, and where it does not (a phone, a

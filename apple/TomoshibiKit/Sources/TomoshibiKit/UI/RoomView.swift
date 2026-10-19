@@ -1,3 +1,4 @@
+import os
 import SwiftUI
 import TomoshibiBasics
 import TomoshibiCore
@@ -44,6 +45,9 @@ public struct RoomView: View {
     #else
     /// The phone's safe area, kept for the filled stage to stay clear of.
     @State private var deviceInsets = EdgeInsets()
+    /// The edge the system lays its own bars down, where it does (an iPhone
+    /// Duo's outer display, its inner one on its side, Split View's halves).
+    @State private var barEdge: HorizontalEdge?
     #endif
 
     enum Panel { case messages, sound, watch, music, host, devices }
@@ -60,30 +64,43 @@ public struct RoomView: View {
         GeometryReader { geometry in
             let whole = geometry.size
             let placement = StageDebug.placement ?? Appearance.shared.controlsPlacement
-            // Down the side only where the window is tall enough to hold a
-            // column (useRoomFor.ts); a shape that does not fit is not the
-            // thing somebody chose.
-            let side = placement == .side && whole.height >= Plan.sideNeeds
-            // A lane for the controls, and the reason nothing else has to know
-            // about them: the room is narrower by it, so the pictures, the
-            // panels and the cards on the right all keep out of it (Room.tsx
-            // `aside`). Not while the stage fills the screen, which is the
-            // whole screen.
-            let lane = side && !filled ? Plan.sideLane : 0
-            let size = CGSize(width: max(0, whole.width - lane), height: whole.height)
-            let island = side ? Plan.gap : Plan.island
-            let pictures = self.pictures
-            let room = Plan.room(size, pictures: pictures.map(\.id), mine: Self.me, stage: pin.pinned,
-                                 fullscreen: filled, page: page, island: island)
             // What the room keeps clear of while it reaches under the
             // system's furniture, which is only while it fills a phone: the
             // insets as they were before it reached past them, since while it
             // ignores the safe area, the safe area it ignores reads as nothing.
             #if os(iOS)
             let inset = filled ? deviceInsets : EdgeInsets()
+            let column = filled ? nil : Self.systemColumn(geometry, edge: barEdge)
             #else
             let inset = EdgeInsets()
+            let column: CGRect? = nil
             #endif
+            // Held half open, the room is laid out on either side of the fold
+            // rather than across it (Plan.folded).
+            let fold = Fold.of(geometry)
+            let halves = Self.halves(fold, in: whole)
+            // Down the side only where the window is tall enough to hold a
+            // column (useRoomFor.ts); a shape that does not fit is not the
+            // thing somebody chose. Never across a fold, which a column down
+            // the side of a phone on a table would cross.
+            let side = column == nil && halves == nil && placement == .side && whole.height >= Plan.sideNeeds
+            // A lane for the controls, and the reason nothing else has to know
+            // about them: the room is narrower by it, so the pictures, the
+            // panels and the cards on the right all keep out of it (Room.tsx
+            // `aside`). Not while the stage fills the screen, which is the
+            // whole screen. The system's own column, where there is one, is
+            // already outside the room.
+            let lane = side && !filled ? Plan.sideLane : 0
+            let size = CGSize(width: max(0, whole.width - lane), height: whole.height)
+            let island = side || column != nil ? Plan.gap : Plan.island
+            let pictures = self.pictures
+            let folded = halves.map {
+                Plan.folded($0, pictures: pictures.map(\.id), mine: Self.me, stage: pin.pinned,
+                            fullscreen: filled, page: page, panelOpen: panel != nil, island: island)
+            }
+            let room = folded?.room ?? Plan.room(size, pictures: pictures.map(\.id), mine: Self.me, stage: pin.pinned,
+                                                 fullscreen: filled, page: page, island: island)
+            let shape = RoomShape(size: size, island: island, inset: inset, folded: folded)
             // The controls may step aside when the setting says so, and
             // whenever the stage fills the screen, and come back on any sign
             // of somebody: the same rule for both, because fullscreen used to
@@ -91,26 +108,21 @@ public struct RoomView: View {
             // (ControlBar.tsx `hiding`).
             let hides = placement == .idle || filled
             let shown = !hides || !idle.idle || nearControls || popovers.open != nil
+            let bar = Self.barPlace(whole: whole, inset: inset, side: side, column: column, folded: folded)
 
-            content(pictures, room: room, size: size, island: island, shown: shown, hides: hides, inset: inset)
+            content(pictures, room: room, shape: shape, shown: shown, hides: hides)
                 .frame(width: size.width, height: size.height)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .overlay(alignment: .bottom) {
-                    if !side {
-                        controls(.horizontal, shown: shown)
-                            .padding(.bottom, 20 + inset.bottom)
-                            .offset(y: shown ? 0 : 110)
-                            .transition(Theme.slideUp)
-                    }
+                // One bar wherever it stands, at the foot, down the side, in
+                // the system's column or at the foot of one half of a fold,
+                // so that it moves there rather than being made again.
+                .overlay(alignment: .topLeading) {
+                    controls(bar.axis, shown: shown)
+                        .padding(bar.padding)
+                        .frame(width: bar.frame.width, height: bar.frame.height, alignment: bar.alignment)
+                        .offset(x: bar.frame.minX + (shown ? 0 : bar.away.width), y: bar.frame.minY + (shown ? 0 : bar.away.height))
                 }
-                .overlay(alignment: .trailing) {
-                    if side {
-                        controls(.vertical, shown: shown)
-                            .padding(.trailing, 12 + inset.trailing)
-                            .offset(x: shown ? 0 : 110)
-                            .transition(Theme.slideIn)
-                    }
-                }
+                .animation(Theme.settle, value: bar)
                 // Over everything, the controls included: drawn under them, the
                 // bar stayed pressable through "you will be back in a moment".
                 .overlay {
@@ -139,6 +151,14 @@ public struct RoomView: View {
                 #if os(iOS)
                 .onChange(of: geometry.safeAreaInsets, initial: true) { _, now in
                     if !filled { deviceInsets = now }
+                    FoldDebug.log("room insets", geometry)
+                }
+                .onChange(of: geometry.size, initial: true) { FoldDebug.log("room size", geometry) }
+                .readsVerticalBarEdge { edge in
+                    barEdge = edge
+                    if FoldDebug.logsGeometry {
+                        Logger(subsystem: "app.tomoshibi", category: "geometry").notice("GEOMETRY vertical bar edge \(String(describing: edge), privacy: .public)")
+                    }
                 }
                 #endif
                 .task { await rehearse() }
@@ -194,14 +214,23 @@ public struct RoomView: View {
     // MARK: The room
 
     @ViewBuilder
-    private func content(_ pictures: [Picture], room: Plan.Room, size: CGSize, island: CGFloat, shown: Bool, hides: Bool, inset: EdgeInsets) -> some View {
+    private func content(_ pictures: [Picture], room: Plan.Room, shape: RoomShape, shown: Bool, hides: Bool) -> some View {
+        let size = shape.size
+        let island = shape.island
+        let inset = shape.inset
+        let centre = shape.centre
+        // The foot a card centred on the room ends above: the controls', or
+        // nothing but the gap on the upper half of a phone on a table, which
+        // has no controls at its foot.
+        let centreFoot = shape.folded.map { $0.controls == $0.centre ? island : Plan.gap } ?? island
         let suspects = self.suspects
         let narrow = size.width < Self.panelWidth(size) + 24 + 172 + 22
         // The list of who is watching moves beside an open panel rather than
         // going behind it, and on a screen with no room beside one it shrinks
         // to the eye and the count in the row at the top, which the panel
-        // then starts below.
-        let watchersInRow = mySharePicture && panel != nil && narrow
+        // then starts below. Folded, a panel has the other half, where the
+        // list beside it would lie over it.
+        let watchersInRow = mySharePicture && panel != nil && (narrow || shape.folded != nil)
         ZStack(alignment: .topLeading) {
             // The space between the pictures: a press there is the second
             // half of a double press that moved its picture away from under
@@ -239,7 +268,7 @@ public struct RoomView: View {
 
             CallOverlayView(feature: host)
 
-            pager(room, size: size, island: island)
+            pager(room, size: size, island: island, centre: centre)
 
             if !filled || shown {
                 HStack(alignment: .top, spacing: 8) {
@@ -272,21 +301,27 @@ public struct RoomView: View {
                     withAnimation(Theme.settle) { aloneDismissed = true }
                 }
                 .padding(.horizontal, 16)
-                .frame(width: size.width, height: max(0, size.height - island - 2), alignment: .bottom)
+                .frame(width: centre.width, height: max(0, centre.height - centreFoot - 2), alignment: .bottom)
+                .offset(x: centre.minX, y: centre.minY)
                 .transition(Theme.arrive)
             }
 
+            // Centred on the room, or on the half of a fold the pictures
+            // start on: centred on the whole room, a notice lay across the
+            // fold of a book.
             if let notice = model.notice {
                 Notice(text: notice)
-                    .frame(maxWidth: .infinity)
+                    .frame(width: centre.width)
                     .padding(.top, 48)
+                    .offset(x: centre.minX, y: centre.minY)
                     .transition(Theme.arrive)
             }
 
             if model.state != .connected {
                 Notice(text: model.state == .reconnecting ? t("Reconnecting…") : t("Connecting…"))
-                    .frame(maxWidth: .infinity)
+                    .frame(width: centre.width)
                     .padding(.top, 12)
+                    .offset(x: centre.minX, y: centre.minY)
                     .transition(Theme.arrive)
             }
         }
@@ -304,8 +339,9 @@ public struct RoomView: View {
                     .transition(Theme.arrive)
             }
         }
-        .overlay(alignment: .topTrailing) {
+        .overlay(alignment: .topLeading) {
             if let panel {
+                let place = Self.panelPlace(shape, narrow: narrow)
                 // Never taller than the space above the controls: a panel
                 // that grows past it covers the buttons that close it.
                 ScrollView {
@@ -327,13 +363,10 @@ public struct RoomView: View {
                 // the middle of the song desk.
                 .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Theme.background.opacity(narrow ? 0.72 : 0)))
                 .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                .frame(width: Self.panelWidth(size))
-                // Below the row at the top wherever it cannot stand beside
-                // it: over it, the panel hid the room's name and its signal.
-                .frame(maxHeight: max(160, size.height - Plan.island - 24 - (narrow ? 38 : 0)), alignment: .top)
+                .frame(width: place.width)
+                .frame(maxHeight: place.height, alignment: .top)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(12)
-                .padding(.top, (narrow ? 38 : 0) + inset.top)
+                .offset(x: place.minX, y: place.minY)
                 .transition(Theme.slideIn)
                 .id(panel)
             }
@@ -343,7 +376,7 @@ public struct RoomView: View {
             SaidView(model: model)
                 .frame(maxWidth: min(320, size.width - 32), alignment: .leading)
                 .padding(.leading, 12)
-                .padding(.bottom, Plan.island + 8)
+                .padding(.bottom, island + 8)
         }
         // The corner for what the call says: the uplink card above the
         // toasts, one column so they cannot land on each other, and drawn
@@ -357,7 +390,7 @@ public struct RoomView: View {
             // ends above it rather than above the controls, under which the
             // strip starts (Room.tsx `aboveStrip`, plan.ts `clearOf`).
             let aboveStrip = pin.pinned != nil && !filled ? Plan.clear(of: room.spots, ids: room.shown, container: size) : nil
-            let lift = Plan.lift(toClear: aboveStrip, ends: Plan.island + 8 + toastsHeight + 10)
+            let lift = Plan.lift(toClear: aboveStrip, ends: island + 8 + toastsHeight + 10)
             VStack(alignment: .trailing, spacing: 10) {
                 #if os(macOS)
                 if let hint = model.strainHint ?? StageDebug.strain, sharing.active {
@@ -371,15 +404,17 @@ public struct RoomView: View {
             }
             .animation(Theme.settle, value: lift)
             .padding(.trailing, beside ? Self.panelWidth(size) + 24 + 8 : 16)
-            .padding(.bottom, Plan.island + 8)
+            .padding(.bottom, island + 8)
             .animation(Theme.settle, value: beside)
         }
-        .overlay(alignment: .top) {
+        .overlay(alignment: .topLeading) {
             if let problem {
                 Notice(text: problem, danger: true)
-                    .padding(.top, 12)
-                    .transition(Theme.arrive)
                     .onTapGesture { self.problem = nil }
+                    .frame(width: centre.width)
+                    .padding(.top, 12)
+                    .offset(x: centre.minX, y: centre.minY)
+                    .transition(Theme.arrive)
             }
         }
         .animation(Theme.settle, value: panel)
@@ -419,6 +454,118 @@ public struct RoomView: View {
         let beside = min(360, size.width - 32)
         return size.width < beside + 24 + 172 + 22 ? max(0, size.width - 24) : beside
     }
+
+    // MARK: Where the parts go
+
+    /// What the room's parts are laid out in: the pictures' space, what the
+    /// controls take at its foot, the system's furniture while the stage
+    /// fills a phone, and the halves of a fold.
+    struct RoomShape {
+        var size: CGSize
+        var island: CGFloat
+        var inset: EdgeInsets
+        var folded: Plan.Folded?
+
+        /// Where a notice, the card for somebody alone and the page dots are
+        /// centred: the room, or the half of a fold the pictures start on.
+        var centre: CGRect { folded?.centre ?? CGRect(origin: .zero, size: size) }
+    }
+
+    /// Where an open panel stands, and the most it may be tall: in the
+    /// room's top trailing corner, below the row at the top where it cannot
+    /// stand beside it; on the second page of a book, which it has to
+    /// itself; on the half of a phone lying on a table, above its controls.
+    static func panelPlace(_ shape: RoomShape, narrow: Bool) -> CGRect {
+        if let folded = shape.folded {
+            let room = folded.panel.insetBy(dx: 12, dy: 12)
+            let width = max(0, min(room.width, 560))
+            return CGRect(x: room.midX - width / 2, y: room.minY, width: width, height: max(160, room.height))
+        }
+        let size = shape.size
+        let width = panelWidth(size)
+        let below: CGFloat = narrow ? 38 : 0
+        return CGRect(x: size.width - width - 12, y: 12 + below + shape.inset.top, width: width,
+                      height: max(160, size.height - shape.island - 24 - below))
+    }
+
+    /// Where the bar stands, as a frame in the room it is aligned in, and
+    /// which way it steps aside while it is hidden.
+    struct BarPlace: Equatable {
+        var axis: Axis
+        var frame: CGRect
+        var alignment: Alignment
+        var padding: EdgeInsets
+        var away: CGSize
+    }
+
+    static func barPlace(whole: CGSize, inset: EdgeInsets, side: Bool, column: CGRect?, folded: Plan.Folded?) -> BarPlace {
+        if let column {
+            // In the system's own column, under its status bar, where its
+            // own bars stand on this screen, and at the column's foot, where
+            // the thumb is.
+            return BarPlace(axis: .vertical, frame: column, alignment: .bottom,
+                            padding: EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0), away: CGSize(width: 110, height: 0))
+        }
+        if let folded {
+            // At the foot of the half the controls keep to: the first page
+            // of a book, the half of a phone lying on a table.
+            return BarPlace(axis: .horizontal, frame: folded.controls, alignment: .bottom,
+                            padding: EdgeInsets(top: 0, leading: 0, bottom: 20 + inset.bottom, trailing: 0), away: CGSize(width: 0, height: 110))
+        }
+        if side {
+            return BarPlace(axis: .vertical, frame: CGRect(origin: .zero, size: whole), alignment: .trailing,
+                            padding: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 12 + inset.trailing), away: CGSize(width: 110, height: 0))
+        }
+        // Centred between the edges the system leaves the room, which on an
+        // iPhone Duo are not the same on both sides: its status bar takes a
+        // column down one of them.
+        return BarPlace(axis: .horizontal, frame: CGRect(origin: .zero, size: whole), alignment: .bottom,
+                        padding: EdgeInsets(top: 0, leading: inset.leading, bottom: 20 + inset.bottom, trailing: inset.trailing),
+                        away: CGSize(width: 0, height: 110))
+    }
+
+    /// The halves of a fold across a room `size` big, or nil while it lies
+    /// flat (or the fold leaves a side too narrow to be a screen).
+    static func halves(_ fold: Fold, in size: CGSize) -> Plan.Halves? {
+        switch fold.posture(in: size) {
+        case .flat: return nil
+        case .book: return .book(first: fold.pane(.first, in: size), second: fold.pane(.second, in: size))
+        case .table: return .table(upper: fold.pane(.first, in: size), lower: fold.pane(.second, in: size))
+        }
+    }
+
+    #if os(iOS)
+    /// The column the system lays its own bars down, outside the room's safe
+    /// area on `edge` and below whatever occludes its top (the status bar
+    /// and the camera of an iPhone Duo's outer display, which the system
+    /// reports as occlusion regions), in the room's coordinates; nil where
+    /// the system lays no bars down the side, or leaves too little room
+    /// there for the bar (the app's languages are all read left to right, so
+    /// the column's side is the side the edge names).
+    ///
+    /// Laid inside the safe area instead, the bar took the foot of a screen
+    /// that the Duo's outer display has little of, and the column beside it,
+    /// a quarter of the width, stood empty below the clock.
+    @MainActor
+    static func systemColumn(_ proxy: GeometryProxy, edge: HorizontalEdge?) -> CGRect? {
+        guard let edge else { return nil }
+        let insets = proxy.safeAreaInsets
+        let width = edge == .trailing ? insets.trailing : insets.leading
+        guard width >= ControlBar.columnWidth else { return nil }
+        let x = edge == .trailing ? proxy.size.width : -width
+        var top = insets.top
+        if #available(iOS 27.1, *) {
+            for region in proxy.reservedRegions(kind: .occlusion) where region.isActive {
+                let frame = region.frame
+                if frame.maxX > x, frame.minX < x + width, frame.midY < proxy.size.height / 2 {
+                    top = max(top, frame.maxY)
+                }
+            }
+        }
+        let column = CGRect(x: x, y: top + 8, width: width, height: max(0, proxy.size.height - top - 8))
+        return column.height >= ControlBar.columnHeight ? column : nil
+    }
+    #endif
 
     // MARK: Arrangement
 
@@ -782,7 +929,7 @@ public struct RoomView: View {
     // MARK: Pages
 
     @ViewBuilder
-    private func pager(_ room: Plan.Room, size: CGSize, island: CGFloat) -> some View {
+    private func pager(_ room: Plan.Room, size: CGSize, island: CGFloat, centre: CGRect) -> some View {
         if room.pages > 1 && !filled {
             // Beside the strip when there is a stage, where the pictures being
             // paged are; either side of the grid otherwise.
@@ -801,10 +948,13 @@ public struct RoomView: View {
             .position(x: size.width / 2, y: strip ?? (size.height - island) / 2)
             .transition(Theme.arrive)
 
+            // Over the half the pictures start on where a fold divides the
+            // room, rather than across the fold.
             PageIndicator(page: room.page, pages: room.pages)
-                .frame(width: size.width)
+                .frame(width: centre.width)
                 // Below the row at the top where the two would meet.
-                .padding(.top, size.width < 560 ? 52 : 15)
+                .padding(.top, centre.width < 560 ? 52 : 15)
+                .offset(x: centre.minX, y: centre.minY)
                 .transition(Theme.arrive)
         }
     }

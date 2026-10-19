@@ -106,7 +106,13 @@ private struct Representable: UIViewRepresentable {
 
     func updateUIView(_ view: SurfaceView, context: Context) {
         view.renderer.layer.videoGravity = fill ? .resizeAspectFill : .resizeAspect
-        view.ask(points: size, scale: view.window?.screen.scale ?? 3)
+        // The density the view is drawn at, from its traits rather than its
+        // window's screen: on an iPhone Duo the window moves between two
+        // screens as the phone opens and closes, and Apple has the screen
+        // read from the scene where it is needed at all (UIScreen.main is
+        // going), the scale from the traits.
+        let scale = view.traitCollection.displayScale
+        view.ask(points: size, scale: scale > 0 ? scale : 3)
     }
 
     static func dismantleUIView(_ view: SurfaceView, coordinator: ()) {
@@ -176,6 +182,8 @@ final class SurfaceView: UIView {
 
     private func askAgain() {
         var density = scale
+        // The device's kind rather than the window's size: the heat is a
+        // phone's however large its screen, an opened iPhone Duo's included.
         if UIDevice.current.userInterfaceIdiom == .phone { density = min(density, 2) }
         if ProcessInfo.processInfo.thermalState.rawValue >= ProcessInfo.ThermalState.serious.rawValue { density = 1 }
         let wanted = (Int(points.width * density), Int(points.height * density))

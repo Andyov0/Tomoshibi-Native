@@ -301,20 +301,64 @@ public struct SettingsView: View {
         .removesWindowTitle()
         .animation(Theme.settle, value: section)
         #else
-        ZStack {
-            Backdrop()
-            if let open {
-                drilled(open)
-                    .transition(.asymmetric(
-                        insertion: .move(edge: .trailing).combined(with: .opacity).animation(Theme.settle),
-                        removal: .move(edge: .trailing).combined(with: .opacity).animation(Theme.leave)))
-                    .zIndex(1)
-            } else {
-                home
-                    .transition(.asymmetric(
-                        insertion: .offset(x: -60).combined(with: .opacity).animation(Theme.settle),
-                        removal: .offset(x: -60).combined(with: .opacity).animation(Theme.leave)))
+        // A list that drills into each section where the sheet is a phone's
+        // width; a sidebar of sections beside the chosen one where it is as
+        // wide as an opened iPhone Duo or an iPad gives it, as the Mac's
+        // window and the Android app's wide settings are. One section open
+        // for both, so that folding with a section showing keeps it in front,
+        // and the section's page in the same place in either, so that what
+        // is half typed into it (a passphrase being changed, a guest link
+        // being made) stays: drawn again in the other layout, the page's own
+        // state went with the old one.
+        GeometryReader { proxy in
+            let wide = proxy.size.width >= Self.wide
+            // Across the fold of a book, should the system leave the sheet
+            // there: the sidebar takes the first page to the fold, and the
+            // section the second page after it. Laid out as on a flat
+            // screen, the section's heading and its first cards lay over
+            // the fold.
+            let fold = Fold.of(proxy)
+            let book = wide && fold.posture(in: proxy.size) == .book
+            let first = fold.pane(.first, in: proxy.size)
+            let second = fold.pane(.second, in: proxy.size)
+            let sidebar = book ? max(200, first.width - 20) : 256
+            let page = book ? second.width : min(proxy.size.width - 276, 652)
+            ZStack {
+                Backdrop()
+                HStack(spacing: 0) {
+                    if wide {
+                        phoneSidebar
+                            .frame(width: sidebar)
+                            .padding(10)
+                            .transition(.asymmetric(
+                                insertion: .offset(x: -60).combined(with: .opacity).animation(Theme.settle),
+                                removal: .offset(x: -60).combined(with: .opacity).animation(Theme.leave)))
+                    }
+                    ZStack {
+                        if let shown = wide ? open ?? section : open {
+                            drilled(shown, back: !wide, width: wide ? page : proxy.size.width)
+                                .id(shown)
+                                .transition(wide
+                                    ? .asymmetric(insertion: .opacity.combined(with: .offset(y: 10)).animation(Theme.settle),
+                                                  removal: .opacity.animation(Theme.leave))
+                                    : .asymmetric(
+                                        insertion: .move(edge: .trailing).combined(with: .opacity).animation(Theme.settle),
+                                        removal: .move(edge: .trailing).combined(with: .opacity).animation(Theme.leave)))
+                                .zIndex(1)
+                        }
+                        if !wide && open == nil {
+                            home
+                                .transition(.asymmetric(
+                                    insertion: .offset(x: -60).combined(with: .opacity).animation(Theme.settle),
+                                    removal: .offset(x: -60).combined(with: .opacity).animation(Theme.leave)))
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .padding(.leading, book ? max(0, second.minX - first.maxX) : 0)
+                }
             }
+            .animation(Theme.settle, value: wide)
+            .animation(Theme.settle, value: book)
         }
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(34)
@@ -388,6 +432,75 @@ public struct SettingsView: View {
     // MARK: The phone's list
 
     #if os(iOS)
+    /// The width from which the sheet is a sidebar beside a page, the
+    /// Android app's (ui/settings/SettingsView.kt `WIDE`).
+    private static let wide: CGFloat = 600
+
+    /// The sections down the side of a wide sheet, with the way out at the
+    /// head and the account at the foot, as the Mac's window has them.
+    private var phoneSidebar: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(t("Settings")).font(.system(size: 21, weight: .bold))
+                Spacer(minLength: 8)
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark").font(.system(size: 13, weight: .bold))
+                }
+                .buttonStyle(.glassCircle(36))
+                .accessibilityLabel(t("Close"))
+            }
+            .padding(.leading, 10).padding(.top, 14).padding(.bottom, 10)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(SettingsTopic.allCases) { one in
+                        let chosen = (open ?? section) == one
+                        Button {
+                            withAnimation(Theme.settle) { open = one }
+                        } label: {
+                            HStack(spacing: 10) {
+                                SectionTile(symbol: one.symbol, lit: chosen, size: 30)
+                                Text(one.title)
+                                    .font(.system(size: 15, weight: chosen ? .semibold : .regular))
+                                    .foregroundStyle(chosen ? Theme.foreground : Theme.foreground.opacity(0.82))
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 8).padding(.vertical, 7)
+                            .background {
+                                if chosen {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .fill(Color.white.opacity(0.11))
+                                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.white.opacity(0.07)))
+                                        .matchedGeometryEffect(id: "chosen", in: highlight)
+                                }
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(chosen ? .isSelected : [])
+                    }
+                }
+            }
+            .scrollIndicators(.never)
+            if let account = app.account {
+                HStack(spacing: 10) {
+                    AccountAvatar(name: account.name, address: app.avatarAddress, size: 32)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(account.name).font(.system(size: 12.5, weight: .semibold)).lineLimit(1)
+                        Text(account.trip).font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.muted).lineLimit(1)
+                    }
+                }
+                .padding(10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.05)))
+                .transition(Theme.arrive)
+            }
+        }
+        .padding(10)
+        .frame(maxHeight: .infinity, alignment: .top)
+        .glassPane(cornerRadius: 22)
+        .animation(Theme.settle, value: app.account?.name)
+    }
+
     private var home: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
@@ -477,26 +590,34 @@ public struct SettingsView: View {
         }
     }
 
-    private func drilled(_ one: SettingsTopic) -> some View {
+    /// One section's page, with the way back to the list where there is a
+    /// list to go back to; beside the sidebar of a wide sheet there is none.
+    private func drilled(_ one: SettingsTopic, back: Bool, width: CGFloat) -> some View {
         ScrollView {
             ScrollViewReader { reader in
             VStack(alignment: .leading, spacing: 0) {
-                Button { withAnimation(Theme.settle) { open = nil } } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold))
-                        Text(t("Settings")).font(.system(size: 14, weight: .semibold)).fixedSize()
+                if back {
+                    Button { withAnimation(Theme.settle) { open = nil } } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold))
+                            Text(t("Settings")).font(.system(size: 14, weight: .semibold)).fixedSize()
+                        }
                     }
+                    .buttonStyle(.glassCapsule(36))
+                    .padding(.bottom, 18)
+                    .transition(Theme.arrive)
                 }
-                .buttonStyle(.glassCapsule(36))
-                .padding(.top, 22)
-                .padding(.bottom, 18)
                 page(one)
                     .contentLayer()
                 Color.clear.frame(height: 1).id("end")
             }
-            // Held to the screen's width whatever a row inside would like,
-            // so the page can never sit off its left edge.
-            .containerRelativeFrame(.horizontal) { width, _ in max(0, width - 32) }
+            .padding(.top, 22)
+            .animation(Theme.settle, value: back)
+            // Held to the width it is given whatever a row inside would
+            // like, so the page can never sit off its left edge: measured by
+            // the sheet rather than the screen, since beside a sidebar the
+            // screen's width put the page's right half outside the sheet.
+            .frame(width: max(0, width - 32))
             .padding(.horizontal, 16)
             .padding(.bottom, 34)
             .onAppear { SettingsTopic.debugScroll(reader) }
@@ -504,9 +625,9 @@ public struct SettingsView: View {
         }
         .scrollIndicators(.never)
         // Back with a swipe from the left edge, as every drill-in on the phone
-        // goes back.
+        // goes back; beside a sidebar there is nothing to go back to.
         .simultaneousGesture(DragGesture(minimumDistance: 20).onEnded { drag in
-            if drag.startLocation.x < 36, drag.translation.width > 80 {
+            if back, drag.startLocation.x < 36, drag.translation.width > 80 {
                 withAnimation(Theme.settle) { open = nil }
             }
         })
@@ -1177,8 +1298,11 @@ final class DeviceCheck {
                 return
             }
             guard mine == generation else { return }
+            // With nothing chosen, the camera a call would start on: the
+            // system's default on a phone is the back camera, which this
+            // page showed while every call sent the front one.
             let device = chosen.flatMap { id in CameraCapture.cameras().first { $0.uniqueID == id } }
-                ?? AVCaptureDevice.default(for: .video)
+                ?? CameraCapture.fallback()
             guard let device, let input = try? AVCaptureDeviceInput(device: device) else { return }
             let session = session
             session.beginConfiguration()

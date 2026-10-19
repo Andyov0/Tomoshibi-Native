@@ -31,6 +31,18 @@ enum LobbyDebug {
         #endif
     }()
 
+    /// The part of the lobby a debug launch opens, given to the first lobby
+    /// only: read again by the lobby a call came back to, it opened the start
+    /// sheet over it once more after the test had left the call (the Android
+    /// lobby's LobbyState found the same).
+    @MainActor private static var taken = false
+
+    @MainActor static func take() -> String? {
+        guard !taken else { return nil }
+        taken = true
+        return open
+    }
+
     /// TOMOSHIBI_DEBUG_ROOM: what is typed into the start and join sheet's
     /// room field when it opens, which takes the keyboard.
     static let room: String? = {
@@ -41,8 +53,8 @@ enum LobbyDebug {
         #endif
     }()
 
-    static var sheet: MeetingSheet.Mode? {
-        switch open {
+    static func sheet(_ opened: String?) -> MeetingSheet.Mode? {
+        switch opened {
         case "start": .start
         case "join": .join("")
         case "again": .again(room ?? "")
@@ -51,18 +63,59 @@ enum LobbyDebug {
     }
 }
 
-/// Signed in or not is the whole difference.
+/// Everything the lobby has open, kept above the choice between the phone's
+/// layout and the sidebar's, so that an iPhone Duo opened or closed in the
+/// middle of choosing a time or typing a room keeps it: the phone's schedule
+/// sheet is the sidebar's schedule section, its pushed server page the server
+/// section, and the start sheet, the settings and the join bar's words are
+/// the same in both (the Android lobby's LobbyState, for a Fold). Kept inside
+/// either layout, everything there went with the layout when the size class
+/// changed, the section somebody was in and whatever was half typed.
+@MainActor
+@Observable
+final class LobbyState {
+    /// Where in the lobby somebody is, beside its home.
+    enum Place: Hashable { case home, scheduled, servers }
+
+    var place: Place
+    /// The start and join sheet, which keeps its own draft for as long as it
+    /// is open: it is presented above both layouts, so it stays open through
+    /// a change between them.
+    var sheet: MeetingSheet.Mode?
+    var settings: Bool
+    /// The phone's join bar, half typed.
+    var typed = ""
+    /// What the schedule's form holds, whichever layout draws it.
+    let schedule = ScheduleDraft()
+    /// One set of popovers for whichever layout is drawn; each column of the
+    /// sidebar's draws its own, and a click in either closes whichever is
+    /// open.
+    let popovers = Popovers()
+
+    init() {
+        let opened = LobbyDebug.take()
+        place = opened == "scheduled" ? .scheduled : opened == "servers" ? .servers : .home
+        sheet = LobbyDebug.sheet(opened)
+        settings = opened == "settings"
+    }
+}
+
+/// Signed in or not is the whole difference; and, signed in, how wide the
+/// window is. On an iPad, an iPhone Duo opened out or a phone whose app shares
+/// the screen, a regular width is the Mac's window with a sidebar; a compact
+/// one, the outer screen of a Duo among them, is the phone's home. Decided by
+/// the size class rather than by what the device is: a Duo is both.
 struct LobbyView: View {
     @Bindable var app: AppModel
+    @State private var state = LobbyState()
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    #endif
 
     var body: some View {
         Group {
             if let account = app.account {
-                #if os(macOS)
-                MacLobby(app: app, account: account)
-                #else
-                PhoneLobby(app: app, account: account)
-                #endif
+                signedIn(account)
             } else {
                 SignInView(app: app)
             }
@@ -70,6 +123,54 @@ struct LobbyView: View {
         .task(id: app.account?.name) {
             await app.lobby.refreshArrangements()
         }
+        // The server section is for choosing a machine; where there is none to
+        // choose it has nothing to offer, and it goes.
+        .onChange(of: app.offersRelayChoice) { if !app.offersRelayChoice, state.place == .servers { state.place = .home } }
+        .onChange(of: state.place) { state.popovers.close() }
+    }
+
+    @ViewBuilder
+    private func signedIn(_ account: Account) -> some View {
+        #if os(macOS)
+        SidebarLobby(app: app, account: account, state: state)
+            .sheet(item: $state.sheet) { mode in
+                MeetingSheet(app: app, mode: mode)
+            }
+        #else
+        let wide = sizeClass == .regular
+        ZStack {
+            if wide {
+                SidebarLobby(app: app, account: account, state: state)
+                    .transition(.opacity.animation(Theme.settle))
+            } else {
+                PhoneLobby(app: app, account: account, state: state)
+                    .transition(.opacity.animation(Theme.settle))
+            }
+        }
+        .onChange(of: wide) { state.popovers.close() }
+        // Presented above both layouts, so that what they hold outlives a
+        // change between them: presented from inside one, a sheet went with
+        // it, and a Duo opened with the start sheet up lost the room typed
+        // into it and the join under way.
+        .fullScreenCover(item: $state.sheet) { mode in
+            MeetingSheet(app: app, mode: mode)
+        }
+        .sheet(isPresented: $state.settings) {
+            SettingsView(app: app)
+        }
+        // The phone's schedule is a sheet; the sidebar's is a section beside
+        // it, with the same draft. Taken down by the layout changing, not by
+        // somebody closing it, it leaves the section where it was: the
+        // binding below is made again with each change of layout, and only
+        // the phone's one closes the section.
+        .sheet(isPresented: Binding(get: { !wide && state.place == .scheduled },
+                                    set: { shown in if !shown && !wide && state.place == .scheduled { state.place = .home } })) {
+            // Its close goes home, which takes the sheet down.
+            ScheduleView(app: app, account: account, draft: state.schedule, close: { state.place = .home })
+                .presentationDragIndicator(.visible)
+                .presentationBackground(Theme.background)
+        }
+        #endif
     }
 }
 
@@ -188,6 +289,9 @@ struct ToastModifier: ViewModifier {
                     .padding(.leading, 14).padding(.trailing, app.problemStays ? 7 : 16).padding(.vertical, 9)
                     .glassSurface(Capsule())
                     .frame(maxWidth: 560)
+                    // On the page the reader is on where a book's fold would
+                    // cut a notice centred on the window in two.
+                    .keptToOnePage(.reading)
                     .padding(.horizontal, 20).padding(.bottom, Self.clearance)
                     .onTapGesture { if !app.problemStays { app.problem = nil } }
                     .task(id: text) {
@@ -263,11 +367,7 @@ struct CameraStage: View {
            let remembered = cameras.first(where: { $0.uniqueID == id }) {
             return remembered
         }
-        #if os(iOS)
-        return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .front) ?? AVCaptureDevice.default(for: .video)
-        #else
-        return AVCaptureDevice.default(for: .video)
-        #endif
+        return CameraCapture.fallback()
     }
 }
 
@@ -329,9 +429,11 @@ struct RecentForget: View {
     }
 }
 
-/// A recent room in the Mac's sidebar: the row opens it, and the cross that
+/// A recent room in the sidebar: the row opens it. On the Mac the cross that
 /// takes it off the list shows under the pointer, as the sidebar's own rows
-/// show what they offer.
+/// show what they offer; a finger has no pointer to rest, so on a touch
+/// screen Remove is under a swipe to the left, as it is on the phone's list
+/// of recent rooms.
 struct RecentSidebarRow: View {
     let recent: LobbyModel.Recent
     let open: () -> Void
@@ -353,12 +455,23 @@ struct RecentSidebarRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            #if os(macOS)
             RecentForget(room: recent.room, size: 20, action: forget)
                 .opacity(hovering ? 1 : 0)
                 .allowsHitTesting(hovering)
+            #endif
         }
+        #if os(macOS)
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.12), value: hovering)
+        #else
+        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+            Button(role: .destructive, action: forget) {
+                Label(t("Remove"), systemImage: "trash")
+            }
+            .accessibilityLabel(t("Remove {room} from recent", ["room": recent.room]))
+        }
+        #endif
     }
 }
 
@@ -372,12 +485,26 @@ struct SignInView: View {
     @State private var shown = false
     @State private var link = ""
     @State private var popovers = Popovers()
+    #if os(iOS)
+    /// A phone on its side, and the Duo's outer display on its side or as a
+    /// tent: the heading, the card and the paste control stacked were taller
+    /// than the screen, and the paste control at its foot sat over the
+    /// passphrase and Sign in. The heading stands beside the card there, with
+    /// the paste control under the words that mention the link. One layout
+    /// either way, so turning the phone keeps the field being typed into.
+    @Environment(\.verticalSizeClass) private var heightClass
+    private var short: Bool { heightClass == .compact }
+    #else
+    private let short = false
+    #endif
 
     var body: some View {
         ZStack {
             Backdrop()
             ScrollView {
-                VStack(spacing: 22) {
+                let layout = short ? AnyLayout(HStackLayout(alignment: .center, spacing: 32))
+                                   : AnyLayout(VStackLayout(spacing: 22))
+                layout {
                     VStack(spacing: 12) {
                         Mark(size: 76)
                             .shadow(color: .black.opacity(0.45), radius: 18, y: 8)
@@ -385,7 +512,11 @@ struct SignInView: View {
                         Text(t("Meetings here are started by the people who belong here. If somebody sent you a link, open that instead."))
                             .font(.system(size: 14)).foregroundStyle(Theme.muted)
                             .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                        #if os(iOS)
+                        if short { pasteLink.padding(.top, 6).transition(.opacity) }
+                        #endif
                     }
+                    .frame(maxWidth: short ? 280 : nil)
                     .rise()
 
                     VStack(spacing: 14) {
@@ -423,33 +554,32 @@ struct SignInView: View {
                     }
                     .padding(18)
                     .glassPane(cornerRadius: 30)
+                    .frame(maxWidth: short ? 400 : nil)
                     .rise(0.06)
                 }
-                .frame(maxWidth: 420)
+                .frame(maxWidth: short ? 720 : 420)
                 .padding(.horizontal, 16)
                 .padding(.top, 72)
-                .padding(.bottom, 140)
+                .padding(.bottom, short ? 24 : 140)
                 .frame(maxWidth: .infinity)
+                .animation(Theme.settle, value: short)
                 .putsKeyboardAway()
             }
             .scrollIndicators(.never)
             .putsKeyboardAway()
+            // A card centred on a Duo held half open sat across its fold;
+            // it keeps to the page it is read on, or above a fold across it,
+            // where the keyboard does not come up over the fields.
+            .keptToOneSide(.reading)
         }
         #if os(iOS)
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 10) {
-                Text(t("Were you sent a link?")).font(.system(size: 13)).foregroundStyle(Theme.muted)
-                // The system's own paste control: it reads the clipboard only
-                // when pressed, so nothing asks permission to look at it.
-                PasteButton(payloadType: String.self) { strings in
-                    guard let text = strings.first?.trimmingCharacters(in: .whitespacesAndNewlines),
-                          let url = URL(string: text), url.host() != nil else { return }
-                    Task { await app.open(url) }
-                }
-                .buttonBorderShape(.capsule)
-                .tint(Theme.surfaceHigh)
+            if !short {
+                pasteLink
+                    .keptToOnePage(.reading)
+                    .padding(.bottom, 8)
+                    .transition(.opacity)
             }
-            .padding(.bottom, 8)
         }
         #endif
         .overlay(alignment: .topTrailing) {
@@ -459,6 +589,24 @@ struct SignInView: View {
         .floatingPopoverLayer(popovers)
         .onAppear { popovers.openFromDebug() }
     }
+
+    #if os(iOS)
+    /// Opening the link you were sent, without typing it.
+    private var pasteLink: some View {
+        VStack(spacing: 10) {
+            Text(t("Were you sent a link?")).font(.system(size: 13)).foregroundStyle(Theme.muted)
+            // The system's own paste control: it reads the clipboard only
+            // when pressed, so nothing asks permission to look at it.
+            PasteButton(payloadType: String.self) { strings in
+                guard let text = strings.first?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      let url = URL(string: text), url.host() != nil else { return }
+                Task { await app.open(url) }
+            }
+            .buttonBorderShape(.capsule)
+            .tint(Theme.surfaceHigh)
+        }
+    }
+    #endif
 
     /// One box holding two fields, as the web holds them: they are one answer.
     private var credentials: some View {
@@ -564,72 +712,88 @@ struct LanguageMenu: View {
     }
 }
 
-// MARK: - The Mac
+// MARK: - A window with a sidebar
 
-#if os(macOS)
 /// A window with a sidebar, as the Mac's own apps are: what to do and what is
-/// coming in the sidebar, and the picture of yourself filling the rest.
-struct MacLobby: View {
+/// coming in the sidebar, and the picture of yourself filling the rest. The
+/// Mac's lobby, and the lobby wherever a phone or a tablet gives the app a
+/// regular width (an iPhone Duo opened out, an iPad). The system's split view
+/// rather than one of the app's own: it collapses, tiles and keeps its
+/// columns clear of a Duo's fold by itself, evening them either side of the
+/// hinge of a phone held half open as a book, which a sidebar laid out by
+/// hand would have to be taught.
+struct SidebarLobby: View {
     @Bindable var app: AppModel
     let account: Account
-    @State private var section: Section? = LobbyDebug.open == "scheduled" ? .scheduled : LobbyDebug.open == "servers" ? .servers : .home
-    @State private var sheet: MeetingSheet.Mode? = LobbyDebug.sheet
-    /// One set of popovers for both columns: each column draws its own, and
-    /// a click in either closes whichever is open.
-    @State private var popovers = Popovers()
-
-    enum Section: Hashable { case home, scheduled, servers }
+    @Bindable var state: LobbyState
+    /// Both columns, always: the sidebar is where everything is started, and
+    /// a phone's split view folded it away behind a button whenever the
+    /// window was narrower than an iPad's, under a greeting that pointed at
+    /// it.
+    @State private var columns = NavigationSplitViewVisibility.all
 
     var body: some View {
-        NavigationSplitView {
-            MacSidebar(app: app, account: account, section: $section, sheet: $sheet)
+        NavigationSplitView(columnVisibility: $columns) {
+            LobbySidebar(app: app, account: account, state: state)
                 .navigationSplitViewColumnWidth(min: 240, ideal: 284, max: 340)
-                .floatingPopoverLayer(popovers)
+                .floatingPopoverLayer(state.popovers)
+                #if os(iOS)
+                // The sidebar's own head is the two things to do; a bar over
+                // it would hold nothing but the button that hides it.
+                .toolbar(removing: .sidebarToggle)
+                .toolbar(.hidden, for: .navigationBar)
+                #endif
         } detail: {
             Group {
-                switch section ?? .home {
-                case .home: HomeStage(app: app, account: account, sheet: $sheet)
-                case .scheduled: ScheduleView(app: app, account: account)
-                case .servers: ServersView(app: app)
+                switch state.place {
+                case .home: HomeStage(app: app, account: account)
+                // Each on the page of a book the sidebar leaves, as the
+                // greeting is: across the fold, the planning form's fields
+                // lay half on either page.
+                case .scheduled: ScheduleView(app: app, account: account, draft: state.schedule, close: { state.place = .home })
+                    .keptToOnePage(.reading)
+                case .servers: ServersView(app: app).keptToOnePage(.reading)
                 }
             }
             // One identity for each section: the same Group switching what
             // is in it is one view changing, and the transition below never
             // played, so a section arrived as a cut.
-            .id(section ?? .home)
+            .id(state.place)
             .contentLayer()
             .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 10)).animation(Theme.settle),
                                     removal: .opacity.animation(Theme.leave)))
-            .animation(Theme.settle, value: section)
-            .floatingPopoverLayer(popovers)
+            .animation(Theme.settle, value: state.place)
+            .floatingPopoverLayer(state.popovers)
         }
-        .sheet(item: $sheet) { mode in
-            MeetingSheet(app: app, mode: mode)
-        }
+        #if os(iOS)
+        .navigationSplitViewStyle(.balanced)
+        .onChange(of: columns) { if columns != .all { columns = .all } }
+        #endif
         .toast(app)
-        .onChange(of: section) { popovers.close() }
-        .onAppear { popovers.openFromDebug() }
-        // The server section is for choosing a machine; where there is none to
-        // choose it has nothing to offer, and it goes.
-        .onChange(of: app.offersRelayChoice) { if !app.offersRelayChoice, section == .servers { section = .home } }
+        .onAppear { state.popovers.openFromDebug() }
     }
 }
 
-private struct MacSidebar: View {
+private struct LobbySidebar: View {
     @Bindable var app: AppModel
     let account: Account
-    @Binding var section: MacLobby.Section?
-    @Binding var sheet: MeetingSheet.Mode?
+    @Bindable var state: LobbyState
+
+    /// The list's selection is optional; a press on nothing leaves the
+    /// section where it was rather than emptying the window.
+    private var selection: Binding<LobbyState.Place?> {
+        Binding(get: { state.place }, set: { if let place = $0 { state.place = place } })
+    }
 
     var body: some View {
-        List(selection: $section) {
+        List(selection: selection) {
             Section {
-                item(t("Home"), "house").tag(MacLobby.Section.home)
+                item(t("Home"), "house").tag(LobbyState.Place.home)
                 item(t("Scheduled meetings"), "calendar")
                     .badge(app.lobby.upcoming.count)
-                    .tag(MacLobby.Section.scheduled)
+                    .tag(LobbyState.Place.scheduled)
                 if app.offersRelayChoice {
-                    item(t("Server"), "server.rack").tag(MacLobby.Section.servers)
+                    item(t("Server"), "server.rack").tag(LobbyState.Place.servers)
                 }
             }
             if !app.lobby.upcoming.isEmpty {
@@ -647,7 +811,7 @@ private struct MacSidebar: View {
             if !app.lobby.recentHere.isEmpty {
                 Section(t("Recent")) {
                     ForEach(app.lobby.recentHere.prefix(6)) { recent in
-                        RecentSidebarRow(recent: recent, open: { sheet = .again(recent.room) },
+                        RecentSidebarRow(recent: recent, open: { state.sheet = .again(recent.room) },
                                          forget: { withAnimation(Theme.settle) { app.lobby.forget(recent) } })
                             .transition(Theme.arrive)
                     }
@@ -658,15 +822,15 @@ private struct MacSidebar: View {
         .tint(Theme.tally)
         .safeAreaInset(edge: .top) {
             HStack(spacing: 8) {
-                Button { sheet = .start } label: {
+                Button { state.sheet = .start } label: {
                     Label(t("Start"), systemImage: "video.fill").frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.glassCapsule(36, prominent: true))
+                .buttonStyle(.glassCapsule(platformTall, prominent: true))
                 .help(t("Start a meeting"))
-                Button { sheet = .join("") } label: {
+                Button { state.sheet = .join("") } label: {
                     Label(t("Join"), systemImage: "link").frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.glassCapsule(36))
+                .buttonStyle(.glassCapsule(platformTall))
                 .help(t("Join a meeting"))
             }
             .labelStyle(.titleAndIcon)
@@ -675,14 +839,23 @@ private struct MacSidebar: View {
         .safeAreaInset(edge: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
                 FleetLine(app: app).padding(.horizontal, 6)
-                AccountMenu(app: app, account: account)
+                AccountMenu(app: app, account: account, state: state)
             }
             .padding(10)
         }
     }
+
+    /// A fingertip's height on a touch screen, a pointer's on the Mac.
+    private var platformTall: CGFloat {
+        #if os(iOS)
+        44
+        #else
+        36
+        #endif
+    }
 }
 
-extension MacSidebar {
+extension LobbySidebar {
     /// A sidebar entry with its symbol drawn in the person's colour, as the
     /// system's own sidebars draw theirs.
     func item(_ title: String, _ symbol: String) -> some View {
@@ -699,7 +872,10 @@ extension MacSidebar {
 struct AccountMenu: View {
     @Bindable var app: AppModel
     let account: Account
+    let state: LobbyState
+    #if os(macOS)
     @Environment(\.openSettings) private var openSettings
+    #endif
     @Environment(\.popovers) private var popovers
 
     var body: some View {
@@ -716,13 +892,21 @@ struct AccountMenu: View {
             }
             .buttonStyle(.plain)
             .glassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .accessibilityLabel(t("Settings"))
             .floatingPopover("account", in: popovers, edge: .top, alignment: .leading, width: 262) {
                 // No pages of the web's here, the user console and the
                 // administrators' among them: an app that sends people out to
                 // a website for its own settings is one App Review questions,
                 // and the account's own settings are in Settings.
                 MenuCard {
-                    MenuItem(title: t("Settings"), symbol: "gearshape") { popovers.close(); openSettings() }
+                    MenuItem(title: t("Settings"), symbol: "gearshape") {
+                        popovers.close()
+                        #if os(macOS)
+                        openSettings()
+                        #else
+                        state.settings = true
+                        #endif
+                    }
                     MenuRule()
                     MenuItem(title: t("Sign out"), symbol: "rectangle.portrait.and.arrow.right", role: .destructive) {
                         popovers.close()
@@ -739,7 +923,6 @@ struct AccountMenu: View {
 private struct HomeStage: View {
     @Bindable var app: AppModel
     let account: Account
-    @Binding var sheet: MeetingSheet.Mode?
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -752,12 +935,18 @@ private struct HomeStage: View {
             }
             .shadow(color: .black.opacity(0.45), radius: 16, y: 2)
             .padding(.leading, 36).padding(.top, 56)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            // On the page beside the sidebar's of a Duo held as a book: the
+            // greeting started on the sidebar's page and ran over the fold.
+            // The picture behind stays under both pages.
+            .keptToOnePage(.reading)
             .rise()
         }
         .overlay(alignment: .bottom) {
             DeviceSwitches(app: app)
                 .padding(8)
                 .glassSurface(Capsule())
+                .keptToOnePage(.reading)
                 .padding(.bottom, 28)
                 .rise(0.08)
         }
@@ -777,7 +966,7 @@ private struct HomeStage: View {
 
 extension View {
     /// Content that carries on under a floating sidebar, mirrored and blurred,
-    /// where the system can (macOS 26); nothing before it.
+    /// where the system can (macOS 26, iOS 26); nothing before it.
     @ViewBuilder
     func backgroundExtended() -> some View {
         if #available(macOS 26.0, iOS 26.0, *), !GlassSupport.forcedFallback {
@@ -787,7 +976,6 @@ extension View {
         }
     }
 }
-#endif
 
 // MARK: - The phone
 
@@ -798,126 +986,74 @@ extension View {
 struct PhoneLobby: View {
     @Bindable var app: AppModel
     let account: Account
-    @State private var sheet: MeetingSheet.Mode? = LobbyDebug.sheet
-    @State private var settings = LobbyDebug.open == "settings"
-    @State private var scheduling = LobbyDebug.open == "scheduled"
-    @State private var typed = ""
-    @State private var popovers = Popovers()
+    /// The sheets, the server page and the join bar's words, which outlive
+    /// this layout (LobbyState).
+    @Bindable var state: LobbyState
     /// The height of a recent room's row, which the list's own height is
     /// counted in: the list does not scroll, so it is as tall as its rows.
     private static let recentRow: CGFloat = 58
 
+    /// The server page, pushed while the lobby is at the servers. Popped by
+    /// the system (Back, the swipe from the edge) only while this layout is
+    /// drawn: taken down by the size class changing, the navigation stack may
+    /// say the page went, and the sidebar that replaces it should still be
+    /// on the servers.
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    private var serversShown: Binding<Bool> {
+        let compact = sizeClass != .regular
+        return Binding(get: { state.place == .servers },
+                       set: { shown in if !shown && compact && state.place == .servers { state.place = .home } })
+    }
+
+    /// A phone on its side, and the iPhone Duo's outer display on its side or
+    /// set down as a tent: too short for the preview above the lists, which
+    /// left Start under the join bar and the lists out of sight below it. The
+    /// preview stands beside them instead, as tall as the screen allows.
+    /// Turning the phone draws the preview again, and its camera starts
+    /// again; the words in the join bar are the lobby's (LobbyState).
+    @Environment(\.verticalSizeClass) private var heightClass
+    private var short: Bool { heightClass == .compact }
+    private var listed: Bool {
+        !app.lobby.upcoming.isEmpty || !app.lobby.recentHere.isEmpty || app.offersRelayChoice
+    }
+
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    hero.rise()
-                    if !app.lobby.upcoming.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            HStack {
-                                Text(t("Upcoming")).font(.system(size: 20, weight: .bold))
-                                Spacer()
-                                Button(t("All of them")) { scheduling = true }.foregroundStyle(Theme.tally)
+            ZStack {
+                if short {
+                    HStack(alignment: .top, spacing: 16) {
+                        hero(height: nil).rise()
+                        if listed {
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 22) { lists }
+                                    .padding(.bottom, 24)
+                                    .animation(Theme.settle, value: app.offersRelayChoice)
                             }
-                            .padding(.horizontal, 6)
-                            VStack(spacing: 0) {
-                                ForEach(app.lobby.upcoming.prefix(4), id: \.id) { one in
-                                    Button {
-                                        if let url = app.lobby.link(one) { Task { await app.open(url) } }
-                                    } label: {
-                                        MeetingRow(one: one, app: app).padding(.horizontal, 14).padding(.vertical, 11)
-                                    }
-                                    .buttonStyle(.plain)
-                                    if one.id != app.lobby.upcoming.prefix(4).last?.id { Divider().padding(.leading, 62) }
-                                }
-                            }
-                            .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Theme.surface))
+                            .scrollIndicators(.never)
+                            .frame(maxWidth: .infinity)
+                            .transition(Theme.arrive)
                         }
-                        .rise(0.06)
                     }
-                    if !app.lobby.recentHere.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(t("Recent")).font(.system(size: 20, weight: .bold)).padding(.horizontal, 6)
-                            // In a List of its own, which does not scroll, for the
-                            // system's swipe to the left: Remove is out of sight
-                            // until the row is swiped. Made by hand on a plain
-                            // stack first, the row moved and its touch did not,
-                            // and pressing Remove opened the room instead.
-                            let shown = Array(app.lobby.recentHere.prefix(4))
-                            List {
-                                ForEach(shown) { recent in
-                                    Button { sheet = .again(recent.room) } label: {
-                                        HStack(spacing: 12) {
-                                            Initial(name: recent.room, size: 36)
-                                            VStack(alignment: .leading, spacing: 2) {
-                                                Text(recent.room).font(.system(size: 16, weight: .semibold))
-                                                Text(recent.at.formatted(.relative(presentation: .named))).font(.system(size: 13)).foregroundStyle(Theme.muted)
-                                            }
-                                            Spacer(minLength: 0)
-                                            Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.muted.opacity(0.6))
-                                        }
-                                        .padding(.horizontal, 14)
-                                        .frame(height: Self.recentRow)
-                                        .contentShape(Rectangle())
-                                        .overlay(alignment: .bottom) {
-                                            if recent.id != shown.last?.id {
-                                                Divider().padding(.leading, 62)
-                                            }
-                                        }
-                                    }
-                                    .buttonStyle(.plain)
-                                    .listRowInsets(EdgeInsets())
-                                    .listRowBackground(Theme.surface)
-                                    .listRowSeparator(.hidden)
-                                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                        Button(role: .destructive) {
-                                            withAnimation(Theme.settle) { app.lobby.forget(recent) }
-                                        } label: {
-                                            Label(t("Remove"), systemImage: "trash")
-                                        }
-                                        .accessibilityLabel(t("Remove {room} from recent", ["room": recent.room]))
-                                    }
-                                }
-                            }
-                            .listStyle(.plain)
-                            .scrollDisabled(true)
-                            .scrollContentBackground(.hidden)
-                            .environment(\.defaultMinListRowHeight, Self.recentRow)
-                            .frame(height: Self.recentRow * CGFloat(shown.count))
-                            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 10)
+                    .animation(Theme.settle, value: listed)
+                    .transition(.opacity)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 22) {
+                            hero(height: 292).rise()
+                            lists
                         }
-                        .rise(0.1)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 24)
+                        .animation(Theme.settle, value: app.offersRelayChoice)
+                        .putsKeyboardAway()
                     }
-                    if app.offersRelayChoice {
-                    NavigationLink {
-                        ServersView(app: app)
-                    } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: "server.rack").font(.system(size: 16)).foregroundStyle(Theme.muted)
-                                .frame(width: 36, height: 36)
-                                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.white.opacity(0.08)))
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(t("Server")).font(.system(size: 16, weight: .semibold))
-                                FleetLine(app: app)
-                            }
-                            Spacer()
-                            Text(app.relayChoice.map { app.lobby.label($0) } ?? t("Automatic")).font(.system(size: 14)).foregroundStyle(Theme.muted)
-                            Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.muted.opacity(0.6))
-                        }
-                        .padding(14)
-                        .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Theme.surface))
-                    }
-                    .buttonStyle(.plain)
-                    .rise(0.14)
-                    .transition(Theme.arrive)
-                    }
+                    .scrollIndicators(.never)
+                    .transition(.opacity)
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 24)
-                .animation(Theme.settle, value: app.offersRelayChoice)
-                .putsKeyboardAway()
             }
-            .scrollIndicators(.never)
+            .animation(Theme.settle, value: short)
             .putsKeyboardAway()
             // The page is content; the join bar below floats over it as a
             // toolbar does, and stays glass.
@@ -926,44 +1062,142 @@ struct PhoneLobby: View {
             .navigationTitle("Tomoshibi")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { settings = true } label: { AccountAvatar(name: account.name, address: app.avatarAddress, size: 30) }
+                    Button { state.settings = true } label: { AccountAvatar(name: account.name, address: app.avatarAddress, size: 30) }
                         .accessibilityLabel(t("Settings"))
                 }
             }
             .safeAreaInset(edge: .bottom) { joinBar }
-        }
-        .fullScreenCover(item: $sheet) { mode in
-            MeetingSheet(app: app, mode: mode)
-        }
-        .sheet(isPresented: $settings) {
-            SettingsView(app: app)
-        }
-        .sheet(isPresented: $scheduling) {
-            ScheduleView(app: app, account: account)
-                .presentationDragIndicator(.visible)
-                .presentationBackground(Theme.background)
+            .navigationDestination(isPresented: serversShown) {
+                ServersView(app: app)
+            }
         }
         .toast(app)
-        .floatingPopoverLayer(popovers)
-        .onAppear { popovers.openFromDebug() }
+        .floatingPopoverLayer(state.popovers)
+        .onAppear { state.popovers.openFromDebug() }
     }
 
-    private var hero: some View {
+    /// The meetings to come, the rooms been in and the server: under the
+    /// preview on a tall screen, beside it on a short one.
+    @ViewBuilder
+    private var lists: some View {
+        if !app.lobby.upcoming.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text(t("Upcoming")).font(.system(size: 20, weight: .bold))
+                    Spacer()
+                    Button(t("All of them")) { state.place = .scheduled }.foregroundStyle(Theme.tally)
+                }
+                .padding(.horizontal, 6)
+                VStack(spacing: 0) {
+                    ForEach(app.lobby.upcoming.prefix(4), id: \.id) { one in
+                        Button {
+                            if let url = app.lobby.link(one) { Task { await app.open(url) } }
+                        } label: {
+                            MeetingRow(one: one, app: app).padding(.horizontal, 14).padding(.vertical, 11)
+                        }
+                        .buttonStyle(.plain)
+                        if one.id != app.lobby.upcoming.prefix(4).last?.id { Divider().padding(.leading, 62) }
+                    }
+                }
+                .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Theme.surface))
+            }
+            .rise(0.06)
+        }
+        if !app.lobby.recentHere.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(t("Recent")).font(.system(size: 20, weight: .bold)).padding(.horizontal, 6)
+                // In a List of its own, which does not scroll, for the
+                // system's swipe to the left: Remove is out of sight
+                // until the row is swiped. Made by hand on a plain
+                // stack first, the row moved and its touch did not,
+                // and pressing Remove opened the room instead.
+                let shown = Array(app.lobby.recentHere.prefix(4))
+                List {
+                    ForEach(shown) { recent in
+                        Button { state.sheet = .again(recent.room) } label: {
+                            HStack(spacing: 12) {
+                                Initial(name: recent.room, size: 36)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(recent.room).font(.system(size: 16, weight: .semibold))
+                                    Text(recent.at.formatted(.relative(presentation: .named))).font(.system(size: 13)).foregroundStyle(Theme.muted)
+                                }
+                                Spacer(minLength: 0)
+                                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.muted.opacity(0.6))
+                            }
+                            .padding(.horizontal, 14)
+                            .frame(height: Self.recentRow)
+                            .contentShape(Rectangle())
+                            .overlay(alignment: .bottom) {
+                                if recent.id != shown.last?.id {
+                                    Divider().padding(.leading, 62)
+                                }
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Theme.surface)
+                        .listRowSeparator(.hidden)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                withAnimation(Theme.settle) { app.lobby.forget(recent) }
+                            } label: {
+                                Label(t("Remove"), systemImage: "trash")
+                            }
+                            .accessibilityLabel(t("Remove {room} from recent", ["room": recent.room]))
+                        }
+                    }
+                }
+                .listStyle(.plain)
+                .scrollDisabled(true)
+                .scrollContentBackground(.hidden)
+                .environment(\.defaultMinListRowHeight, Self.recentRow)
+                .frame(height: Self.recentRow * CGFloat(shown.count))
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            }
+            .rise(0.1)
+        }
+        if app.offersRelayChoice {
+            Button { state.place = .servers } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "server.rack").font(.system(size: 16)).foregroundStyle(Theme.muted)
+                        .frame(width: 36, height: 36)
+                        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.white.opacity(0.08)))
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(t("Server")).font(.system(size: 16, weight: .semibold))
+                        FleetLine(app: app)
+                    }
+                    Spacer()
+                    Text(app.relayChoice.map { app.lobby.label($0) } ?? t("Automatic")).font(.system(size: 14)).foregroundStyle(Theme.muted)
+                    Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.muted.opacity(0.6))
+                }
+                .padding(14)
+                .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Theme.surface))
+            }
+            .buttonStyle(.plain)
+            .rise(0.14)
+            .transition(Theme.arrive)
+        }
+    }
+
+    /// The camera's preview with Start at its foot: 292 points tall above the
+    /// lists, or as tall as the space beside them.
+    private func hero(height: CGFloat?) -> some View {
         ZStack {
             CameraStage(app: app, cornerRadius: 30)
         }
-        .frame(height: 292)
+        .frame(height: height)
+        .frame(maxWidth: .infinity, maxHeight: height == nil ? .infinity : nil)
         .overlay(alignment: .topTrailing) {
             DeviceSwitches(app: app, size: 40).padding(12)
         }
         .overlay(alignment: .bottom) {
             GlassGroup(spacing: 8) {
                 HStack(spacing: 8) {
-                    Button { sheet = .start } label: {
+                    Button { state.sheet = .start } label: {
                         Label(t("Start a meeting"), systemImage: "video.fill").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.glassCapsule(52, prominent: true))
-                    Button { scheduling = true } label: {
+                    Button { state.place = .scheduled } label: {
                         Label(t("Schedule a meeting"), systemImage: "calendar").labelStyle(.iconOnly)
                     }
                     .buttonStyle(.glassCircle(52))
@@ -979,13 +1213,13 @@ struct PhoneLobby: View {
     /// thumb already is.
     private var joinBar: some View {
         HStack(alignment: .bottom, spacing: 10) {
-            ScopedRoomField(prompt: t("Room name or invite link"), text: $typed, scopes: account.scopes, admin: account.admin,
+            ScopedRoomField(prompt: t("Room name or invite link"), text: $state.typed, scopes: account.scopes, admin: account.admin,
                             capsule: true, onSubmit: joinTyped)
             Button(action: joinTyped) {
                 Image(systemName: "arrow.right").font(.system(size: 20, weight: .bold))
             }
             .buttonStyle(.glassCircle(54, prominent: true))
-            .disabled(!validRoomName(name: normaliseRoomName(typed: typed)) && pastedLink(typed) == nil)
+            .disabled(!validRoomName(name: normaliseRoomName(typed: state.typed)) && pastedLink(state.typed) == nil)
             .accessibilityLabel(t("Join"))
         }
         .padding(.horizontal, 16).padding(.bottom, 6)
@@ -993,16 +1227,16 @@ struct PhoneLobby: View {
 
     private func joinTyped() {
         // An invitation pasted in is opened as the link it is.
-        if let url = pastedLink(typed) {
-            typed = ""
+        if let url = pastedLink(state.typed) {
+            state.typed = ""
             putKeyboardAway()
             Task { await app.open(url) }
             return
         }
-        let room = normaliseRoomName(typed: typed)
+        let room = normaliseRoomName(typed: state.typed)
         guard validRoomName(name: room) else { return }
-        sheet = .join(room)
-        typed = ""
+        state.sheet = .join(room)
+        state.typed = ""
     }
 }
 #endif
@@ -1043,6 +1277,14 @@ struct MeetingSheet: View {
     @State private var going: Task<Void, Never>?
     @State private var popovers = Popovers()
     @Environment(\.dismiss) private var dismiss
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.verticalSizeClass) private var heightClass
+    /// A wide screen, or a short one: a phone on its side, and the Duo's
+    /// outer display on its side or as a tent, where across the foot the
+    /// card was 680 points long and as tall as the screen.
+    private var wide: Bool { sizeClass == .regular || heightClass == .compact }
+    #endif
 
     init(app: AppModel, mode: Mode) {
         self.app = app
@@ -1087,19 +1329,31 @@ struct MeetingSheet: View {
             .contentLayer()
             .background(Backdrop().opacity(0.55))
             #else
-            ZStack(alignment: .bottom) {
+            // At the foot of a phone, where the thumb is; in the middle of a
+            // wide screen, at a card's width, where across the whole foot of
+            // an opened Duo it was a bar 950 points long. The same card in
+            // both, only placed, so a fold or an unfold keeps the room typed
+            // into it and the keyboard where it was.
+            ZStack {
                 CameraStage(app: app).ignoresSafeArea()
-                VStack(spacing: 16) {
-                    header
-                    DeviceSwitches(app: app, size: 52)
-                    form
-                    footer
+                ZStack(alignment: wide ? .center : .bottom) {
+                    VStack(spacing: 16) {
+                        header
+                        DeviceSwitches(app: app, size: 52)
+                        form
+                        footer
+                    }
+                    .padding(18)
+                    .concentricGlassShell(minimum: 34)
+                    .frame(maxWidth: wide ? 520 : .infinity)
+                    .padding(10)
                 }
-                .padding(18)
-                .glassShell(cornerRadius: 34)
-                .padding(10)
+                // On one page of a Duo held as a book, and above the fold of
+                // one standing on a table, rather than across either.
+                .keptToOneSide(.reading)
             }
             .putsKeyboardAway()
+            .animation(Theme.settle, value: wide)
             #endif
         }
         .animation(Theme.settle, value: sealing)
@@ -1537,22 +1791,36 @@ struct MeetingRow: View {
 
 // MARK: - Arranging
 
+/// What the schedule's form has typed and chosen: the room's name, the day
+/// and the time. Kept by the lobby rather than by the form, because the form
+/// is drawn in a sheet on a phone and beside the sidebar on a wider screen,
+/// and an iPhone Duo opened or closed with it showing draws it in the other;
+/// kept in the form, the name half typed and the day chosen went with the
+/// layout.
+@MainActor
+@Observable
+final class ScheduleDraft {
+    var planning = ""
+    var day = Date()
+    var hour = Calendar.current.component(.hour, from: ScheduleView.nextQuarter)
+    var minute = Calendar.current.component(.minute, from: ScheduleView.nextQuarter)
+}
+
 /// Schedule.tsx: which name, which day, what time, which machine, and the
 /// meetings already arranged with their links.
 struct ScheduleView: View {
     @Bindable var app: AppModel
     let account: Account
-    @State private var planning = ""
-    @State private var day = Date()
-    @State private var hour = Calendar.current.component(.hour, from: ScheduleView.nextQuarter)
-    @State private var minute = Calendar.current.component(.minute, from: ScheduleView.nextQuarter)
+    @Bindable var draft: ScheduleDraft
+    /// Back to the lobby's home: on a phone the sheet closes, beside the
+    /// sidebar the section goes back to the picture. No default, so that no
+    /// caller is left with a cross that does nothing, as the phone's sheet
+    /// was for a while.
+    let close: () -> Void
     @State private var arranging = false
     @State private var copied: String?
     @State private var now = Date()
     @State private var popovers = Popovers()
-    #if os(iOS)
-    @Environment(\.dismiss) private var dismiss
-    #endif
 
     private static let ahead: TimeInterval = 60 * 24 * 60 * 60
 
@@ -1561,13 +1829,13 @@ struct ScheduleView: View {
     /// to zero searches forward for the next such moment, and the minute it
     /// landed on was one the minute list does not offer, which left the list
     /// blank.
-    private static var nextQuarter: Date {
+    static var nextQuarter: Date {
         let now = Date().timeIntervalSinceReferenceDate
         return Date(timeIntervalSinceReferenceDate: ((now / 900).rounded(.down) + 1) * 900)
     }
 
     private var canArrange: Bool { account.can?.contains("arrange") ?? true }
-    private var at: Date? { Calendar.current.date(bySettingHour: hour, minute: minute, second: 0, of: day) }
+    private var at: Date? { Calendar.current.date(bySettingHour: draft.hour, minute: draft.minute, second: 0, of: draft.day) }
     private var problem: Bool {
         guard let at else { return true }
         return at < now || at > now.addingTimeInterval(Self.ahead)
@@ -1590,19 +1858,7 @@ struct ScheduleView: View {
             #if os(macOS)
             VStack(alignment: .leading, spacing: 20) {
                 heading(size: 26)
-                // Side by side where the list has room for a meeting's name,
-                // its time and its three buttons; in a narrower window it
-                // was squeezed to "…" beside the form, so it goes under it.
-                ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .top, spacing: 20) {
-                        form.frame(width: 360)
-                        list.frame(minWidth: 420, maxWidth: .infinity, alignment: .top)
-                    }
-                    VStack(alignment: .leading, spacing: 20) {
-                        form.frame(maxWidth: 560)
-                        list.frame(maxWidth: 560)
-                    }
-                }
+                columns
             }
             .padding(28)
             #else
@@ -1610,14 +1866,13 @@ struct ScheduleView: View {
                 HStack(alignment: .top, spacing: 12) {
                     heading(size: 22)
                     Spacer(minLength: 0)
-                    Button { dismiss() } label: { Image(systemName: "xmark").font(.system(size: 13, weight: .bold)) }
+                    Button(action: close) { Image(systemName: "xmark").font(.system(size: 13, weight: .bold)) }
                         .buttonStyle(.glassCircle(32))
                         .accessibilityLabel(t("Close"))
                 }
                 // Clear of the sheet's grabber, which it sat against.
                 .padding(.top, 22)
-                form
-                list
+                columns
             }
             .padding(.horizontal, 16)
             .padding(.bottom, 24)
@@ -1636,6 +1891,23 @@ struct ScheduleView: View {
         .animation(Theme.settle, value: listing)
         .floatingPopoverLayer(popovers)
         .onAppear { popovers.openFromDebug() }
+    }
+
+    /// Side by side where the list has room for a meeting's name, its time
+    /// and its three buttons, as beside a sidebar on a Mac or an opened Duo;
+    /// in a narrower window, or a phone's sheet, it was squeezed to "…"
+    /// beside the form, so it goes under it.
+    private var columns: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 20) {
+                form.frame(width: 360)
+                list.frame(minWidth: 420, maxWidth: .infinity, alignment: .top)
+            }
+            VStack(alignment: .leading, spacing: 20) {
+                form.frame(maxWidth: 560)
+                list.frame(maxWidth: 560)
+            }
+        }
     }
 
     private func heading(size: CGFloat) -> some View {
@@ -1663,19 +1935,19 @@ struct ScheduleView: View {
             if !canArrange {
                 Text(t("Arranging meetings has not been opened to you.")).font(.system(size: 13)).foregroundStyle(Theme.muted)
             } else {
-                GlassField(prompt: t("Room name"), text: $planning, symbol: "number", mono: !planning.isEmpty, height: 40)
+                GlassField(prompt: t("Room name"), text: $draft.planning, symbol: "number", mono: !draft.planning.isEmpty, height: 40)
                 Text(t("Name it yourself, or leave it blank for one nobody has used.")).font(.system(size: 11.5)).foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
                 // The app's own month rather than the system's calendar: the
                 // chosen day in the person's colour, the days past and beyond
                 // sixty dimmed (Schedule.tsx offers no further ahead).
-                MonthCalendar(day: $day, earliest: Date(), latest: Date().addingTimeInterval(Self.ahead))
+                MonthCalendar(day: $draft.day, earliest: Date(), latest: Date().addingTimeInterval(Self.ahead))
                     .padding(12)
                     .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.black.opacity(0.18)))
                 HStack(spacing: 8) {
                     rowLabel(t("Time"), "clock")
                     Spacer(minLength: 8)
-                    ClockChoice(id: "schedule.clock", hour: $hour, minute: $minute)
+                    ClockChoice(id: "schedule.clock", hour: $draft.hour, minute: $draft.minute)
                 }
                 if app.offersRelayChoice {
                     HStack(spacing: 8) {
@@ -1923,14 +2195,14 @@ struct ScheduleView: View {
         guard !arranging, let at else { return }
         now = Date()
         guard !problem else { return }
-        let wanted = normaliseRoomName(typed: planning)
+        let wanted = normaliseRoomName(typed: draft.planning)
         let room = validRoomName(name: wanted) ? wanted : generateRoomName()
         arranging = true
         Task {
             defer { arranging = false }
             switch await app.lobby.arrange(room: room, at: at, relay: app.relayChoice) {
             case let .success(made):
-                planning = ""
+                draft.planning = ""
                 copy(made)
             case let .failure(refused):
                 app.problem = refused.sentence
