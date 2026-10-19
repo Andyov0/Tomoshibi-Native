@@ -318,6 +318,8 @@ public final class AppModel {
         do {
             var address = serverAddress.trimmingCharacters(in: .whitespacesAndNewlines)
             if !address.contains("://") { address = "https://" + address }
+            // Before the deployment is made, which reads it then.
+            ClientDescription.tell()
             let deployment = try Deployment(base: address)
             if let cookie = Keychain.read("account:" + deployment.baseUrl()) {
                 try? deployment.restoreAccountCookie(value: cookie)
