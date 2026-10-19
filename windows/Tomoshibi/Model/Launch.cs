@@ -48,9 +48,6 @@ public sealed record Launch
     /// <summary>Speaks this language for the launch without keeping it (TOMOSHIBI_LANGUAGE=en|zh-Hans|zh-Hant|ja).</summary>
     public string? Language { get; init; }
 
-    /// <summary>The window's size in device-independent pixels (TOMOSHIBI_WINDOW=WIDTHxHEIGHT), for pictures at a phone's width and a laptop's.</summary>
-    public (int Width, int Height)? Window { get; init; }
-
     /// <summary>
     /// Something to open over the screen (TOMOSHIBI_SHOW): settings,
     /// settings:&lt;section&gt;, start, join, schedule, servers, account, or in
@@ -80,6 +77,14 @@ public sealed record Launch
     /// </summary>
     public bool RealDevices { get; init; } = true;
 
+    /// <summary>
+    /// Keeps what this rehearsal is told in a store of the test's own
+    /// (TOMOSHIBI_KEEP=name: %LOCALAPPDATA%\Tomoshibi-tests\name), never
+    /// the owner's, so that a test can sign in, quit, and see the next launch
+    /// come back signed in from the sealed cookie, as a person's would.
+    /// </summary>
+    public string? KeepIn { get; init; }
+
     /// <summary>A file the measurements are written to (TOMOSHIBI_DEBUG_LOG).</summary>
     public string? LogFile { get; init; }
 
@@ -106,16 +111,11 @@ public sealed record Launch
 
         var baseUrl = Get("TOMOSHIBI_BASE");
         var logFile = Get("TOMOSHIBI_DEBUG_LOG");
-        (int, int)? window = null;
-        if (Get("TOMOSHIBI_WINDOW") is { } size && size.Split('x') is [var w, var h] && int.TryParse(w, out var width) && int.TryParse(h, out var height))
-        {
-            window = (width, height);
-        }
         // Everything below drives the app by itself, and only a launch that
         // says where to drive it to may.
         if (baseUrl == null)
         {
-            return new Launch { LogFile = logFile, Window = window, Mute = Get("TOMOSHIBI_MUTE") != null };
+            return new Launch { LogFile = logFile, Mute = Get("TOMOSHIBI_MUTE") != null };
         }
 
         string? signInName = null, signInFile = null;
@@ -138,7 +138,6 @@ public sealed record Launch
             Open = Get("TOMOSHIBI_OPEN"),
             Ended = Get("TOMOSHIBI_ENDED"),
             Language = Get("TOMOSHIBI_LANGUAGE"),
-            Window = window,
             Show = Get("TOMOSHIBI_SHOW"),
             Mute = Get("TOMOSHIBI_MUTE") != null,
             Microphone = Get("TOMOSHIBI_MIC") != null,
@@ -146,6 +145,7 @@ public sealed record Launch
             // Synthetic unless asked: a test given a deployment of its own
             // never reaches a real device by forgetting a switch.
             RealDevices = string.Equals(Get("TOMOSHIBI_SOURCE"), "devices", StringComparison.OrdinalIgnoreCase),
+            KeepIn = Get("TOMOSHIBI_KEEP") is { } keep && keep.All(c => char.IsLetterOrDigit(c) || c == '-') ? keep : null,
             LogFile = logFile,
             QuitAfterSeconds = int.TryParse(Get("TOMOSHIBI_DEBUG_QUIT_AFTER"), out var seconds) && seconds > 0 ? seconds : null,
         };

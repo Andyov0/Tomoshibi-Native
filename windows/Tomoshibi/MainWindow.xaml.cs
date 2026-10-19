@@ -10,7 +10,6 @@ using Tomoshibi.Model;
 using Tomoshibi.UI;
 using Tomoshibi.UI.Kit;
 using Tomoshibi.UI.Screens;
-using Windows.Graphics;
 using Windows.System;
 
 namespace Tomoshibi;
@@ -61,11 +60,13 @@ public sealed partial class MainWindow : Window
             // The narrowest a phone is held, and tall enough for a join
             // screen's pane: below this the screens have nowhere to put
             // their forms.
-            presenter.PreferredMinimumWidth = Scaled(360);
-            presenter.PreferredMinimumHeight = Scaled(560);
+            presenter.PreferredMinimumWidth = Scaled(Placement.MinimumWidth);
+            presenter.PreferredMinimumHeight = Scaled(Placement.MinimumHeight);
         }
-        var (width, height) = app.Launch.Window ?? (1280, 800);
-        AppWindow.Resize(new SizeInt32(Scaled(width), Scaled(height)));
+        // A desktop window where it was left, or the Mac app's first size in
+        // the middle of the screen (Placement).
+        Placement.Restore(AppWindow, app.Defaults, Scaled(1000) / 1000.0);
+        AppWindow.Closing += (_, _) => Placement.Keep(AppWindow, app.Defaults);
 
         // Escape closes what lies on top, then does what the screen's Back
         // does, as the system's Back does on the other platforms.
@@ -81,9 +82,26 @@ public sealed partial class MainWindow : Window
             Ink.ApplyAccent();
             Refresh();
         };
-        Closed += async (_, _) =>
+        // Closed in a call: the call is left first, and then the window
+        // goes, so that the others see the person go at once, as a closed
+        // browser tab is seen to; closed without that, the app was gone
+        // before its leave was sent, and the room kept a picture of
+        // nobody until the server gave up on it. Two seconds at most.
+        var leaving = false;
+        AppWindow.Closing += async (_, e) =>
         {
-            if (app.Call is { } call) await call.Leave();
+            if (leaving || app.Call is not { } call) return;
+            e.Cancel = true;
+            leaving = true;
+            try
+            {
+                await Task.WhenAny(call.Leave(), Task.Delay(2000));
+            }
+            catch (Exception fault)
+            {
+                Log.Line($"leaving as the window closed: {fault.Message}");
+            }
+            Close();
         };
     }
 

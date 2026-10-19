@@ -28,8 +28,21 @@ public partial class App : Application
 
         // A test's choices are shown while it runs and kept nowhere: what it
         // would write over is the owner's (AppModel.rehearsal).
-        IDefaults kept = launch.Rehearsal ? new MemoryDefaults() : FileDefaults.App();
-        ISecrets secrets = launch.Rehearsal ? new MemorySecrets() : DpapiSecrets.App();
+        IDefaults kept;
+        ISecrets secrets;
+        if (launch.KeepIn is { } keep)
+        {
+            // A test's own store, never the owner's (Launch.KeepIn).
+            var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Tomoshibi-tests", keep);
+            Directory.CreateDirectory(folder);
+            kept = new FileDefaults(Path.Combine(folder, "preferences.json"));
+            secrets = new DpapiSecrets(Path.Combine(folder, "secrets"));
+        }
+        else
+        {
+            kept = launch.Rehearsal ? new MemoryDefaults() : FileDefaults.App();
+            secrets = launch.Rehearsal ? new MemorySecrets() : DpapiSecrets.App();
+        }
 
         var tables = LoadPhrases();
         Localization.Shared = new Localization(tables, kept, Shared.SystemLanguages) { Keeps = !launch.Rehearsal };
