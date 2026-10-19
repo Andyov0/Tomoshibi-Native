@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The Windows app: WinUI 3 over the shared Rust core, which build-core.ps1
+    builds into Native\win-<arch>\tomoshibi_core.dll and whose C# bindings it
+    generates into Generated.
+
+    Unpackaged, with the Windows App SDK and .NET carried in the output: the
+    build directory runs as it is, without an installer, a signing
+    certificate or a package registration, and a launch inherits the
+    environment it was started with, which is how the TOMOSHIBI_* switches
+    reach it (a packaged app is started by activation and does not).
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+    <RootNamespace>Tomoshibi</RootNamespace>
+    <AssemblyName>Tomoshibi</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>ARM64;x64</Platforms>
+    <RuntimeIdentifiers>win-arm64;win-x64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The generated bindings move memory across the FFI by pointer. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- Generated code is not ours to keep tidy. -->
+    <NoWarn>$(NoWarn);CS1591;CS8618;CS8625;CS8600;CS8602;CS8603;CS8604;CS0108</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.9169" />
+  </ItemGroup>
+
+  <!-- The core, for the architecture being built. -->
+  <ItemGroup>
+    <None Include="Native\$(RuntimeIdentifier)\tomoshibi_core.dll" Condition="Exists('Native\$(RuntimeIdentifier)\tomoshibi_core.dll')">
+      <Link>tomoshibi_core.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Native\$(RuntimeIdentifier)\tomoshibi_core.pdb" Condition="Exists('Native\$(RuntimeIdentifier)\tomoshibi_core.pdb')">
+      <Link>tomoshibi_core.pdb</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <Target Name="RequireCore" BeforeTargets="Build" Condition="!Exists('Generated') Or !Exists('Native\$(RuntimeIdentifier)\tomoshibi_core.dll')">
+    <Error Text="No core for $(RuntimeIdentifier): run windows\build-core.ps1 first." />
+  </Target>
+</Project>

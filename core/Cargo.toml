@@ -44,6 +44,17 @@ thiserror = "2"
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
 
+# Direct3D 11 and DXGI, for the swap chains remote pictures are drawn into on
+# Windows (src/call/panel.rs).
+[target.'cfg(target_os = "windows")'.dependencies]
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+] }
+
 # Two LiveKit crates carry small changes this project needs, each marked
 # "Tomoshibi:" where it is made. See vendor/README.md.
 [patch.crates-io]

@@ -1,0 +1,183 @@
+# Tomoshibi for Windows
+
+A WinUI 3 app over the same Rust core as the Apple and Android apps. This is
+phase one: the core built for Windows, its C# bindings, and an app that signs
+in, joins a room, shows and plays everybody else, and publishes a microphone
+and a camera. The screens of the other apps come in the next phase.
+
+- `build-core.ps1` builds the core into `Tomoshibi\Native\win-<arch>\tomoshibi_core.dll`
+  and generates the C# bindings into `Tomoshibi\Generated`. Neither is
+  committed, as on the other platforms.
+- `Tomoshibi\` is the app.
+
+## The machine it is built on
+
+Windows 11 on Arm (build 26200), in the owner's Parallels VM. Everything below
+came from the vendor's own site, and is what was installed, how, in this order.
+
+| What | Version | From | How |
+|---|---|---|---|
+| Git for Windows | 2.56.0.windows.2, arm64 | `github.com/git-for-windows/git/releases` (`Git-2.56.0.2-arm64.exe`) | `/VERYSILENT /NORESTART /NOCANCEL /SP- /SUPPRESSMSGBOXES` |
+| .NET SDK | 10.0.402 (the current LTS), arm64 | `builds.dotnet.microsoft.com` (`dotnet-sdk-10.0.402-win-arm64.exe`), SHA-512 checked against the release metadata | `/install /quiet /norestart` |
+| LLVM | 23.1.3, Windows on Arm | `github.com/llvm/llvm-project/releases` (`LLVM-23.1.3-woa64.msi`) | `msiexec /i … /qn /norestart` |
+| Visual Studio Build Tools 2026 | 18.11 (MSVC 14.51.36231, Windows SDK 10.0.26100.0) | `aka.ms/vs/stable/vs_buildtools.exe` | `--quiet --wait --norestart --nocache --add Microsoft.VisualStudio.Workload.VCTools --add Microsoft.VisualStudio.Component.VC.Tools.ARM64 --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows11SDK.26100` |
+| Rust | rustup, stable 1.99.1 | `static.rust-lang.org/rustup/dist/aarch64-pc-windows-msvc/rustup-init.exe` | for the user, not system-wide: `-y --profile minimal --default-toolchain stable --default-host aarch64-pc-windows-msvc --target x86_64-pc-windows-msvc` |
+
+The installers ran as SYSTEM (`prlctl exec` without `--current-user`), since
+nobody is there to answer a UAC prompt; rustup ran as the user.
+
+Not installed, because nothing needed it: C++ ATL (neither webrtc-sys's C++
+nor the prebuilt WebRTC's objects ask for an ATL library), CMake, NASM, Perl.
+LLVM is there for one reason: ring compiles its C with clang when it targets
+Windows on Arm (its `build.rs`), and `build-core.ps1` puts it on the path.
+
+Per project, not per machine: the NuGet packages `Microsoft.WindowsAppSDK`
+2.5.1 and `Microsoft.Windows.SDK.BuildTools` 10.0.26100.9169 (restored by
+`dotnet build`), and the C# binding generator, which `build-core.ps1` builds
+into `windows\.tools` (see below).
+
+Two settings in the VM user's global git config: `safe.directory` for the
+repository on the Mac's share (a network drive records no owner, and git
+refuses it otherwise), and `core.autocrlf false`.
+
+## Building
+
+Clone the repository onto a local disk; a build on the Mac's share is slow and
+puts cargo's and MSBuild's outputs on the Mac. Then, in PowerShell:
+
+```powershell
+windows\build-core.ps1                          # debug, arm64
+windows\build-core.ps1 -Profile local           # optimised, talks to the server it is given
+windows\build-core.ps1 -Profile release -Arch x64
+
+dotnet build windows\Tomoshibi\Tomoshibi.csproj -c Debug -r win-arm64 -p:Platform=ARM64
+dotnet build windows\Tomoshibi\Tomoshibi.csproj -c Debug -r win-x64   -p:Platform=x64
+```
+
+The profiles are the other platforms': `release` admits only the home
+deployment (`protocol/src/api/mod.rs`, `admitted`), so anything pointed at a
+local deployment is `debug` or `local`, which is release with debug assertions.
+
+The first core build downloads LiveKit's prebuilt WebRTC for the target
+(about 110 MB) and takes five minutes on four Arm cores; later ones take
+seconds. The app is at
+`windows\Tomoshibi\bin\ARM64\Debug\net10.0-windows10.0.26100.0\win-arm64\Tomoshibi.exe`.
+
+### What the Windows link needs
+
+- **The static C runtime.** The prebuilt WebRTC's objects ask for libcmt and
+  libcpmt and refuse to be linked with anything built against the DLL
+  runtime (`/FAILIFMISMATCH:RuntimeLibrary=MT_StaticRelease`), so every
+  Windows target is built with `+crt-static` (`core/.cargo/config.toml`).
+- **The system libraries reach the DLL by themselves.** On Android,
+  webrtc-sys's `rustc-link-arg`s never reached the final link and the JNI
+  symbols had to be named again in `build-core.sh`. On Windows everything
+  webrtc-sys asks for is a `rustc-link-lib` (`msdmo`, `wmcodecdspuuid`,
+  `dmoguids`, `strmiids`, `winmm`, `secur32`, `crypt32`, `iphlpapi`, `ws2_32`,
+  `d3d11`, `dxgi`, …), which cargo does carry to the final link, and the
+  archive names the rest itself (`/DEFAULTLIB`: `avrt`, `dbghelp`, `user32`,
+  …). The DLL linked on the first attempt for both architectures.
+- **A DLL only for Windows.** `build-core.ps1` asks for a cdylib with
+  `cargo rustc --crate-type cdylib`, as `android/build-core.sh` does, rather
+  than in `Cargo.toml`, where every Apple target would link one too; and
+  without the staticlib, which would copy all of WebRTC into a second archive.
+
+### Arm64 and x64
+
+LiveKit publishes its prebuilt WebRTC for `win-arm64` as well as `win-x64`
+(release `webrtc-89d790b`), so the app is native on Arm. The x64 build is made
+on the same Arm machine, cross-compiled, and runs there under emulation.
+
+## The C# bindings
+
+UniFFI has no C# generator of its own. NordSecurity's `uniffi-bindgen-cs` is
+the one there is, and its latest release (v0.11.1) is built on UniFFI 0.31:
+bindings from it refuse a 0.32 library at load, by its checksums. The options
+were:
+
+- **a fork of the generator on 0.32**, which exists as the open upstream pull
+  request NordSecurity/uniffi-bindgen-cs#176 (175 binding tests passing, and
+  reported working against matrix-rust-sdk on 0.32.1);
+- **an older UniFFI for Windows alone**, which would mean two versions of the
+  macros over one core and a core that is not the one the other apps run;
+- **a hand-written C API with P/Invoke over it**, which would mean writing and
+  keeping by hand what the generator writes for the other platforms: the core
+  and the protocol crate export over two hundred items, async functions and
+  callback interfaces among them.
+
+The first is the least bad, and it is what `build-core.ps1` does: it builds
+the generator from that pull request, pinned to one commit
+(`dennisameling/uniffi-bindgen-cs@cf0aa7a8`), into `windows\.tools`, and runs
+it over the DLL that was just built. Generated for this core it compiles
+without a change: both crates, `async` methods as `Task`s, callback
+interfaces, errors as exceptions. Move to the first release made on 0.32 when
+NordSecurity publishes one.
+
+## Media on Windows
+
+- **Remote video is drawn by the core**, as on Android (`core/src/call/panel.rs`).
+  The decoder hands over I420 in memory; giving that to C# would be every
+  frame of every picture copied across the binding and converted to BGRA in
+  managed code. Instead the core makes a composition swap chain on its own
+  Direct3D 11 device, the app sets it on a `SwapChainPanel`
+  (`ISwapChainPanelNative::SetSwapChain`), and each frame is converted with
+  libyuv into the back buffer and presented; the swap chain's matrix
+  transform scales it to the panel. A `SwapChainPanel` cannot be turned or
+  cut by layout, so the turn a phone's camera asks for and the crop of a
+  picture that fills its tile are made in the core, from the size the app
+  reports (`place_video_panel`). `video_panel_frames` counts what was drawn.
+- **Remote sound** is `attach_pcm`: 10 ms of 48 kHz PCM per sound, measured
+  always and played through an audio graph (one frame input node per sound)
+  unless the launch is muted. A muted launch never opens the graph.
+- **Local video** goes in through `push_planes`: a generated picture
+  (`Media\Synthetic.cs`) or, with `TOMOSHIBI_SOURCE=devices`, the camera
+  through `Windows.Media.Capture` as NV12 (`Media\Devices.cs`).
+- **Local sound** goes in through `push_pcm`: a generated 440 Hz tone at
+  -20 dBFS, or, with `TOMOSHIBI_SOURCE=devices`, the microphone through an
+  audio graph.
+
+Synthetic is the default in this phase, so that no launch can capture whoever
+sits at a machine whose devices are another's (a VM shares its host's). The
+device paths compile and are not yet checked on real hardware.
+
+## Packaging
+
+Unpackaged, with the Windows App SDK and .NET carried in the output
+(`WindowsPackageType=None`, `WindowsAppSDKSelfContained`, `SelfContained`):
+the build directory runs as it is, with no installer, signing certificate or
+package registration, and a launch inherits its environment, which is how the
+`TOMOSHIBI_*` switches reach it; a packaged app is started by activation and
+does not. An MSIX for distribution, with an identity for notifications and
+the camera prompt, belongs with the full UI.
+
+## Switches
+
+Read from the environment, the same names the Apple apps read:
+
+| Switch | What it does |
+|---|---|
+| `TOMOSHIBI_BASE` | The deployment. Without it the app goes nowhere by itself: autojoin and signing in need it, because the default is the home deployment. |
+| `TOMOSHIBI_NAME` | The name shown to the room. |
+| `TOMOSHIBI_SIGNIN=name:file` | Signs in first, the passphrase read from the file. |
+| `TOMOSHIBI_PASSPHRASE` | A passphrase to join with. |
+| `TOMOSHIBI_SEALING_WORD` | Seals the call. |
+| `TOMOSHIBI_AUTOJOIN` | Straight into this room. |
+| `TOMOSHIBI_MUTE` | Plays nothing; only measures. Always set in tests. |
+| `TOMOSHIBI_MIC`, `TOMOSHIBI_CAMERA` | Joins with each published. |
+| `TOMOSHIBI_SOURCE=devices` | The real camera and microphone instead of the synthetic ones. |
+| `TOMOSHIBI_DEBUG_LOG=file` | Writes what the app does and, every two seconds, what it sent and received. |
+| `TOMOSHIBI_DEBUG_QUIT_AFTER=seconds` | Leaves and quits. |
+
+## Testing
+
+As for the other platforms, against a local deployment and a headless
+browser, never the production fleet. The deployment runs on the Mac,
+listening on its address on the Parallels shared network with `node_ip` set
+to it, and the browser (Chrome for Testing, `--mute-audio`, fake devices) on
+the Mac as well; it treats that plain-http origin as secure
+(`--unsafely-treat-insecure-origin-as-secure`), or it would have no
+`getUserMedia`. The app, in the VM, is launched with `TOMOSHIBI_BASE` naming
+that deployment, `TOMOSHIBI_MUTE`, and the synthetic sources.
+
+The app's log says what it drew and heard; the browser's `inbound-rtp` stats
+and `interop/channels.js` say what it received.

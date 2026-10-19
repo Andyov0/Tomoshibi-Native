@@ -17,6 +17,18 @@ rustflags = ["-C", "link-arg=-ObjC"]
 [target.aarch64-apple-ios-sim]
 rustflags = ["-C", "link-arg=-ObjC"]
 
+# The prebuilt WebRTC for Windows is compiled against the static C runtime:
+# its objects ask for libcmt and libcpmt and carry
+# /FAILIFMISMATCH:RuntimeLibrary=MT_StaticRelease. Rust links the DLL runtime
+# (/MD) unless told otherwise, and so would cc for webrtc-sys's own C++, and
+# the linker refuses to put objects of both kinds in one image. With
+# crt-static rustc links libcmt and cc compiles with /MT, as WebRTC did.
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
 # The oldest systems the apps support; set so that the core and the apps that
 # link it agree on what they may call.
 [env]
