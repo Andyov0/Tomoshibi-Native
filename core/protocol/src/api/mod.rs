@@ -11,7 +11,9 @@
 //! paths escaped the same way, the same JSON in the same key order, the same
 //! headers, and no `Origin` or `Sec-Fetch-Site` (internal/admin/api.go
 //! `FromHere` lets a request without them through, which is how the watchdog
-//! and the enrolment script are let through too).
+//! and the enrolment script are let through too). The one header that differs
+//! is the user agent, which says which app this is (agent.rs): the deployment
+//! keeps it for its management pages, and nobody in a call ever sees it.
 //!
 //! Errors. The server sends `{"error": code}` with a refusal and the app owns
 //! the sentence, so a refusal comes back as `Refused { status, code }` with the
@@ -35,6 +37,7 @@
 //! network would spend somebody's guesses on their own correct passphrase.
 
 mod account;
+mod agent;
 mod meetings;
 mod music;
 mod rooms;
@@ -155,6 +158,7 @@ impl Deployment {
 
         let client = reqwest::Client::builder()
             .cookie_provider(jar.clone())
+            .user_agent(agent::user_agent())
             .redirect(redirect)
             // A connection that will not open is a server that is not there,
             // and saying so after ten seconds is better than a spinner.

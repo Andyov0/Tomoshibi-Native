@@ -380,6 +380,8 @@ class AppModel(
         try {
             var address = serverAddress.trim()
             if (!address.contains("://")) address = "https://$address"
+            // Before the deployment is made, which reads it then.
+            ClientDescription.tell()
             val deployment = Deployment(address)
             secrets.read("account:" + deployment.baseUrl())?.let { cookie ->
                 try {
