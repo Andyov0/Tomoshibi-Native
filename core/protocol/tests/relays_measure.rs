@@ -6,7 +6,8 @@
 //! join without a preference. And the measurement itself must not be the thing
 //! that gets a relay blocked: a relay in mainland China is taken off the air
 //! when it is seen answering web requests, so all a relay may ever see from
-//! this is one STUN binding request, or one WebSocket opening to /rtc.
+//! this is a STUN binding request a round, or a WebSocket opening to /rtc a
+//! round, and never more than five rounds.
 //!
 //! The choice is cached for the whole process, so the tests take turns.
 
@@ -151,18 +152,24 @@ async fn closed() -> SocketAddr {
 }
 
 /// A relay's STUN probe, built as internal/rtc/stun.go builds it: every
-/// datagram it was sent, and an answer to binding requests after `delay`,
-/// skipping the first `ignore` of them. `None` never answers.
+/// datagram it was sent and when, and an answer to binding requests after
+/// `delay`, skipping the first `ignore` of them. `None` never answers.
 struct Stun {
     address: SocketAddr,
-    datagrams: Arc<Mutex<Vec<Vec<u8>>>>,
+    datagrams: Arc<Mutex<Vec<(Instant, Vec<u8>)>>>,
 }
 
 impl Stun {
     async fn start(delay: Option<Duration>, ignore: usize) -> Stun {
+        Stun::answering(move |count| if count <= ignore { None } else { delay }).await
+    }
+
+    /// One that answers the `count`th datagram it is sent (from 1) after
+    /// what `answer` says, or not at all.
+    async fn answering(answer: impl Fn(usize) -> Option<Duration> + Send + 'static) -> Stun {
         let socket = Arc::new(UdpSocket::bind("127.0.0.1:0").await.unwrap());
         let address = socket.local_addr().unwrap();
-        let datagrams = Arc::new(Mutex::new(Vec::<Vec<u8>>::new()));
+        let datagrams = Arc::new(Mutex::new(Vec::<(Instant, Vec<u8>)>::new()));
 
         let log = datagrams.clone();
         tokio::spawn(async move {
@@ -171,14 +178,11 @@ impl Stun {
                 let packet = buffer[..read].to_vec();
                 let count = {
                     let mut log = log.lock().unwrap();
-                    log.push(packet.clone());
+                    log.push((Instant::now(), packet.clone()));
                     log.len()
                 };
 
-                let Some(delay) = delay else { continue };
-                if count <= ignore {
-                    continue;
-                }
+                let Some(delay) = answer(count) else { continue };
                 let Some(reply) = binding(&packet, from) else { continue };
 
                 let socket = socket.clone();
@@ -197,7 +201,24 @@ impl Stun {
     }
 
     fn datagrams(&self) -> Vec<Vec<u8>> {
-        self.datagrams.lock().unwrap().clone()
+        self.datagrams.lock().unwrap().iter().map(|(_, datagram)| datagram.clone()).collect()
+    }
+
+    fn arrivals(&self) -> Vec<Instant> {
+        self.datagrams.lock().unwrap().iter().map(|(at, _)| *at).collect()
+    }
+
+    /// The transactions it was asked, each once, in the order they first
+    /// arrived: one per round, however often a round's request was resent.
+    fn transactions(&self) -> Vec<[u8; 12]> {
+        let mut seen: Vec<[u8; 12]> = Vec::new();
+        for datagram in self.datagrams() {
+            let id: [u8; 12] = datagram[8..20].try_into().unwrap();
+            if !seen.contains(&id) {
+                seen.push(id);
+            }
+        }
+        seen
     }
 }
 
@@ -305,7 +326,8 @@ async fn names_nothing_when_no_relay_answers_and_gives_up_at_the_timeout() {
     let took = started.elapsed();
 
     // All at once and each bounded: one and a half seconds, not three, and
-    // not however long a dead relay would keep a person waiting.
+    // not however long a dead relay would keep a person waiting. Not five
+    // of them either: a round that ran out is a relay's last.
     assert!(took >= ms(1450), "gave up after {took:?}");
     assert!(took < ms(2200), "waited {took:?}");
 
@@ -380,7 +402,7 @@ async fn forgetting_measures_again() {
     relays::fastest(&offered).await;
 
     settle().await;
-    assert_eq!((sh.count(), hk.count()), (2, 2));
+    assert_eq!((sh.count(), hk.count()), (2 * relays::ROUNDS, 2 * relays::ROUNDS));
 }
 
 // Automatic is for somebody who did not choose, and choosing a relay they will
@@ -413,7 +435,7 @@ async fn never_measures_or_chooses_a_reserved_or_resting_relay() {
     assert_eq!(relays::fastest(&lone).await.as_deref(), Some("tokyo"));
 
     settle().await;
-    assert_eq!((reserved.count(), resting.count(), jp.count()), (0, 0, 1));
+    assert_eq!((reserved.count(), resting.count(), jp.count()), (0, 0, relays::ROUNDS));
 }
 
 // The one request a relay may see: the WebSocket opening a call begins with,
@@ -435,23 +457,33 @@ async fn the_websocket_opening_is_the_only_request_a_relay_sees() {
     settle().await;
 
     for (socket, path) in [(&sh, "/relay/rtc"), (&hk, "/rtc")] {
+        // A connection of its own for every round, as every round of the
+        // web's is a new WebSocket, and no more than the rounds.
         let connections = socket.connections();
-        assert_eq!(connections.len(), 1, "one connection per relay");
+        assert_eq!(connections.len(), relays::ROUNDS, "one connection per round");
 
-        let (line, headers, after) = request(&connections[0]);
-        assert_eq!(line, format!("GET {path} HTTP/1.1"));
-        assert_eq!(header(&headers, "upgrade").map(str::to_ascii_lowercase).as_deref(), Some("websocket"));
-        assert_eq!(header(&headers, "connection").map(str::to_ascii_lowercase).as_deref(), Some("upgrade"));
-        assert_eq!(header(&headers, "sec-websocket-version"), Some("13"));
-        assert_eq!(header(&headers, "sec-websocket-key").map(str::len), Some(24));
+        let mut keys = Vec::new();
+        for connection in &connections {
+            let (line, headers, after) = request(connection);
+            assert_eq!(line, format!("GET {path} HTTP/1.1"));
+            assert_eq!(header(&headers, "upgrade").map(str::to_ascii_lowercase).as_deref(), Some("websocket"));
+            assert_eq!(header(&headers, "connection").map(str::to_ascii_lowercase).as_deref(), Some("upgrade"));
+            assert_eq!(header(&headers, "sec-websocket-version"), Some("13"));
+            assert_eq!(header(&headers, "sec-websocket-key").map(str::len), Some(24));
+            keys.push(header(&headers, "sec-websocket-key").unwrap().to_owned());
 
-        // No token, no credentials, nothing of the deployment's.
-        for absent in ["authorization", "cookie", "proxy-authorization"] {
-            assert_eq!(header(&headers, absent), None, "{absent} sent to a relay");
+            // No token, no credentials, nothing of the deployment's.
+            for absent in ["authorization", "cookie", "proxy-authorization"] {
+                assert_eq!(header(&headers, absent), None, "{absent} sent to a relay");
+            }
+
+            // And nothing after it: not a second request on the same connection.
+            assert!(after.is_empty(), "sent after the upgrade request: {after:?}");
         }
 
-        // And nothing after it: not a second request on the same connection.
-        assert!(after.is_empty(), "sent after the upgrade request: {after:?}");
+        keys.sort();
+        keys.dedup();
+        assert_eq!(keys.len(), relays::ROUNDS, "a handshake key reused");
     }
 }
 
@@ -468,11 +500,15 @@ async fn a_redirect_is_an_answer_and_is_not_followed() {
     assert_eq!(relays::fastest(&[at("shanghai", &sh), at("hongkong", &hk)]).await.as_deref(), Some("shanghai"));
     settle().await;
 
+    // One connection a round, each the upgrade and nothing after it: a
+    // followed redirect would be a sixth, or a second request on one.
     let connections = sh.connections();
-    assert_eq!(connections.len(), 1, "the redirect was followed");
-    let (line, _, after) = request(&connections[0]);
-    assert_eq!(line, "GET /rtc HTTP/1.1");
-    assert!(after.is_empty(), "sent after the upgrade request: {after:?}");
+    assert_eq!(connections.len(), relays::ROUNDS, "the redirect was followed");
+    for connection in &connections {
+        let (line, _, after) = request(connection);
+        assert_eq!(line, "GET /rtc HTTP/1.1");
+        assert!(after.is_empty(), "sent after the upgrade request: {after:?}");
+    }
 }
 
 // Should a relay ever accept the upgrade, the socket is closed the way a
@@ -490,12 +526,14 @@ async fn an_accepted_socket_is_closed_with_a_close_frame() {
     settle().await;
 
     let connections = sh.connections();
-    assert_eq!(connections.len(), 1);
-    let (_, _, after) = request(&connections[0]);
+    assert_eq!(connections.len(), relays::ROUNDS);
+    for connection in &connections {
+        let (_, _, after) = request(connection);
 
-    // A masked close frame with no payload, and nothing else.
-    assert_eq!(after.len(), 6, "after the upgrade: {after:?}");
-    assert_eq!(&after[..2], &[0x88, 0x80]);
+        // A masked close frame with no payload, and nothing else.
+        assert_eq!(after.len(), 6, "after the upgrade: {after:?}");
+        assert_eq!(&after[..2], &[0x88, 0x80]);
+    }
 }
 
 // relays.ts counts `error` as an answer alongside `open` and `close`, so a
@@ -529,7 +567,7 @@ async fn a_relay_with_no_address_has_no_reading() {
 }
 
 #[tokio::test]
-async fn times_one_udp_round_trip_when_every_relay_has_a_probe() {
+async fn times_round_trips_over_udp_when_every_relay_has_a_probe() {
     let _turn = TURN.lock().await;
     relays::forget();
 
@@ -550,19 +588,147 @@ async fn times_one_udp_round_trip_when_every_relay_has_a_probe() {
     // No socket was opened to either.
     assert_eq!((sh.count(), hk.count()), (0, 0));
 
-    // And each probe was sent one binding request, with nothing attached to it.
+    // And each probe was sent one binding request a round, with nothing
+    // attached to it, every one a transaction of its own.
     for stun in [&sh_stun, &hk_stun] {
         let datagrams = stun.datagrams();
-        assert_eq!(datagrams.len(), 1, "datagrams: {datagrams:?}");
+        assert_eq!(datagrams.len(), relays::ROUNDS, "datagrams: {datagrams:?}");
 
-        let request = &datagrams[0];
-        assert_eq!(request.len(), 20, "a binding request with attributes: {request:?}");
-        assert_eq!(&request[0..2], &[0x00, 0x01], "not a binding request");
-        assert_eq!(&request[2..4], &[0x00, 0x00]);
-        assert_eq!(&request[4..8], &[0x21, 0x12, 0xA4, 0x42]);
+        for request in &datagrams {
+            assert_eq!(request.len(), 20, "a binding request with attributes: {request:?}");
+            assert_eq!(&request[0..2], &[0x00, 0x01], "not a binding request");
+            assert_eq!(&request[2..4], &[0x00, 0x00]);
+            assert_eq!(&request[4..8], &[0x21, 0x12, 0xA4, 0x42]);
+        }
     }
 
-    assert_ne!(sh_stun.datagrams()[0][8..20], hk_stun.datagrams()[0][8..20], "a transaction id reused");
+    let mut ids = [sh_stun.transactions(), hk_stun.transactions()].concat();
+    ids.sort();
+    ids.dedup();
+    assert_eq!(ids.len(), 2 * relays::ROUNDS, "a transaction id reused");
+}
+
+// The owner's complaint (2026-10-19): the first UDP reading is always the
+// slow one, and a single reading ranked relays by which one happened to pay
+// for it. The relay here is the nearer one on four rounds of five.
+#[tokio::test]
+async fn a_slow_first_round_does_not_decide_the_reading() {
+    let _turn = TURN.lock().await;
+    relays::forget();
+
+    let sh_stun = Stun::answering(|count| Some(if count == 1 { ms(200) } else { ms(5) })).await;
+    let hk_stun = Stun::start(Some(ms(40)), 0).await;
+
+    let offered = [
+        Relay { probe: Some(sh_stun.probe()), ..relay("shanghai") },
+        Relay { probe: Some(hk_stun.probe()), ..relay("hongkong") },
+    ];
+    let read = relays::timings(&offered).await;
+    let (sh, hk) = (read[0].millis.unwrap(), read[1].millis.unwrap());
+    assert!(sh < 30.0, "shanghai read {sh} ms from rounds of 200, 5, 5, 5, 5");
+    assert!((40.0..100.0).contains(&hk), "hongkong read {hk} ms");
+
+    assert_eq!(relays::fastest(&offered).await.as_deref(), Some("shanghai"));
+}
+
+// Nor does one lucky round: a relay that answered quickly once and slowly
+// four times is the slow one.
+#[tokio::test]
+async fn a_quick_round_does_not_decide_the_reading_either() {
+    let _turn = TURN.lock().await;
+    relays::forget();
+
+    let sh_stun = Stun::answering(|count| Some(if count == 1 { ms(5) } else { ms(90) })).await;
+    let hk_stun = Stun::start(Some(ms(40)), 0).await;
+
+    let offered = [
+        Relay { probe: Some(sh_stun.probe()), ..relay("shanghai") },
+        Relay { probe: Some(hk_stun.probe()), ..relay("hongkong") },
+    ];
+    assert_eq!(relays::fastest(&offered).await.as_deref(), Some("hongkong"));
+}
+
+// In turn for one relay, so a round does not share the slow start of the
+// one before it, and every relay at once, so the wait is one relay's rounds
+// and not everybody's added up.
+#[tokio::test]
+async fn rounds_go_one_after_another_and_relays_all_at_once() {
+    let _turn = TURN.lock().await;
+    relays::forget();
+
+    let sh_stun = Stun::start(Some(ms(80)), 0).await;
+    let hk_stun = Stun::start(Some(ms(80)), 0).await;
+    let offered = [
+        Relay { probe: Some(sh_stun.probe()), ..relay("shanghai") },
+        Relay { probe: Some(hk_stun.probe()), ..relay("hongkong") },
+    ];
+
+    let started = Instant::now();
+    relays::timings(&offered).await;
+    let took = started.elapsed();
+
+    for stun in [&sh_stun, &hk_stun] {
+        let arrivals = stun.arrivals();
+        assert_eq!(arrivals.len(), relays::ROUNDS);
+        // Each request only once the one before it was answered.
+        for pair in arrivals.windows(2) {
+            let apart = pair[1] - pair[0];
+            assert!(apart >= ms(75), "a round asked {apart:?} after the one before");
+        }
+    }
+
+    // Five rounds of 80 ms, for both relays together.
+    assert!(took >= ms(390), "five rounds in {took:?}");
+    assert!(took < ms(700), "the relays waited for each other: {took:?}");
+}
+
+// Over UDP a relay has to answer three of its rounds to have a reading, and
+// one that does not sends the whole list to the socket. Two answers here
+// would have won over UDP; over the socket the other relay does.
+#[tokio::test]
+async fn a_relay_answering_fewer_than_three_rounds_over_udp_sends_everybody_over_the_socket() {
+    let _turn = TURN.lock().await;
+    relays::forget();
+
+    let sh_stun = Stun::answering(|count| (count <= 2).then_some(ms(5))).await;
+    let hk_stun = Stun::start(Some(ms(50)), 0).await;
+    let sh = Socket::start(Answer::Refuse(ms(150))).await;
+    let hk = Socket::start(Answer::Refuse(ms(5))).await;
+
+    let offered = [
+        Relay { probe: Some(sh_stun.probe()), ..at("shanghai", &sh) },
+        Relay { probe: Some(hk_stun.probe()), ..at("hongkong", &hk) },
+    ];
+    assert_eq!(relays::fastest(&offered).await.as_deref(), Some("hongkong"));
+    settle().await;
+    assert_eq!((sh.count(), hk.count()), (relays::ROUNDS, relays::ROUNDS));
+
+    // Two rounds answered and a third that was not, and nothing after it.
+    assert_eq!(sh_stun.transactions().len(), 3);
+}
+
+#[tokio::test]
+async fn three_rounds_answered_over_udp_are_a_reading() {
+    let _turn = TURN.lock().await;
+    relays::forget();
+
+    let sh_stun = Stun::answering(|count| (count <= 3).then_some(ms(5))).await;
+    let hk_stun = Stun::start(Some(ms(50)), 0).await;
+    let sh = Socket::start(Answer::Refuse(ms(150))).await;
+    let hk = Socket::start(Answer::Refuse(ms(5))).await;
+
+    let offered = [
+        Relay { probe: Some(sh_stun.probe()), ..at("shanghai", &sh) },
+        Relay { probe: Some(hk_stun.probe()), ..at("hongkong", &hk) },
+    ];
+    assert_eq!(relays::fastest(&offered).await.as_deref(), Some("shanghai"));
+    settle().await;
+
+    // Still over UDP: no socket to either, and the fourth round, unanswered,
+    // was Shanghai's last.
+    assert_eq!((sh.count(), hk.count()), (0, 0));
+    assert_eq!(sh_stun.transactions().len(), 4);
+    assert_eq!(hk_stun.transactions().len(), relays::ROUNDS);
 }
 
 // The two kinds of reading are not the same number: one round trip over UDP,
@@ -602,19 +768,27 @@ async fn measures_everybody_over_the_socket_when_one_probe_is_silent() {
         Relay { probe: Some(sh_stun.probe()), ..at("shanghai", &sh) },
         Relay { probe: Some(hk_stun.probe()), ..at("hongkong", &hk) },
     ];
+    let started = Instant::now();
     assert_eq!(relays::fastest(&offered).await.as_deref(), Some("shanghai"));
+    let took = started.elapsed();
     settle().await;
-    assert_eq!((sh.count(), hk.count()), (1, 1));
+    assert_eq!((sh.count(), hk.count()), (relays::ROUNDS, relays::ROUNDS));
 
     // The silent probe was asked again while it was given time, and only ever
-    // with the same request.
+    // with the same request: its first round was its last.
     let asked = sh_stun.datagrams();
     assert!(asked.len() >= 2, "never retransmitted: {asked:?}");
     assert!(asked.iter().all(|datagram| *datagram == asked[0]), "the request changed: {asked:?}");
+
+    // One timeout for the silent probe and five quick rounds over the socket,
+    // not five timeouts.
+    assert!(took < ms(3200), "waited {took:?}");
 }
 
 // UDP loses packets. The browser's STUN client sends the same request again,
-// and a native one has to, or one lost datagram sends every relay the slow way.
+// and a native one has to, or one lost datagram ends a relay's rounds and,
+// early enough, sends every relay the slow way. The round the loss slowed is
+// then one of five, and the median leaves it out.
 #[tokio::test]
 async fn a_lost_binding_request_is_sent_again_unchanged() {
     let _turn = TURN.lock().await;
@@ -623,12 +797,17 @@ async fn a_lost_binding_request_is_sent_again_unchanged() {
     let stun = Stun::start(Some(ms(1)), 1).await;
     let read = relays::timings(&[Relay { probe: Some(stun.probe()), ..relay("shanghai") }]).await;
 
-    let millis = read[0].millis.expect("answered on the second request");
-    assert!(millis >= 240.0, "answered before it was asked again: {millis}");
+    let millis = read[0].millis.expect("answered every round");
+    assert!(millis < 100.0, "the round slowed by the loss decided the reading: {millis}");
 
     let datagrams = stun.datagrams();
-    assert_eq!(datagrams.len(), 2, "datagrams: {datagrams:?}");
+    assert_eq!(datagrams.len(), relays::ROUNDS + 1, "datagrams: {datagrams:?}");
     assert_eq!(datagrams[0], datagrams[1], "a retransmission is the same request");
+    assert_eq!(stun.transactions().len(), relays::ROUNDS);
+
+    // Resent a retransmission interval after the first was sent.
+    let arrivals = stun.arrivals();
+    assert!(arrivals[1] - arrivals[0] >= ms(240), "resent after {:?}", arrivals[1] - arrivals[0]);
 }
 
 // A probe the browser could not make a `stun:` URL of is no reading, rather
@@ -670,7 +849,7 @@ async fn timings_measure_every_relay_but_a_resting_one_and_are_never_cached() {
 
     relays::timings(&offered).await;
     settle().await;
-    assert_eq!((resting.count(), reserved.count(), jp.count()), (0, 2, 2));
+    assert_eq!((resting.count(), reserved.count(), jp.count()), (0, 2 * relays::ROUNDS, 2 * relays::ROUNDS));
 }
 
 #[tokio::test]
