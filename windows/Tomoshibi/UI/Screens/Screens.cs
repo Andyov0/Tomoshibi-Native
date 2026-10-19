@@ -425,6 +425,10 @@ internal sealed class WaitingScreen : Screen
         content.Children.Add(_problem);
         content.Children.Add(Shared.BackButton(App.StopWaiting));
         Children.Add(Frames.PaneScreen(App, wide, content, out _stage));
+        // Said again into the new layout's own place: kept, it matched what
+        // the old layout said, and a window dragged narrow was left with no
+        // time and no button at all.
+        _said = null;
         Update();
     }
 
