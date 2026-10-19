@@ -24,13 +24,19 @@ internal sealed class SettingsView : Grid
     private readonly AppModel _app;
     private readonly Action _close;
     private Topic? _topic;
+    private bool _chosen;
     private bool? _wide;
     private Grid? _page;
     private Border? _plate;
     private readonly List<(Topic Topic, Tap Row)> _rows = new();
 
-    /// <summary>The page shown, as the constructor takes it, so that the settings can be opened again where they were.</summary>
-    public string? Section => _topic switch
+    /// <summary>
+    /// The page the person chose, as the constructor takes it, so that the
+    /// settings can be opened again where they were; none while the wide
+    /// window shows General only because something has to be shown, so that
+    /// dragged narrow it opens on the list, as it opened.
+    /// </summary>
+    public string? Section => !_chosen ? null : _topic switch
     {
         Topic.Media => "media",
         Topic.Account => "account",
@@ -43,6 +49,7 @@ internal sealed class SettingsView : Grid
     {
         _app = app;
         _close = close;
+        _chosen = section != null;
         _topic = section switch
         {
             "media" => Topic.Media,
@@ -184,6 +191,7 @@ internal sealed class SettingsView : Grid
         {
             if (_topic == topic) return;
             _topic = topic;
+            _chosen = true;
             foreach (var (each, row) in _rows) row.Content = RowLine(each);
             MovePlate(animated: true);
             ShowPage(animated: true);
@@ -225,7 +233,9 @@ internal sealed class SettingsView : Grid
     {
         if (_page == null) return;
         var column = K.Column(18);
-        column.Padding = new Thickness(16, 22, 16, 30);
+        // Below the title bar: on a phone's width the settings are the whole
+        // window, under the caption buttons.
+        column.Padding = new Thickness(16, Shared.TitleBar + 22, 16, 30);
         var close = Tap.Icon("xmark", T("Close"), Look.Plain, 36, 13);
         close.Click += (_, _) => _close();
         column.Children.Add(K.Line(8, K.Flex(K.Text(T("Settings"), 32, K.Bold, lines: 1)), K.Fixed(close)).Rises());
@@ -295,6 +305,7 @@ internal sealed class SettingsView : Grid
     private void Open(Topic topic)
     {
         _topic = topic;
+        _chosen = true;
         ShowPage(animated: true);
     }
 
@@ -319,7 +330,7 @@ internal sealed class SettingsView : Grid
                 _topic = null;
                 ShowList();
             };
-            column.Children.Add(Shared.OnGlass(back).Pad(0, 22, 0, -6));
+            column.Children.Add(Shared.OnGlass(back).Pad(0, Shared.TitleBar + 22, 0, -6));
         }
         column.Children.Add(Pieces.PageHeading(Title(topic), Detail(topic), Symbol(topic)).Rises());
         body.Rises(50);

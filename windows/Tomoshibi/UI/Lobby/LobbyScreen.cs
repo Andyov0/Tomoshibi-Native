@@ -222,7 +222,9 @@ internal sealed class LobbyScreen : Screen
         var view = new SettingsView(App, () => _closeSettings?.Invoke(), section);
         _settings = view;
         _settingsWide = _wide == true;
-        var close = Overlay.Current!.ShowDialog(view, 900, 700, () => _closeSettings?.Invoke(), sheet: _wide == false, scrolls: false);
+        // A dialog on a wide window; on a phone's width the whole window,
+        // as the phone's settings are the whole screen.
+        var close = Overlay.Current!.ShowDialog(view, 900, _wide == false ? null : 700, () => _closeSettings?.Invoke(), sheet: _wide == false, scrolls: false, cover: _wide == false);
         _closeSettings = () =>
         {
             close();
