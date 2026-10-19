@@ -8,23 +8,88 @@
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                <ResourceDictionary>
+                    <!--
+                        The apps' palette (Theme.swift, Android's Theme.kt, and
+                        Tomoshibi.Basics.Theme, where the numbers live): dark in
+                        every system appearance, Apple's dark greys, and one
+                        signal colour. The Windows controls' own fills and
+                        fields are brought to the same greys here, so that a
+                        TextBox or a ToggleSwitch is the platform's control in
+                        the product's colours rather than Windows' grey.
+                    -->
+                    <ResourceDictionary.ThemeDictionaries>
+                        <ResourceDictionary x:Key="Dark">
+                            <SolidColorBrush x:Key="TextControlBackground" Color="#3D000000" />
+                            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#52000000" />
+                            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#52000000" />
+                            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#1AFFFFFF" />
+                            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#2EFFFFFF" />
+                            <SolidColorBrush x:Key="TextControlForeground" Color="#FFF5F5F7" />
+                            <SolidColorBrush x:Key="TextControlForegroundFocused" Color="#FFF5F5F7" />
+                            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#99EBEBF5" />
+                            <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#99EBEBF5" />
+                            <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#99EBEBF5" />
+                            <SolidColorBrush x:Key="ToggleSwitchFillOff" Color="#24FFFFFF" />
+                            <SolidColorBrush x:Key="ToggleSwitchFillOffPointerOver" Color="#33FFFFFF" />
+                            <SolidColorBrush x:Key="ToggleSwitchStrokeOff" Color="#1AFFFFFF" />
+                            <SolidColorBrush x:Key="ToggleSwitchKnobFillOff" Color="#FFF5F5F7" />
+                            <SolidColorBrush x:Key="ToggleSwitchKnobFillOffPointerOver" Color="#FFFFFFFF" />
+                            <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#FFFFFFFF" />
+                            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#FFFFFFFF" />
+                            <SolidColorBrush x:Key="ComboBoxBackground" Color="#12FFFFFF" />
+                            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#21FFFFFF" />
+                            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#17FFFFFF" />
+                        </ResourceDictionary>
+                    </ResourceDictionary.ThemeDictionaries>
+
+                    <x:Double x:Key="ToggleSwitchPreContentMargin">0</x:Double>
+                    <x:Double x:Key="ToggleSwitchPostContentMargin">0</x:Double>
+                    <CornerRadius x:Key="TextControlCornerRadius">12</CornerRadius>
+
+                    <!--
+                        Every button the kit makes (UI/Kit/Tap.cs): only the
+                        shape and what is in it. Its colours under the pointer
+                        and the press are the kit's own, the apps' numbers,
+                        rather than the default template's states, which
+                        would turn a lamplit button grey under the pointer.
+                        The brush moves to its new colour over the hover
+                        curve's 120 ms. The system's focus ring still draws
+                        round it for the keyboard.
+                    -->
+                    <Style x:Key="Tap" TargetType="Button">
+                        <Setter Property="Background" Value="Transparent" />
+                        <Setter Property="BorderBrush" Value="Transparent" />
+                        <Setter Property="BorderThickness" Value="0" />
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="HorizontalContentAlignment" Value="Center" />
+                        <Setter Property="VerticalContentAlignment" Value="Center" />
+                        <Setter Property="UseSystemFocusVisuals" Value="True" />
+                        <Setter Property="FocusVisualMargin" Value="-3" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="Button">
+                                    <Border
+                                        Background="{TemplateBinding Background}"
+                                        BorderBrush="{TemplateBinding BorderBrush}"
+                                        BorderThickness="{TemplateBinding BorderThickness}"
+                                        CornerRadius="{TemplateBinding CornerRadius}"
+                                        Padding="{TemplateBinding Padding}">
+                                        <Border.BackgroundTransition>
+                                            <BrushTransition Duration="0:0:0.12" />
+                                        </Border.BackgroundTransition>
+                                        <ContentPresenter
+                                            HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                            VerticalAlignment="{TemplateBinding VerticalContentAlignment}"
+                                            Content="{TemplateBinding Content}"
+                                            Foreground="{TemplateBinding Foreground}" />
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </ResourceDictionary>
             </ResourceDictionary.MergedDictionaries>
-            <!--
-                The apps' palette (Theme.swift, Android's Theme.kt): dark in
-                every system appearance, Apple's dark greys, and one signal
-                colour, the tally, amber until the person chooses another.
-                The screens, their layout and the glass come with the full UI.
-            -->
-            <SolidColorBrush x:Key="Background" Color="#FF0B0B0D" />
-            <SolidColorBrush x:Key="Surface" Color="#FF1C1C1E" />
-            <SolidColorBrush x:Key="SurfaceHigh" Color="#FF2C2C2E" />
-            <SolidColorBrush x:Key="Border" Color="#1AFFFFFF" />
-            <SolidColorBrush x:Key="Foreground" Color="#FFF5F5F7" />
-            <SolidColorBrush x:Key="Muted" Color="#99EBEBF5" />
-            <SolidColorBrush x:Key="Tally" Color="#FFFFA23B" />
-            <SolidColorBrush x:Key="TallyForeground" Color="#FF1F1200" />
-            <SolidColorBrush x:Key="Danger" Color="#FFFF453A" />
-            <CornerRadius x:Key="TileRadius">8</CornerRadius>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

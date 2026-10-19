@@ -1,14 +1,72 @@
 # Tomoshibi for Windows
 
-A WinUI 3 app over the same Rust core as the Apple and Android apps. This is
-phase one: the core built for Windows, its C# bindings, and an app that signs
-in, joins a room, shows and plays everybody else, and publishes a microphone
-and a camera. The screens of the other apps come in the next phase.
+A WinUI 3 app over the same Rust core as the Apple and Android apps, with
+their screens: starting, sign-in, the lobby (a sidebar on a wide window, the
+phone's lobby on a narrow one), starting, joining and scheduling meetings,
+the join screen, the door and an arranged meeting's wait, the call, its
+endings, and the settings, in the same words, colours and motion.
 
 - `build-core.ps1` builds the core into `Tomoshibi\Native\win-<arch>\tomoshibi_core.dll`
   and generates the C# bindings into `Tomoshibi\Generated`. Neither is
   committed, as on the other platforms.
-- `Tomoshibi\` is the app.
+- `Tomoshibi.Basics\` holds the rules the three platforms share, ported from
+  Android's `basics/` (which follows the Apple apps' TomoshibiBasics and the
+  web): the room planner, the stage pin and the speaking order, the
+  fill-or-whole framing rule, the corner's notice times, the chat box's
+  limit, the address finder, the language rules and phrase table, the
+  palette and accents, and the sentences the server's refusals read as.
+  A plain .NET library, so that `Tomoshibi.Tests\` runs without the core:
+  `dotnet test windows\Tomoshibi.Tests` holds them to Android's cases one for
+  one, and checks that every `T("…")` in the Windows sources is a phrase of
+  the shared catalog.
+- `Tomoshibi\` is the app: `Model\` (AppModel, LobbyModel, CallModel, the
+  stores), `Media\` (capture, playback, the synthetic sources), `UI\` (the
+  kit, then the screens, the lobby, the room and the settings).
+
+## The app
+
+The model is Android's, decision for decision: who is signed in and what the
+deployment allows decide between the lobby and the join form; only somebody
+signed in or holding an invitation is taken into a room by its name; a call
+the server moves is joined again by itself. A release build talks to the home
+deployment alone and reads no switches; no screen shows a server's address.
+
+The screens are built in code, as Compose builds Android's, and follow the
+Windows way where the platforms differ: the content runs under a dark title
+bar with the caption buttons in the apps' greys; the control layer (the
+lobby's sidebar and join bar, the call's bar, the popovers, the pills over
+the pictures) wears in-app acrylic and what is inside it is plain; fields,
+switches, the calendar and time pickers and the device lists are Windows'
+own controls in the apps' colours, the tally carried into their accent;
+Escape closes what lies on top, then does what the screen's Back does. Every
+view arrives on the settle curve (320 ms) and leaves on the leave curve
+(200 ms), through composition animations on its own visual.
+
+The window opens as a desktop window: the first time 1280 by 820
+device-independent pixels at the monitor's scale (never more than nine
+tenths of the work area), in the middle of it; after that where it was left,
+as large, and maximised if it was. It can be made as small as 360 by 560.
+The layout follows its width by the other apps' lines: from 600 the wide
+layout (the sidebar lobby, the desktop room), below it the phone's; the
+sidebar is 250 wide below 760 and 284 from it.
+
+The call places every picture by the shared planner and frames a camera by
+the shared rule: shown whole, a camera sits on a blurred, darkened glimpse of
+itself that the core keeps of the last frame (`video_panel_glimpse`), taken
+once a second and crossfaded, since a composition swap chain cannot be read
+back by the app.
+
+What is kept: the choices in `%LOCALAPPDATA%\Tomoshibi\preferences.json`
+under the web's own keys; the session cookie and the join passphrase sealed
+with DPAPI for the Windows user in `%LOCALAPPDATA%\Tomoshibi\secrets`. Not
+the Credential Locker, which roams what it holds to the person's other PCs;
+a deployment's session belongs to the device it was signed in on.
+
+Not in this phase, and left as marked stubs rather than as controls that do
+nothing: sharing a screen (the bar's button is there and disabled), watching
+together, music and their settings, the host panel beyond ending the meeting
+for everybody, background blur, links handed over by the system
+(`tomoshibi://` and app links, which need a package identity), and MSIX.
 
 ## The machine it is built on
 
@@ -156,7 +214,7 @@ Read from the environment, the same names the Apple apps read:
 
 | Switch | What it does |
 |---|---|
-| `TOMOSHIBI_BASE` | The deployment. Without it the app goes nowhere by itself: autojoin and signing in need it, because the default is the home deployment. |
+| `TOMOSHIBI_BASE` | The deployment. Every other switch needs it, because the default is the home deployment. |
 | `TOMOSHIBI_NAME` | The name shown to the room. |
 | `TOMOSHIBI_SIGNIN=name:file` | Signs in first, the passphrase read from the file. |
 | `TOMOSHIBI_PASSPHRASE` | A passphrase to join with. |
@@ -167,6 +225,19 @@ Read from the environment, the same names the Apple apps read:
 | `TOMOSHIBI_SOURCE=devices` | The real camera and microphone instead of the synthetic ones. |
 | `TOMOSHIBI_DEBUG_LOG=file` | Writes what the app does and, every two seconds, what it sent and received. |
 | `TOMOSHIBI_DEBUG_QUIT_AFTER=seconds` | Leaves and quits. |
+| `TOMOSHIBI_PREPARE=room` | To this room's join screen. |
+| `TOMOSHIBI_OPEN=link` | Opens an invitation or an arranged meeting's link, as the system would hand it over. |
+| `TOMOSHIBI_ENDED=left\|closed\|removed\|lost` | Opens on that ending, for pictures of it. |
+| `TOMOSHIBI_LANGUAGE=en\|zh-Hans\|zh-Hant\|ja` | Speaks this language for the launch, without keeping it. |
+| `TOMOSHIBI_SHOW=…` | Opens something over the screen: `start`, `join`, `schedule`, `servers`, `settings[:general\|media\|account\|about]`, and in a call `chat`, `devices`, `leave`. |
+| `TOMOSHIBI_KEEP=name` | Keeps what the launch is told in a store of the test's own, `%LOCALAPPDATA%\Tomoshibi-tests\name`, so that a later launch can find the sealed session. |
+
+Only a debug build reads them. Everything that drives the app needs
+`TOMOSHIBI_BASE` as well: a launch without it is the release app's, at the
+home deployment, with nothing automatic (only `TOMOSHIBI_MUTE` and the log
+are honoured). A launch with it is a rehearsal and keeps nothing (no name,
+passphrase, session, identity, language or colour) unless `TOMOSHIBI_KEEP`
+gives it a store of its own.
 
 ## Testing
 

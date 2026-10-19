@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    The rules the Windows app shares with the Apple and Android apps, kept
+    apart from everything that needs Windows or the core: where pictures go
+    (Plan), whether a camera fills its place (Framing), the corner's notices,
+    the language rules and the phrase table, the palette and the motion.
+
+    A plain library so that its tests run anywhere .NET does, without the
+    Windows App SDK or the core's DLL; the other platforms hold their ports
+    of the same rules to the same cases (Android's basics/, Apple's
+    TomoshibiBasics).
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>Tomoshibi.Basics</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- The app is built for ARM64 and x64 and references this from either. -->
+    <Platforms>AnyCPU;ARM64;x64</Platforms>
+  </PropertyGroup>
+</Project>

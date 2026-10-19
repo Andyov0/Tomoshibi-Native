@@ -232,12 +232,38 @@ fn transform(width: u32, height: u32, place: Option<Place>) -> [f32; 3] {
     [scale, (place.width - width as f32 * scale) / 2.0, (place.height - height as f32 * scale) / 2.0]
 }
 
+/// A small copy of the last picture drawn, upright, as BGRA rows of
+/// `width` by `height` pixels.
+///
+/// What the app blurs behind a camera it shows whole rather than cut to its
+/// tile (a camera on its side in an upright place), as the Apple and Android
+/// apps do: a glimpse taken about once a second and crossfaded, not the video
+/// again. The panel itself cannot be read back by the app (a composition swap
+/// chain shows in the compositor and nowhere else), so the core keeps the
+/// picture it converted and hands over a few dozen pixels of it.
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
+pub struct Glimpse {
+    pub width: u32,
+    pub height: u32,
+    pub bgra: Vec<u8>,
+}
+
+/// The converted pictures one panel group reuses from frame to frame, and
+/// which of them holds the last upright picture.
+#[derive(Default)]
+struct Scratch {
+    decoded: Vec<u8>,
+    turned: Vec<u8>,
+    /// Whether the last upright picture is in `turned`, and its size.
+    last: Option<(bool, u32, u32)>,
+}
+
 /// Every panel one picture is drawn into, and the picture converted once
 /// for all of them.
 #[derive(Default)]
 pub(crate) struct Panels {
     panels: Mutex<Vec<Panel>>,
-    scratch: Mutex<(Vec<u8>, Vec<u8>)>,
+    scratch: Mutex<Scratch>,
 }
 
 impl Panels {
@@ -280,16 +306,20 @@ impl Panels {
             return;
         }
         let mut scratch = self.scratch.lock().unwrap();
-        let (decoded, turned) = &mut *scratch;
+        let Scratch { decoded, turned, last } = &mut *scratch;
         decoded.resize((width * height * 4) as usize, 0);
         // libyuv's ARGB is a 32-bit word, so its bytes are B, G, R, A in
         // memory: DXGI's B8G8R8A8.
         yuv_helper::i420_to_argb(y, sy, u, su, v, sv, decoded, width * 4, width as i32, height as i32);
         let (pixels, shown_w, shown_h) = match rotation {
-            0 => (&decoded[..], width, height),
+            0 => {
+                *last = Some((false, width, height));
+                (&decoded[..], width, height)
+            }
             _ => {
                 turn(decoded, turned, width, height, rotation);
                 let (w, h) = if rotation == 180 { (width, height) } else { (height, width) };
+                *last = Some((true, w, h));
                 (&turned[..], w, h)
             }
         };
@@ -303,6 +333,53 @@ impl Panels {
             shape.changed(width, height, rotation);
         }
     }
+}
+
+impl Panels {
+    /// The last picture drawn, upright and shrunk so that its longer side is
+    /// `longest` pixels, each one the average of the block it stands for (a
+    /// point sample of a few pixels flickers from one glimpse to the next
+    /// when the picture holds a fine pattern). None before the first frame.
+    pub(crate) fn glimpse(&self, longest: u32) -> Option<Glimpse> {
+        let scratch = self.scratch.lock().unwrap();
+        let (turned, width, height) = scratch.last?;
+        let source = if turned { &scratch.turned } else { &scratch.decoded };
+        Some(shrink(source, width, height, longest))
+    }
+}
+
+/// `source`, a BGRA picture of `width` by `height`, averaged down to at most
+/// `longest` pixels on its longer side.
+fn shrink(source: &[u8], width: u32, height: u32, longest: u32) -> Glimpse {
+    let longest = longest.clamp(1, 256);
+    let scale = (longest as f32 / width.max(height) as f32).min(1.0);
+    let (w, h) = (((width as f32 * scale).round() as u32).max(1), ((height as f32 * scale).round() as u32).max(1));
+    let mut bgra = vec![0u8; (w * h * 4) as usize];
+    for ty in 0..h {
+        let (y0, y1) = (ty * height / h, ((ty + 1) * height / h).max(ty * height / h + 1));
+        for tx in 0..w {
+            let (x0, x1) = (tx * width / w, ((tx + 1) * width / w).max(tx * width / w + 1));
+            // Every fourth row and column of the block is enough for an
+            // average that is about to be blurred over a whole tile.
+            let mut sum = [0u32; 4];
+            let mut count = 0u32;
+            for y in (y0..y1).step_by(4) {
+                for x in (x0..x1).step_by(4) {
+                    let at = ((y * width + x) * 4) as usize;
+                    for (channel, total) in sum.iter_mut().enumerate() {
+                        *total += source[at + channel] as u32;
+                    }
+                    count += 1;
+                }
+            }
+            let at = ((ty * w + tx) * 4) as usize;
+            for channel in 0..3 {
+                bgra[at + channel] = (sum[channel] / count.max(1)) as u8;
+            }
+            bgra[at + 3] = 255;
+        }
+    }
+    Glimpse { width: w, height: h, bgra }
 }
 
 /// Turns a BGRA picture clockwise by `rotation` degrees into `out`.
@@ -361,5 +438,28 @@ mod tests {
         assert_eq!(out, vec![0, 0, 255, 255, 255, 0, 0, 255]);
         turn(&source, &mut out, 2, 1, 270);
         assert_eq!(out, vec![255, 0, 0, 255, 0, 0, 255, 255]);
+    }
+
+    #[test]
+    fn a_glimpse_keeps_the_shape_and_the_colours_where_they_were() {
+        // A wide picture, dark on its left half and bright on its right.
+        let (width, height) = (1280u32, 720u32);
+        let mut source = vec![0u8; (width * height * 4) as usize];
+        for y in 0..height {
+            for x in 0..width {
+                let at = ((y * width + x) * 4) as usize;
+                let level = if x < width / 2 { 20 } else { 220 };
+                source[at..at + 4].copy_from_slice(&[level, level, level, 255]);
+            }
+        }
+        let glimpse = shrink(&source, width, height, 48);
+        assert_eq!((glimpse.width, glimpse.height), (48, 27));
+        assert_eq!(glimpse.bgra.len(), 48 * 27 * 4);
+        assert_eq!(&glimpse.bgra[0..4], &[20, 20, 20, 255]);
+        let last = glimpse.bgra.len() - 4;
+        assert_eq!(&glimpse.bgra[last..], &[220, 220, 220, 255]);
+        // Upright stays upright, and nothing is ever enlarged.
+        let tall = shrink(&vec![9u8; 30 * 40 * 4], 30, 40, 48);
+        assert_eq!((tall.width, tall.height), (30, 40));
     }
 }

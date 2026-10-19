@@ -47,6 +47,7 @@ internal sealed class Synthetic : IDisposable
         long frames = 0, chunks = 0;
         var pcm = new byte[Chunk * 2];
         var (y, u, v) = (new byte[Width * Height], new byte[Width * Height / 4], new byte[Width * Height / 4]);
+        var preview = new byte[PreviewWidth * PreviewHeight * 4];
         double phase = 0;
         while (!_stopped)
         {
@@ -78,6 +79,14 @@ internal sealed class Synthetic : IDisposable
                         video.PushPlanes(y, u, v, Width, Width / 2, 1, Width, Height, (long)(now * 1000), 0);
                         Interlocked.Increment(ref FramesPushed);
                     }
+                    // Half the rate is enough for a picture of yourself, and
+                    // it is the same picture the call is sent, so that what a
+                    // person sees of themselves is what the room sees.
+                    if (frames % 2 == 0 && Previewing && Previewed is { } previewed)
+                    {
+                        PaintPreview(preview, frames);
+                        previewed(preview, PreviewWidth, PreviewHeight);
+                    }
                     frames++;
                 }
             }
@@ -107,6 +116,56 @@ internal sealed class Synthetic : IDisposable
         var turn = frame * 2 * Math.PI / (FramesPerSecond * 10);
         u.AsSpan().Fill((byte)(128 + 60 * Math.Cos(turn)));
         v.AsSpan().Fill((byte)(128 + 60 * Math.Sin(turn)));
+    }
+
+    /// <summary>The picture of yourself is drawn this size, a quarter of the one sent in each direction.</summary>
+    public const int PreviewWidth = 320;
+    public const int PreviewHeight = 180;
+
+    /// <summary>
+    /// Hears a picture of what is sent, as BGRA rows of PreviewWidth by
+    /// PreviewHeight, on the generator's thread; the buffer is reused, so a
+    /// listener copies what it keeps.
+    /// </summary>
+    public event Action<byte[], int, int>? Previewed;
+
+    /// <summary>Whether a picture of yourself is showing anywhere, so that one is painted.</summary>
+    public volatile bool Previewing;
+
+    /// <summary>
+    /// The same picture as <see cref="Paint"/>, at a quarter of the size and
+    /// in colour: the bands are the luma, the ground's hue the chroma, which
+    /// is uniform, so each row is one colour and the bar a brighter one.
+    /// </summary>
+    private static void PaintPreview(byte[] bgra, long frame)
+    {
+        var turn = frame * 2 * Math.PI / (FramesPerSecond * 10);
+        var cb = 60 * Math.Cos(turn);
+        var cr = 60 * Math.Sin(turn);
+        var bar = (int)(frame * Width / (FramesPerSecond * 4) % Width) / 4;
+        for (var row = 0; row < PreviewHeight; row++)
+        {
+            var luma = 48 + (row * 4 + frame * 2) % 160;
+            var (r, g, b) = Rgb(luma, cb, cr);
+            var (br, bg, bb) = Rgb(235, cb, cr);
+            var line = row * PreviewWidth * 4;
+            for (var x = 0; x < PreviewWidth; x++)
+            {
+                var lit = x >= bar && x < bar + 24;
+                var at = line + x * 4;
+                bgra[at] = lit ? bb : b;
+                bgra[at + 1] = lit ? bg : g;
+                bgra[at + 2] = lit ? br : r;
+                bgra[at + 3] = 255;
+            }
+        }
+    }
+
+    /// <summary>BT.601 from a luma and two chroma offsets about 128.</summary>
+    private static (byte R, byte G, byte B) Rgb(double y, double cb, double cr)
+    {
+        static byte Clamp(double value) => (byte)Math.Clamp((int)Math.Round(value), 0, 255);
+        return (Clamp(y + 1.402 * cr), Clamp(y - 0.344 * cb - 0.714 * cr), Clamp(y + 1.772 * cb));
     }
 
     public void Dispose()

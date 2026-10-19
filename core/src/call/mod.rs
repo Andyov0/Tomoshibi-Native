@@ -646,6 +646,14 @@ impl Call {
         self.sinks.panels(&sid).map_or(0, |panels| panels.frames(panel))
     }
 
+    /// A few dozen pixels of the last picture drawn for this video, upright,
+    /// its longer side `longest` pixels: what the app blurs behind a camera
+    /// it shows whole (`panel::Glimpse`). None before the first frame, or
+    /// when the video is not drawn into any panel.
+    pub fn video_panel_glimpse(&self, sid: String, longest: u32) -> Option<panel::Glimpse> {
+        self.sinks.panels(&sid).and_then(|panels| panels.glimpse(longest))
+    }
+
     /// Stops drawing into one panel and lets its swap chain go; the app
     /// clears the panel's swap chain first.
     pub fn detach_video_panel(&self, sid: String, panel: u64) {

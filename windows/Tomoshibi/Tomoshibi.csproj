@@ -27,6 +27,13 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- The generated bindings move memory across the FFI by pointer. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!--
+      The version the download page and the user agent say (ClientDescription):
+      0.1.0, build 1, the other apps' first.
+    -->
+    <Version>0.1.0</Version>
+    <AssemblyVersion>0.1.0.1</AssemblyVersion>
+    <FileVersion>0.1.0.1</FileVersion>
     <!-- Generated code is not ours to keep tidy. -->
     <NoWarn>$(NoWarn);CS1591;CS8618;CS8625;CS8600;CS8602;CS8603;CS8604;CS0108</NoWarn>
   </PropertyGroup>
@@ -34,6 +41,23 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.9169" />
+  </ItemGroup>
+
+  <!-- The rules the three platforms share, and their tests' subject. -->
+  <ItemGroup>
+    <ProjectReference Include="..\Tomoshibi.Basics\Tomoshibi.Basics.csproj" />
+  </ItemGroup>
+
+  <!--
+    The phrase table, the one android/i18n.mjs writes from the catalog the
+    Apple apps build from: read where Android keeps it, so that the platforms
+    read one table and a phrase added to native.json reaches all three.
+  -->
+  <ItemGroup>
+    <Content Include="..\..\android\app\src\main\assets\phrases.json">
+      <Link>phrases.json</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
   <!-- The core, for the architecture being built. -->
