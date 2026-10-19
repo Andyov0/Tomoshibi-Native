@@ -53,6 +53,17 @@ pub trait PcmSink: Send + Sync {
     fn on_pcm(&self, pcm: Vec<u8>, sample_rate: u32, channels: u32);
 }
 
+/// What the view is told about the picture it shows, when it changes: on
+/// Android and Windows, where the core draws the picture itself (window.rs,
+/// panel.rs) and the app never sees a frame.
+#[cfg(any(target_os = "android", target_os = "windows"))]
+#[uniffi::export(with_foreign)]
+pub trait PictureShape: Send + Sync {
+    /// The picture's size as decoded, and the clockwise degrees it is to be
+    /// turned when shown.
+    fn changed(&self, width: u32, height: u32, rotation: u32);
+}
+
 #[uniffi::export(with_foreign)]
 pub trait AudioSink: Send + Sync {
     /// Interleaved 16-bit samples.
@@ -111,6 +122,9 @@ enum Wanted {
     /// Android: drawn by the core straight into the app's surfaces.
     #[cfg(target_os = "android")]
     Windows(Arc<super::window::Windows>),
+    /// Windows: drawn by the core into the swap chains of the app's panels.
+    #[cfg(target_os = "windows")]
+    Panels(Arc<super::panel::Panels>),
 }
 
 struct Entry {
@@ -160,6 +174,41 @@ impl Sinks {
         };
         if empty {
             self.detach(sid);
+        }
+    }
+
+    /// Adds a panel to those this picture is drawn into, keeping the others.
+    #[cfg(target_os = "windows")]
+    pub(super) fn attach_panel(&self, sid: &str, panel: super::panel::Panel, track: Option<RemoteTrack>) {
+        let entries = self.entries.lock().unwrap();
+        if let Some(Entry { wanted: Wanted::Panels(panels), .. }) = entries.get(sid) {
+            panels.add(panel);
+            return;
+        }
+        let panels = Arc::new(super::panel::Panels::default());
+        panels.add(panel);
+        drop(entries);
+        self.attach(sid, Wanted::Panels(panels), track);
+    }
+
+    /// Takes one panel away; the picture stops flowing with the last.
+    #[cfg(target_os = "windows")]
+    pub(super) fn detach_panel(&self, sid: &str, panel: u64) {
+        let empty = match self.entries.lock().unwrap().get(sid) {
+            Some(Entry { wanted: Wanted::Panels(panels), .. }) => panels.remove(panel),
+            _ => false,
+        };
+        if empty {
+            self.detach(sid);
+        }
+    }
+
+    /// The panels a picture is drawn into, to place one or count its frames.
+    #[cfg(target_os = "windows")]
+    pub(super) fn panels(&self, sid: &str) -> Option<Arc<super::panel::Panels>> {
+        match self.entries.lock().unwrap().get(sid) {
+            Some(Entry { wanted: Wanted::Panels(panels), .. }) => Some(panels.clone()),
+            _ => None,
         }
     }
 
@@ -249,6 +298,16 @@ fn flow(wanted: &Wanted, track: RemoteTrack) -> Option<JoinHandle<()>> {
             Some(tokio::spawn(async move {
                 while let Some(frame) = stream.next().await {
                     windows.draw(&frame.buffer, frame.rotation);
+                }
+            }))
+        }
+        #[cfg(target_os = "windows")]
+        (Wanted::Panels(panels), RemoteTrack::Video(video)) => {
+            let panels = panels.clone();
+            let mut stream = NativeVideoStream::new(video.rtc_track());
+            Some(tokio::spawn(async move {
+                while let Some(frame) = stream.next().await {
+                    panels.draw(&frame.buffer, frame.rotation);
                 }
             }))
         }

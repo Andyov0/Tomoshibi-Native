@@ -23,6 +23,8 @@ use livekit::webrtc::{
     video_frame::{VideoBuffer, VideoRotation},
 };
 
+use super::remote::PictureShape;
+
 #[repr(C)]
 struct NativeWindowBuffer {
     width: i32,
@@ -44,14 +46,6 @@ extern "C" {
 /// AHARDWAREBUFFER_FORMAT_R8G8B8A8_UNORM: bytes R, G, B, A, which is what
 /// libyuv calls ABGR (it names a 32-bit word, least significant byte last).
 const RGBA_8888: i32 = 1;
-
-/// What the view is told about the picture it shows, when it changes.
-#[uniffi::export(with_foreign)]
-pub trait PictureShape: Send + Sync {
-    /// The picture's size as decoded, and the clockwise degrees it is to be
-    /// turned when shown.
-    fn changed(&self, width: u32, height: u32, rotation: u32);
-}
 
 /// One surface, owning the reference `windowFromSurface` acquired.
 pub(crate) struct Window {

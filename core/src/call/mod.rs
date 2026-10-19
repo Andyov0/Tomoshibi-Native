@@ -15,6 +15,8 @@ mod publish;
 mod remote;
 mod strain;
 mod types;
+#[cfg(target_os = "windows")]
+mod panel;
 #[cfg(target_os = "android")]
 mod window;
 
@@ -40,8 +42,8 @@ pub use lossless::LosslessSink;
 pub use publish::{AudioInput, VideoInput, VideoKind};
 pub use remote::{AudioSink, PcmSink, RemoteFrame, VideoSink};
 pub use types::*;
-#[cfg(target_os = "android")]
-pub use window::PictureShape;
+#[cfg(any(target_os = "android", target_os = "windows"))]
+pub use remote::PictureShape;
 
 use crate::runtime::on_core;
 
@@ -606,5 +608,48 @@ impl Call {
     pub fn detach_video_window(&self, sid: String, window: u64) {
         let _core = crate::runtime::enter();
         self.sinks.detach_window(&sid, window);
+    }
+}
+
+#[cfg(target_os = "windows")]
+#[uniffi::export]
+impl Call {
+    /// Draws this remote video into a new swap chain, beside any other panel
+    /// it is already drawn into, and returns that swap chain: an
+    /// IDXGISwapChain1 pointer with one reference that is the app's, to hand
+    /// to `ISwapChainPanelNative::SetSwapChain` on the UI thread and then
+    /// release. The value also names the panel to the calls below. Zero when
+    /// no Direct3D device could be made. `shape` hears the picture's size and
+    /// turn whenever they change, after the frame is drawn and with nothing
+    /// in the core locked.
+    pub fn attach_video_panel(&self, sid: String, shape: Arc<dyn PictureShape>) -> u64 {
+        let _core = crate::runtime::enter();
+        let Some(panel) = panel::Panel::new(shape) else { return 0 };
+        let handed = panel.hand_over();
+        let track = self.publication(&sid).and_then(|p| p.track());
+        self.sinks.attach_panel(&sid, panel, track);
+        handed
+    }
+
+    /// Where the picture sits: its panel's size in device-independent pixels,
+    /// and whether it fills the panel, cut to its shape, or fits inside it.
+    /// Takes effect with the next frame.
+    pub fn place_video_panel(&self, sid: String, panel: u64, width: f32, height: f32, fill: bool) {
+        if let Some(panels) = self.sinks.panels(&sid) {
+            panels.place(panel, width, height, fill);
+        }
+    }
+
+    /// How many frames have been drawn into this panel, for the app to tell
+    /// a picture that moves from one that froze.
+    pub fn video_panel_frames(&self, sid: String, panel: u64) -> u64 {
+        self.sinks.panels(&sid).map_or(0, |panels| panels.frames(panel))
+    }
+
+    /// Stops drawing into one panel and lets its swap chain go; the app
+    /// clears the panel's swap chain first.
+    pub fn detach_video_panel(&self, sid: String, panel: u64) {
+        let _core = crate::runtime::enter();
+        self.sinks.detach_panel(&sid, panel);
     }
 }
