@@ -57,6 +57,9 @@ internal class Tap : Button
         AddHandler(PointerReleasedEvent, new PointerEventHandler((_, _) => { _down = false; Paint(); }), true);
         PointerCaptureLost += (_, _) => { _down = false; Paint(); };
         IsEnabledChanged += (_, _) => Paint();
+        // Painted again once shown: a button turned off before it reached
+        // the screen hears no IsEnabledChanged, and stayed lit.
+        Loaded += (_, _) => Paint();
         Paint();
     }
 
@@ -78,6 +81,12 @@ internal class Tap : Button
     {
         var tap = new Tap(K.Symbol(symbol, glyph ?? size * 0.4, InkFor(look)), look, size, circle: true, label: label);
         return tap;
+    }
+
+    protected override void OnContentChanged(object oldContent, object newContent)
+    {
+        base.OnContentChanged(oldContent, newContent);
+        if (newContent is UIElement inside) inside.Opacity = IsEnabled ? 1 : 0.45;
     }
 
     public Look Look
@@ -141,12 +150,16 @@ internal class Tap : Button
             down = new Shade(resting.Red, resting.Green, resting.Blue, Math.Min(1f, resting.Alpha + 0.12f));
         }
         var enabled = IsEnabled;
-        Background = Ink.Brush(!enabled ? rest : _down ? down : _over ? over : rest);
-        BorderBrush = edge is { } e ? Ink.Brush(e) : null;
+        // Dimmed when it cannot be pressed by drawing its fill, its edge and
+        // what is in it at 45 per cent, rather than by the button's own
+        // opacity: that was set before the button reached the screen and
+        // lost there, the composition visual the press scales being the one
+        // XAML writes the element's opacity to when it is shown.
+        static Shade Dim(Shade shade, bool on) => on ? shade : shade.WithAlpha(shade.Alpha * 0.45f);
+        Background = Ink.Brush(Dim(!enabled ? rest : _down ? down : _over ? over : rest, enabled));
+        BorderBrush = edge is { } e ? Ink.Brush(Dim(e, enabled)) : null;
         BorderThickness = new Thickness(edge != null ? 1 : 0);
-        // On the composition visual, which the press's scale is on too:
-        // once the visual is in use, XAML no longer carries UIElement.Opacity to it.
-        Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(this).Opacity = enabled ? 1f : 0.45f;
+        if (Content is UIElement inside) inside.Opacity = enabled ? 1 : 0.45;
         Motion.ScaleTo(this, _down && enabled ? 0.96f : 1f);
     }
 

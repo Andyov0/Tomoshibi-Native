@@ -36,7 +36,13 @@ internal sealed class MeetingSheet : Grid
     private Shared.Pressing? _go;
     private Shared.CameraStage? _stage;
 
-    public MeetingSheet(AppModel app, Account account, bool start, string room, Action close, bool wide)
+    public bool Wide => _wide;
+    public bool Starting => _starting;
+    public string Room => _room;
+    public bool Sealing => _sealing;
+    public bool Working => _working;
+
+    public MeetingSheet(AppModel app, Account account, bool start, string room, Action close, bool wide, bool? sealing = null)
     {
         _app = app;
         _account = account;
@@ -44,7 +50,7 @@ internal sealed class MeetingSheet : Grid
         _wide = wide;
         _starting = start;
         _room = room;
-        _sealing = app.SealingWord.Length > 0;
+        _sealing = sealing ?? app.SealingWord.Length > 0;
         // A room from the recent list: is a meeting going on in it?
         _again = !start && room.Length > 0;
         Build();
@@ -75,40 +81,60 @@ internal sealed class MeetingSheet : Grid
     {
         Children.Clear();
         var column = K.Flowing(16);
-        column.Padding = new Thickness(20);
 
-        // The head: close, and Start or Join.
+        // The head: close, and Start or Join; on a phone's width the choice
+        // takes the whole width beside the close button (centred between two
+        // buttons' worth of space, it cut "Start new meeting" short there).
         var cancel = Tap.Icon("xmark", T("Cancel"), Look.Plain, 32, 13);
         cancel.Click += (_, _) => Cancel();
-        _choice = new Segmented(new[] { T("Start new meeting"), T("Join a meeting") }, _starting ? 0 : 1, 32);
-        _choice.HorizontalAlignment = HorizontalAlignment.Center;
+        _choice = new Segmented(new[] { T("Start new meeting"), T("Join a meeting") }, _starting ? 0 : 1, 32, fill: !_wide);
         _choice.Chose += index =>
         {
             _starting = index == 0;
             _again = false;
             Rebuild();
         };
-        var head = new Grid();
-        head.Children.Add(cancel.At(HorizontalAlignment.Left, VerticalAlignment.Center));
-        head.Children.Add(_choice);
-        column.Children.Add(head);
-
-        // The picture of yourself and its switches.
-        _stage = new Shared.CameraStage(_app, 20);
-        var picture = new Grid { Children = { _stage } };
-        var switches = new Border
+        if (_wide)
         {
-            Child = Shared.DeviceSwitches(_app, 38),
-            Background = K.Acrylic(),
-            CornerRadius = new CornerRadius(25),
-            Padding = new Thickness(6),
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(0, 0, 0, 12),
-        };
-        picture.Children.Add(switches);
-        picture.SizeChanged += (_, e) => picture.Height = e.NewSize.Width * 9 / 16;
-        column.Children.Add(picture);
+            _choice.HorizontalAlignment = HorizontalAlignment.Center;
+            _choice.MaxWidth = 300;
+            var head = new Grid();
+            head.Children.Add(cancel.At(HorizontalAlignment.Left, VerticalAlignment.Center));
+            head.Children.Add(_choice);
+            column.Children.Add(head);
+        }
+        else
+        {
+            column.Children.Add(K.Line(8, K.Fixed(cancel), K.Flex(_choice)));
+        }
+
+        if (_wide)
+        {
+            // The picture of yourself and its switches, in the sheet.
+            _stage = new Shared.CameraStage(_app, 20);
+            var picture = new Grid { Children = { _stage } };
+            var switches = new Border
+            {
+                Child = Shared.DeviceSwitches(_app, 38),
+                Background = K.Acrylic(),
+                CornerRadius = new CornerRadius(25),
+                Padding = new Thickness(6),
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Margin = new Thickness(0, 0, 0, 12),
+            };
+            picture.Children.Add(switches);
+            picture.SizeChanged += (_, e) => picture.Height = e.NewSize.Width * 9 / 16;
+            column.Children.Add(picture);
+        }
+        else
+        {
+            // On a phone's width the picture is the whole window behind the
+            // pane, and the switches are in the pane, large.
+            var switches = Shared.DeviceSwitches(_app, 52);
+            switches.HorizontalAlignment = HorizontalAlignment.Center;
+            column.Children.Add(switches);
+        }
 
         // The form.
         var form = K.Flowing(10);
@@ -126,7 +152,9 @@ internal sealed class MeetingSheet : Grid
         form.Children.Add(Shared.OptionsCard(_app, _sealing, on => _sealing = on, "sheet.server"));
         column.Children.Add(form);
 
-        // The foot: why the last press did not take, the knock it may offer, and the button.
+        // The foot: why the last press did not take, the knock it may offer,
+        // and the button: beside Cancel in a dialog, the whole width on a
+        // phone's, where the cross is the way out.
         _problem = K.Text("", 12.5, ink: Ink.Danger, align: TextAlignment.Center);
         _problem.Arrives();
         column.Children.Add(_problem);
@@ -137,24 +165,53 @@ internal sealed class MeetingSheet : Grid
             await _app.Knock();
             _close();
         };
-        var cancelWords = Tap.Words(T("Cancel"), height: 36);
-        cancelWords.Click += (_, _) => Cancel();
-        _go = new Shared.Pressing(_starting ? T("Start") : T("Join"), 36, 13.5);
-        _go.HorizontalAlignment = HorizontalAlignment.Right;
+        _go = _wide ? new Shared.Pressing(_starting ? T("Start") : T("Join"), 36, 13.5) : new Shared.Pressing(_starting ? T("Start") : T("Join"), 56, 16);
         _go.Named(_starting ? T("Start") : T("Join"), "sheet.go");
         _go.Click += (_, _) => Go();
-        var foot = K.Line(10, K.Fixed(_knock), K.Flex(K.Spacer()), K.Fixed(cancelWords), K.Fixed(_go));
-        column.Children.Add(foot);
-
-        var ground = new Grid();
         if (_wide)
         {
-            // The evening room faintly behind the dialog's surface.
-            var room = new Backdrop { Opacity = 0.55 };
-            ground.Children.Add(room);
+            var cancelWords = Tap.Words(T("Cancel"), height: 36);
+            cancelWords.Click += (_, _) => Cancel();
+            _go.HorizontalAlignment = HorizontalAlignment.Right;
+            column.Children.Add(K.Line(10, K.Fixed(_knock), K.Flex(K.Spacer()), K.Fixed(cancelWords), K.Fixed(_go)));
         }
-        ground.Children.Add(column);
-        Children.Add(ground);
+        else
+        {
+            column.Children.Add(K.Line(10, K.Fixed(_knock), K.Flex(_go)));
+        }
+
+        if (_wide)
+        {
+            column.Padding = new Thickness(20);
+            // The evening room faintly behind the dialog's surface.
+            Children.Add(new Backdrop { Opacity = 0.55 });
+            Children.Add(column);
+        }
+        else
+        {
+            // The whole window: the picture of yourself behind a pane of
+            // glass at the foot (MeetingSheet.kt's phone layout). The pane is
+            // the control layer over the picture, so the one material is its.
+            _stage = new Shared.CameraStage(_app);
+            Children.Add(_stage);
+            column.Padding = new Thickness(18);
+            var pane = new Border
+            {
+                Child = column,
+                Background = K.Acrylic(),
+                CornerRadius = new CornerRadius(34),
+                BorderBrush = Ink.White(0.10f),
+                BorderThickness = new Thickness(1),
+                Margin = new Thickness(10),
+                VerticalAlignment = VerticalAlignment.Bottom,
+            };
+            // A window too short for the pane scrolls it, still at the foot
+            // when it fits.
+            var holder = new Grid { Children = { pane } };
+            var scroller = new ScrollViewer { Content = holder, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollMode = ScrollMode.Disabled };
+            scroller.SizeChanged += (_, e) => holder.MinHeight = e.NewSize.Height;
+            Children.Add(scroller);
+        }
         Update();
     }
 

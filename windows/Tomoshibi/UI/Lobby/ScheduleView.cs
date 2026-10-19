@@ -386,7 +386,7 @@ internal sealed class ScheduleView : Grid
     {
         var local = at.ToLocalTime();
         if (local.Year != DateTimeOffset.Now.Year) return LobbyModel.Said(at);
-        return Times.Written(at, "month.abbreviated day hour minute") + " " + LobbyModel.Zone(local);
+        return Times.Skeleton(at, "MMMdjmm", "month.abbreviated day hour minute") + " " + LobbyModel.Zone(local);
     }
 }
 

@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Tomoshibi.UI.Kit;
 using uniffi.tomoshibi_protocol;
 using static Tomoshibi.Basics.Words;
@@ -91,14 +92,45 @@ internal sealed class RoomField : StackPanel
         _strange = K.Text("", 12, ink: Ink.Danger).Pad(6, 0, 6, 0);
         _strange.Arrives();
         _strange.Visibility = Visibility.Collapsed;
-        Children.Add(_box);
+        // What the field is for, before the words, as the other apps have
+        // it: a link in the join bar, where one is pasted, and a room's
+        // number sign in the sheet. Laid over the box and passed through, so
+        // a press on it is a press on the box.
+        var mark = K.Symbol(capsule ? "link" : "number", capsule ? 16 : 14, Ink.Muted);
+        mark.IsHitTestVisible = false;
+        mark.HorizontalAlignment = HorizontalAlignment.Left;
+        mark.VerticalAlignment = VerticalAlignment.Center;
+        mark.Margin = new Thickness(capsule ? 18 : 14, 0, 0, 0);
+        mark.Width = 18;
+        var lead = capsule ? 18 + 18 + 10 : 14 + 18 + 10;
+        Children.Add(new Grid { Children = { _box, mark } });
         Children.Add(_strange);
         Loaded += (_, _) =>
         {
             // The field's own text box, so that its fill and corners are the
-            // lobby's: a capsule in the join bar, a box in the sheet.
+            // lobby's: a capsule in the join bar, a box in the sheet; and
+            // its words start after the mark.
             _box.CornerRadius = new CornerRadius(capsule ? 27 : 16);
+            if (Inner(_box) is { } inner)
+            {
+                inner.Padding = new Thickness(lead, inner.Padding.Top, inner.Padding.Right, inner.Padding.Bottom);
+                Mono(inner);
+                inner.TextChanged += (_, _) => Mono(inner);
+            }
         };
+    }
+
+    /// <summary>A room's name is shown in the monospaced face once there is one, the prompt in the ordinary one (as the other apps' fields).</summary>
+    private static void Mono(TextBox inner) => inner.FontFamily = inner.Text.Length > 0 ? K.Mono : K.Face;
+
+    private static TextBox? Inner(DependencyObject root)
+    {
+        if (root is TextBox box) return box;
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++)
+        {
+            if (Inner(VisualTreeHelper.GetChild(root, i)) is { } found) return found;
+        }
+        return null;
     }
 
     public void Focus() => _box.Focus(FocusState.Programmatic);

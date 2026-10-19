@@ -83,6 +83,12 @@ internal sealed class ScreenHost : Grid
         _current = next;
         // The leaving one fades by its own hide animation as it is taken out.
         if (animated) next.Arrives();
+        void Settled(object sender, RoutedEventArgs e)
+        {
+            next.Loaded -= Settled;
+            next.SettleFocus();
+        }
+        next.Loaded += Settled;
         Children.Add(next);
         if (old != null)
         {

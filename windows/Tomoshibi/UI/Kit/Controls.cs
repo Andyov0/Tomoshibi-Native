@@ -84,7 +84,8 @@ internal sealed class Segmented : Grid
 
     public event Action<int>? Chose;
 
-    public Segmented(IReadOnlyList<string> options, int chosen, double height = 30)
+    /// <summary>With <paramref name="fill"/>, the choices share the width it is given, as the phone's sheet has them beside its close button.</summary>
+    public Segmented(IReadOnlyList<string> options, int chosen, double height = 30, bool fill = false)
     {
         _chosen = chosen;
         Height = height;
@@ -105,11 +106,12 @@ internal sealed class Segmented : Grid
         var row = new Grid { ColumnSpacing = 2 };
         for (var i = 0; i < options.Count; i++)
         {
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = fill ? new GridLength(1, GridUnitType.Star) : GridLength.Auto });
             var label = K.Text(options[i], 12.5, i == chosen ? K.Semibold : K.Regular, i == chosen ? Ink.Foreground : Ink.Muted, lines: 1);
             var index = i;
             var segment = new Tap(label, Look.Clear, height - 4, padding: 10) { CornerRadius = new CornerRadius((height - 4) / 2) };
             segment.Named(options[i]);
+            if (fill) segment.HorizontalAlignment = HorizontalAlignment.Stretch;
             segment.Click += (_, _) => Choose(index);
             Grid.SetColumn(segment, i);
             row.Children.Add(segment);
@@ -122,14 +124,19 @@ internal sealed class Segmented : Grid
     }
 
     private bool _placed;
+    private double _placedX = double.NaN, _placedWidth = double.NaN;
 
     private void PlacePill(bool animated)
     {
         if (_chosen < 0 || _chosen >= _segments.Count) return;
         var segment = _segments[_chosen];
         if (segment.ActualWidth <= 0) return;
-        if (_placed && !animated) return;
         var x = segment.TransformToVisual(this).TransformPoint(new Windows.Foundation.Point(0, 0)).X - Padding.Left - BorderThickness.Left;
+        // Placed again only where the chosen segment moved or changed width
+        // (one that shares a width that changed), not at every layout pass.
+        if (_placed && !animated && Math.Abs(x - _placedX) < 0.5 && Math.Abs(segment.ActualWidth - _placedWidth) < 0.5) return;
+        _placedX = x;
+        _placedWidth = segment.ActualWidth;
         _pill.Width = segment.ActualWidth;
         _pill.Height = segment.ActualHeight;
         var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(_pill);

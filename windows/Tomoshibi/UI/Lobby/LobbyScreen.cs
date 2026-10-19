@@ -32,6 +32,8 @@ internal sealed class LobbyScreen : Screen
     private Action? _closeSheet;
     private Action? _closeSettings;
     private Action? _closeSchedule;
+    private SettingsView? _settings;
+    private bool _settingsWide;
     private MeetingSheet? _meeting;
 
     // What the current layout keeps to update.
@@ -56,6 +58,9 @@ internal sealed class LobbyScreen : Screen
             Build(Wide(e.NewSize.Width));
         };
         Loaded += (_, _) => OpenFromLaunch();
+        // The lists change with the lobby's own reads (the meetings, the
+        // relays measured), not only with the app's.
+        app.Lobby.Changed += Update;
     }
 
     private string? AvatarAddress => App.AvatarAddress;
@@ -77,6 +82,7 @@ internal sealed class LobbyScreen : Screen
     {
         if (_wide == wide) return;
         _wide = wide;
+        Relaying();
         Children.Clear();
         _section = null;
         _sectionShown = null;
@@ -88,7 +94,35 @@ internal sealed class LobbyScreen : Screen
         else BuildNarrow();
         _toast = new Shared.ProblemToast(App, wide ? 28 : 92);
         Children.Add(_toast);
+        Reopen(wide);
         Update();
+    }
+
+    /// <summary>
+    /// What was open over the lobby as the window crossed the line is made
+    /// again in the new width's form, keeping what was typed and chosen, as
+    /// Android redraws its sheet when a phone is unfolded with it open: the
+    /// start sheet opened in a wide window and kept as a dialog in a narrow
+    /// one was the dialog squeezed, not the phone's sheet. A join under way
+    /// is left where it is.
+    /// </summary>
+    private void Reopen(bool wide)
+    {
+        if (_meeting is { Working: false } meeting && meeting.Wide != wide)
+        {
+            var (start, room, sealing) = (meeting.Starting, meeting.Room, meeting.Sealing);
+            _closeSheet?.Invoke();
+            OpenSheet(start, room, sealing);
+        }
+        if (_settings is { } settings && _settingsWide != wide)
+        {
+            var section = settings.Section;
+            _closeSettings?.Invoke();
+            OpenSettings(section);
+        }
+        // The schedule is a section of the wide lobby and a sheet of the narrow one.
+        if (wide) _closeSchedule?.Invoke();
+        else if (_place == Place.Scheduled) OpenSchedule();
     }
 
     public override void Update()
@@ -135,6 +169,7 @@ internal sealed class LobbyScreen : Screen
 
     public override void Gone()
     {
+        App.Lobby.Changed -= Update;
         _closeSheet?.Invoke();
         _closeSettings?.Invoke();
         _closeSchedule?.Invoke();
@@ -165,14 +200,14 @@ internal sealed class LobbyScreen : Screen
 
     // The sheet that starts or joins a meeting.
 
-    private void OpenSheet(bool start, string room)
+    private void OpenSheet(bool start, string room, bool? sealing = null)
     {
         if (_closeSheet != null) return;
-        _meeting = new MeetingSheet(App, _account, start, room, () => _closeSheet?.Invoke(), _wide == true);
+        _meeting = new MeetingSheet(App, _account, start, room, () => _closeSheet?.Invoke(), _wide == true, sealing);
         var close = Overlay.Current!.ShowDialog(_meeting, 560, null, () =>
         {
             _meeting?.Cancel();
-        }, sheet: _wide == false);
+        }, sheet: _wide == false, scrolls: _wide == true, cover: _wide == false);
         _closeSheet = () =>
         {
             close();
@@ -185,11 +220,14 @@ internal sealed class LobbyScreen : Screen
     {
         if (_closeSettings != null) return;
         var view = new SettingsView(App, () => _closeSettings?.Invoke(), section);
-        var close = Overlay.Current!.ShowDialog(view, 900, 700, () => _closeSettings?.Invoke(), sheet: _wide == false);
+        _settings = view;
+        _settingsWide = _wide == true;
+        var close = Overlay.Current!.ShowDialog(view, 900, 700, () => _closeSettings?.Invoke(), sheet: _wide == false, scrolls: false);
         _closeSettings = () =>
         {
             close();
             _closeSettings = null;
+            _settings = null;
         };
     }
 
@@ -535,10 +573,11 @@ internal sealed class LobbyScreen : Screen
     /// <summary>A room joined lately, opened again in one press, with the way to take it off the list (Lobby.kt <c>RecentLine</c>).</summary>
     private Grid RecentLine(LobbyModel.Recent item)
     {
+        var chevron = K.Symbol("chevron.right", 13, Ink.MutedAt(0.6f));
         var line = K.Line(12,
             K.Fixed(Faces.Initial(item.Room, 36)),
             K.Flex(K.Column(2, K.Text(item.Room, 16, K.Semibold, lines: 1), K.Text(Times.Relative(item.At), 13, ink: Ink.Muted, lines: 1))),
-            K.Fixed(K.Symbol("chevron.right", 13, Ink.MutedAt(0.6f))));
+            K.Fixed(chevron));
         var open = new Tap(line, Look.Clear, 58, padding: 14)
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
@@ -551,13 +590,36 @@ internal sealed class LobbyScreen : Screen
         // close mark, and its context menu, take it off the list.
         var forget = Tap.Icon("xmark", T("Remove {room} from recent", ("room", item.Room)), Look.Plain, 24, 8);
         forget.Click += (_, _) => App.Lobby.Forget(item);
-        forget.Margin = new Thickness(0, 0, 12, 0);
+        forget.Margin = new Thickness(0, 0, 8, 0);
+        forget.HorizontalAlignment = HorizontalAlignment.Right;
+        forget.VerticalAlignment = VerticalAlignment.Center;
         var menu = new MenuFlyout();
         var remove = new MenuFlyoutItem { Text = T("Remove"), Icon = new FontIcon { Glyph = "" } };
         remove.Click += (_, _) => App.Lobby.Forget(item);
         menu.Items.Add(remove);
         open.ContextFlyout = menu;
-        return K.Line(0, K.Flex(open), K.Fixed(forget));
+        // The mark takes the chevron's place while the pointer is on the row
+        // or the keyboard on the mark, so that the list at rest is the
+        // phone's: a name, when, and the way in. A finger holds the row for
+        // its menu instead.
+        var row = new Grid { Children = { open, forget } };
+        // Hidden, it takes no presses: a finger's press where the chevron is
+        // opens the room, and never takes it off the list unseen.
+        var over = false;
+        Motion.FadeTo(forget, 0);
+        forget.IsHitTestVisible = false;
+        void Show()
+        {
+            var shown = over || forget.FocusState != FocusState.Unfocused;
+            forget.IsHitTestVisible = shown;
+            Motion.FadeTo(forget, shown ? 1 : 0);
+            Motion.FadeTo(chevron, shown ? 0 : 1);
+        }
+        row.PointerEntered += (_, _) => { over = true; Show(); };
+        row.PointerExited += (_, _) => { over = false; Show(); };
+        forget.GotFocus += (_, _) => Show();
+        forget.LostFocus += (_, _) => Show();
+        return row;
     }
 
     /// <summary>The relay, as a card in the narrow lobby (Lobby.kt <c>ServerCard</c>).</summary>

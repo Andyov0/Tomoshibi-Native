@@ -18,7 +18,7 @@ namespace Tomoshibi.UI;
 internal sealed class SelfView : Grid
 {
     private readonly CallMedia _media;
-    private readonly Image _image = new() { Stretch = Stretch.UniformToFill };
+    private readonly Image _image = new() { Stretch = Stretch.UniformToFill, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
     private readonly DispatcherQueue _ui;
     private WriteableBitmap? _bitmap;
     private byte[]? _pending;
@@ -33,9 +33,11 @@ internal sealed class SelfView : Grid
         _media = media;
         _ui = DispatcherQueue.GetForCurrentThread();
         IsHitTestVisible = false;
-        // Mirrored about its middle.
-        _image.RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5);
-        _image.RenderTransform = new ScaleTransform { ScaleX = -1 };
+        // Mirrored about the middle of its place, not of the picture: cut
+        // to fill, the picture is wider than its place, and turned about its
+        // own middle it left part of the place empty.
+        RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5);
+        RenderTransform = new ScaleTransform { ScaleX = -1 };
         Motion.Hide(_image);
         Children.Add(_image);
         Loaded += (_, _) => Start();

@@ -88,6 +88,15 @@ internal static class General
             var colour = accent.Color();
             var bead = new Grid { Width = 42, Height = 42 };
             bead.Children.Add(new Ellipse { Width = 34, Height = 34, Fill = Ink.Brush(colour), Stroke = Ink.White(0.25f), StrokeThickness = 0.5 });
+            // Lit from the upper left and shaded underneath, a bead rather than a dot (General.kt `Swatch`).
+            var light = new RadialGradientBrush { Center = new Windows.Foundation.Point(0.32, 0.26), GradientOrigin = new Windows.Foundation.Point(0.32, 0.26), RadiusX = 0.45, RadiusY = 0.45 };
+            light.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.White.WithAlpha(0.42f)), Offset = 0 });
+            light.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.White.WithAlpha(0f)), Offset = 1 });
+            bead.Children.Add(new Ellipse { Width = 34, Height = 34, Fill = light });
+            var shade = new LinearGradientBrush { StartPoint = new Windows.Foundation.Point(0.5, 0.5), EndPoint = new Windows.Foundation.Point(0.5, 1) };
+            shade.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.Black.WithAlpha(0f)), Offset = 0 });
+            shade.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.Black.WithAlpha(0.2f)), Offset = 1 });
+            bead.Children.Add(new Ellipse { Width = 34, Height = 34, Fill = shade });
             if (chosen)
             {
                 bead.Children.Add(new Ellipse { Width = 42, Height = 42, Stroke = Ink.Brush(colour), StrokeThickness = 2 });
@@ -100,6 +109,16 @@ internal static class General
         }
         // How it looks: a picture ringed in it, the Join button, a switch on.
         var scene = K.Row(12);
+        var tag = new Border
+        {
+            Background = Ink.Black(0.45f),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(6, 3, 6, 3),
+            Margin = new Thickness(6),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            Child = K.Row(4, K.Symbol("waveform", 8, Ink.Tally), K.Text("Mika", 9, K.Semibold, lines: 1)),
+        };
         var tile = new Border
         {
             Width = 104,
@@ -108,10 +127,19 @@ internal static class General
             BorderBrush = Ink.Tally,
             BorderThickness = new Thickness(2),
             Background = Ink.Brush(new Shade(0.2f, 0.25f, 0.32f)),
-            Child = Faces.Initial("Mika", 30).At(HorizontalAlignment.Center, VerticalAlignment.Center),
+            Child = K.Stack(Faces.Initial("Mika", 30).At(HorizontalAlignment.Center, VerticalAlignment.Center), tag),
         };
         var join = new Border { Height = 28, CornerRadius = new CornerRadius(14), Background = Ink.Tally, Padding = new Thickness(16, 0, 16, 0), Child = K.Text(T("Join"), 12.5, K.Semibold, Ink.TallyForeground, lines: 1).At(HorizontalAlignment.Center, VerticalAlignment.Center) };
-        var switchOn = new ToggleSwitch { IsOn = true, IsEnabled = false, OnContent = "", OffContent = "", MinWidth = 0 };
+        // A switch drawn on, not a control: the preview is a picture.
+        var switchOn = new Border
+        {
+            Width = 38,
+            Height = 23,
+            CornerRadius = new CornerRadius(11.5),
+            Background = Ink.Tally,
+            Padding = new Thickness(2.5),
+            Child = new Ellipse { Width = 18, Height = 18, Fill = Ink.Brush(Shade.White), HorizontalAlignment = HorizontalAlignment.Right },
+        };
         scene.Children.Add(tile);
         scene.Children.Add(K.Column(10, K.Row(10, join, switchOn), K.Row(6, K.Symbol("bubble.left.fill", 14, Ink.ForegroundAt(0.85f)), K.Symbol("hand.raised.fill", 14, Ink.Tally))));
         var preview = new Border

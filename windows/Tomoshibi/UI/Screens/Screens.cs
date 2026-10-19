@@ -220,6 +220,7 @@ internal sealed class PreJoinScreen : Screen
     {
         if (_wide == wide) return;
         _wide = wide;
+        Relaying();
         Children.Clear();
         var content = K.Flowing(18);
         content.Children.Add(RoomHeading(App, App.Room, Door(App)));
@@ -407,6 +408,7 @@ internal sealed class WaitingScreen : Screen
     {
         if (_wide == wide) return;
         _wide = wide;
+        Relaying();
         Children.Clear();
         var content = K.Flowing(18);
         content.Children.Add(Shared.Heading(App.Room, mono: true));

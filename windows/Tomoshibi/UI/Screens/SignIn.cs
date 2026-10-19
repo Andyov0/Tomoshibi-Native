@@ -58,6 +58,7 @@ internal sealed class SignInScreen : Screen
     {
         if (_wide == wide) return;
         _wide = wide;
+        Relaying();
         Children.Clear();
 
         var mark = new Mark(76);

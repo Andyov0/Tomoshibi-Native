@@ -155,7 +155,7 @@ internal sealed class LobbyModel : Observable
 
     public void Remember(string room)
     {
-        if (_app.Deployment?.BaseUrl() is not { } server || _app.Rehearsal) return;
+        if (_app.Deployment?.BaseUrl() is not { } server || _app.Forgets) return;
         Recents = new[] { new Recent(room, server, DateTimeOffset.UtcNow) }
             .Concat(Recents.Where(r => !(r.Server == server && r.Room == room)))
             .Take(RecentsKept).ToList();
@@ -167,7 +167,7 @@ internal sealed class LobbyModel : Observable
     public void Forget(Recent recent)
     {
         Recents = Recents.Where(r => r.Id != recent.Id).ToList();
-        if (!_app.Rehearsal) SaveRecents();
+        if (!_app.Forgets) SaveRecents();
         Notify();
     }
 
@@ -284,9 +284,10 @@ internal sealed class LobbyModel : Observable
     public static string Said(DateTimeOffset at)
     {
         // The date at medium length and the time short, as ICU writes them
-        // on Android, from Windows' own formatter in the reader's language.
+        // on Android: by ICU here too (Windows carries it), Windows' own
+        // formatter where ICU cannot be reached.
         var local = at.ToLocalTime();
-        return UI.Kit.Times.Written(at, "month.abbreviated day year hour minute") + " " + Zone(local);
+        return UI.Kit.Times.MediumDateShortTime(at, "month.abbreviated day year hour minute") + " " + Zone(local);
     }
 
     /// <summary>The short name of the reader's zone at that moment, as a browser writes it: UTC and the offset, there being no short names on Windows.</summary>

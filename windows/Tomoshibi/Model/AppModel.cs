@@ -61,6 +61,13 @@ internal sealed class AppModel : Observable
     /// <summary>A test is driving the app, and nothing it does is kept (Launch.Rehearsal).</summary>
     public bool Rehearsal => _launch.Rehearsal;
 
+    /// <summary>
+    /// A test with nowhere to keep things: a rehearsal not given a store of
+    /// its own (TOMOSHIBI_KEEP). One that was keeps the rooms it went to, as
+    /// a person's app does, so that a lobby with a history can be looked at.
+    /// </summary>
+    public bool Forgets => Rehearsal && _launch.KeepIn == null;
+
     public Launch Launch => _launch;
     public CallMedia Media => _media;
     public IDefaults Defaults => _defaults;
@@ -69,8 +76,9 @@ internal sealed class AppModel : Observable
     {
         _launch = launch;
         _media = media;
-        _defaults = Rehearsal ? new MemoryDefaults() : defaults;
-        _secrets = Rehearsal ? new MemorySecrets() : secrets;
+        // A rehearsal keeps nothing, unless it was given a store of its own.
+        _defaults = Forgets ? new MemoryDefaults() : defaults;
+        _secrets = Forgets ? new MemorySecrets() : secrets;
         // The deployment this app is for, from the core, which holds a
         // release build to that one address; a test names its own. No
         // screen ever shows it: the app is for this deployment and not for

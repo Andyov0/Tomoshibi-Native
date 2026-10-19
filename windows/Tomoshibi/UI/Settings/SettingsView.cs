@@ -29,6 +29,16 @@ internal sealed class SettingsView : Grid
     private Border? _plate;
     private readonly List<(Topic Topic, Tap Row)> _rows = new();
 
+    /// <summary>The page shown, as the constructor takes it, so that the settings can be opened again where they were.</summary>
+    public string? Section => _topic switch
+    {
+        Topic.Media => "media",
+        Topic.Account => "account",
+        Topic.About => "about",
+        Topic.General => "general",
+        _ => null,
+    };
+
     public SettingsView(AppModel app, Action close, string? section)
     {
         _app = app;
@@ -140,15 +150,22 @@ internal sealed class SettingsView : Grid
         }
         rows.Children.Add(list);
         column.Children.Add(rows);
+        // Who is signed in, at the sidebar's foot.
+        var shell = new Grid();
+        shell.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        shell.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        shell.Children.Add(column);
         if (_app.Account is { } account)
         {
             var foot = K.Card(K.Line(10,
                 K.Fixed(Faces.AccountAvatar(account.Name, _app.AvatarAddress, 32)),
                 K.Flex(K.Column(1, K.Text(account.Name, 12.5, K.Semibold, lines: 1), K.Text(account.Trip, 11, mono: true, ink: Ink.Muted, lines: 1)))), 14, 0.05f, 0, new Thickness(10));
-            foot.Margin = new Thickness(0, 12, 0, 0);
-            column.Children.Add(foot);
+            foot.Margin = new Thickness(10, 0, 10, 10);
+            Grid.SetRow(foot, 1);
+            foot.Arrives();
+            shell.Children.Add(foot);
         }
-        var sidebar = K.Glass(column, 22);
+        var sidebar = K.Glass(shell, 22);
         sidebar.Margin = new Thickness(10);
         rows.Loaded += (_, _) => MovePlate(animated: false);
         return sidebar;

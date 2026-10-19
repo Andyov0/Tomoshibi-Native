@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Tomoshibi.Basics;
 using Tomoshibi.Model;
@@ -36,6 +37,54 @@ internal abstract class Screen : Grid
 
     /// <summary>Whether a window this wide is laid out as the other apps lay out a tablet or a computer (their 600-point line).</summary>
     public static bool Wide(double width) => width >= 600;
+
+    /// <summary>
+    /// Called as a screen lays itself out again for a new width: the focus,
+    /// which was on something about to go, is settled on the new layout
+    /// (SettleFocus).
+    /// </summary>
+    protected void Relaying()
+    {
+        if (XamlRoot is { } root && FocusManager.GetFocusedElement(root) is DependencyObject focused && Within(focused)) SettleFocus();
+    }
+
+    /// <summary>
+    /// Puts the focus on the screen's first control as a pointer puts it,
+    /// without the ring of keyboard focus, unless it is on something over
+    /// the screen (a sheet's field). The screens change at a press, and left
+    /// to Windows the first control took the focus with the ring: the
+    /// lobby's Start was ringed in white as the app opened, and the
+    /// microphone's button in a lobby only dragged narrower. A key pressed
+    /// after brings the ring back, as everywhere in Windows.
+    /// </summary>
+    public void SettleFocus()
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (XamlRoot is not { } root) return;
+            if (FocusManager.GetFocusedElement(root) is DependencyObject now && !OnSomeScreen(now)) return;
+            if (FocusManager.FindFirstFocusableElement(this) is Control first) first.Focus(FocusState.Pointer);
+        });
+    }
+
+    private bool Within(DependencyObject element)
+    {
+        for (var at = element; at != null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (ReferenceEquals(at, this)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>Whether something is on this screen or the one it replaces, rather than over them.</summary>
+    private static bool OnSomeScreen(DependencyObject element)
+    {
+        for (var at = element; at != null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (at is Screen) return true;
+        }
+        return false;
+    }
 }
 
 /// <summary>The frames the plainer screens are drawn in (Android's ui/screens/Screens.kt).</summary>
@@ -74,11 +123,14 @@ internal static class Frames
         var card = Pane(content, 30, new Thickness(22));
         card.MaxWidth = width;
         card.HorizontalAlignment = HorizontalAlignment.Stretch;
-        card.VerticalAlignment = VerticalAlignment.Center;
+        // Near the top, sixty below the title bar, as the other apps place
+        // it: centred, it stood apart from the language's button and moved
+        // with the window's height.
+        card.VerticalAlignment = VerticalAlignment.Top;
         card.Rises();
         var scroller = new ScrollViewer
         {
-            Content = new Grid { Children = { card }, Padding = new Thickness(16, Shared.TitleBar + 40, 16, 60), VerticalAlignment = VerticalAlignment.Center },
+            Content = new Grid { Children = { card }, Padding = new Thickness(16, Shared.TitleBar + 60, 16, 60), VerticalAlignment = VerticalAlignment.Top },
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
         };
         var grid = K.Stack(new Backdrop(), scroller, Shared.LanguageMenu());

@@ -154,9 +154,11 @@ internal sealed class Overlay : Grid
     /// which dismisses, and the content on the apps' surface in the middle,
     /// at most <paramref name="width"/> wide. With <paramref name="sheet"/>,
     /// the narrow window's sheet instead (SheetHost): the content rising from
-    /// the foot, the window's full width, the top corners rounded.
+    /// the foot, the window's full width, the top corners rounded; with
+    /// <paramref name="cover"/> as well, the whole window, as the phone's
+    /// start sheet takes the whole screen, its content laying itself out.
     /// </summary>
-    public Action ShowDialog(UIElement content, double width, double? maxHeight, Action dismiss, bool sheet = false)
+    public Action ShowDialog(UIElement content, double width, double? maxHeight, Action dismiss, bool sheet = false, bool scrolls = true, bool cover = false)
     {
         var dim = new Border { Background = Ink.Black(0.45f) };
         dim.PointerPressed += (_, e) =>
@@ -165,15 +167,30 @@ internal sealed class Overlay : Grid
             dismiss();
         };
         FrameworkElement panel;
-        if (sheet)
+        // A page that scrolls its own parts (the settings: the sidebar stays,
+        // the page moves) is given the height and does its own scrolling.
+        UIElement Held() => scrolls
+            ? new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollMode = ScrollMode.Disabled }
+            : content;
+        if (sheet && cover)
         {
-            var scroller = new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollMode = ScrollMode.Disabled };
+            panel = new Border
+            {
+                Child = content,
+                Background = Ink.Background,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+            };
+        }
+        else if (sheet)
+        {
             var body = new Border
             {
-                Child = scroller,
+                Child = Held(),
                 Background = Ink.Background,
                 CornerRadius = new CornerRadius(22, 22, 0, 0),
-                VerticalAlignment = VerticalAlignment.Bottom,
+                // A page that scrolls itself takes the sheet's whole height.
+                VerticalAlignment = scrolls ? VerticalAlignment.Bottom : VerticalAlignment.Stretch,
                 Margin = new Thickness(0, 42, 0, 0),
                 Shadow = new ThemeShadow(),
                 Translation = new Vector3(0, 0, 32),
@@ -183,20 +200,28 @@ internal sealed class Overlay : Grid
         }
         else
         {
-            var scroller = new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollMode = ScrollMode.Disabled };
             var body = new Border
             {
-                Child = scroller,
+                Child = Held(),
                 Background = Ink.Surface,
                 CornerRadius = new CornerRadius(26),
                 MaxWidth = width,
                 Margin = new Thickness(24, 56, 24, 24),
-                HorizontalAlignment = HorizontalAlignment.Center,
+                // As wide as it may be: stretched and held to its most, XAML
+                // centres it, where centred alone it would be as narrow as
+                // its content asked and a wide page would lay itself out narrow.
+                HorizontalAlignment = HorizontalAlignment.Stretch,
                 VerticalAlignment = VerticalAlignment.Center,
                 Shadow = new ThemeShadow(),
                 Translation = new Vector3(0, 0, 48),
             };
             if (maxHeight is { } most) body.MaxHeight = most;
+            if (!scrolls && maxHeight is { } tall)
+            {
+                void Fit() => body.Height = Math.Max(320, Math.Min(tall, ActualHeight - 80));
+                Fit();
+                SizeChanged += (_, _) => Fit();
+            }
             panel = body;
         }
         panel.TabFocusNavigation = KeyboardNavigationMode.Cycle;
@@ -237,10 +262,23 @@ internal sealed class Overlay : Grid
         else Animate(held.Panel, 1f, 0.98f, 1f, 0f, Motion.Leave, false, new Vector2(0.5f, 0.5f), new Vector2((float)held.Panel.ActualWidth, (float)held.Panel.ActualHeight), remove);
     }
 
-    private static void FocusInside(FrameworkElement panel)
+    /// <summary>
+    /// The keyboard's focus into the dialog, once it is shown, on its first
+    /// control: unless what it holds put the focus somewhere of its own (the
+    /// start sheet's field), which a focus put on the first control after
+    /// it took away again.
+    /// </summary>
+    private void FocusInside(FrameworkElement panel)
     {
-        var first = FocusManager.FindFirstFocusableElement(panel);
-        if (first is Control control) control.Focus(FocusState.Programmatic);
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (panel.XamlRoot is not { } root) return;
+            for (var at = FocusManager.GetFocusedElement(root) as DependencyObject; at != null; at = VisualTreeHelper.GetParent(at))
+            {
+                if (ReferenceEquals(at, panel)) return;
+            }
+            if (FocusManager.FindFirstFocusableElement(panel) is Control control) control.Focus(FocusState.Programmatic);
+        });
     }
 
     private static void Animate(FrameworkElement element, float fromScale, float toScale, float fromOpacity, float toOpacity, TimeSpan duration, bool arriving, Vector2 anchor, Vector2 size, Action? done = null, float lift = 0)
