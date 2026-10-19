@@ -400,6 +400,9 @@ public final class AppModel {
     /// still out is called off instead: the link is where they now mean to
     /// go.
     public func open(_ url: URL) async {
+        #if DEBUG
+        linksOpened += 1
+        #endif
         if let call {
             call.announce(CallToast(t("Leave this call to open that link."), lasts: NoticeTimes.atMost))
             return
@@ -796,6 +799,10 @@ public final class AppModel {
     /// twice asks once.
     @ObservationIgnored private(set) var lastJoinRelay: String?
     @ObservationIgnored private(set) var joinsAnswered = 0
+    /// How many links the app was handed, for a test that a universal link
+    /// arrives once and not twice (SwiftUI could hand one to `onOpenURL` and
+    /// to a user-activity handler both).
+    @ObservationIgnored private(set) var linksOpened = 0
     #endif
 
     /// The server moved the call to another relay; the web rejoins at once

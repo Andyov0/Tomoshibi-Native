@@ -6,6 +6,12 @@ options:
   deploymentTarget:
     macOS: "14.0"
     iOS: "17.0"
+  # The Mac's Debug entitlements: the Release ones without the associated
+  # domain (see the Mac target), written beside them every time the project
+  # is, so the camera and the microphone are declared in one place.
+  postGenCommand: >-
+    cp build/Tomoshibi-macOS.entitlements build/Tomoshibi-macOS-Debug.entitlements &&
+    /usr/libexec/PlistBuddy -c "Delete :com.apple.developer.associated-domains" build/Tomoshibi-macOS-Debug.entitlements
 packages:
   TomoshibiCore:
     path: TomoshibiCore
@@ -53,17 +59,32 @@ targets:
     # here gives nothing, silently. The screen needs no entitlement (it asks
     # for Screen Recording itself), and nothing here is loaded from a library
     # signed by anybody else.
+    #
+    # And the deployment's universal links: an invitation or a meeting's link
+    # (https://meet.example.com/?invite=T#/room) opens in the app, once the
+    # deployment's apple-app-site-association names SM86NB3CPZ.app.tomoshibi.mac.
+    # Release only. On the Mac this entitlement needs a provisioning profile
+    # that grants it, and a Debug build is signed with the development
+    # certificate and no profile: with it, every Debug build stopped at "No
+    # profiles for 'app.tomoshibi.mac' were found" unless xcodebuild was
+    # allowed to make one, which no test script is. A Debug build is pointed
+    # at a local deployment anyway, and one that claimed the real domain's
+    # links would open them in a test build.
     entitlements:
       path: build/Tomoshibi-macOS.entitlements
       properties:
         com.apple.security.device.camera: true
         com.apple.security.device.audio-input: true
+        com.apple.developer.associated-domains: ["applinks:meet.example.com"]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.tomoshibi.mac
         PRODUCT_NAME: Tomoshibi
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ENABLE_HARDENED_RUNTIME: YES
+        # Conditional, because XcodeGen writes CODE_SIGN_ENTITLEMENTS for every
+        # configuration over whatever a configuration of the target says.
+        "CODE_SIGN_ENTITLEMENTS[config=Debug]": build/Tomoshibi-macOS-Debug.entitlements
   Tomoshibi-iOS:
     type: application
     platform: iOS
@@ -127,10 +148,16 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: app.tomoshibi.link
             CFBundleURLSchemes: [tomoshibi]
+    # The app group the broadcast extension hands the screen over in, and the
+    # deployment's universal links (see the Mac target): the association file
+    # names SM86NB3CPZ.app.tomoshibi.ios. Debug as well as Release here: the
+    # simulator needs no profile for it, and a build for a phone is signed
+    # with a profile in either configuration, which has to grant it.
     entitlements:
       path: build/Tomoshibi-iOS.entitlements
       properties:
         com.apple.security.application-groups: [group.app.tomoshibi]
+        com.apple.developer.associated-domains: ["applinks:meet.example.com"]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.tomoshibi.ios

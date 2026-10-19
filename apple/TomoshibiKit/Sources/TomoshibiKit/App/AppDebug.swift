@@ -5,6 +5,8 @@ import TomoshibiBasics
 import TomoshibiCore
 #if os(macOS)
 import AppKit
+#else
+import UIKit
 #endif
 
 /// TOMOSHIBI_DEBUG_APP=<file>: drives the app around its calls from a test,
@@ -27,6 +29,10 @@ import AppKit
 ///     open <url>                 a link, straight to the model
 ///     url <url>                  a link handed over by the system, as an
 ///                                Apple event (Mac)
+///     activity <url>             a universal link, as the system hands one
+///                                over: a browsing-web user activity given
+///                                to SwiftUI's own scene delegate (iPhone)
+///                                or application delegate (Mac)
 ///     forget-server              Change server
 ///     mic                        the menu's ⌘D
 ///     leave                      the menu's Leave
@@ -123,6 +129,9 @@ enum AppDebug {
             guard let text = rest.first, let url = URL(string: text) else { return "open <url>" }
             Task { await app.open(url) }
             return "opening"
+        case "activity":
+            guard let text = rest.first, let url = URL(string: text) else { return "activity <url>" }
+            return continueBrowsing(url)
         case "mic":
             Task { await app.toggleMicrophone() }
             return "pressed"
@@ -275,6 +284,7 @@ enum AppDebug {
             "relayChoice=\(app.relayChoice ?? "auto")",
             "lastJoinRelay=\(app.lastJoinRelay.map { $0.isEmpty ? "\"\"" : $0 } ?? "none")",
             "joinsAnswered=\(app.joinsAnswered)",
+            "linksOpened=\(app.linksOpened)",
             "arrivedByLink=\(app.arrivedByLink)",
             "pickerAtTheDoor=\(app.offersRelayChoiceAtTheDoor)",
             "moving=\(app.movingTo ?? "no")",
@@ -296,6 +306,33 @@ enum AppDebug {
         parts.append("windows=\(mainWindows().count)")
         #endif
         return parts.joined(separator: "\n")
+    }
+
+    /// A universal link delivered the way the system delivers one: an
+    /// NSUserActivity of the browsing-web type, handed to the delegate the
+    /// system hands it to, which is SwiftUI's own. What SwiftUI then does
+    /// with it (Apple: it passes a universal link to `onOpenURL` as a URL) is
+    /// the thing this checks, since a real one needs the deployment's
+    /// association file and a real domain.
+    private static func continueBrowsing(_ url: URL) -> String {
+        let activity = NSUserActivity(activityType: NSUserActivityTypeBrowsingWeb)
+        activity.webpageURL = url
+        #if os(iOS)
+        guard let scene = UIApplication.shared.connectedScenes.first(where: { $0.activationState == .foregroundActive })
+                ?? UIApplication.shared.connectedScenes.first,
+              let delegate = scene.delegate else { return "no scene" }
+        guard delegate.responds(to: #selector(UISceneDelegate.scene(_:continue:))) else {
+            return "\(type(of: delegate)) does not continue activities"
+        }
+        delegate.scene?(scene, continue: activity)
+        return "activity given to \(type(of: delegate))"
+        #else
+        guard let delegate = NSApp.delegate else { return "no application delegate" }
+        guard let taken = delegate.application?(NSApp, continue: activity, restorationHandler: { _ in }) else {
+            return "\(type(of: delegate)) does not continue activities"
+        }
+        return "activity given to \(type(of: delegate)), taken \(taken)"
+        #endif
     }
 
     #if os(macOS)

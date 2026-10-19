@@ -107,8 +107,35 @@ public struct AppRoot: View {
         // Readings taken while the app is in the background say nothing about
         // a freeze (the web skips a hidden tab); inactive is still on screen.
         .onChange(of: scenePhase) { app.call?.call.setBackground(background: scenePhase == .background) }
-        .onOpenURL { url in Task { await app.open(url) } }
+        // A `tomoshibi:` link, and a universal link to the deployment
+        // (`https://meet.example.com/?invite=T#/room`, `?meeting=`), which the
+        // system hands over once the domain's association file names the app
+        // (the Associated Domains entitlement, project.yml). Both are opened
+        // the one way, `open`, which follows an https link and the scheme
+        // alike, so a universal link lands exactly where the same link under
+        // `tomoshibi:` does.
+        .onOpenURL { url in receive(url) }
+        // Apple says SwiftUI hands a universal link to `onOpenURL` as a URL.
+        // A browsing-web activity given to SwiftUI's own delegates, as the
+        // system gives one (AppDebug `activity`), reached neither handler
+        // without this one, on the iPhone and the Mac alike, and the link
+        // was dropped; so the activity is taken here as well, and `receive`
+        // keeps the two from opening one link twice.
+        .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+            if let url = activity.webpageURL { receive(url) }
+        }
         .environment(\.locale, localization.language.locale)
+    }
+
+    /// The last link handed over and when, so the same link arriving by both
+    /// ways in at once is opened once: opened twice, an invitation was asked
+    /// about twice and its screen drawn twice.
+    @State private var received: (url: URL, at: Date)?
+
+    private func receive(_ url: URL) {
+        if let received, received.url == url, Date().timeIntervalSince(received.at) < 2 { return }
+        received = (url, Date())
+        Task { await app.open(url) }
     }
 }
 
