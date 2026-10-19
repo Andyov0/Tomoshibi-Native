@@ -314,6 +314,11 @@ object CallKeeper {
             .setUsesChronometer(true)
             .setWhen(since)
             .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            // The app's own colour, said rather than left to the system. A
+            // call's buttons other than Hang up are drawn in the notification's
+            // colour, and with none given One UI drew Mute microphone as white
+            // on white, unreadable (the owner's Fold6, 2026-10-19).
+            .setColor(CALL_COLOUR)
             .setStyle(NotificationCompat.CallStyle.forOngoingCall(person, leave).setIsVideo(held.camera))
         if (open != null) builder.setContentIntent(open)
         if (held.microphone) {
@@ -329,6 +334,9 @@ object CallKeeper {
         }
         return builder.build()
     }
+
+    /** The lamp's amber (Theme's default accent), for the notification's buttons. */
+    private const val CALL_COLOUR = 0xFFFFA23B.toInt()
 
     /** A button's intent to [CallActions], which works with the app anywhere. */
     fun broadcast(context: Context, control: Control): PendingIntent = PendingIntent.getBroadcast(

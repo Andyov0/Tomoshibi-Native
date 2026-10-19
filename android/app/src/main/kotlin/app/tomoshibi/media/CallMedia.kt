@@ -1,5 +1,7 @@
 package app.tomoshibi.media
 
+import app.tomoshibi.feature.watch.ExoBackend
+import app.tomoshibi.feature.watch.WatchEngine
 import android.content.Context
 import android.content.Intent
 import android.util.Log
@@ -109,14 +111,34 @@ class CallMedia(context: Context, val muted: Boolean = false) {
         }.collect { CallKeeper.hold(it) }
     }
 
-    /** The small window: open on the way out of a call, in the shape of the picture it shows, with the microphone's button as it is. */
+    /**
+     * The small window: open on the way out of a call, in the shape of what
+     * it shows, with the microphone's button as it is.
+     *
+     * What it shows decides how large it is, since Android sizes the window
+     * from its shape and nothing else an app can say. Something to watch --
+     * the video everybody is watching, or a shared screen -- keeps its own
+     * wide shape and so the large window. A camera keeps the camera's. With
+     * no picture at all, a call of voices or a song playing, the window is
+     * square, which is the smallest Android makes it: it was drawn sixteen by
+     * nine around a single initial, the owner's "画中画大小太大了"
+     * (2026-10-19).
+     */
     private suspend fun window(app: AppModel, call: CallModel) {
         snapshotFlow {
+            val watch = WatchEngine.of(call)
             val sid = call.pictureInPictureSid
-            // The shape it is drawn in, or before it has been drawn the one it
-            // was published at.
-            val shape = sid?.let { VideoHub.existing(call.call)?.shapes?.get(it)?.shown }
-                ?: sid?.let { s -> call.people.firstNotNullOfOrNull { it.tracks[s] }?.let { it.width.toInt() to it.height.toInt() } }
+            val shape = if (watch.onStage) {
+                // The video's own shape, or the shape videos nearly always are
+                // until it has said.
+                val aspect = (watch.player?.backend as? ExoBackend)?.aspect ?: (16f / 9f)
+                Math.round(aspect * 1000) to 1000
+            } else {
+                // The shape it is drawn in, or before it has been drawn the one
+                // it was published at.
+                sid?.let { VideoHub.existing(call.call)?.shapes?.get(it)?.shown }
+                    ?: sid?.let { s -> call.people.firstNotNullOfOrNull { it.tracks[s] }?.let { it.width.toInt() to it.height.toInt() } }
+            }
             sid to CallWindow.Wanted(inCall = app.screen == AppModel.Screen.Call, shape = shape, microphone = call.microphoneOn)
         }.collect { (sid, wanted) ->
             call.pictureInPicture.follow(sid)

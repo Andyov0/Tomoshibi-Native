@@ -1,5 +1,7 @@
 package app.tomoshibi.ui.room
 
+import app.tomoshibi.feature.music.SongDesk
+import app.tomoshibi.feature.watch.WatchEngine
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -93,6 +95,9 @@ import app.tomoshibi.ui.call.HostPanel
 import app.tomoshibi.ui.call.MovingOverlay
 import app.tomoshibi.ui.call.SoundPanel
 import app.tomoshibi.ui.kit.BarAxis
+import app.tomoshibi.ui.kit.Symbol
+import app.tomoshibi.ui.kit.Font
+import app.tomoshibi.ui.kit.KitText
 import app.tomoshibi.ui.kit.FloatingPopover
 import app.tomoshibi.ui.kit.FloatingPopoverLayer
 import app.tomoshibi.ui.kit.GlassAppear
@@ -233,7 +238,7 @@ fun RoomView(app: AppModel, call: CallModel, modifier: Modifier = Modifier) {
     GlassBackdrop {
         FloatingPopoverLayer(state.popovers) {
             if (call.pictureInPicture.inSmallWindow) {
-                SmallWindow(call, state, modifier)
+                SmallWindow(app, call, state, modifier)
             } else {
                 Room(app, call, state, host, record, modifier)
             }
@@ -1203,22 +1208,58 @@ private fun Context.activity(): Activity? {
 
 /**
  * The room in the small window: the stage alone, whole, with nothing to press
- * (PictureInPictureHost): whatever is on the stage, or the call's own choice
- * of picture (CallModel.pictureInPictureSid), a shared screen first.
+ * (PictureInPictureHost). What it holds, first that there is:
+ *
+ * - the video everybody is watching together, which before this never reached
+ *   the small window at all, though watching is the one thing somebody leaves
+ *   the app and goes on doing;
+ * - whatever is on the stage, or the call's own choice of picture
+ *   (CallModel.pictureInPictureSid), a shared screen first;
+ * - with no picture, the person talking, or failing that the person being
+ *   talked to, and the song playing where one is. The window is square then
+ *   (CallMedia `window`), the smallest Android draws one.
  */
 @Composable
-private fun SmallWindow(call: CallModel, state: RoomState, modifier: Modifier) {
+private fun SmallWindow(app: AppModel, call: CallModel, state: RoomState, modifier: Modifier) {
     val pictures = LocalRoomPictures.current
+    val watching = WatchEngine.of(call).onStage
     val staged = call.surfaces.firstOrNull { it.id == state.pin.pinned && it.sid != null }
     val sid = staged?.sid ?: call.pictureInPictureSid
     val camera = (staged ?: call.surfaces.firstOrNull { it.sid == sid })?.kind == Surface.Kind.Camera
+    val shown = when {
+        watching -> "watch"
+        sid != null -> "picture $sid"
+        else -> "voice"
+    }
     Box(modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
-        AnimatedContent(sid, transitionSpec = { fadeIn(Theme.settle()) togetherWith fadeOut(Theme.leave()) }, label = "small") { shown ->
-            if (shown != null) {
-                pictures.remote(call, shown, camera, Modifier.fillMaxSize())
-            } else {
-                val other = call.people.firstOrNull()
-                Avatar(other?.name ?: call.localName, other?.id ?: call.localIdentity)
+        AnimatedContent(shown, transitionSpec = { fadeIn(Theme.settle()) togetherWith fadeOut(Theme.leave()) }, label = "small") { face ->
+            when {
+                face == "watch" -> WatchStage(app, call, Modifier.fillMaxSize())
+                face.startsWith("picture ") -> pictures.remote(call, face.removePrefix("picture "), camera, Modifier.fillMaxSize())
+                else -> SmallVoice(call)
+            }
+        }
+    }
+}
+
+/** The small window with no picture: who is talking, by name, and the song where one is playing. */
+@Composable
+private fun SmallVoice(call: CallModel) {
+    val talking = call.people.firstOrNull { it.speaking } ?: call.people.firstOrNull()
+    val song = SongDesk.of(call).state?.now
+    Column(
+        Modifier.fillMaxSize().padding(10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Avatar(talking?.name ?: call.localName, talking?.id ?: call.localIdentity)
+        }
+        KitText(talking?.name ?: call.localName, font = Font(12f, Font.Semibold), lines = 1)
+        AnimatedVisibility(song != null, enter = Theme.arrive, exit = Theme.depart) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Symbol("music.note", size = 10f, tint = Theme.muted)
+                KitText(song?.title ?: "", font = Font(10.5f), color = Theme.muted, lines = 1)
             }
         }
     }

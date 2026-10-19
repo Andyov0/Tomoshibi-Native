@@ -26,4 +26,19 @@ class CallWindowTest {
     fun noPictureYetIsSixteenByNine() {
         assertEquals(16 to 9, CallWindow.aspect(0, 0))
     }
+
+    /*
+     * The window's size follows its shape and nothing else an app can say, so
+     * a call with no picture asks for the square one, the smallest: it was
+     * sixteen by nine around a single initial ("画中画大小太大了", 2026-10-19).
+     * What has a picture keeps the picture's shape, the video watched together
+     * and a shared screen their wide one.
+     */
+    @Test
+    fun aCallWithNoPictureAsksForTheSmallestWindow() {
+        assertEquals(1 to 1, CallWindow.windowShape(null))
+        assertEquals(1778 to 1000, CallWindow.windowShape(1778 to 1000))
+        assertEquals(1920 to 1080, CallWindow.windowShape(1920 to 1080))
+        assertEquals(720 to 960, CallWindow.windowShape(720 to 960))
+    }
 }

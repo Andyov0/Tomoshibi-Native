@@ -98,7 +98,7 @@ object CallWindow {
     data class Wanted(
         /** A call is showing: leaving the app opens the small window. */
         val inCall: Boolean = false,
-        /** The shown picture's width and height as it is shown, or null for none yet. */
+        /** What it shows' width and height as it is shown, or null where it shows no picture: a square window, the smallest. */
         val shape: Pair<Int, Int>? = null,
         val microphone: Boolean = false,
     )
@@ -198,8 +198,7 @@ object CallWindow {
 
     private fun params(activity: Activity): PictureInPictureParams {
         val builder = PictureInPictureParams.Builder()
-        val (w, h) = wanted.shape ?: (16 to 9)
-        val (across, down) = aspect(w, h)
+        val (across, down) = windowShape(wanted.shape)
         builder.setAspectRatio(Rational(across, down))
         builder.setActions(actions(activity))
         stage?.let { builder.setSourceRectHint(it) }
@@ -230,6 +229,9 @@ object CallWindow {
         val intent: PendingIntent = CallKeeper.broadcast(activity, control)
         return RemoteAction(Icon.createWithResource(activity, icon), title, title, intent)
     }
+
+    /** The window's shape for what it shows: that picture's, kept within Android's bounds, or square with no picture, the smallest window Android draws. */
+    internal fun windowShape(shape: Pair<Int, Int>?): Pair<Int, Int> = shape?.let { (w, h) -> aspect(w, h) } ?: (1 to 1)
 
     /** The picture's shape within what Android allows a small window to be (between 1:2.39 and 2.39:1). */
     internal fun aspect(width: Int, height: Int): Pair<Int, Int> {
