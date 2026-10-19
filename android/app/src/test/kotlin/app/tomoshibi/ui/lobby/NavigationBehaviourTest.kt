@@ -215,6 +215,33 @@ class NavigationBehaviourTest {
         assertEquals(0, compose.onAllNodesWithText("Start new meeting").fetchSemanticsNodes().size)
     }
 
+    /**
+     * The server picker on the join screen of somebody signed in who came by
+     * an invitation, pressed: the lobby's list opens over the pane, the relay
+     * out of service does not take a press, and a relay pressed is the
+     * lobby's own choice and what the button says.
+     */
+    @Test
+    fun theJoinScreensServerPickerChoosesTheLobbysRelay() {
+        val app = fakeApp(screen = Screen.Prejoin)
+        app.stage("invitation", invitation())
+        app.stage("arrivedByLink", true)
+        app.room = "design-review"
+        compose.setContent { TestApp(app) }
+        settle()
+        compose.onNodeWithText("Server").assertExists()
+        compose.onNodeWithText("Automatic").performClick()
+        settle()
+        compose.onNodeWithText("Los Angeles").performClick()
+        settle()
+        assertEquals(null, app.relayChoice)
+        compose.onNodeWithText("Hong Kong").performClick()
+        settle()
+        assertEquals("hongkong", app.relayChoice)
+        assertEquals(0, compose.onAllNodesWithText("Automatic").fetchSemanticsNodes().size)
+        compose.onNodeWithText("Hong Kong").assertExists()
+    }
+
     /** In a window as wide as an unfolded Fold, the app drawn first in a phone's width of it and then in all of it. */
     @Test
     @Config(qualifiers = WIDE)

@@ -357,6 +357,27 @@ public final class AppModel {
         return relays.measure && relays.relays.count > 1
     }
 
+    /// Whether the join screen and the meeting's waiting screen offer the
+    /// server picker: where there is a choice, to somebody who did not come
+    /// to them through the lobby. Somebody signed in who starts or joins from
+    /// the lobby has its picker in the sheet they press Join in, and goes
+    /// straight into the call; somebody who opened an invitation or a
+    /// meeting's link, signed in or not, or who is not signed in at all, never
+    /// sees the lobby's picker, and could not choose (the owner, 2026-10-19).
+    /// The web's join screen offers it in the same place (PreJoin.tsx,
+    /// `offerChoice`), and it is the lobby's own choice, `relayChoice`, so a
+    /// machine picked on either is the one the other says.
+    public var offersRelayChoiceAtTheDoor: Bool {
+        offersRelayChoice && (account == nil || arrivedByLink)
+    }
+
+    /// The screen before a call was reached by a link (an invitation, a
+    /// meeting, a room's address), handed over by the system or pasted, and
+    /// not by the lobby's own join. Kept until the person goes back to the
+    /// lobby, so a join that is refused, or a move that fails, comes back to
+    /// the same screen with the same picker on it.
+    public private(set) var arrivedByLink = false
+
     /// A relay remembered from before that this deployment does not offer,
     /// or no longer takes calls on, would be sent with every join and
     /// refused, or honoured for a machine nobody can see in the picker.
@@ -379,6 +400,9 @@ public final class AppModel {
     /// still out is called off instead: the link is where they now mean to
     /// go.
     public func open(_ url: URL) async {
+        #if DEBUG
+        linksOpened += 1
+        #endif
         if let call {
             call.announce(CallToast(t("Leave this call to open that link."), lasts: NoticeTimes.atMost))
             return
@@ -411,6 +435,7 @@ public final class AppModel {
         }
         if let meeting {
             if !linkRoom.isEmpty { room = linkRoom }
+            arrivedByLink = true
             wait(for: meeting, on: deployment)
             return
         }
@@ -433,6 +458,7 @@ public final class AppModel {
                 } else {
                     tell(t("That invitation is no longer good. Ask for another."))
                 }
+                arrivedByLink = false
                 screen = .lobby
                 return
             }
@@ -444,12 +470,16 @@ public final class AppModel {
             // somebody signed in is taken anywhere by one of those.
             guard account != nil else {
                 tell(t("{room} is by invitation. Ask the organiser for a link.", ["room": linkRoom]))
+                arrivedByLink = false
                 screen = .lobby
                 return
             }
             room = linkRoom
         }
-        if !room.isEmpty { screen = .prejoin }
+        if !room.isEmpty {
+            arrivedByLink = true
+            screen = .prejoin
+        }
     }
 
     /// The name an invitation was made for, which is the name the guest will
@@ -599,6 +629,7 @@ public final class AppModel {
         }
         self.room = room.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         problem = nil
+        arrivedByLink = false
         screen = .prejoin
     }
 
@@ -611,6 +642,7 @@ public final class AppModel {
         }
         self.room = room.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         problem = nil
+        arrivedByLink = false
         await join()
     }
 
@@ -767,6 +799,10 @@ public final class AppModel {
     /// twice asks once.
     @ObservationIgnored private(set) var lastJoinRelay: String?
     @ObservationIgnored private(set) var joinsAnswered = 0
+    /// How many links the app was handed, for a test that a universal link
+    /// arrives once and not twice (SwiftUI could hand one to `onOpenURL` and
+    /// to a user-activity handler both).
+    @ObservationIgnored private(set) var linksOpened = 0
     #endif
 
     /// The server moved the call to another relay; the web rejoins at once
@@ -868,6 +904,7 @@ public final class AppModel {
         problem = nil
         invite = nil
         invitation = nil
+        arrivedByLink = false
         stopWaitingTasks()
         arrangement = nil
     }
@@ -1011,6 +1048,7 @@ public final class AppModel {
         arrangement = nil
         meetingToken = nil
         waiting = Waiting()
+        arrivedByLink = false
         screen = .lobby
     }
 

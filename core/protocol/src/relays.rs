@@ -9,15 +9,19 @@
 //!   measurement (`measure`), and then never a relay kept for administrators or
 //!   one out of service;
 //! - a list of fewer than two is answered without measuring;
-//! - where every candidate advertises a STUN `probe`, one round trip over UDP is
+//! - where every candidate advertises a STUN `probe`, round trips over UDP are
 //!   timed to each; if any of them does not answer, every relay is timed the
 //!   other way instead, so the readings stay comparable;
 //! - otherwise the signalling socket, `<url>/rtc`, is opened with no token, and
 //!   whatever comes back first (the upgrade, the refusal, or an error) is the
 //!   answer;
-//! - 1.5 s per probe, all at once, the fastest wins and ties go to the earlier
-//!   relay in the list; the winner is trusted for five minutes, and [`forget`]
-//!   drops it when a call is lost.
+//! - each relay is timed in [`ROUNDS`] rounds, one after another, every relay
+//!   at once, each round given 1.5 s; a reading is the median of the rounds
+//!   that answered, and a relay that answered fewer than [`QUORUM`] has not
+//!   answered, whichever way it was timed, so its rounds stop at its third
+//!   miss; over UDP the first relay out stops everybody's UDP rounds;
+//! - the fastest wins and ties go to the earlier relay in the list; the winner
+//!   is trusted for five minutes, and [`forget`] drops it when a call is lost.
 //!
 //! Two things differ from the browser, both because a browser cannot do them.
 //! The UDP round trip is a bare STUN binding request (RFC 5389) sent from a
@@ -31,24 +35,55 @@
 
 use std::{
     collections::HashMap,
+    future::Future,
     net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
     sync::{Mutex, OnceLock},
     time::{Duration, Instant},
 };
 
 use base64::Engine as _;
-use futures_util::future::join_all;
+use futures_util::{future::join_all, stream::FuturesUnordered, StreamExt as _};
 use serde_json::Value;
 use tokio::{io::AsyncWriteExt as _, net::UdpSocket};
 
 use crate::ProtocolError;
 
-/// How long one relay is given to answer (relays.ts, `PROBE_TIMEOUT_MS`).
+/// How long one round with one relay is given to answer (relays.ts,
+/// `PROBE_TIMEOUT_MS`).
 ///
 /// This sits between somebody pressing join and their call starting. A relay
 /// that has not answered in a second and a half is not the one to hold a
-/// conversation on, and one that is down must cost no more than this.
+/// conversation on. A round that runs out is a round the relay missed, and a
+/// relay that is down is given up on at its third ([`QUORUM`]), so it costs
+/// three of these over each kind of reading rather than five.
 pub const PROBE_TIMEOUT: Duration = Duration::from_millis(1500);
+
+/// How many times each relay is timed, one round after another (the owner's
+/// rule of 2026-10-19, which the web follows in relays.ts).
+///
+/// One reading was not a measurement: the first round trip to a relay comes
+/// back slow far more often than the rest (a name to resolve, a route and a
+/// NAT mapping to be made, a radio to wake), so a single reading ranked
+/// relays by which one happened to pay for that, and the picker showed a
+/// number for the nearest machine that the call on it never had. Five, and
+/// the median of them, lets one bad round fall out without letting one good
+/// one decide. In turn rather than at once, because rounds sent together
+/// share the slow start instead of leaving it behind; every relay is timed
+/// at the same time as the others, as before, so the wait is the slowest
+/// relay's five round trips and not the sum of everybody's.
+pub const ROUNDS: usize = 5;
+
+/// How many of the [`ROUNDS`] a relay has to answer to have a reading at all,
+/// over UDP and over the socket alike (relays.ts, `ENOUGH`).
+///
+/// The median of one or two answers is the single reading this replaced, and
+/// a relay that drops more than half of what it is sent is not one to put a
+/// call on however quick the rounds that came back. Over UDP a relay short of
+/// this is a broken probe port, which the all-or-nothing rule in [`measure`]
+/// exists to make visible: it sends the whole list to the signalling socket.
+/// It is also what bounds the wait: once a relay has missed three it cannot
+/// reach three answers, and is not asked again.
+pub const QUORUM: usize = 3;
 
 /// How long a choice is trusted before it is measured again (relays.ts,
 /// `CACHE_MS`): long enough that three joins in a row measure once, short
@@ -352,19 +387,93 @@ pub async fn relay_timings(relays: Vec<Relay>) -> Vec<RelayTiming> {
 /// One kind of reading for the whole list, never a mixture: a STUN answer is
 /// one round trip and the socket is about three, and ranking the two together
 /// hands the call to whichever relays happen to have a probe configured. So
-/// one probe that fails sends everybody the slower way, which keeps every
-/// number comparable and makes a broken probe port visible.
+/// one probe short of its [`QUORUM`] sends everybody the slower way, which
+/// keeps every number comparable and makes a broken probe port visible.
 async fn measure(list: &[Relay]) -> Vec<(String, Option<Duration>)> {
     let probed = |relay: &Relay| relay.probe.as_deref().is_some_and(|probe| !probe.is_empty());
 
     if !list.is_empty() && list.iter().all(probed) {
-        let took = join_all(list.iter().map(over_udp)).await;
-        if took.iter().all(Option::is_some) {
-            return answered(list, took);
+        if let Some(took) = over_udp(list).await {
+            return answered(list, took.into_iter().map(Some).collect());
         }
     }
 
     answered(list, join_all(list.iter().map(over_signalling)).await)
+}
+
+/// Up to [`ROUNDS`] readings taken one after another (relays.ts, `inRounds`),
+/// the rounds that answered, in order.
+///
+/// A round that brings nothing (refused outright, or the whole
+/// [`PROBE_TIMEOUT`] with its retransmissions and no answer) is a miss and the
+/// next round is taken all the same, since one lost round is not a relay
+/// that is down. At the third miss the relay can no longer reach [`QUORUM`]
+/// answers, and is not asked again: a dead relay costs three timeouts, not
+/// five.
+async fn rounds<F, R>(mut round: F) -> Vec<Duration>
+where
+    F: FnMut() -> R,
+    R: Future<Output = Option<Duration>>,
+{
+    let mut took = Vec::with_capacity(ROUNDS);
+    let mut missed = 0;
+
+    for _ in 0..ROUNDS {
+        match round().await {
+            Some(one) => took.push(one),
+            None => {
+                missed += 1;
+                if missed > ROUNDS - QUORUM {
+                    break;
+                }
+            }
+        }
+    }
+
+    took
+}
+
+/// The median of the rounds that answered, where at least [`QUORUM`] did
+/// (relays.ts, `reading`).
+///
+/// Of the rounds that answered rather than of all five with the misses
+/// counted as slow: a miss is no reading, and a relay that answered four
+/// times in thirty milliseconds and once not at all is a thirty-millisecond
+/// relay that dropped a packet. The middle one of an odd number; of four, the
+/// mean of the middle two, which is what a median of four is. The web takes it
+/// the same way, so a browser and an app on one network rank alike.
+fn reading(took: &[Duration]) -> Option<Duration> {
+    if took.len() < QUORUM {
+        return None;
+    }
+
+    let mut sorted = took.to_vec();
+    sorted.sort_unstable();
+
+    let middle = sorted.len() / 2;
+    if sorted.len() % 2 == 1 {
+        Some(sorted[middle])
+    } else {
+        Some((sorted[middle - 1] + sorted[middle]) / 2)
+    }
+}
+
+/// What a debug build says about each relay it timed, on standard error: the
+/// rounds and what was made of them, which is the only way to see why a call
+/// went where it did. Nothing in a release build.
+fn report(name: &str, over: &str, took: &[Duration], made: Option<Duration>) {
+    if !cfg!(debug_assertions) {
+        return;
+    }
+
+    let ms = |one: &Duration| format!("{:.1}", one.as_secs_f64() * 1000.0);
+    let rounds = took.iter().map(ms).collect::<Vec<_>>().join(", ");
+    let made = match made {
+        Some(one) => format!("median {} ms", ms(&one)),
+        None => "no reading".to_owned(),
+    };
+
+    eprintln!("tomoshibi relays: {name} over {over}: {} answered [{rounds}] ms, {made}", took.len());
 }
 
 /// Pairs readings with names the way the web's `Map` does: one entry per name,
@@ -382,36 +491,91 @@ fn answered(list: &[Relay], took: Vec<Option<Duration>>) -> Vec<(String, Option<
     out
 }
 
-/// One round trip over UDP to the relay's probe, or nothing.
+/// Every relay's reading over UDP, in the list's order, or nothing at all
+/// when any one of them has none.
 ///
-/// Timed from before the name is resolved, as the browser's clock starts
-/// before it resolves the STUN server's, to the first valid answer.
-async fn over_udp(relay: &Relay) -> Option<Duration> {
-    let probe = relay.probe.as_deref()?;
-    let started = Instant::now();
+/// The probes' names are resolved first, all at once and before any clock
+/// starts. The single reading used to start its clock before resolving, so
+/// the first number for every relay included a DNS lookup, which is the
+/// device's network and not the relay's, and was much of why the first round
+/// was always the slow one. A name that will not resolve within the timeout
+/// is no reading, as before.
+///
+/// Every relay is then timed at once, and the moment one of them cannot have
+/// a reading the rest are dropped, rounds in flight and all (relays.ts,
+/// `inRounds` with `together`): the list is going to the signalling socket
+/// whatever they say, and their remaining rounds would only delay that.
+async fn over_udp(list: &[Relay]) -> Option<Vec<Duration>> {
+    let targets = join_all(list.iter().map(|relay| async move {
+        let probe = relay.probe.as_deref()?;
+        tokio::time::timeout(PROBE_TIMEOUT, resolve(probe)).await.ok().flatten()
+    }))
+    .await;
+    let targets: Vec<SocketAddr> = targets.into_iter().collect::<Option<_>>()?;
 
-    tokio::time::timeout(PROBE_TIMEOUT, binding(probe)).await.ok().flatten()?;
+    let mut pending: FuturesUnordered<_> = list
+        .iter()
+        .zip(targets)
+        .enumerate()
+        .map(|(at, (relay, target))| async move { (at, over_udp_to(&relay.name, target).await) })
+        .collect();
 
-    Some(started.elapsed())
+    let mut took = vec![Duration::ZERO; list.len()];
+    while let Some((at, one)) = pending.next().await {
+        took[at] = one?;
+    }
+
+    Some(took)
 }
 
-/// The relay's signalling socket, opened and timed, or nothing.
+/// One relay's reading over UDP: its rounds, each a new binding request from
+/// a new socket, as each of the web's rounds is a new peer connection, and
+/// their [`reading`].
+///
+/// Each round is timed from just before its request is sent to its answer.
+async fn over_udp_to(name: &str, target: SocketAddr) -> Option<Duration> {
+    let took = rounds(|| async move {
+        let started = Instant::now();
+        tokio::time::timeout(PROBE_TIMEOUT, binding_at(target)).await.ok().flatten()?;
+        Some(started.elapsed())
+    })
+    .await;
+
+    let made = reading(&took);
+    report(name, "udp", &took, made);
+    made
+}
+
+/// The relay's signalling socket, opened and timed in rounds, or nothing.
 ///
 /// Any answer counts: the upgrade accepted, the missing token refused, or the
 /// connection failing outright. That is what relays.ts does, taking `open`,
 /// `close` and `error` alike, because a refusal is a complete round trip. A
 /// relay without an address, or with one a browser would not open a socket to,
-/// has no reading, as the browser's constructor throwing gives none.
+/// has no reading, as the browser's constructor throwing gives none. Every
+/// round is a connection of its own (the prober keeps none), as each of the
+/// web's is a new WebSocket, and the rounds come to their [`reading`] as they
+/// do over UDP; one relay out here stops nobody else, there being no other
+/// way left to time them.
 async fn over_signalling(relay: &Relay) -> Option<Duration> {
     let target = signalling(relay.url.as_deref()?)?;
     // Built before the clock starts: the first build loads the system's
     // certificate roots, which is the device's time and not the relay's.
     let client = prober()?;
 
-    let started = Instant::now();
-    tokio::time::timeout(PROBE_TIMEOUT, open(&client, target)).await.ok()?;
+    let took = rounds(|| {
+        let (client, target) = (&client, target.clone());
+        async move {
+            let started = Instant::now();
+            tokio::time::timeout(PROBE_TIMEOUT, open(client, target)).await.ok()?;
+            Some(started.elapsed())
+        }
+    })
+    .await;
 
-    Some(started.elapsed())
+    let made = reading(&took);
+    report(&relay.name, "signalling", &took, made);
+    made
 }
 
 /// Where the probe's socket goes: `<url>/rtc`, with trailing slashes on the
@@ -498,15 +662,19 @@ async fn open(client: &reqwest::Client, target: url::Url) {
     }));
 }
 
-/// The STUN answer to one binding request: the address the far end saw.
-///
-/// Sent from a fresh socket to the address `probe` names, and retransmitted
-/// unchanged, the same transaction, until an answer or the caller's deadline.
-/// Nothing but the 20-byte binding request ever leaves the socket: no
-/// attributes, no credentials, no second message.
+/// The STUN answer to one binding request to the server `probe` names: the
+/// address the far end saw. See [`binding_at`].
 pub(crate) async fn binding(probe: &str) -> Option<SocketAddr> {
-    let target = resolve(probe).await?;
+    binding_at(resolve(probe).await?).await
+}
 
+/// The STUN answer to one binding request to `target`.
+///
+/// Sent from a fresh socket, and retransmitted unchanged, the same
+/// transaction, until an answer or the caller's deadline. Nothing but the
+/// 20-byte binding request ever leaves the socket: no attributes, no
+/// credentials, no second message.
+async fn binding_at(target: SocketAddr) -> Option<SocketAddr> {
     let local = match target {
         SocketAddr::V4(_) => SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
         SocketAddr::V6(_) => SocketAddr::new(IpAddr::V6(Ipv6Addr::UNSPECIFIED), 0),
@@ -747,6 +915,64 @@ mod tests {
 
         assert_eq!(best(&took), Some("hongkong".into()));
         assert_eq!(best(&[("shanghai".to_owned(), None)]), None);
+    }
+
+    // The rule the web shares, on readings no socket can be made to produce
+    // exactly: the slow first round falls out, an even count takes the mean
+    // of the middle two, and the order the rounds came in is not the order
+    // they are ranked in.
+    #[test]
+    fn a_reading_is_the_median_of_the_rounds_that_answered() {
+        let ms = Duration::from_millis;
+
+        assert_eq!(reading(&[ms(180), ms(31), ms(30), ms(33), ms(29)]), Some(ms(31)));
+        assert_eq!(reading(&[ms(40), ms(10), ms(30), ms(20)]), Some(ms(25)));
+        assert_eq!(reading(&[ms(90), ms(12), ms(11)]), Some(ms(12)));
+    }
+
+    #[test]
+    fn fewer_than_three_answers_are_no_reading() {
+        let ms = Duration::from_millis;
+
+        assert_eq!(QUORUM, 3);
+        assert_eq!(reading(&[ms(10), ms(11)]), None);
+        assert_eq!(reading(&[ms(10)]), None);
+        assert_eq!(reading(&[]), None);
+        assert!(reading(&[ms(10), ms(11), ms(12)]).is_some());
+    }
+
+    /// Runs `rounds` over answers given in order (`None` is a round that
+    /// brought nothing), and says how many rounds were asked for.
+    fn ran(answers: &[Option<u64>]) -> (Vec<Duration>, usize) {
+        let asked = std::cell::Cell::new(0);
+        let took = futures_util::FutureExt::now_or_never(rounds(|| {
+            let at = asked.get();
+            asked.set(at + 1);
+            let answer = answers.get(at).copied().flatten().map(Duration::from_millis);
+            async move { answer }
+        }))
+        .expect("rounds that never wait finish at once");
+
+        (took, asked.get())
+    }
+
+    #[test]
+    fn five_rounds_and_none_after_the_third_miss() {
+        let ms = Duration::from_millis;
+
+        // Five, and not a sixth however many more would answer.
+        let every = [Some(5), Some(6), Some(7), Some(8), Some(9), Some(10), Some(11)];
+        assert_eq!(ran(&every), (vec![ms(5), ms(6), ms(7), ms(8), ms(9)], ROUNDS));
+
+        // A missed round is not the end: the next is taken, the first round
+        // included, which is the one most likely to be lost.
+        assert_eq!(ran(&[None, Some(6), Some(7), Some(8), Some(9)]), (vec![ms(6), ms(7), ms(8), ms(9)], ROUNDS));
+        assert_eq!(ran(&[Some(5), None, Some(7), None, Some(9)]), (vec![ms(5), ms(7), ms(9)], ROUNDS));
+
+        // At the third miss three answers are out of reach, and the relay is
+        // not asked again.
+        assert_eq!(ran(&[None, None, Some(7), None, Some(9)]), (vec![ms(7)], 4));
+        assert_eq!(ran(&[None, None, None, Some(8), Some(9)]), (vec![], 3));
     }
 
     #[test]

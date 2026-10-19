@@ -457,6 +457,31 @@ class AppModel(
         }
 
     /**
+     * Whether the join screen and the meeting's waiting screen offer the
+     * server picker (AppModel.swift `offersRelayChoiceAtTheDoor`): where there
+     * is a choice, to somebody who did not come to them through the lobby.
+     * Somebody signed in who starts or joins from the lobby has its picker in
+     * the sheet they press Join in, and goes straight into the call; somebody
+     * who opened an invitation or a meeting's link, signed in or not, or who
+     * is not signed in at all, never sees the lobby's picker, and could not
+     * choose (the owner, 2026-10-19). The web's join screen offers it in the
+     * same place (PreJoin.tsx, `offerChoice`), and it is the lobby's own
+     * choice, [relayChoice].
+     */
+    val offersRelayChoiceAtTheDoor: Boolean
+        get() = offersRelayChoice && (account == null || arrivedByLink)
+
+    /**
+     * The screen before a call was reached by a link (an invitation, a
+     * meeting, a room's address), handed over by the system or pasted, and
+     * not by the lobby's own join. Kept until the person goes back to the
+     * lobby, so a join that is refused, or a move that fails, comes back to
+     * the same screen with the same picker on it.
+     */
+    var arrivedByLink by mutableStateOf(false)
+        private set
+
+    /**
      * A relay remembered from before that this deployment does not offer, or
      * no longer takes calls on, would be sent with every join and refused.
      */
@@ -500,6 +525,7 @@ class AppModel(
         }
         if (parts.meeting != null) {
             if (parts.room.isNotEmpty()) room = parts.room
+            arrivedByLink = true
             wait(parts.meeting, deployment)
             return
         }
@@ -527,6 +553,7 @@ class AppModel(
                     error == "rate_limited" -> tell(t("Too many attempts. Try again in a moment."))
                     else -> tell(t("That invitation is no longer good. Ask for another."))
                 }
+                arrivedByLink = false
                 screen = Screen.Lobby
                 return
             }
@@ -538,12 +565,16 @@ class AppModel(
             // somebody signed in is taken anywhere by one of those.
             if (account == null) {
                 tell(t("{room} is by invitation. Ask the organiser for a link.", mapOf("room" to parts.room)))
+                arrivedByLink = false
                 screen = Screen.Lobby
                 return
             }
             room = parts.room
         }
-        if (room.isNotEmpty()) screen = Screen.Prejoin
+        if (room.isNotEmpty()) {
+            arrivedByLink = true
+            screen = Screen.Prejoin
+        }
     }
 
     /** The name an invitation was made for, which the guest will wear whatever is typed (PreJoin.tsx `locked`). */
@@ -677,6 +708,7 @@ class AppModel(
         }
         this.room = room.trim().lowercase()
         problem = null
+        arrivedByLink = false
         screen = Screen.Prejoin
     }
 
@@ -688,6 +720,7 @@ class AppModel(
         }
         this.room = room.trim().lowercase()
         problem = null
+        arrivedByLink = false
         join()
     }
 
@@ -921,6 +954,7 @@ class AppModel(
         problem = null
         invite = null
         invitation = null
+        arrivedByLink = false
         stopWaitingTasks()
         arrangement = null
     }
@@ -1055,6 +1089,7 @@ class AppModel(
         arrangement = null
         meetingToken = null
         waiting = Waiting()
+        arrivedByLink = false
         screen = Screen.Lobby
     }
 

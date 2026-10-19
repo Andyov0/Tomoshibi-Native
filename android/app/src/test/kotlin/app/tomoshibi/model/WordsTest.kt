@@ -123,6 +123,13 @@ class WordsTest {
         assertEquals("abc", meeting.meeting)
         assertEquals("standup", meeting.room)
 
+        // What the deployment's invitation page hands the app when it opens
+        // it: tomoshibi://<host>/?invite=<token>#/<room>.
+        val handed = OpenedLink.parse("tomoshibi://meet.example.com/?invite=Ab-_9xYz#/team-room")!!
+        assertEquals("Ab-_9xYz", handed.invite)
+        assertEquals("team-room", handed.room)
+        assertTrue(handed.isFor("https://meet.example.com/"))
+
         val bare = OpenedLink.parse("https://meet.example.com/#/plain")!!
         assertNull(bare.invite)
         assertEquals("plain", bare.room)

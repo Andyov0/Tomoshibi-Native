@@ -340,8 +340,8 @@ impl Api {
         invite: Option<&str>,
     ) -> Result<JoinGrant, ProtocolError> {
         // Measured only where nobody chose: a relay picked by hand overrules
-        // the measurement, and taking one anyway would be a second and a half
-        // of waiting for an answer already overruled.
+        // the measurement, and taking one anyway would be five rounds to every
+        // relay of waiting for an answer already overruled.
         let measured;
         let relay = if relay.is_empty() {
             measured = self.preferred_relay().await;
