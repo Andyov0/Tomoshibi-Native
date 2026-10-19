@@ -86,7 +86,25 @@ internal class Tap : Button
     protected override void OnContentChanged(object oldContent, object newContent)
     {
         base.OnContentChanged(oldContent, newContent);
-        if (newContent is UIElement inside) inside.Opacity = IsEnabled ? 1 : 0.45;
+        if (newContent is UIElement inside) inside.Opacity = IsEnabled ? _faint : 0.45;
+    }
+
+    private double _faint = 1;
+
+    /// <summary>
+    /// Drawn faint while still pressable (Notices.kt <c>RoundButton</c>
+    /// <c>faint</c>): a press that will be refused, and is kept so the
+    /// reason can be said. Set on the content here because Paint sets the
+    /// content's opacity on every change and would undo it set from outside.
+    /// </summary>
+    public double Faint
+    {
+        get => _faint;
+        set
+        {
+            _faint = value;
+            Paint();
+        }
     }
 
     public Look Look
@@ -159,7 +177,7 @@ internal class Tap : Button
         Background = Ink.Brush(Dim(!enabled ? rest : _down ? down : _over ? over : rest, enabled));
         BorderBrush = edge is { } e ? Ink.Brush(Dim(e, enabled)) : null;
         BorderThickness = new Thickness(edge != null ? 1 : 0);
-        if (Content is UIElement inside) inside.Opacity = enabled ? 1 : 0.45;
+        if (Content is UIElement inside) inside.Opacity = enabled ? _faint : 0.45;
         Motion.ScaleTo(this, _down && enabled ? 0.96f : 1f);
     }
 

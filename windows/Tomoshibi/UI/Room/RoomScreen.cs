@@ -23,7 +23,22 @@ namespace Tomoshibi.UI.Room;
 /// </summary>
 internal sealed class RoomScreen : Screen
 {
-    public enum Panel { Messages, Devices }
+    public enum Panel { Messages, Sound, Watch, Music, Host, Devices }
+
+    /// <summary>Who has this participant's own share on their stage, and the eye with the count where there is no room beside a panel.</summary>
+    private const string MyShare = "me/screen";
+    public const string WatchStage = "watch/stage";
+
+    private readonly HostFeature _host;
+    private readonly Arrivals _doorRows = new();
+    private Grid? _watchersHost;
+    private WatchersCard? _watchers;
+    private bool? _watchersCompact;
+    private Grid? _strainHost;
+    private StrainHint? _strainShown;
+    private Grid? _movingHost;
+    private string? _movingShown;
+    private Offers _offers = new();
 
     public readonly CallModel Call;
     public new AppModel App => base.App;
@@ -62,6 +77,13 @@ internal sealed class RoomScreen : Screen
     public RoomScreen(AppModel app, CallModel call) : base(app)
     {
         Call = call;
+        _host = HostFeature.Of(call);
+        // The door's notice carries the people outside with both answers,
+        // so a knock is answered where it is read.
+        call.Attachments[HostFeature.Door] = () => new DoorList(_host, _doorRows);
+        _ = _host.Run();
+        _host.Changed += Update;
+        call.Sharing.Changed += Update;
         Background = Ink.Background;
         Children.Add(_pictures);
         Children.Add(_chrome);
@@ -87,12 +109,22 @@ internal sealed class RoomScreen : Screen
         Update();
     }
 
+    /// <summary>Whether the launch's TOMOSHIBI_SHOW has been opened: once, in the first call, not again in the call a move rejoins.</summary>
+    private static bool _launchShown;
+
     private void OpenFromLaunch()
     {
+        if (_launchShown) return;
+        _launchShown = true;
         switch (App.Launch.Show)
         {
             case "chat": Toggle(Panel.Messages); break;
             case "devices": Toggle(Panel.Devices); break;
+            case "sound": Toggle(Panel.Sound); break;
+            case "host": Toggle(Panel.Host); break;
+            case "watch": Toggle(Panel.Watch); break;
+            case "music": Toggle(Panel.Music); break;
+            case "share": _bar?.OpenShare(); break;
             case "leave": _bar?.OpenLeave(); break;
         }
     }
@@ -102,6 +134,8 @@ internal sealed class RoomScreen : Screen
     public override void Gone()
     {
         Call.Changed -= Update;
+        _host.Changed -= Update;
+        Call.Sharing.Changed -= Update;
         _stats.Stop();
         _idle.Stop();
         Report();
@@ -164,14 +198,29 @@ internal sealed class RoomScreen : Screen
         _toasts = new ToastStack(Call) { Margin = new Thickness(0, 0, 16, Plan.Island + 8) };
         _chrome.Children.Add(_toasts);
 
+        _watchersHost = new Grid { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top };
+        _watchers = null;
+        _watchersCompact = null;
+        _chrome.Children.Add(_watchersHost);
+
         _panelHost = new Grid { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top };
         _chrome.Children.Add(_panelHost);
+
+        _strainHost = new Grid { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Bottom };
+        _strainShown = null;
+        _chrome.Children.Add(_strainHost);
 
         _bar = new ControlBar(this, Call);
         _barHost = new Grid { VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 20), Children = { _bar } };
         _barHost.Arrives(1f, fromY: 110);
         _chrome.Children.Add(_barHost);
         _aloneSaid = null;
+
+        // Over everything, the controls included: drawn under them, the bar
+        // stayed pressable through "you will be back in a moment".
+        _movingHost = new Grid();
+        _movingShown = null;
+        _chrome.Children.Add(_movingHost);
     }
 
     // The model
@@ -185,9 +234,14 @@ internal sealed class RoomScreen : Screen
         _chat?.Update();
         _said!.Update();
         _toasts!.Update();
+        (_panelShown as SoundPanel)?.Update();
+        (_panelShown as HostPanel)?.Update();
         UpdateNotice();
         UpdateAlone();
+        UpdateStrain();
+        UpdateMoving();
         Lay();
+        UpdateWatchers();
     }
 
     private string? _noticeSaid;
@@ -238,6 +292,8 @@ internal sealed class RoomScreen : Screen
         var rank = order.Select((id, i) => (id, i)).ToDictionary(p => p.id, p => p.i);
         surfaces = all.ToDictionary(s => s.Id);
         var ids = new List<string> { "me/camera" };
+        // This participant's own share is a picture of its own (surface.ts ~91).
+        if (Call.Sharing.Active) ids.Add(MyShare);
         ids.AddRange(all.Select((s, i) => (s, i))
             .OrderBy(p => rank.TryGetValue(p.s.Person.Id, out var r) ? r : int.MaxValue)
             .ThenBy(p => p.i)
@@ -251,6 +307,13 @@ internal sealed class RoomScreen : Screen
         var ids = Pictures(out var surfaces);
         var shares = surfaces.Values.Where(s => s.Kind == Surface.Kinds.Screen).Select(s => s.Id).ToList();
         _pin = _pin.Update(ids, shares);
+        // The sharer whose screen is on this participant's stage, or "" (the
+        // web's `watched`): written to the `watching` attribute so a sharer
+        // can see who is looking at their screen. Only a share actually on
+        // the stage counts; one sitting in the strip as a card is a thing
+        // nobody has opened.
+        var stageOwner = _pin.Pinned is { } pinned && surfaces.TryGetValue(pinned, out var staged) && staged.Kind == Surface.Kinds.Screen ? staged.Person.Id : "";
+        _ = Call.SetWatching(stageOwner);
         if (_pin.Pinned == null && _filled) Unfill();
         var size = new Size((float)ActualWidth, (float)ActualHeight);
         var room = Planned(ids);
@@ -276,7 +339,8 @@ internal sealed class RoomScreen : Screen
             ShowTile(tile, id, surfaces);
         }
 
-        _bar.Fit(ActualWidth);
+        _offers = MakeOffers();
+        _bar.Fit(ActualWidth, _offers);
         LayPager(room, size);
         LayPanel(size);
         LiftNames();
@@ -291,7 +355,7 @@ internal sealed class RoomScreen : Screen
     private void LiftNames()
     {
         if (_bar == null) return;
-        var barWidth = _bar.ActualWidth > 0 ? _bar.ActualWidth : ControlBar.FullLength;
+        var barWidth = _bar.ActualWidth > 0 ? _bar.ActualWidth : _bar.FullLength;
         var left = (ActualWidth - barWidth) / 2;
         var right = left + barWidth;
         var bottom = ActualHeight - 20;
@@ -306,11 +370,19 @@ internal sealed class RoomScreen : Screen
     private void ShowTile(Tile tile, string id, Dictionary<string, Surface> surfaces)
     {
         var onStage = _pin.Pinned == id;
+        var controls = onStage && _barShown ? StageControlsFor(id, surfaces) : null;
         if (id == "me/camera")
         {
             tile.Show(T("{name} (you)", ("name", Call.LocalName)), Call.LocalIdentity, Call.LocalName, null, Call.CameraOn, mine: true,
                 speaking: Call.MeSpeaking && Call.MicrophoneOn, muted: !Call.MicrophoneOn, hand: Call.HandUp,
-                selected: onStage, onStage: onStage, filled: _filled, Call.Reactions.Where(r => r.From == Call.LocalIdentity));
+                selected: onStage, onStage: onStage, filled: _filled, Call.Reactions.Where(r => r.From == Call.LocalIdentity), controls: controls);
+            return;
+        }
+        if (id == MyShare)
+        {
+            tile.Show(T("{name} (you)", ("name", T("{name} (screen)", ("name", Call.LocalName)))), Call.LocalIdentity, Call.LocalName, null, false, mine: true,
+                speaking: false, muted: false, hand: false, selected: onStage, onStage: onStage, filled: _filled, Array.Empty<ShownReaction>(),
+                face: new Tile.Face.MyShare(() => _ = Call.Sharing.StopScreen()), controls: controls);
             return;
         }
         if (!surfaces.TryGetValue(id, out var surface)) return;
@@ -318,9 +390,121 @@ internal sealed class RoomScreen : Screen
         var camera = surface.Kind == Surface.Kinds.Camera;
         var name = person.Shown;
         var microphone = person.Track(MediaSource.Microphone);
-        tile.Show(camera ? name : T("{name} (screen)", ("name", name)), person.Id, name, surface.Sid, camera, mine: false,
+        var silenced = HostFeature.Setting(person, camera ? Sound.Voice : Sound.Screen).Silenced;
+        // A screen off the stage is a card rather than a picture: a desktop
+        // scaled into a grid cell is unreadable (ShareCard.tsx).
+        var face = !camera && !onStage ? new Tile.Face.ShareCard() : null;
+        tile.Show(camera ? name : T("{name} (screen)", ("name", name)), person.Id, name, face == null ? surface.Sid : null, camera, mine: false,
             speaking: camera && person.Speaking, muted: camera && (microphone == null || microphone.Muted), hand: camera && person.HandUp,
-            selected: onStage, onStage: onStage, filled: _filled, camera ? Call.Reactions.Where(r => r.From == person.Id) : Array.Empty<ShownReaction>());
+            selected: onStage, onStage: onStage, filled: _filled, camera ? Call.Reactions.Where(r => r.From == person.Id) : Array.Empty<ShownReaction>(),
+            face: face, silenced: silenced, controls: controls);
+    }
+
+    /// <summary>
+    /// The stage's own controls over the picture on it, shown with the bar
+    /// and leaving with it (RoomView.kt <c>StageControlsOver</c>): the same
+    /// person's other picture, and filling the screen.
+    /// </summary>
+    private (string Key, Func<UIElement> Make)? StageControlsFor(string id, Dictionary<string, Surface> surfaces)
+    {
+        var other = Counterpart(id, surfaces);
+        var key = $"{other?.Id}|{_filled}|{Localization.Shared.Language}";
+        return (key, () => SharePieces.StageControls(other?.Kind, _filled,
+            () =>
+            {
+                if (other is { } that)
+                {
+                    _pin = _pin.Pin(that.Id);
+                    Lay();
+                }
+            },
+            () =>
+            {
+                if (_filled) Unfill();
+                else Fill();
+                Lay();
+            }));
+    }
+
+    /// <summary>The same person's other picture, which the switch on the stage offers (Room.tsx <c>counterpart</c>).</summary>
+    private (string Id, Surface.Kinds Kind)? Counterpart(string id, Dictionary<string, Surface> surfaces)
+    {
+        if (id == "me/camera") return Call.Sharing.Active ? (MyShare, Surface.Kinds.Screen) : null;
+        if (id == MyShare) return ("me/camera", Surface.Kinds.Camera);
+        if (!surfaces.TryGetValue(id, out var surface)) return null;
+        var other = surfaces.Values.FirstOrDefault(s => s.Person.Id == surface.Person.Id && s.Id != id);
+        return other == null ? null : (other.Id, other.Kind);
+    }
+
+    /// <summary>What the features offer the bar (RoomView.kt <c>offers</c>), read here so the bar does not hold the features.</summary>
+    private Offers MakeOffers()
+    {
+        var watch = Call.Parts.TryGetValue(IBarOffer.Watch, out var w) ? w as IBarOffer : null;
+        var music = Call.Parts.TryGetValue(IBarOffer.Music, out var m) ? m as IBarOffer : null;
+        var sendingMusic = Call.People.Any(p => p.MusicTrack != null);
+        return new Offers(
+            Watch: watch?.Offered ?? false,
+            WatchPlaying: watch?.Playing ?? false,
+            Music: music?.Offered ?? sendingMusic,
+            MusicPlaying: music?.Playing ?? sendingMusic,
+            Host: _host.Standing.Yours,
+            Knocking: _host.Waiting.Count);
+    }
+
+    /// <summary>
+    /// Who has our share open, to the right of the pictures and below the
+    /// stage's corner (Room.tsx: top-16 right-3), beside a panel when one is
+    /// open; where there is no room beside one, the eye and the count alone.
+    /// </summary>
+    private void UpdateWatchers()
+    {
+        if (_watchersHost == null) return;
+        var shown = Call.Sharing.Active && (!_filled || _barShown);
+        var width = PanelWidth(new Size((float)ActualWidth, (float)ActualHeight));
+        var narrow = ActualWidth < width + 24 + 172 + 22;
+        var compact = _panel != null && narrow;
+        if (!shown)
+        {
+            if (_watchers != null) _watchersHost.Children.Clear();
+            _watchers = null;
+            _watchersCompact = null;
+            return;
+        }
+        if (_watchers == null || _watchersCompact != compact)
+        {
+            _watchersHost.Children.Clear();
+            _watchers = new WatchersCard(Call, compact);
+            _watchers.Arrives();
+            _watchersCompact = compact;
+            _watchersHost.Children.Add(_watchers);
+        }
+        _watchers.Update();
+        var beside = _panel != null && !narrow;
+        _watchersHost.Margin = compact
+            ? new Thickness(0, Shared.TitleBar + 12, 14, 0)
+            : new Thickness(0, Shared.TitleBar + (_panel == null || !beside ? 64 : 12), beside ? width + 24 + 8 : 14, 0);
+    }
+
+    /// <summary>The uplink card for our own share, above the toasts, while it stands (strain.ts; the Mac's StrainCard).</summary>
+    private void UpdateStrain()
+    {
+        if (_strainHost == null) return;
+        var hint = Call.Sharing.Active ? Call.StrainHint : null;
+        if (hint == _strainShown) return;
+        _strainShown = hint;
+        _strainHost.Children.Clear();
+        if (hint != null) _strainHost.Children.Add(new StrainCard(Call, hint).Arrives(0.96f, fromY: 18));
+    }
+
+    /// <summary>A call being moved, over everything for the few seconds it takes (Moving.tsx).</summary>
+    private void UpdateMoving()
+    {
+        if (_movingHost == null) return;
+        var to = _host.MovingTo;
+        if (to == _movingShown) return;
+        _movingShown = to;
+        _movingHost.Children.Clear();
+        if (to != null) _movingHost.Children.Add(SharePieces.Moving(to).Arrives(1f));
     }
 
     /// <summary>The arrows beside the pictures they turn, and which page of how many (RoomView.kt <c>Pager</c>).</summary>
@@ -444,7 +628,15 @@ internal sealed class RoomScreen : Screen
     {
         var onStage = _pin.Pinned == id;
         Pictures(out var surfaces);
-        var name = id == "me/camera" ? Call.LocalName : surfaces.TryGetValue(id, out var surface) ? surface.Person.Shown : id;
+        surfaces.TryGetValue(id, out var surface);
+        var screen = surface?.Kind == Surface.Kinds.Screen || id == MyShare;
+        var name = id switch
+        {
+            "me/camera" => Call.LocalName,
+            MyShare => T("{name} (screen)", ("name", Call.LocalName)),
+            WatchStage => T("Watch together"),
+            _ => surface == null ? id : screen ? T("{name} (screen)", ("name", surface.Person.Shown)) : surface.Person.Shown,
+        };
         var items = new List<UIElement>
         {
             onStage
@@ -456,6 +648,33 @@ internal sealed class RoomScreen : Screen
             items.Add(_filled
                 ? Menu.Item(T("Leave fullscreen"), () => { Overlay.Current?.ClosePopover(); Unfill(); Lay(); }, "arrow.down.right.and.arrow.up.left")
                 : Menu.Item(T("Fill the screen"), () => { Overlay.Current?.ClosePopover(); Fill(); Lay(); }, "arrow.up.left.and.arrow.down.right"));
+        }
+        // Nobody hears themselves, so nothing here for our own pictures.
+        if (surface?.Person is { } person)
+        {
+            var sound = screen ? Sound.Screen : Sound.Voice;
+            var blocked = HostFeature.Setting(person, sound).Blocked;
+            items.Add(Menu.Rule());
+            items.Add(Menu.Item(blocked ? T("Unmute {name}", ("name", name)) : T("Mute {name}", ("name", name)), () =>
+            {
+                Overlay.Current?.ClosePopover();
+                _host.SetBlocked(person, sound, !blocked);
+                Update();
+            }, blocked ? "speaker.wave.2.fill" : "speaker.slash.fill"));
+            items.Add(Menu.Item(T("Sound settings"), () =>
+            {
+                Overlay.Current?.ClosePopover();
+                if (_panel != Panel.Sound) Toggle(Panel.Sound);
+            }, "slider.horizontal.3"));
+        }
+        // Only a signature somebody earned: an issued one is fresh each
+        // visit, and a copy of it is true for this call and misleading
+        // afterwards.
+        var identity = surface?.Person.Id ?? Call.LocalIdentity;
+        if (id != WatchStage && TomoshibiProtocolMethods.SignatureOf(identity) is { Proven: true } signature)
+        {
+            items.Add(Menu.Rule());
+            items.Add(Menu.Item(T("Copy signature"), () => { Overlay.Current?.ClosePopover(); Pasteboard.Copy(signature.Trip); }, "signature"));
         }
         if (LinkWorks && Link is { } link)
         {
@@ -499,6 +718,18 @@ internal sealed class RoomScreen : Screen
             {
                 _panelShown = new DevicesPanel(App, Call, () => Toggle(Panel.Devices));
             }
+            else if (_panel == Panel.Sound)
+            {
+                _panelShown = new SoundPanel(_host, () => Toggle(Panel.Sound));
+            }
+            else if (_panel == Panel.Host)
+            {
+                _panelShown = new HostPanel(_host, () => Toggle(Panel.Host));
+            }
+            else if (_panel is { } feature && PanelMakers.TryGetValue(feature, out var make))
+            {
+                _panelShown = make(this, () => Toggle(feature));
+            }
             if (_panelShown is FrameworkElement shown)
             {
                 shown.Arrives(1f, fromX: (float)width);
@@ -511,7 +742,17 @@ internal sealed class RoomScreen : Screen
         // Notices go beside an open panel where there is room for both.
         var beside = _panel != null && size.Width - width - 48 >= 280 + 320;
         _toasts!.Margin = new Thickness(0, 0, beside ? width + 32 : 16, Plan.Island + 8);
+        // The uplink card above the toasts, one column so they cannot land
+        // on each other (the Mac's RoomView).
+        if (_strainHost != null)
+        {
+            _toasts.Measure(new Windows.Foundation.Size(300, size.Height));
+            _strainHost.Margin = new Thickness(0, 0, beside ? width + 32 : 16, Plan.Island + 8 + _toasts.DesiredSize.Height + 10);
+        }
     }
+
+    /// <summary>The panels the features layered over the call bring (watching together, the music), made by the feature's own code.</summary>
+    public static readonly Dictionary<Panel, Func<RoomScreen, Action, UIElement>> PanelMakers = new();
 
     // The bar stepping aside
 

@@ -306,7 +306,23 @@ internal static class Blur
 /// </summary>
 internal sealed class Tile : Grid
 {
+    /// <summary>
+    /// What fills a place other than a person's own picture: a screen shared
+    /// but not on the stage, this participant's own share, or something a
+    /// feature draws there (the video watched together).
+    /// </summary>
+    public abstract record Face
+    {
+        public sealed record Picture : Face;
+        public sealed record ShareCard : Face;
+        public sealed record MyShare(Action Stop) : Face;
+        public sealed record Drawn(string Key, Func<UIElement> Make) : Face;
+    }
+
     public readonly string Id;
+    private string? _faceKey;
+    private readonly Grid _controls = new() { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(12) };
+    private string? _controlsKey;
     private readonly RoomScreen _room;
     private readonly Grid _content = new();
     private readonly Border _ring;
@@ -389,6 +405,7 @@ internal sealed class Tile : Grid
         Children.Add(_plate);
         Children.Add(_hand);
         Children.Add(_expand);
+        Children.Add(_controls);
         Children.Add(_ring);
 
         // A press selects it (on to the stage or back), a second within the
@@ -464,8 +481,10 @@ internal sealed class Tile : Grid
     /// <summary>Brings the tile up to date: whose, what picture, which marks.</summary>
     public void Show(
         string label, string identity, string name, string? sid, bool camera, bool mine, bool speaking, bool muted, bool hand,
-        bool selected, bool onStage, bool filled, IEnumerable<ShownReaction> reactions)
+        bool selected, bool onStage, bool filled, IEnumerable<ShownReaction> reactions,
+        Face? face = null, bool silenced = false, (string Key, Func<UIElement> Make)? controls = null)
     {
+        face ??= new Face.Picture();
         _name.Text = label;
         // The ring lights at once and is held 700 ms after speech stops, so
         // that it does not flicker between two words (Tile.kt `steady`).
@@ -492,12 +511,66 @@ internal sealed class Tile : Grid
             mark.Named(T("microphone off"));
             _label.Children.Add(mark);
         }
+        // Somebody this listener turned off, said on their picture so that
+        // nobody wonders why a person talking makes no sound (Tile.kt `silenced`).
+        if (silenced) _label.Children.Add(K.Symbol("speaker.slash.fill", _name.FontSize - 2, Ink.Muted));
+        // The stage's own controls over whatever is on it, arriving and
+        // leaving with it.
+        var controlsKey = controls?.Key;
+        if (controlsKey != _controlsKey)
+        {
+            _controlsKey = controlsKey;
+            _controls.Children.Clear();
+            if (controls is { } shown) _controls.Children.Add(shown.Make());
+        }
         _hand.Visibility = hand ? Visibility.Visible : Visibility.Collapsed;
         _expand.Child = K.Symbol(selected ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right", 11, Ink.Foreground);
         this.Named(selected ? T("Show everybody") : T("Show {name} larger", ("name", name)));
 
-        // The picture, or the initials with the camera off.
-        if (mine)
+        // What fills the place, made again only when it changes.
+        var key = face switch
+        {
+            Face.ShareCard => "card:" + name + (_spot.Height < 140 ? ":compact" : ""),
+            Face.MyShare => "mine:screen" + (_spot.Height < 140 ? ":compact" : ""),
+            Face.Drawn drawn => "drawn:" + drawn.Key,
+            _ => null,
+        };
+        if (key != null)
+        {
+            if (key != _faceKey)
+            {
+                _faceKey = key;
+                _content.Children.Clear();
+                _picture = null;
+                _self = null;
+                _sid = null;
+                var compact = _spot.Height < 140;
+                UIElement made = face switch
+                {
+                    Face.ShareCard => SharePieces.ShareCard(name, compact),
+                    Face.MyShare share => SharePieces.MyShare(compact, share.Stop),
+                    Face.Drawn drawn => drawn.Make(),
+                    _ => new Grid(),
+                };
+                _content.Children.Add(made.Arrives(1f));
+            }
+        }
+        else if (_faceKey != null)
+        {
+            // Back to a picture from a card: made again below.
+            _faceKey = null;
+            _content.Children.Clear();
+            _sid = null;
+            _self = null;
+            _picture = null;
+        }
+        // Otherwise the picture, or the initials with the camera off; a
+        // place filled by a face above is left as it is.
+        if (key != null)
+        {
+            // Nothing more to fill.
+        }
+        else if (mine)
         {
             if (camera && _self == null)
             {

@@ -62,11 +62,34 @@ with DPAPI for the Windows user in `%LOCALAPPDATA%\Tomoshibi\secrets`. Not
 the Credential Locker, which roams what it holds to the person's other PCs;
 a deployment's session belongs to the device it was signed in on.
 
+Sharing is Android's share menu on the bar's one share button: the picture's
+size and frame rate, then sharing the screen, then sound on its own with the
+lossless switch under it (turned off, with the reason, in a sealed call). A
+screen comes from the system's picker; sound shared on its own, and a shared
+screen's sound, is everything the computer plays except the call, since
+Windows names no app's sound by its window, where Android's line is "Pick
+the app that is playing" for its own picker. The sharer's own picture is a
+card that says so with a stop; who has it on their stage is read from the
+web's `watching` attribute, and this app writes the same attribute for the
+screen on its own stage. A remote screen off the stage is a card rather than
+a desktop shrunk into a cell; on the stage it has the stage's controls (the
+same person's camera, fill the screen). The uplink card of a share that
+cannot be sent at its size (strain.ts) stands above the notices.
+
+The host panel is Android's: the invitation with its link and the quiet
+stop, the door (also drawn inside its notice, so a knock is answered where
+it is read), moving the call to another relay, the people with mute, make
+host (faint beside a guest, and pressable so the refusal can be said) and
+remove, and ending the meeting asked twice in the panel. The sound panel
+sets each person's voice, screen and music apart, under the web's hearing
+store; the picture menu mutes or unmutes somebody for this listener alone.
+The panel's buttons are drawn for a pointer (28 across) rather than a
+fingertip (48), and keep the keyboard where it was when the panel is drawn
+again.
+
 Not in this phase, and left as marked stubs rather than as controls that do
-nothing: sharing a screen (the bar's button is there and disabled), watching
-together, music and their settings, the host panel beyond ending the meeting
-for everybody, background blur, links handed over by the system
-(`tomoshibi://` and app links, which need a package identity), and MSIX.
+nothing: watching together, music and their settings, background blur,
+links handed over by the system (`tomoshibi://` and app links), and MSIX.
 
 ## The machine it is built on
 
@@ -186,7 +209,24 @@ NordSecurity publishes one.
   reports (`place_video_panel`). `video_panel_frames` counts what was drawn.
 - **Remote sound** is `attach_pcm`: 10 ms of 48 kHz PCM per sound, measured
   always and played through an audio graph (one frame input node per sound)
-  unless the launch is muted. A muted launch never opens the graph.
+  unless the launch is muted. A muted launch never opens the graph. Speakers
+  picked in a call take effect at once: the graph is made again on them and
+  every sound moved across before the old one stops (`Playback.UseOutput`).
+  `TOMOSHIBI_MUTE=speakers` opens the graph on the device with its output at
+  nought, so that a test can change the speakers with nothing reaching them;
+  the log then says which speakers play and how many quanta they rendered.
+- **Lossless sound** from others (the web's `lossless` data streams) comes
+  from the core whole and is played by the app as a pulled sound: a cushion,
+  a windowed-sinc resampler to the graph's rate and an eased gain
+  (`Media\LosslessPlayback.cs`, the rules in `Tomoshibi.Basics\Sound.cs`).
+- **A shared screen** is `Windows.Graphics.Capture` on a Direct3D 11 device,
+  copied to a staging texture and handed over as BGRA (`push_bgra`, which
+  converts and scales with libyuv in the core); in a test a generated screen
+  (`Media\ScreenCapture.cs`).
+- **Shared sound** is process loopback with the call's own process excluded
+  (`VAD\Process_Loopback`, `Interop\Loopback.cs`), sent as the screen's
+  sound or, on its own, as a track or as lossless data; in a test a generated
+  chord (`Media\SoundCapture.cs`).
 - **Local video** goes in through `push_planes`: a generated picture
   (`Media\Synthetic.cs`) or, with `TOMOSHIBI_SOURCE=devices`, the camera
   through `Windows.Media.Capture` as NV12 (`Media\Devices.cs`).
@@ -220,7 +260,7 @@ Read from the environment, the same names the Apple apps read:
 | `TOMOSHIBI_PASSPHRASE` | A passphrase to join with. |
 | `TOMOSHIBI_SEALING_WORD` | Seals the call. |
 | `TOMOSHIBI_AUTOJOIN` | Straight into this room. |
-| `TOMOSHIBI_MUTE` | Plays nothing; only measures. Always set in tests. |
+| `TOMOSHIBI_MUTE` | Plays nothing; only measures. Always set in tests. `=speakers` opens the speakers and plays silence to them. |
 | `TOMOSHIBI_MIC`, `TOMOSHIBI_CAMERA` | Joins with each published. |
 | `TOMOSHIBI_SOURCE=devices` | The real camera and microphone instead of the synthetic ones. |
 | `TOMOSHIBI_DEBUG_LOG=file` | Writes what the app does and, every two seconds, what it sent and received. |
@@ -229,7 +269,8 @@ Read from the environment, the same names the Apple apps read:
 | `TOMOSHIBI_OPEN=link` | Opens an invitation or an arranged meeting's link, as the system would hand it over. |
 | `TOMOSHIBI_ENDED=left\|closed\|removed\|lost` | Opens on that ending, for pictures of it. |
 | `TOMOSHIBI_LANGUAGE=en\|zh-Hans\|zh-Hant\|ja` | Speaks this language for the launch, without keeping it. |
-| `TOMOSHIBI_SHOW=…` | Opens something over the screen: `start`, `join`, `schedule`, `servers`, `settings[:general\|media\|account\|about]`, and in a call `chat`, `devices`, `leave`. |
+| `TOMOSHIBI_SHOW=…` | Opens something over the screen: `start`, `join`, `schedule`, `servers`, `settings[:general\|media\|account\|about]`, and in a call `chat`, `devices`, `sound`, `host`, `share`, `leave`. Once, in the first call. |
+| `TOMOSHIBI_SHARE=screen\|sound\|both` | Shares straight after joining: a generated screen and chord unless `TOMOSHIBI_SOURCE=devices`, and then the first screen without the picker. |
 | `TOMOSHIBI_KEEP=name` | Keeps what the launch is told in a store of the test's own, `%LOCALAPPDATA%\Tomoshibi-tests\name`, so that a later launch can find the sealed session. |
 
 Only a debug build reads them. Everything that drives the app needs

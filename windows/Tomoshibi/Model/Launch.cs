@@ -62,6 +62,14 @@ public sealed record Launch
     /// </summary>
     public bool Mute { get; init; }
 
+    /// <summary>
+    /// Opens the speakers and plays silence to them (TOMOSHIBI_MUTE=speakers):
+    /// the call's audio graph runs on the device as it would, every sound in
+    /// it, with the output turned to nothing, so that changing the speakers
+    /// in a call can be tested without anything reaching them.
+    /// </summary>
+    public bool SilentSpeakers { get; init; }
+
     /// <summary>Joins with the microphone on (TOMOSHIBI_MIC); off otherwise, so that a test asks for nothing it did not mean to.</summary>
     public bool Microphone { get; init; }
 
@@ -84,6 +92,17 @@ public sealed record Launch
     /// come back signed in from the sealed cookie, as a person's would.
     /// </summary>
     public string? KeepIn { get; init; }
+
+    /// <summary>
+    /// Shares straight after joining (TOMOSHIBI_SHARE=screen|sound|both):
+    /// the screen, sound on its own, or both, from the generated sources
+    /// unless the launch asked for the devices, and then the first screen
+    /// taken without the picker, which nobody is there to answer.
+    /// </summary>
+    public string? Share { get; init; }
+
+    /// <summary>Whether a test asked for a share, and so takes the first screen rather than asking the picker.</summary>
+    public bool SharePicked => Share != null;
 
     /// <summary>A file the measurements are written to (TOMOSHIBI_DEBUG_LOG).</summary>
     public string? LogFile { get; init; }
@@ -111,11 +130,12 @@ public sealed record Launch
 
         var baseUrl = Get("TOMOSHIBI_BASE");
         var logFile = Get("TOMOSHIBI_DEBUG_LOG");
+        var quiet = Get("TOMOSHIBI_MUTE");
         // Everything below drives the app by itself, and only a launch that
         // says where to drive it to may.
         if (baseUrl == null)
         {
-            return new Launch { LogFile = logFile, Mute = Get("TOMOSHIBI_MUTE") != null };
+            return new Launch { LogFile = logFile, Mute = quiet != null && quiet != "speakers", SilentSpeakers = quiet == "speakers" };
         }
 
         string? signInName = null, signInFile = null;
@@ -139,12 +159,14 @@ public sealed record Launch
             Ended = Get("TOMOSHIBI_ENDED"),
             Language = Get("TOMOSHIBI_LANGUAGE"),
             Show = Get("TOMOSHIBI_SHOW"),
-            Mute = Get("TOMOSHIBI_MUTE") != null,
+            Mute = quiet != null && quiet != "speakers",
+            SilentSpeakers = quiet == "speakers",
             Microphone = Get("TOMOSHIBI_MIC") != null,
             Camera = Get("TOMOSHIBI_CAMERA") != null,
             // Synthetic unless asked: a test given a deployment of its own
             // never reaches a real device by forgetting a switch.
             RealDevices = string.Equals(Get("TOMOSHIBI_SOURCE"), "devices", StringComparison.OrdinalIgnoreCase),
+            Share = Get("TOMOSHIBI_SHARE") is { } share && share is "screen" or "sound" or "both" ? share : null,
             KeepIn = Get("TOMOSHIBI_KEEP") is { } keep && keep.All(c => char.IsLetterOrDigit(c) || c == '-') ? keep : null,
             LogFile = logFile,
             QuitAfterSeconds = int.TryParse(Get("TOMOSHIBI_DEBUG_QUIT_AFTER"), out var seconds) && seconds > 0 ? seconds : null,

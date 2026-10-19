@@ -790,6 +790,11 @@ internal sealed class AppModel : Observable
             // with their own device, not a room that would not open.
             if (StartWithMicrophone && Call == model) await model.SetMicrophone(true);
             if (StartWithCamera && Call == model) await model.SetCamera(true);
+            if (_launch.Share is { } share && Rehearsal && Call == model)
+            {
+                if (share is "screen" or "both") await model.ShareScreen();
+                if (share is "sound" or "both") await model.ShareSound();
+            }
             if (_launch.QuitAfterSeconds is { } seconds && Rehearsal) _ = QuitAfter(seconds);
         }
         catch (ProtocolException fault)

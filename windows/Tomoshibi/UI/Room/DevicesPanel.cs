@@ -13,10 +13,9 @@ namespace Tomoshibi.UI.Room;
 /// microphone, speakers and camera, the voice as it is, and the language,
 /// the only settings a call has. A device picked moves the tick at once and
 /// back again if it did not take, and is remembered once it did.
-///
-/// TODO(windows 2b): speakers picked here take effect from the next call,
-/// since the call's audio graph is opened on one output; blurring the
-/// background needs a segmentation model on Windows and is not offered yet.
+/// Speakers picked here take effect in the call at once: its sound is
+/// played through an audio graph opened again on them, every sound moved
+/// across before the old one closes (Playback.UseOutput).
 /// </summary>
 internal sealed class DevicesPanel : Grid
 {
@@ -54,10 +53,11 @@ internal sealed class DevicesPanel : Grid
         microphoneRows.Children.Add(Rows.Row(T("Original sound"), original, T("No noise suppression or automatic volume. For headphones and music."), "waveform.path", last: true));
         _sections.Children.Add(Rows.Section(T("Microphone"), K.Card(microphoneRows, 16)));
 
-        var speakerRows = Choices(speakers, "speaker.wave.2", memory.Choice(DeviceMemory.Kind.Speakers), id =>
+        var speakerRows = Choices(speakers, "speaker.wave.2", memory.Choice(DeviceMemory.Kind.Speakers), async id =>
         {
-            memory.Remember(DeviceMemory.Kind.Speakers, id);
-            return Task.CompletedTask;
+            // Remembered by the call once it took; a device that would not
+            // open puts the tick back and leaves the sound where it was.
+            if (!await _call.UseSpeakers(id)) throw new InvalidOperationException("the speakers picked would not open");
         });
         _sections.Children.Add(Rows.Section(T("Speakers"), K.Card(speakerRows, 16)));
 

@@ -462,6 +462,12 @@
       "zh-Hans": "USB 音频",
       "zh-Hant": "USB 音訊",
       "ja": "USB オーディオ"
+    },
+    "Everything this computer plays, except the call": {
+      "en": "Everything this computer plays, except the call",
+      "zh-Hans": "这台电脑播放的所有声音，通话除外",
+      "zh-Hant": "這台電腦播放的所有聲音，通話除外",
+      "ja": "このコンピュータで再生中のすべての音（通話を除く）"
     }
   }
 }

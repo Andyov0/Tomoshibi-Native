@@ -5,13 +5,22 @@ namespace Tomoshibi.UI;
 /// <summary>The system's clipboard, for the links the app hands out (Android's Stage.kt <c>Pasteboard</c>).</summary>
 internal static class Pasteboard
 {
-    public static void Copy(string text)
+    /// <summary>Puts the text on the clipboard; whether it took (another app holding the clipboard open refuses it).</summary>
+    public static bool Copy(string text)
     {
-        var package = new DataPackage();
-        package.SetText(text);
-        Clipboard.SetContent(package);
-        // Kept after the app quits, as a copied link is expected to be.
-        Clipboard.Flush();
+        try
+        {
+            var package = new DataPackage();
+            package.SetText(text);
+            Clipboard.SetContent(package);
+            // Kept after the app quits, as a copied link is expected to be.
+            Clipboard.Flush();
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
     }
 
     /// <summary>The text on the clipboard, or nothing.</summary>

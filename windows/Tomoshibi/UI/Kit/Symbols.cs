@@ -100,6 +100,28 @@ internal static class Symbols
         ["film"] = "",
         ["door.left.hand.open"] = "",
         ["play.rectangle"] = "",
+        ["rectangle.inset.filled.on.rectangle"] = "\uE7F4",
+        ["rectangle.inset.filled.and.person.filled"] = "\uE7F4",
+        ["waveform.circle.fill"] = "\uE8D6",
+        ["stop.circle"] = "\uE71A",
+        ["hifispeaker"] = "\uE7F5",
+        ["person.badge.minus"] = "\uE8F8",
+        ["gauge.with.dots.needle.33percent"] = "\uEB5E",
+        ["arrow.down.right.and.arrow.up.left.rectangle"] = "\uE73F",
+        ["arrow.up.left.and.arrow.down.right.rectangle"] = "\uE740",
+        ["music.note.list"] = "\uE8D6",
+        ["forward.fill"] = "\uE893",
+        ["pause.fill"] = "\uE769",
+        ["plus"] = "\uE710",
+        ["magnifyingglass"] = "\uE721",
+        ["arrow.uturn.backward"] = "\uE72B",
+        ["folder"] = "\uE8B7",
+        ["tv"] = "\uE7F4",
+        ["antenna.radiowaves.left.and.right"] = "\uEC05",
+        ["hand.thumbsup.fill"] = "\uE8E1",
+        ["xmark.circle.fill"] = "\uEB90",
+        ["speaker.wave.1.fill"] = "\uE993",
+        ["square.and.arrow.up"] = "\uE72D",
         ["signature"] = "",
     };
 
@@ -138,6 +160,26 @@ internal static class Symbols
                     StrokeEndLineCap = PenLineCap.Round,
                 });
                 return grid.Quiet();
+            }
+            case "crown":
+            case "crown.fill":
+            {
+                // Nor a crown, which is who runs the room on every
+                // platform: three points on a band, drawn.
+                var crown = new Microsoft.UI.Xaml.Shapes.Path
+                {
+                    Data = (Geometry)Microsoft.UI.Xaml.Markup.XamlBindingHelper.ConvertValue(typeof(Geometry), "M 1,9 L 2,3 L 5,6 L 8,1 L 11,6 L 14,3 L 15,9 Z M 2,10.5 L 14,10.5 L 14,12.5 L 2,12.5 Z"),
+                    Fill = name == "crown.fill" ? ink : null,
+                    Stroke = ink,
+                    StrokeThickness = name == "crown.fill" ? 0 : 1.3,
+                    StrokeLineJoin = PenLineJoin.Round,
+                    Stretch = Stretch.Uniform,
+                    Width = size * 1.05,
+                    Height = size * 0.9,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                return crown.Quiet();
             }
             case "number":
                 return new TextBlock

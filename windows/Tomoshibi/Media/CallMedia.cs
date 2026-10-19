@@ -28,7 +28,21 @@ internal sealed class CallMedia : IDisposable
     /// <summary>A picture of yourself, as BGRA rows, on a capture thread; the buffer may be reused, so a listener copies what it keeps.</summary>
     public event Action<byte[], int, int>? Previewed;
 
-    public CallMedia(Launch launch) => Launch = launch;
+    public CallMedia(Launch launch)
+    {
+        Launch = launch;
+        // The share's picture and sound are generated wherever the camera's
+        // are: a test never sends a real desktop or a real room.
+        Sharing = new Sharing(!launch.RealDevices, WindowHandle)
+        {
+            SkipPicker = launch.SharePicked,
+        };
+    }
+
+    private static IntPtr WindowHandle() => MainWindow.Current is { } window ? WinRT.Interop.WindowNative.GetWindowHandle(window) : IntPtr.Zero;
+
+    /// <summary>The share from this device, one for the app's life as the menu's choices are; each call stops it as it goes.</summary>
+    public readonly Sharing Sharing;
 
     /// <summary>The camera and the microphone last picked (DeviceMemory), or the system's.</summary>
     public string? CameraId { get; set; }
@@ -71,7 +85,7 @@ internal sealed class CallMedia : IDisposable
         }
     }
 
-    public async Task<Playback?> OpenPlayback() => Mute ? null : await Playback.Open();
+    public async Task<Playback?> OpenPlayback(string? speakers) => Mute ? null : await Playback.Open(speakers, Launch.SilentSpeakers);
 
     /// <summary>A picture of yourself is shown somewhere; the camera runs while any is.</summary>
     public void StartPreview()

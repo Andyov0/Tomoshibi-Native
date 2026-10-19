@@ -16,14 +16,21 @@ internal sealed record Person(
     IReadOnlyDictionary<string, string> Attributes,
     IReadOnlyDictionary<string, TrackInfo> Tracks,
     LinkQuality Quality = LinkQuality.Good,
-    bool Speaking = false)
+    bool Speaking = false,
+    bool? Readable = null)
 {
     public bool HandUp => Attributes.TryGetValue("hand", out var hand) && hand == "up";
 
     public TrackInfo? Track(MediaSource source) => Tracks.Values.FirstOrDefault(t => t.Source == source);
 
+    /// <summary>The song desk's music, a track of its own with no source of its own (lossless.ts: named "music" or "music-lossless").</summary>
+    public TrackInfo? MusicTrack => Tracks.Values.FirstOrDefault(t => t.Source == MediaSource.Unknown && t.Name.StartsWith("music", StringComparison.Ordinal));
+
     public string Shown => Refusals.Named(Name, Id);
 }
+
+/// <summary>Where a move the server announced is taking this call, and when it said so (App.tsx ~560-627).</summary>
+internal sealed record Moving(string Relay, long At);
 
 /// <summary>The unit of layout: a picture, not a person (the web's <c>Surface</c>). Someone sharing their screen with their camera on is two of these.</summary>
 internal sealed record Surface(string Id, Person Person, Surface.Kinds Kind, string? Sid)
@@ -45,7 +52,8 @@ internal sealed record CallToast(
     double? Lasts = NoticeTimes.Briefly,
     string? ActionTitle = null,
     string? Key = null,
-    bool? Closable = null)
+    bool? Closable = null,
+    string? Attachment = null)
 {
     public enum Kinds { Info, Signal, Warning, Failure }
 
@@ -82,7 +90,7 @@ internal sealed class CallModel : Observable, IDisposable
     /// <summary>The web keeps the last 500 messages (chat.ts).</summary>
     public const int MessagesKept = 500;
     /// <summary>A room that closes within this long of a <c>moving</c> message is the move, not the end (App.tsx ~560-627).</summary>
-    private static readonly TimeSpan MoveWindow = TimeSpan.FromSeconds(15);
+    private const long MoveWindowMs = 15_000;
     /// <summary>hands.ts <c>REACTION</c>.</summary>
     public const string ReactionTopic = "reaction";
 
@@ -172,8 +180,8 @@ internal sealed class CallModel : Observable, IDisposable
 
     public IReadOnlyList<ShownReaction> Reactions { get; private set; } = Array.Empty<ShownReaction>();
 
-    /// <summary>The relay a move is taking this call to, between the server saying so and the room closing.</summary>
-    private (string Relay, DateTime At)? _moving;
+    /// <summary>The relay a move is taking this call to, between the server saying so and the room closing (web App.tsx ~560-627).</summary>
+    public Moving? MovingNow { get; private set; }
 
     /// <summary>The call ended because the server moved it; the app joins again.</summary>
     public event Action<string>? Moved;
@@ -183,6 +191,166 @@ internal sealed class CallModel : Observable, IDisposable
 
     /// <summary>What the core said, after the model has applied it, for whoever draws from the event itself (a tile hearing its track go).</summary>
     public event Action<CallEvent>? Heard;
+
+    /// <summary>
+    /// Everybody else who wants to hear what the call says (CallModel.kt
+    /// <c>listen</c>): the protocols layered over it, watching together, the
+    /// song desk and hosting, each subscribe here and pick out what concerns
+    /// them. Called on the UI thread after the model itself has applied the
+    /// event.
+    /// </summary>
+    public void Listen(Action<CallEvent> listener) => Heard += listener;
+
+    /// <summary>
+    /// The features layered over the call, made once per call by whoever
+    /// owns them (CallModel.kt <c>parts</c>): the views are made and remade,
+    /// and a feature made with each would listen to the call once more every
+    /// time, answering every message twice.
+    /// </summary>
+    public readonly Dictionary<string, object> Parts = new();
+
+    /// <summary>What the parts layered over the call say before it goes, each awaited while the call can still carry it.</summary>
+    public readonly Dictionary<string, Func<Task>> BeforeLeaving = new();
+
+    /// <summary>What a toast's <c>Attachment</c> names, drawn under its words (the door's notice, with the people outside).</summary>
+    public readonly Dictionary<string, Func<Microsoft.UI.Xaml.UIElement>> Attachments = new();
+
+    /// <summary>Cancelled when the call is left or ends: what a feature runs for the call's life stops with it.</summary>
+    public CancellationToken Over => _over.Token;
+
+    /// <summary>Lossless streams standing in for somebody's shared sound or music.</summary>
+    public readonly LosslessPlayback Lossless;
+
+    /// <summary>The share from this device, kept with the call so that leaving, or being ended, always stops it.</summary>
+    public readonly Sharing Sharing;
+
+    /// <summary>
+    /// Starts sharing the screen (the share menu): a picker cancelled says
+    /// nothing, being an answer; a share that would not start says so.
+    /// </summary>
+    public async Task ShareScreen()
+    {
+        try
+        {
+            await Sharing.Start(Core);
+        }
+        catch (Exception fault)
+        {
+            Log.Line($"the share would not start: {fault.GetType().Name}: {fault.Message}");
+            PressFailed();
+        }
+    }
+
+    /// <summary>Shares sound on its own (the share menu's "Share only sound").</summary>
+    public async Task ShareSound()
+    {
+        try
+        {
+            await Sharing.StartSoundOnly(Core, Sealed);
+        }
+        catch (Exception fault)
+        {
+            Log.Line($"the sound share would not start: {fault.GetType().Name}: {fault.Message}");
+            PressFailed();
+        }
+    }
+
+    /// <summary>Something pressed that did not take: said briefly, and gone (ControlBar.kt <c>pressFailed</c>).</summary>
+    public void PressFailed() => Announce(new CallToast(T("That could not be done. Try again."), Kind: CallToast.Kinds.Failure, Lasts: 4.0));
+
+    /// <summary>The uplink card for this participant's own share, while it stands (strain.ts).</summary>
+    public StrainHint? StrainHint { get; private set; }
+
+    /// <summary>The person pressed the uplink card's button: Apply carries the setting to restart the share at.</summary>
+    public StrainAccept StrainAccept() => Core.StrainAccept();
+
+    /// <summary>How the restart the card asked for went; whether the card goes.</summary>
+    public bool StrainAccepted(bool took) => Core.StrainAccepted(took);
+
+    /// <summary>The person put the card away for this share.</summary>
+    public void StrainDecline() => Core.StrainDecline();
+
+    /// <summary>Sends a data packet: <paramref name="to"/> empty means everybody (the watch and song-desk protocols, reactions).</summary>
+    public Task Send(string topic, byte[] payload, IReadOnlyList<string>? to = null, bool reliable = true) =>
+        Core.SendData(topic, payload, (to ?? Array.Empty<string>()).ToArray(), reliable);
+
+    private string _watchingWritten = "";
+
+    /// <summary>
+    /// The <c>watching</c> attribute (watching.ts): whose shared screen is on
+    /// this participant's stage, or nobody's; written only when it changes,
+    /// so that a sharer can see who has their screen open.
+    /// </summary>
+    public async Task SetWatching(string sharer)
+    {
+        if (sharer == _watchingWritten) return;
+        _watchingWritten = sharer;
+        try
+        {
+            await Core.SetAttributes(new Dictionary<string, string> { ["watching"] = sharer });
+        }
+        catch (Exception fault)
+        {
+            // Written again with the next change of stage; a sharer seeing
+            // one watcher too few for a moment is the whole of the harm.
+            _watchingWritten = "";
+            Log.Line($"watching not written: {fault.Message}");
+        }
+    }
+
+    /// <summary>The level one remote sound plays at here, from nought to as sent (the sound panel, the song desk's music).</summary>
+    public void SetVolume(string sid, float level) => _playback?.SetGain(sid, level);
+
+    /// <summary>
+    /// The listener's setting for a person's shared screen sound or music
+    /// (hearing.ts): the level on any lossless stream standing in for it, and
+    /// the level and block told to the core, which switches those tracks and
+    /// their lossless streams at the server (lossless.rs) and must know a
+    /// block, or it would let a blocked sound flow again the next time a
+    /// stream started or stopped. The Opus track's own level is the caller's
+    /// (<see cref="SetVolume"/>).
+    /// </summary>
+    public async Task HearShared(string identity, bool music, float level, bool blocked)
+    {
+        Lossless.SetLevel(identity, music, blocked ? 0f : level);
+        try
+        {
+            await Core.SetHearing(identity, music, level, blocked);
+        }
+        catch (Exception fault)
+        {
+            Log.Line($"hearing not set: {fault.Message}");
+        }
+    }
+
+    /// <summary>Stops a remote track at the server, or lets it flow again (the web's block, hearing.ts).</summary>
+    public void Enable(string sid, bool enabled)
+    {
+        try
+        {
+            Core.SetRemoteEnabled(sid, enabled);
+        }
+        catch (Exception fault)
+        {
+            Log.Line($"{sid} could not be {(enabled ? "let flow" : "stopped")}: {fault.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Plays the call through these speakers from now on (the devices panel):
+    /// the call carries on there at once. Remembered once it took; one that
+    /// would not open says nothing, as on the web, and the sound stays where
+    /// it was.
+    /// </summary>
+    public async Task<bool> UseSpeakers(string? id)
+    {
+        if (_playback != null && !await _playback.UseOutput(id)) return false;
+        _memory.Remember(DeviceMemory.Kind.Speakers, id);
+        return true;
+    }
+
+    /// <summary>Whether the app's window is out of sight: readings taken then are not evidence of a freeze (the web skips a hidden tab).</summary>
+    public void SetBackground(bool background) => Core.SetBackground(background);
 
     private AudioInput? _microphone;
     private VideoInput? _camera;
@@ -208,6 +376,9 @@ internal sealed class CallModel : Observable, IDisposable
         LocalIdentity = core.LocalIdentity();
         LocalName = core.LocalName();
         _connectionOpen = memory.Defaults?.Bool(SignalDetailKey) ?? false;
+        Lossless = new LosslessPlayback(playback);
+        Sharing = media.Sharing;
+        Sharing.Keep(memory.Defaults);
     }
 
     private sealed class Bridge(Action<CallEvent> heard) : CallObserver
@@ -224,7 +395,8 @@ internal sealed class CallModel : Observable, IDisposable
     public static async Task<CallModel> Join(CallOptions options, Deployment deployment, string? region, CallMedia media, DeviceMemory memory)
     {
         // Nothing is ever played in a muted launch: the graph is not opened.
-        var playback = await media.OpenPlayback();
+        // To the speakers last picked, where they are still there.
+        var playback = await media.OpenPlayback(memory.Choice(DeviceMemory.Kind.Speakers));
         CallModel? model = null;
         var early = new List<CallEvent>();
         var bridge = new Bridge(e =>
@@ -246,11 +418,11 @@ internal sealed class CallModel : Observable, IDisposable
             foreach (var e in early) model.Arrived(e);
         }
         // Applied on the UI thread after the events queued above.
-        model._ui.TryEnqueue(() =>
-        {
-            model._settled = true;
-            _ = model.KeepStanding();
-        });
+        model._ui.TryEnqueue(() => model._settled = true);
+        // It has to play from the first call: the core asks for a stream
+        // whenever a browser offers one and holds the sound's Opus track back
+        // at the server meanwhile, sink or no sink.
+        core.SetLosslessSink(model.Lossless);
         return model;
     }
 
@@ -707,39 +879,17 @@ internal sealed class CallModel : Observable, IDisposable
     private static long _reactionIds;
 
     /// <summary>
-    /// Asks the server whether this participant runs the room, at the join
-    /// and every half minute after: a room can be handed over, and only its
-    /// host is offered ending it for everybody (HostFeature.kt
-    /// <c>refreshStanding</c>). TODO(windows 2b): the host panel (the door,
-    /// muting and moving people, handing the room over) is not here yet.
+    /// What the server last said about whether this participant runs the
+    /// room (host.ts <c>useStanding</c>), told by the host feature, which
+    /// asks: only the host is offered ending it for everybody and the host
+    /// panel.
     /// </summary>
-    private async Task KeepStanding()
+    internal void Standing(bool yours)
     {
-        while (!_over.IsCancellationRequested)
-        {
-            try
-            {
-                var standing = await Deployment.HostStanding(Room, Core.Token());
-                if (standing.Yours != Hosting)
-                {
-                    Hosting = standing.Yours;
-                    Log.Line(Hosting ? "this room is ours" : "this room is not ours");
-                    Notify();
-                }
-            }
-            catch (Exception)
-            {
-                // A round that did not answer says nothing about who runs it.
-            }
-            try
-            {
-                await Task.Delay(TimeSpan.FromSeconds(30), _over.Token);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-        }
+        if (yours == Hosting) return;
+        Hosting = yours;
+        Log.Line(Hosting ? "this room is ours" : "this room is not ours");
+        Notify();
     }
 
     /// <summary>
@@ -763,8 +913,24 @@ internal sealed class CallModel : Observable, IDisposable
         if (_left) return;
         _left = true;
         _over_ = true;
+        // What the parts layered over the call say before it goes (the
+        // holder of a show saying it closed), while the call can still carry
+        // it: said after, it never arrived.
+        foreach (var last in BeforeLeaving.Values.ToList())
+        {
+            try
+            {
+                await last();
+            }
+            catch (Exception fault)
+            {
+                Log.Line($"before leaving: {fault.Message}");
+            }
+        }
+        BeforeLeaving.Clear();
         _over.Cancel();
         StopMedia();
+        await Quietly(Sharing.Stop);
         try
         {
             await Core.Leave();
@@ -778,6 +944,7 @@ internal sealed class CallModel : Observable, IDisposable
 
     private void StopMedia()
     {
+        Lossless.CloseAll();
         if (!_media.RealDevices) _media.SyntheticSource.Audio = null;
         _ = _media.Unpublish();
         _microphoneFeed?.Dispose();
@@ -802,11 +969,12 @@ internal sealed class CallModel : Observable, IDisposable
             case CallEvent.Ended ended:
                 _over_ = true;
                 StopMedia();
+                _ = Quietly(Sharing.Stop);
                 Log.Line($"call ended: {ended.Reason}");
                 // The server deleting the room is `RoomDeleted` in the Rust
                 // SDK; waiting only for `RoomClosed` left the app sitting in a
                 // call that had gone, never rejoining.
-                if (_moving is { } moving && DateTime.UtcNow - moving.At < MoveWindow && Refusals.MovedAway(ended.Reason)) Moved?.Invoke(moving.Relay);
+                if (MovingNow is { } moving && WatchWords.Now() - moving.At < MoveWindowMs && Refusals.MovedAway(ended.Reason)) Moved?.Invoke(moving.Relay);
                 else EndedBy?.Invoke(ended.Reason);
                 break;
             case CallEvent.ParticipantJoined joined:
@@ -888,7 +1056,7 @@ internal sealed class CallModel : Observable, IDisposable
                 // believed (host.ts, App.tsx).
                 if (data.Identity == null && data.Topic is "moving" or "placing")
                 {
-                    _moving = (System.Text.Encoding.UTF8.GetString(data.Payload), DateTime.UtcNow);
+                    MovingNow = new Moving(System.Text.Encoding.UTF8.GetString(data.Payload), WatchWords.Now());
                 }
                 else if (TomoshibiProtocolMethods.ReceivedReaction(data.Topic, data.Identity, data.Payload) is { } reaction && data.Identity is { } from)
                 {
@@ -901,6 +1069,12 @@ internal sealed class CallModel : Observable, IDisposable
                 break;
             case CallEvent.Connection connection:
                 Connection = connection.Reading;
+                break;
+            case CallEvent.Sealed seal:
+                Update(seal.Identity, p => p with { Readable = seal.Readable });
+                break;
+            case CallEvent.Strain strain:
+                StrainHint = strain.Hint;
                 break;
             case CallEvent.LosslessGaveUp:
                 Announce(new CallToast(
@@ -972,6 +1146,7 @@ internal sealed class CallModel : Observable, IDisposable
                 return $"audio {s.Sid} chunks={total} (+{since}) level={dbfs:F1} dBFS";
             }).ToList();
         }
+        if (_playback != null) heard.Add(_playback.Reading());
         return string.Join("; ", heard.Prepend(sent));
     }
 

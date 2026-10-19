@@ -124,6 +124,14 @@ internal sealed class Overlay : Grid
         y = Math.Clamp(y, 10, Math.Max(10, ActualHeight - 10 - size.Height));
         Canvas.SetLeft(panel, x);
         Canvas.SetTop(panel, y);
+        // A popover whose contents grow or shrink while it is open (the
+        // share menu's frame rates arriving with a size) keeps its edge
+        // against the control: above the bar, it grows upwards.
+        if (side == Edge.Above)
+        {
+            var foot = y + size.Height;
+            panel.SizeChanged += (_, e) => Canvas.SetTop(panel, Math.Max(10, foot - e.NewSize.Height));
+        }
         _popoverLayer.Children.Add(catcher);
         _popoverLayer.Children.Add(panel);
         _pop = new Pop(id, catcher, panel, closed);

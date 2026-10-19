@@ -22,6 +22,7 @@ internal sealed class ToastStack : Canvas
 {
     private readonly CallModel _call;
     private readonly Dictionary<long, Border> _cards = new();
+    private readonly Dictionary<long, CallToast> _drawn = new();
     private bool _spread;
     private double _lift;
 
@@ -66,13 +67,20 @@ internal sealed class ToastStack : Canvas
         {
             var card = _cards[gone];
             _cards.Remove(gone);
+            _drawn.Remove(gone);
             Children.Remove(card);
         }
         foreach (var toast in toasts)
         {
             if (_cards.TryGetValue(toast.Id, out var card))
             {
-                card.Child = Line(toast);
+                // Said again under its key: the words change inside the
+                // card's own glass, which stays where it is. Only when they
+                // did change: drawn again on every change to the call, the
+                // door's notice made its list afresh every two seconds.
+                if (_drawn.TryGetValue(toast.Id, out var drawn) && drawn == toast) continue;
+                _drawn[toast.Id] = toast;
+                if (card.Child is Border kept) kept.Child = Line(toast);
                 continue;
             }
             card = new Border { Width = 300, Child = Line(toast) };
@@ -82,6 +90,7 @@ internal sealed class ToastStack : Canvas
             card.Child = glass;
             card.Arrives(0.96f, new Vector2(0.5f, 1f), fromY: 18);
             _cards[toast.Id] = card;
+            _drawn[toast.Id] = toast;
             Children.Add(card);
         }
         Lay();
@@ -141,6 +150,12 @@ internal sealed class ToastStack : Canvas
         };
         var words = K.Column(3, K.Text(toast.Title, 13, K.Medium));
         if (toast.Detail != null) words.Children.Add(K.Text(toast.Detail, 11.5, ink: Ink.Muted));
+        if (toast.Attachment is { } attachment && _call.Attachments.TryGetValue(attachment, out var draw))
+        {
+            var drawn = draw();
+            if (drawn is FrameworkElement element) element.Margin = new Thickness(0, 6, 0, 0);
+            words.Children.Add(drawn);
+        }
         var parts = new List<(UIElement, double)> { K.Fixed(rail), K.Flex(words) };
         if (toast.ActionTitle != null)
         {

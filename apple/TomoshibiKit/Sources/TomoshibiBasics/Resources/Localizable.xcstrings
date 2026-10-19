@@ -5761,6 +5761,36 @@
         }
       }
     },
+    "Everything this computer plays, except the call" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Everything this computer plays, except the call"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このコンピュータで再生中のすべての音（通話を除く）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台电脑播放的所有声音，通话除外"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這台電腦播放的所有聲音，通話除外"
+          }
+        }
+      }
+    },
     "External camera" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,

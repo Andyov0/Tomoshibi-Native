@@ -313,6 +313,39 @@ impl VideoInput {
         self.source.capture_frame(&VideoFrame { rotation: turned(rotation), timestamp_us, frame_metadata: None, buffer });
     }
 
+    /// A picture as rows of blue, green, red and alpha bytes, `stride` bytes
+    /// from one row to the next (DXGI's B8G8R8A8, which libyuv calls ARGB),
+    /// sent at `out_width` by `out_height`: what a Windows screen capture
+    /// reads back from the GPU, converted and scaled here by libyuv. In the
+    /// app it would be every pixel of a 1440p screen sixty times a second in
+    /// managed code. A picture shorter than it says is not sent.
+    #[allow(clippy::too_many_arguments)]
+    pub fn push_bgra(
+        &self,
+        bgra: Vec<u8>,
+        stride: u32,
+        width: u32,
+        height: u32,
+        out_width: u32,
+        out_height: u32,
+        timestamp_us: i64,
+    ) {
+        if width == 0 || height == 0 || stride < width * 4 || bgra.len() < (stride as usize) * (height as usize) {
+            return;
+        }
+        let mut buffer = I420Buffer::new(width, height);
+        let (sy, su, sv) = buffer.strides();
+        let (dy, du, dv) = buffer.data_mut();
+        livekit::webrtc::native::yuv_helper::argb_to_i420(&bgra, stride, dy, sy, du, su, dv, sv, width as i32, height as i32);
+        let (out_width, out_height) = (out_width & !1, out_height & !1);
+        let buffer = if out_width >= 2 && out_height >= 2 && (out_width, out_height) != (width, height) {
+            buffer.scale(out_width as i32, out_height as i32)
+        } else {
+            buffer
+        };
+        self.source.capture_frame(&VideoFrame { rotation: VideoRotation::VideoRotation0, timestamp_us, frame_metadata: None, buffer });
+    }
+
     pub fn set_muted(&self, muted: bool) {
         let _core = crate::runtime::enter();
         if muted {

@@ -49,6 +49,10 @@ public partial class App : Application
         if (launch.Language is { } code && Languages.Of(code) is { } language) Localization.Shared.Choose(language);
         Appearance.Shared = new Appearance(kept) { Keeps = !launch.Rehearsal };
         Ink.ApplyAccent();
+        // The sound panel's record: in a rehearsal the memory store, which
+        // keeps nothing past the launch, so that a test's mute is never
+        // written into the owner's book.
+        Hearing.Shared = new Hearing(kept);
 
         var media = new CallMedia(launch);
         var app = new AppModel(launch, media, kept, secrets);
