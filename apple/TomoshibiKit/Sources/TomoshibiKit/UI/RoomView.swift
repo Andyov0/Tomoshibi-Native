@@ -246,7 +246,9 @@ public struct RoomView: View {
             // ground as well, which is opaque: drawn over it, the picture it
             // carries showed through every gap between the tiles, a second
             // copy of a shared screen edging out from behind the stage.
-            PictureInPictureHost(call: model.call, sid: model.pictureInPictureSid)
+            let small = model.pictureInPictureSid
+            PictureInPictureHost(call: model.call, sid: small,
+                                 camera: small != nil && model.surfaces.contains { $0.sid == small && $0.kind == .camera })
                 .frame(width: size.width, height: size.height)
                 .allowsHitTesting(false)
                 .zIndex(-4)
@@ -1096,6 +1098,14 @@ public struct RoomView: View {
                                            isARepeat: false, keyCode: 53)
                     if let event { NSApp.postEvent(event, atStart: false) }
                 }
+            case "window":
+                // `window:WxH`: the window resized as somebody dragging its
+                // corner would, for a picture to be framed again by its new
+                // shape.
+                let size = step.argument.split(separator: "x").compactMap { Double($0) }
+                if size.count == 2, let window = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil }) {
+                    window.setContentSize(NSSize(width: size[0], height: size[1]))
+                }
             #endif
             case "share":
                 #if os(macOS)
@@ -1164,8 +1174,9 @@ extension View {
 ///   double presses or pins a picture (by a person's name, `me`, `myshare`
 ///   or `screen:<name>`), and fills, unfills, shows the grid, turns the page,
 ///   opens a panel, starts a share, raises this participant's hand, mutes a
-///   guest for this participant or leaves the call as the Leave menu does,
-///   each that many seconds after the one before.
+///   guest for this participant, resizes the Mac's window (`window:WxH`) or
+///   leaves the call as the Leave menu does, each that many seconds after
+///   the one before.
 enum StageDebug {
     struct Step {
         let at: Double

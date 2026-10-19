@@ -9,20 +9,23 @@ import TomoshibiCore
 /// for `pixelDensity: "screen"` for the same reason (room.ts ~624), a share
 /// read on a Retina screen at half its pixels is a share that cannot be read.
 /// When it leaves the screen it detaches, and the server stops sending.
+///
+/// A camera fills its place or is shown whole by the two shapes (Framing,
+/// Framer); anything else, a shared screen, is always shown whole.
 public struct VideoSurface: View {
     let call: Call
     let sid: String
-    var fill: Bool
+    var camera: Bool
 
-    public init(call: Call, sid: String, fill: Bool = false) {
+    public init(call: Call, sid: String, camera: Bool = false) {
         self.call = call
         self.sid = sid
-        self.fill = fill
+        self.camera = camera
     }
 
     public var body: some View {
         GeometryReader { geometry in
-            Representable(call: call, sid: sid, fill: fill, size: geometry.size)
+            Representable(call: call, sid: sid, camera: camera, size: geometry.size)
         }
     }
 }
@@ -31,17 +34,18 @@ public struct VideoSurface: View {
 private struct Representable: NSViewRepresentable {
     let call: Call
     let sid: String
-    let fill: Bool
+    let camera: Bool
     let size: CGSize
 
     func makeNSView(context: Context) -> SurfaceView {
         let view = SurfaceView()
+        view.framer.camera = camera
         view.connect(call: call, sid: sid)
         return view
     }
 
     func updateNSView(_ view: SurfaceView, context: Context) {
-        view.renderer.layer.videoGravity = fill ? .resizeAspectFill : .resizeAspect
+        view.framer.camera = camera
         view.ask(points: size, scale: view.window?.backingScaleFactor ?? 2)
     }
 
@@ -51,26 +55,28 @@ private struct Representable: NSViewRepresentable {
 }
 
 final class SurfaceView: NSView {
-    let renderer = VideoRenderer()
+    let renderer: VideoRenderer
+    let framer: Framer
     private var call: Call?
     private var sid = ""
     private var asked = (0, 0)
 
     override init(frame: NSRect) {
+        let renderer = VideoRenderer()
+        self.renderer = renderer
+        framer = Framer(renderer: renderer)
         super.init(frame: frame)
         wantsLayer = true
-        layer = CALayer()
-        layer?.addSublayer(renderer.layer)
+        let root = CALayer()
+        layer = root
+        framer.attach(to: root)
     }
 
     required init?(coder: NSCoder) { nil }
 
     override func layout() {
         super.layout()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        renderer.layer.frame = bounds
-        CATransaction.commit()
+        framer.layout(bounds)
     }
 
     func connect(call: Call, sid: String) {
@@ -82,6 +88,7 @@ final class SurfaceView: NSView {
     func disconnect() {
         if let call { VideoHub.existing(call)?.remove(renderer, from: sid) }
         call = nil
+        framer.stop()
     }
 
     func ask(points: CGSize, scale: CGFloat) {
@@ -95,17 +102,18 @@ final class SurfaceView: NSView {
 private struct Representable: UIViewRepresentable {
     let call: Call
     let sid: String
-    let fill: Bool
+    let camera: Bool
     let size: CGSize
 
     func makeUIView(context: Context) -> SurfaceView {
         let view = SurfaceView()
+        view.framer.camera = camera
         view.connect(call: call, sid: sid)
         return view
     }
 
     func updateUIView(_ view: SurfaceView, context: Context) {
-        view.renderer.layer.videoGravity = fill ? .resizeAspectFill : .resizeAspect
+        view.framer.camera = camera
         // The density the view is drawn at, from its traits rather than its
         // window's screen: on an iPhone Duo the window moves between two
         // screens as the phone opens and closes, and Apple has the screen
@@ -121,24 +129,25 @@ private struct Representable: UIViewRepresentable {
 }
 
 final class SurfaceView: UIView {
-    let renderer = VideoRenderer()
+    let renderer: VideoRenderer
+    let framer: Framer
     private var call: Call?
     private var sid = ""
     private var asked = (0, 0)
 
     override init(frame: CGRect) {
+        let renderer = VideoRenderer()
+        self.renderer = renderer
+        framer = Framer(renderer: renderer)
         super.init(frame: frame)
-        layer.addSublayer(renderer.layer)
+        framer.attach(to: layer)
     }
 
     required init?(coder: NSCoder) { nil }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        renderer.layer.frame = bounds
-        CATransaction.commit()
+        framer.layout(bounds)
     }
 
     func connect(call: Call, sid: String) {
@@ -150,6 +159,7 @@ final class SurfaceView: UIView {
     func disconnect() {
         if let call { VideoHub.existing(call)?.remove(renderer, from: sid) }
         call = nil
+        framer.stop()
     }
 
     private var points = CGSize.zero

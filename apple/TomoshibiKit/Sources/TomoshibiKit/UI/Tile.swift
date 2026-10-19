@@ -267,9 +267,11 @@ struct Steady<Inner: View>: View {
 }
 
 /// A picture that belongs to somebody else: their camera, or their screen on
-/// the stage (components/room/SurfaceTile.tsx). A camera fills its tile,
-/// because a face is fine cropped at the edges and wrong letterboxed; a
-/// screen is shown whole, because cropping hides whatever was at the edge.
+/// the stage (components/room/SurfaceTile.tsx). A camera fills its tile
+/// while the two shapes are close, because a face is fine cropped at the
+/// edges, and is shown whole on a blurred copy of itself when filling would
+/// cut away most of it (Framing); a screen is always shown whole, because
+/// cropping hides whatever was at the edge.
 struct SurfacePicture: View {
     let surface: Surface
     let call: Call
@@ -278,7 +280,7 @@ struct SurfacePicture: View {
     var body: some View {
         ZStack {
             if let sid = surface.sid {
-                VideoSurface(call: call, sid: sid, fill: surface.kind == .camera)
+                VideoSurface(call: call, sid: sid, camera: surface.kind == .camera)
                     .transition(.opacity.animation(Theme.settle))
             } else {
                 Avatar(name: surface.person.name, identity: surface.person.id)

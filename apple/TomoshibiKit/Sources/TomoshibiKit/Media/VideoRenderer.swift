@@ -35,9 +35,40 @@ public final class VideoRenderer: @unchecked Sendable {
     private static let log = Logger(subsystem: "app.tomoshibi", category: "video")
 
     /// The size of the last frame and its rotation, for the view to fit the
-    /// picture rather than the box it sits in (web SurfaceTile.tsx ~93-124).
+    /// picture rather than the box it sits in (web SurfaceTile.tsx ~93-124),
+    /// and to choose between filling its place and being shown whole
+    /// (Framing). Said on the decoder's thread whenever it changes, a turn
+    /// alone included: a sender that turns its phone and says so with the
+    /// rotation rather than with the buffer's own shape changes the picture's
+    /// shape as much as one that sends the other way round.
     public private(set) var pictureSize: CGSize = .zero
     public var onPictureSize: (@Sendable (CGSize) -> Void)?
+    private var shape: (Int, Int, Int) = (0, 0, -1)
+
+    /// Whoever draws the blurred copy of the picture behind it while it is
+    /// shown whole (PictureBackdrop), handed a frame at most once in
+    /// `sampleEvery` seconds on the decoder's thread. A copy refreshed once a
+    /// second is a backdrop; every frame of it would be a second picture to
+    /// work out.
+    private var sampler: (@Sendable (CVPixelBuffer, Int) -> Void)?
+    private var sampleEvery: CFTimeInterval = 1
+    private var lastSampled: CFAbsoluteTime = 0
+
+    /// Hands a frame at most once in `seconds` to `take`, starting with the
+    /// next one; nil stops it.
+    func sample(every seconds: CFTimeInterval, _ take: (@Sendable (CVPixelBuffer, Int) -> Void)?) {
+        lock.lock()
+        sampler = take
+        sampleEvery = seconds
+        lastSampled = 0
+        lock.unlock()
+    }
+
+    /// The turn a frame's rotation asks for, for anything drawn from the same
+    /// buffer to be turned as the picture is.
+    static func turn(_ rotation: Int) -> CGAffineTransform {
+        CGAffineTransform(rotationAngle: CGFloat(rotation) * .pi / 180)
+    }
 
     public init() {
         layer.videoGravity = .resizeAspect
@@ -62,10 +93,20 @@ public final class VideoRenderer: @unchecked Sendable {
             CMVideoFormatDescriptionCreateForImageBuffer(allocator: nil, imageBuffer: buffer, formatDescriptionOut: &description)
             format = description
             lastSize = (width, height)
+        }
+        if shape != (width, height, rotation) {
+            shape = (width, height, rotation)
             let turned = rotation == 90 || rotation == 270
             let size = CGSize(width: turned ? height : width, height: turned ? width : height)
             pictureSize = size
             onPictureSize?(size)
+        }
+        if let sampler {
+            let now = CFAbsoluteTimeGetCurrent()
+            if now - lastSampled >= sampleEvery {
+                lastSampled = now
+                sampler(buffer, rotation)
+            }
         }
         guard let format else { return }
         var timing = CMSampleTimingInfo(duration: .invalid, presentationTimeStamp: CMClockGetTime(CMClockGetHostTimeClock()), decodeTimeStamp: .invalid)
@@ -102,10 +143,9 @@ public final class VideoRenderer: @unchecked Sendable {
         renderer.enqueue(sample)
         lastTaken = CFAbsoluteTimeGetCurrent()
         turnedAway = 0
-        let angle = CGFloat(rotation) * .pi / 180
         if rotation != 0 || layer.affineTransform() != .identity {
             DispatchQueue.main.async { [layer] in
-                layer.setAffineTransform(CGAffineTransform(rotationAngle: angle))
+                layer.setAffineTransform(Self.turn(rotation))
             }
         }
     }
