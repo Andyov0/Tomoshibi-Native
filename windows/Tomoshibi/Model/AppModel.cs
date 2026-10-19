@@ -885,8 +885,11 @@ internal sealed class AppModel : Observable
         }
         if (Call == model)
         {
-            Call = null;
+            // The ended screen first, then no call: the other way round, the
+            // call screen with no call in it gave way to the join screen for
+            // an instant before the ended screen replaced it.
             Showing = Screen.Ended;
+            Call = null;
         }
         // A relay that has just dropped a call is the one thing known about
         // the fleet; without forgetting the measurement it would go on being
