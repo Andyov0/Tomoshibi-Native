@@ -12,7 +12,13 @@ struct TomoshibiApp: App {
         WindowGroup {
             AppRoot(app: app)
                 #if os(macOS)
-                .frame(minWidth: 480, minHeight: 360)
+                // As small as the lobby can be drawn whole: its sidebar is
+                // 240 points at the least and what stands beside it needs
+                // about another five hundred. It was 480 by 360, which the
+                // first window took whenever its first screen (the mark, the
+                // sign-in) was small, and the lobby that followed was cut off
+                // at the right and the foot.
+                .frame(minWidth: 760, minHeight: 520)
                 // A link opened with the app goes to the window already open
                 // rather than to a new one: there is one call at a time, and
                 // a second window drew the same call twice.
@@ -20,6 +26,10 @@ struct TomoshibiApp: App {
                 #endif
         }
         #if os(macOS)
+        // A first window the size of the lobby rather than of whatever the
+        // first screen measured (the Windows app opens at the same size).
+        // Once moved or resized, the window comes back as it was left.
+        .defaultSize(width: 1180, height: 760)
         .windowStyle(.hiddenTitleBar)
         .commands {
             // No second window. Every window is the same app on the same

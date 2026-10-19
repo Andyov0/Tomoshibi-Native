@@ -77,6 +77,13 @@ public struct AppRoot: View {
         .animation(Theme.settle, value: app.account?.name)
         .animation(Theme.settle, value: app.call == nil)
         .preferredColorScheme(.dark)
+        // A page that fits stays put. The sign-in, the join screens and the
+        // cards around a call are in scroll views so that a phone on its side
+        // can still reach the foot of them, and left to the default every one
+        // of them rubber-banded under a finger or a trackpad even when there
+        // was nothing more to see, which read as the page being loose. Where
+        // the content is taller than the window, it scrolls as before.
+        .scrollBounceBehavior(.basedOnSize)
         // The colour the person chose, for every control the system draws.
         .tint(appearance.accent.color)
         .task {
