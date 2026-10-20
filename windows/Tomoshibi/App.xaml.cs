@@ -35,12 +35,12 @@ public partial class App : Application
             // A test's own store, never the owner's (Launch.KeepIn).
             var folder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Tomoshibi-tests", keep);
             Directory.CreateDirectory(folder);
-            kept = new FileDefaults(Path.Combine(folder, "preferences.json"));
+            kept = new FileDefaults(Path.Combine(folder, "preferences.json"), Log.Line);
             secrets = new DpapiSecrets(Path.Combine(folder, "secrets"));
         }
         else
         {
-            kept = launch.Rehearsal ? new MemoryDefaults() : FileDefaults.App();
+            kept = launch.Rehearsal ? new MemoryDefaults() : new FileDefaults(Path.Combine(Folders.Local, "preferences.json"), Log.Line);
             secrets = launch.Rehearsal ? new MemorySecrets() : DpapiSecrets.App();
         }
 
