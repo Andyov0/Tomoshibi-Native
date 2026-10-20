@@ -1,6 +1,7 @@
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.Windows.AppLifecycle;
+using Tomoshibi.Basics;
 using Tomoshibi.Model;
 using Windows.ApplicationModel.Activation;
 
@@ -27,8 +28,13 @@ internal static class Program
     /// <summary>A link the app was opened with, or nothing.</summary>
     public static string? OpenedWith { get; private set; }
 
-    /// <summary>A link handed to this app by a later launch, on a thread of the system's.</summary>
-    public static event Action<string?>? Handed;
+    /// <summary>
+    /// Links handed to this app by later launches (null for a launch with
+    /// none, which only brings the window forward), on a thread of the
+    /// system's; kept from the moment the app registers until the app
+    /// listens, which is once its window is up (Handover).
+    /// </summary>
+    public static readonly Handover<string?> Handed = new();
 
     [STAThread]
     private static int Main(string[] args)
@@ -68,7 +74,7 @@ internal static class Program
                 done.Wait(TimeSpan.FromSeconds(10));
                 return 0;
             }
-            first.Activated += (_, e) => Handed?.Invoke(LinkOf(e));
+            first.Activated += (_, e) => Handed.Hand(LinkOf(e));
         }
         Application.Start(started =>
         {

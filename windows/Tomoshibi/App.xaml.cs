@@ -107,13 +107,13 @@ public partial class App : Application
         // A link handed over by a later launch: the window comes forward and
         // the link is opened here, on the UI thread.
         var ui = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-        Program.Handed += link => ui.TryEnqueue(() =>
+        Program.Handed.Listen(link => ui.TryEnqueue(() =>
         {
             _window?.Activate();
             if (link == null) return;
             Log.Line("handed a link");
             _ = app.Open(link);
-        });
+        }));
         _ = app.Start();
     }
 
