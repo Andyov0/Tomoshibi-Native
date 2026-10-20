@@ -526,6 +526,27 @@ internal sealed class AppModel : Observable
     /// <summary>Whether there is a machine to choose at all (PreJoin.tsx <c>offerChoice</c>): more than one relay, on a deployment that acts on the choice.</summary>
     public bool OffersRelayChoice => Relays is { } relays && relays.Measure && relays.Relays.Length > 1;
 
+    /// <summary>
+    /// Whether the join screen and the meeting's waiting screen offer the
+    /// server picker: where there is a choice, to somebody who did not come
+    /// to them through the lobby. Somebody signed in who starts or joins from
+    /// the lobby has its picker in the sheet they press Join in; somebody who
+    /// opened an invitation or a meeting's link, signed in or not, or who is
+    /// not signed in at all, never sees the lobby's picker, and could not
+    /// choose (the owner, 2026-10-19). The same rule as the iPhone and Android
+    /// (<c>offersRelayChoiceAtTheDoor</c>), which is the web's.
+    /// </summary>
+    public bool OffersRelayChoiceAtTheDoor => OffersRelayChoice && (Account == null || ArrivedByLink);
+
+    /// <summary>
+    /// The screen before a call was reached by a link (an invitation, a
+    /// meeting, a room's address), handed over by the system or pasted, and
+    /// not by the lobby's own join. Kept until the person goes back to the
+    /// lobby, so a join that is refused, or a move that fails, comes back to
+    /// the same screen with the same picker on it.
+    /// </summary>
+    public bool ArrivedByLink { get; private set; }
+
     /// <summary>A relay remembered from before that this deployment does not offer, or no longer takes calls on, would be sent with every join and refused.</summary>
     private void DropRelayNotOffered()
     {
@@ -569,6 +590,7 @@ internal sealed class AppModel : Observable
         if (parts.Meeting != null)
         {
             if (parts.Room.Length > 0) Room = parts.Room;
+            ArrivedByLink = true;
             Wait(parts.Meeting);
             return;
         }
@@ -596,6 +618,7 @@ internal sealed class AppModel : Observable
                 else if (error == "invite_expired") Tell(T("That meeting has ended."));
                 else if (error == "rate_limited") Tell(T("Too many attempts. Try again in a moment."));
                 else Tell(T("That invitation is no longer good. Ask for another."));
+                ArrivedByLink = false;
                 Showing = Screen.Lobby;
                 return;
             }
@@ -610,12 +633,17 @@ internal sealed class AppModel : Observable
             if (Account == null)
             {
                 Tell(T("{room} is by invitation. Ask the organiser for a link.", ("room", parts.Room)));
+                ArrivedByLink = false;
                 Showing = Screen.Lobby;
                 return;
             }
             Room = parts.Room;
         }
-        if (Room.Length > 0) Showing = Screen.Prejoin;
+        if (Room.Length > 0)
+        {
+            ArrivedByLink = true;
+            Showing = Screen.Prejoin;
+        }
         Notify();
     }
 
@@ -1029,6 +1057,7 @@ internal sealed class AppModel : Observable
         CancelJoin();
         Batch(() =>
         {
+            ArrivedByLink = false;
             Showing = Screen.Lobby;
             Problem = null;
             Invite = null;

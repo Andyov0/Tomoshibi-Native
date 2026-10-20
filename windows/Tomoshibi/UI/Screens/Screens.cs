@@ -241,7 +241,7 @@ internal sealed class PreJoinScreen : Screen
         }
         // Where the call is held, only for somebody who has not already
         // chosen it in the lobby, and only where there is a choice.
-        content.Children.Add(Shared.OptionsCard(App, _sealing, on => _sealing = on, "prejoin.server", offerServer: App.Account == null));
+        content.Children.Add(Shared.OptionsCard(App, _sealing, on => _sealing = on, "prejoin.server", offerServer: App.OffersRelayChoiceAtTheDoor));
         _problem = new Shared.ProblemSlot(App);
         content.Children.Add(_problem);
         _join = new Shared.Pressing(T("Join"), 52);
@@ -418,7 +418,7 @@ internal sealed class WaitingScreen : Screen
             // it (Waiting.tsx: "Nothing is asked until there is one").
             content.Children.Add(Shared.IdentityBox(App.Name, text => App.Name = text, App.Passphrase, text => App.Passphrase = text, nameOnly: true));
         }
-        content.Children.Add(Shared.OptionsCard(App, _sealing, on => _sealing = on, "waiting.server", offerServer: false));
+        content.Children.Add(Shared.OptionsCard(App, _sealing, on => _sealing = on, "waiting.server", offerServer: App.OffersRelayChoiceAtTheDoor));
         _state = K.Flowing(12);
         content.Children.Add(_state);
         _problem = new Shared.ProblemSlot(App);
