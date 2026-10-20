@@ -463,6 +463,240 @@
       "zh-Hant": "USB 音訊",
       "ja": "USB オーディオ"
     },
+    "Allow": {
+      "en": "Allow",
+      "zh-Hans": "允许",
+      "zh-Hant": "允許",
+      "ja": "許可"
+    },
+    "Allow Tomoshibi to install its update": {
+      "en": "Allow Tomoshibi to install its update",
+      "zh-Hans": "允许 Tomoshibi 安装更新",
+      "zh-Hant": "允許 Tomoshibi 安裝更新",
+      "ja": "Tomoshibi にアップデートのインストールを許可"
+    },
+    "Android asks you to allow this once. On the next screen, turn on “Allow from this source”, then come back to Tomoshibi.": {
+      "en": "Android asks you to allow this once. On the next screen, turn on “Allow from this source”, then come back to Tomoshibi.",
+      "zh-Hans": "Android 需要你允许一次。请在接下来的页面里打开「允许来自此来源的应用」，然后回到 Tomoshibi。",
+      "zh-Hant": "Android 需要你允許一次。請在接下來的頁面裡開啟「允許安裝這個來源的應用程式」，然後回到 Tomoshibi。",
+      "ja": "Android では一度だけ許可が必要です。次の画面で「この提供元のアプリを許可」をオンにして、Tomoshibi に戻ってください。"
+    },
+    "Apple has not approved this update, so it was not installed.": {
+      "en": "Apple has not approved this update, so it was not installed.",
+      "zh-Hans": "这个更新没有通过 Apple 的公证，所以没有安装。",
+      "zh-Hant": "這個更新沒有通過 Apple 的公證，所以沒有安裝。",
+      "ja": "このアップデートは Apple の公証を受けていないため、インストールしませんでした。"
+    },
+    "Check for updates": {
+      "en": "Check for updates",
+      "zh-Hans": "检查更新",
+      "zh-Hant": "檢查更新",
+      "ja": "アップデートを確認"
+    },
+    "Checking for updates…": {
+      "en": "Checking for updates…",
+      "zh-Hans": "正在检查更新…",
+      "zh-Hant": "正在檢查更新…",
+      "ja": "アップデートを確認しています…"
+    },
+    "Confirm the update in the window Android shows.": {
+      "en": "Confirm the update in the window Android shows.",
+      "zh-Hans": "请在 Android 弹出的窗口里确认更新。",
+      "zh-Hant": "請在 Android 彈出的視窗裡確認更新。",
+      "ja": "Android が表示する画面でアップデートを確定してください。"
+    },
+    "Continue": {
+      "en": "Continue",
+      "zh-Hans": "继续",
+      "zh-Hant": "繼續",
+      "ja": "続ける"
+    },
+    "Could not check for updates. Try again later.": {
+      "en": "Could not check for updates. Try again later.",
+      "zh-Hans": "检查更新失败，请稍后再试。",
+      "zh-Hant": "檢查更新失敗，請稍後再試。",
+      "ja": "アップデートを確認できませんでした。しばらくしてからもう一度お試しください。"
+    },
+    "Downloading Tomoshibi {version}": {
+      "en": "Downloading Tomoshibi {version}",
+      "zh-Hans": "正在下载 Tomoshibi {version}",
+      "zh-Hant": "正在下載 Tomoshibi {version}",
+      "ja": "Tomoshibi {version} をダウンロードしています"
+    },
+    "Installing Tomoshibi {version}": {
+      "en": "Installing Tomoshibi {version}",
+      "zh-Hans": "正在安装 Tomoshibi {version}",
+      "zh-Hant": "正在安裝 Tomoshibi {version}",
+      "ja": "Tomoshibi {version} をインストールしています"
+    },
+    "Later": {
+      "en": "Later",
+      "zh-Hans": "以后再说",
+      "zh-Hant": "以後再說",
+      "ja": "後で"
+    },
+    "Show in Finder": {
+      "en": "Show in Finder",
+      "zh-Hans": "在访达中显示",
+      "zh-Hant": "在 Finder 中顯示",
+      "ja": "Finder で表示"
+    },
+    "The download stopped. Check your connection and try again.": {
+      "en": "The download stopped. Check your connection and try again.",
+      "zh-Hans": "下载中断了，请检查网络后重试。",
+      "zh-Hant": "下載中斷了，請檢查網路後重試。",
+      "ja": "ダウンロードが中断しました。接続を確認してもう一度お試しください。"
+    },
+    "The download was damaged and has been deleted. Try again.": {
+      "en": "The download was damaged and has been deleted. Try again.",
+      "zh-Hans": "下载的文件已损坏，已经删除，请重试。",
+      "zh-Hant": "下載的檔案已損壞，已經刪除，請重試。",
+      "ja": "ダウンロードしたファイルが壊れていたため削除しました。もう一度お試しください。"
+    },
+    "The update could not be downloaded. Try again later.": {
+      "en": "The update could not be downloaded. Try again later.",
+      "zh-Hans": "更新下载失败，请稍后再试。",
+      "zh-Hant": "更新下載失敗，請稍後再試。",
+      "ja": "アップデートをダウンロードできませんでした。しばらくしてからもう一度お試しください。"
+    },
+    "The update could not be installed.": {
+      "en": "The update could not be installed.",
+      "zh-Hans": "更新安装失败。",
+      "zh-Hant": "更新安裝失敗。",
+      "ja": "アップデートをインストールできませんでした。"
+    },
+    "The update could not be opened.": {
+      "en": "The update could not be opened.",
+      "zh-Hans": "无法打开更新文件。",
+      "zh-Hant": "無法開啟更新檔案。",
+      "ja": "アップデートを開けませんでした。"
+    },
+    "The update could not be saved on this device.": {
+      "en": "The update could not be saved on this device.",
+      "zh-Hans": "无法把更新保存到这台设备上。",
+      "zh-Hant": "無法把更新儲存到這台裝置上。",
+      "ja": "このデバイスにアップデートを保存できませんでした。"
+    },
+    "The update does not match the app that is installed.": {
+      "en": "The update does not match the app that is installed.",
+      "zh-Hans": "这个更新与已安装的 app 不匹配。",
+      "zh-Hant": "這個更新與已安裝的 App 不相符。",
+      "ja": "このアップデートはインストール済みのアプリと一致しません。"
+    },
+    "The update is not signed by Tomoshibi's developer, so it was not installed.": {
+      "en": "The update is not signed by Tomoshibi's developer, so it was not installed.",
+      "zh-Hans": "这个更新不是 Tomoshibi 开发者签名的，所以没有安装。",
+      "zh-Hant": "這個更新不是 Tomoshibi 開發者簽署的，所以沒有安裝。",
+      "ja": "このアップデートには Tomoshibi の開発者の署名がないため、インストールしませんでした。"
+    },
+    "The update is not the version that was offered, so it was not installed.": {
+      "en": "The update is not the version that was offered, so it was not installed.",
+      "zh-Hans": "这个更新不是提示的那个版本，所以没有安装。",
+      "zh-Hant": "這個更新不是提示的那個版本，所以沒有安裝。",
+      "ja": "このアップデートは案内されたバージョンではないため、インストールしませんでした。"
+    },
+    "The update was not installed.": {
+      "en": "The update was not installed.",
+      "zh-Hans": "更新没有安装。",
+      "zh-Hant": "更新沒有安裝。",
+      "ja": "アップデートはインストールされませんでした。"
+    },
+    "There is not enough room on this device for the update.": {
+      "en": "There is not enough room on this device for the update.",
+      "zh-Hans": "这台设备的空间不够，装不下更新。",
+      "zh-Hant": "這台裝置的空間不夠，裝不下更新。",
+      "ja": "このデバイスにはアップデートに必要な空き容量がありません。"
+    },
+    "This device blocked the update.": {
+      "en": "This device blocked the update.",
+      "zh-Hans": "这台设备阻止了更新。",
+      "zh-Hant": "這台裝置阻止了更新。",
+      "ja": "このデバイスがアップデートをブロックしました。"
+    },
+    "This update does not run on this device.": {
+      "en": "This update does not run on this device.",
+      "zh-Hans": "这个更新不能在这台设备上运行。",
+      "zh-Hant": "這個更新無法在這台裝置上執行。",
+      "ja": "このアップデートはこのデバイスでは動作しません。"
+    },
+    "Tomoshibi cannot update itself here": {
+      "en": "Tomoshibi cannot update itself here",
+      "zh-Hans": "Tomoshibi 在这里无法自行更新",
+      "zh-Hant": "Tomoshibi 在這裡無法自行更新",
+      "ja": "この場所では Tomoshibi を更新できません"
+    },
+    "Tomoshibi could not put the update in place. Nothing was changed.": {
+      "en": "Tomoshibi could not put the update in place. Nothing was changed.",
+      "zh-Hans": "Tomoshibi 没能装上更新，原来的版本没有任何改动。",
+      "zh-Hant": "Tomoshibi 沒能裝上更新，原來的版本沒有任何改動。",
+      "ja": "Tomoshibi はアップデートを適用できませんでした。何も変更されていません。"
+    },
+    "Tomoshibi is not allowed to install apps, so it could not install the update. Allow it on the next screen to try again.": {
+      "en": "Tomoshibi is not allowed to install apps, so it could not install the update. Allow it on the next screen to try again.",
+      "zh-Hans": "Tomoshibi 没有安装应用的权限，所以没能安装更新。在接下来的页面里允许后再试一次。",
+      "zh-Hant": "Tomoshibi 沒有安裝應用程式的權限，所以沒能安裝更新。在接下來的頁面裡允許後再試一次。",
+      "ja": "Tomoshibi にアプリのインストールが許可されていないため、アップデートをインストールできませんでした。次の画面で許可してからもう一度お試しください。"
+    },
+    "Tomoshibi is running from its disk image. Drag it into Applications, open it from there, and update again.": {
+      "en": "Tomoshibi is running from its disk image. Drag it into Applications, open it from there, and update again.",
+      "zh-Hans": "Tomoshibi 正在直接从磁盘映像里运行。请把它拖进「应用程序」文件夹，从那里打开后再更新。",
+      "zh-Hant": "Tomoshibi 正在直接從磁碟映像檔裡執行。請把它拖進「應用程式」檔案夾，從那裡打開後再更新。",
+      "ja": "Tomoshibi をディスクイメージから直接開いています。「アプリケーション」フォルダにドラッグし、そこから開いてもう一度アップデートしてください。"
+    },
+    "Tomoshibi will open again when it is done.": {
+      "en": "Tomoshibi will open again when it is done.",
+      "zh-Hans": "完成后 Tomoshibi 会自动重新打开。",
+      "zh-Hant": "完成後 Tomoshibi 會自動重新打開。",
+      "ja": "完了すると Tomoshibi が自動的に開き直します。"
+    },
+    "Tomoshibi {version} is available": {
+      "en": "Tomoshibi {version} is available",
+      "zh-Hans": "Tomoshibi {version} 可以更新了",
+      "zh-Hant": "Tomoshibi {version} 可以更新了",
+      "ja": "Tomoshibi {version} が利用できます"
+    },
+    "Update": {
+      "en": "Update",
+      "zh-Hans": "更新",
+      "zh-Hant": "更新",
+      "ja": "アップデート"
+    },
+    "Updates": {
+      "en": "Updates",
+      "zh-Hans": "更新",
+      "zh-Hant": "更新",
+      "ja": "アップデート"
+    },
+    "Version {version} is available.": {
+      "en": "Version {version} is available.",
+      "zh-Hans": "{version} 版可以更新了。",
+      "zh-Hant": "{version} 版可以更新了。",
+      "ja": "バージョン {version} が利用できます。"
+    },
+    "You are not allowed to change Tomoshibi where it is. Move it into Applications, or ask whoever manages this Mac to update it.": {
+      "en": "You are not allowed to change Tomoshibi where it is. Move it into Applications, or ask whoever manages this Mac to update it.",
+      "zh-Hans": "你没有权限修改当前位置的 Tomoshibi。请把它移到「应用程序」文件夹，或者请这台 Mac 的管理员来更新。",
+      "zh-Hant": "你沒有權限修改目前位置的 Tomoshibi。請把它移到「應用程式」檔案夾，或請這台 Mac 的管理者來更新。",
+      "ja": "この場所にある Tomoshibi を変更する権限がありません。「アプリケーション」フォルダに移動するか、この Mac の管理者にアップデートを依頼してください。"
+    },
+    "You have the latest version.": {
+      "en": "You have the latest version.",
+      "zh-Hans": "已是最新版本。",
+      "zh-Hant": "已是最新版本。",
+      "ja": "最新バージョンです。"
+    },
+    "macOS is running this copy of Tomoshibi from a temporary place. Move Tomoshibi into Applications in Finder, open it from there, and update again.": {
+      "en": "macOS is running this copy of Tomoshibi from a temporary place. Move Tomoshibi into Applications in Finder, open it from there, and update again.",
+      "zh-Hans": "macOS 正在从一个临时位置运行这份 Tomoshibi。请在访达里把 Tomoshibi 移到「应用程序」文件夹，从那里打开后再更新。",
+      "zh-Hant": "macOS 正在從一個暫時位置執行這份 Tomoshibi。請在 Finder 裡把 Tomoshibi 移到「應用程式」檔案夾，從那裡打開後再更新。",
+      "ja": "macOS はこの Tomoshibi を一時的な場所から実行しています。Finder で Tomoshibi を「アプリケーション」フォルダに移動し、そこから開いてもう一度アップデートしてください。"
+    },
+    "{received} of {total}": {
+      "en": "{received} of {total}",
+      "zh-Hans": "{received} / {total}",
+      "zh-Hant": "{received} / {total}",
+      "ja": "{received} / {total}"
+    },
     "Everything this computer plays, except the call": {
       "en": "Everything this computer plays, except the call",
       "zh-Hans": "这台电脑播放的所有声音，通话除外",

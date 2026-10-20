@@ -15,6 +15,7 @@ import app.tomoshibi.basics.Appearance
 import app.tomoshibi.basics.Localization
 import app.tomoshibi.core.CoreNative
 import app.tomoshibi.media.DeviceAccess
+import app.tomoshibi.media.Foreground
 import app.tomoshibi.model.AppModel
 import app.tomoshibi.model.DebugLaunch
 import app.tomoshibi.ui.TomoshibiApp
@@ -86,6 +87,20 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         app.call?.setBackground(false)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // The update's system pages are opened from here (media/SelfInstall.kt),
+        // and coming back from the one that allows installs is how the app
+        // learns whether it was allowed.
+        Foreground.resumed(this)
+        app.updates?.resumed()
+    }
+
+    override fun onPause() {
+        Foreground.paused(this)
+        super.onPause()
     }
 
     override fun onStop() {

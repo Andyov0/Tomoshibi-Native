@@ -72,6 +72,7 @@ import app.tomoshibi.ui.kit.rounded
 import app.tomoshibi.ui.lobby.Mark
 import app.tomoshibi.ui.lobby.OpenFromDebug
 import app.tomoshibi.ui.lobby.ProblemToast
+import app.tomoshibi.ui.lobby.UpdateBanner
 import app.tomoshibi.ui.lobby.pastedLink
 import app.tomoshibi.ui.lobby.plainPress
 import app.tomoshibi.ui.lobby.rise
@@ -190,6 +191,9 @@ fun SignInView(app: AppModel) {
                 },
             )
             LanguageMenu(Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp))
+            // Somebody not signed in gets their updates too; below the
+            // language menu, which it would otherwise cover on a phone.
+            UpdateBanner(app, Modifier.windowInsetsPadding(WindowInsets.safeDrawing), top = 64.dp)
             ProblemToast(
                 app,
                 Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)),

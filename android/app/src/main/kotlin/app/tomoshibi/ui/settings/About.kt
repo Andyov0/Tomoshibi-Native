@@ -1,6 +1,11 @@
 package app.tomoshibi.ui.settings
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +34,13 @@ import androidx.compose.ui.unit.dp
 import app.tomoshibi.basics.Theme
 import app.tomoshibi.basics.t
 import app.tomoshibi.model.AppModel
+import app.tomoshibi.model.Updates
+import app.tomoshibi.model.Updates.Said
+import app.tomoshibi.model.Updates.Step
+import app.tomoshibi.ui.kit.Hairline
+import app.tomoshibi.ui.kit.PillButton
+import app.tomoshibi.ui.kit.PillRole
+import app.tomoshibi.ui.lobby.megabytes
 import app.tomoshibi.ui.kit.Font
 import app.tomoshibi.ui.kit.KitText
 import app.tomoshibi.ui.kit.Motion
@@ -64,6 +76,9 @@ internal fun AboutSettings(app: AppModel) {
             SettingsRow(t("Version"), symbol = "app.badge") {
                 KitText(version, font = Font(12.5f, mono = true), color = Theme.muted, lines = 1)
             }
+            // Only where the app looks for updates at all: not in a debug
+            // build started by hand, which would ask the real deployment.
+            app.updates?.let { UpdateRow(it) }
             SettingsRow(t("Media core"), symbol = "cpu", last = info == null) {
                 KitText(core, font = Font(12.5f, mono = true), color = Theme.muted, lines = 1)
             }
@@ -81,6 +96,71 @@ internal fun AboutSettings(app: AppModel) {
                 if (info.source.isNotEmpty()) SourceRow(info.source)
             }
         }
+    }
+}
+
+/**
+ * Where the app's updates stand, and the check somebody can ask for
+ * (Settings.swift `UpdateRow`): the version on offer with "Update", a
+ * download's progress with "Cancel", and the answer to a check, which says
+ * so even when there is nothing newer. What it says changes with a fade.
+ */
+@Composable
+private fun UpdateRow(updates: Updates) {
+    val step = updates.step
+    val said = updates.said
+    val line: String? = when {
+        step is Step.Downloading -> t("{received} of {total}", mapOf("received" to megabytes(step.received), "total" to megabytes(step.total)))
+        step is Step.Held -> t("{received} of {total}", mapOf("received" to megabytes(step.received), "total" to megabytes(step.total)))
+        step is Step.Installing -> t("Installing Tomoshibi {version}", mapOf("version" to step.offer.version))
+        step is Step.Permission -> t("Allow Tomoshibi to install its update")
+        step is Step.Offered -> step.problem ?: t("Version {version} is available.", mapOf("version" to step.offer.version))
+        said == Said.Checking -> t("Checking for updates…")
+        said == Said.Current -> t("You have the latest version.")
+        said == Said.Failed -> t("Could not check for updates. Try again later.")
+        else -> null
+    }
+    Column(Modifier.fillMaxWidth().testTag("settings.updates")) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 14.dp, vertical = 9.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(Modifier.size(26.dp).background(Color.White.copy(alpha = 0.10f), rounded(7f)), contentAlignment = Alignment.Center) {
+                Symbol("arrow.clockwise", size = 12.5f, weight = Font.Semibold)
+            }
+            Column(Modifier.weight(1f).animateContentSize(Theme.settle()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                KitText(t("Updates"), font = Font(13.5f))
+                AnimatedContent(
+                    line,
+                    transitionSpec = { fadeIn(Theme.settle()) togetherWith fadeOut(Theme.leave()) },
+                    label = "said",
+                ) { now ->
+                    if (now != null) {
+                        KitText(now, font = Font(11.5f), color = if (step is Step.Offered && step.problem != null) Theme.danger else Theme.muted)
+                    }
+                }
+            }
+            Spacer(Modifier.width(10.dp))
+            AnimatedContent(
+                step::class,
+                transitionSpec = { fadeIn(Theme.settle()) togetherWith fadeOut(Theme.leave()) },
+                label = "action",
+            ) { kind ->
+                when (kind) {
+                    Step.Offered::class -> PillButton(t("Update"), updates::accept, Modifier.testTag("settings.update"), role = PillRole.Prominent)
+                    Step.Downloading::class -> PillButton(t("Cancel"), updates::cancel, Modifier.testTag("settings.cancelUpdate"))
+                    else -> PillButton(
+                        t("Check for updates"),
+                        updates::checkNow,
+                        Modifier.testTag("settings.checkUpdates"),
+                        busy = said == Said.Checking,
+                        enabled = step is Step.None && said != Said.Checking,
+                    )
+                }
+            }
+        }
+        Hairline(52.dp)
     }
 }
 

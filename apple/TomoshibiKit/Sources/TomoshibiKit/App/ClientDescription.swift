@@ -12,12 +12,17 @@ import UIKit
 /// from an iPhone.
 @MainActor
 enum ClientDescription {
-    static func tell() {
+    /// The version as the download page and the update check write it.
+    static var version: String {
         let info = Bundle.main.infoDictionary
-        let version = [info?["CFBundleShortVersionString"], info?["CFBundleVersion"]]
+        return [info?["CFBundleShortVersionString"], info?["CFBundleVersion"]]
             .compactMap { $0 as? String }
             .filter { !$0.isEmpty }
             .joined(separator: ".")
+    }
+
+    static func tell() {
+        let version = version
         #if os(iOS)
         let pad = UIDevice.current.userInterfaceIdiom == .pad
         describeClient(

@@ -264,6 +264,10 @@ private fun PhoneLobby(app: AppModel, account: Account, state: LobbyState) {
                         Spacer(Modifier.windowInsetsTopHeight(WindowInsets.safeDrawing))
                         Spacer(Modifier.height(BarHeight))
                         KitText("Tomoshibi", Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp), font = Font(34f, Font.Bold), lines = 1)
+                        // In the page under its title, rather than over it: laid
+                        // over the top it covered the title, and what the
+                        // navigation bar leaves of it.
+                        UpdateBanner(app, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), inline = true)
                         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
                             Hero(app, state, Modifier.rise())
                             Upcoming(app, state, Modifier.rise(60))
@@ -606,6 +610,9 @@ private fun WideLobby(app: AppModel, account: Account, state: LobbyState) {
                     if (onTable) DeskLobby(app, account, state) else SidebarLobby(app, account, state)
                 }
             }
+            // Over the whole window only on the desk, where there is no
+            // section of its own to sit in; beside the sidebar otherwise.
+            if (standing) UpdateBanner(app, Modifier.windowInsetsPadding(WindowInsets.safeDrawing))
             ProblemToast(app, Modifier.windowInsetsPadding(WindowInsets.safeDrawing))
             DialogHost(state.settings, { state.settings = false }, width = 900.dp, height = 700.dp) {
                 SettingsView(app, close = { state.settings = false }, Modifier.heightIn(max = 700.dp), state.settingsPage)
@@ -652,7 +659,13 @@ private fun SidebarLobby(app: AppModel, account: Account, state: LobbyState) {
                 )
             }
             if (folded != null) Spacer(Modifier.width(folded.second - folded.first))
-            Box(Modifier.weight(1f).fillMaxHeight()) { ChosenSection(app, account, state) }
+            Box(Modifier.weight(1f).fillMaxHeight()) {
+                ChosenSection(app, account, state)
+                // In the section beside the sidebar, whose buttons it covered
+                // when it was centred on the window, and below the server menu
+                // in the section's corner.
+                UpdateBanner(app, Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.End)), top = 52.dp)
+            }
         }
     }
 }

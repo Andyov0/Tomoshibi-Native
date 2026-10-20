@@ -46,7 +46,17 @@ import UIKit
 ///     choose <kind> <id>|none    a device picked in the settings
 ///     devices                    the record both of those write
 ///     preview-camera             the camera the join screen's preview opens
-///     window <width> <height>    the main window's size (Mac)
+///     window <width> <height> [<x> <y>]
+///                                the main window's size, and where its top
+///                                left goes on its screen (Mac)
+///                                `where`, `front` and `window` end in
+///                                `settings` to act on the Settings window
+///     front                      the main window above every other app's, as
+///                                a floating window: macOS does not make an
+///                                app active that nobody clicked (Mac)
+///     where                      the main window's frame from the top left
+///                                of its screen, and whether the app is in
+///                                front, for a picture cut to it (Mac)
 ///     close-window | reopen      ⌘W on the main window, and the Dock's
 ///                                reopen (Mac)
 ///     menu                       the menus' items and their keys (Mac)
@@ -59,6 +69,11 @@ import UIKit
 ///                                a choice in the settings
 ///     close-problem              the cross on the line saying why a press
 ///                                did not take
+///     update                     where the app's update stands
+///     update-check | update-accept | update-later | update-cancel |
+///     update-reveal              the settings' Check for Updates, and the
+///                                banner's Update, Later, Cancel and Show in
+///                                Finder (Updates)
 ///     wait <ms>
 @MainActor
 enum AppDebug {
@@ -185,12 +200,38 @@ enum AppDebug {
         case "wait":
             try? await Task.sleep(for: .milliseconds(Int(rest.first ?? "") ?? 0))
             return "waited"
+        case "update", "update-check", "update-accept", "update-later", "update-cancel", "update-reveal":
+            guard let updates = app.updates else { return "no updates in this build" }
+            switch verb {
+            case "update-check": updates.checkNow()
+            case "update-accept": updates.accept()
+            case "update-later": updates.putAway()
+            case "update-cancel": updates.cancel()
+            case "update-reveal": updates.reveal()
+            default: break
+            }
+            return "update step=\(updates.step) said=\(String(describing: updates.said)) shown=\(updates.shown) running=\(updates.running)"
         #if os(macOS)
         case "window":
-            guard rest.count == 2, let width = Double(rest[0]), let height = Double(rest[1]),
-                  let window = mainWindows().first else { return "window <width> <height>" }
+            let rest = rest.last == "settings" ? Array(rest.dropLast()) : rest
+            guard rest.count == 2 || rest.count == 4, let width = Double(rest[0]), let height = Double(rest[1]),
+                  let window = target(words) else { return "window <width> <height> [<x> <y>] [settings]" }
             window.setContentSize(NSSize(width: width, height: height))
+            if rest.count == 4, let x = Double(rest[2]), let y = Double(rest[3]), let screen = window.screen ?? NSScreen.main {
+                window.setFrameTopLeftPoint(NSPoint(x: screen.frame.minX + x, y: screen.frame.maxY - y))
+            }
             return "sized \(window.frame.size)"
+        case "front":
+            guard let window = target(rest) else { return "no window" }
+            window.level = .floating
+            window.orderFrontRegardless()
+            return "in front: floating"
+        case "where":
+            guard let window = target(rest), let screen = window.screen ?? NSScreen.main else { return "no window" }
+            let frame = window.frame
+            let top = screen.frame.maxY - frame.maxY
+            return "where x=\(Int(frame.minX - screen.frame.minX)) y=\(Int(top)) w=\(Int(frame.width)) h=\(Int(frame.height))"
+                + " screen=\(Int(screen.frame.width))x\(Int(screen.frame.height)) active=\(NSApp.isActive || window.level == .floating) key=\(window.isKeyWindow)"
         case "close-window":
             let windows = mainWindows()
             for window in windows { window.performClose(nil) }
@@ -338,6 +379,15 @@ enum AppDebug {
     #if os(macOS)
     /// The app's own windows that show its screens, not the Settings window
     /// or the system's panels.
+    /// The Settings window where the command ends in `settings`, the main
+    /// window otherwise.
+    private static func target(_ words: [String]) -> NSWindow? {
+        if words.last == "settings" {
+            return NSApp.windows.first { $0.isVisible && isSettings($0) }
+        }
+        return mainWindows().first
+    }
+
     private static func mainWindows() -> [NSWindow] {
         NSApp.windows.filter { $0.isVisible && $0.contentView != nil && $0.canBecomeMain && !isSettings($0) }
     }
