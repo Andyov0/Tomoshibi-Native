@@ -470,10 +470,20 @@ internal sealed class CallModel : Observable, IDisposable
         if (playback != null) playback.Lost += () => _ui.TryEnqueue(() => _ = FollowSpeakers(failed: true));
     }
 
+    /// <summary>
+    /// The core's way back to the model. The core keeps it as long as its
+    /// call exists, from a table of the bindings' that is never collected,
+    /// so it is cut when the call is left: kept, it held the model, and the
+    /// model the core's call, so neither was ever let go.
+    /// </summary>
     private sealed class Bridge(Action<CallEvent> heard) : CallObserver
     {
-        public void OnEvent(CallEvent @event) => heard(@event);
+        private volatile Action<CallEvent>? _heard = heard;
+        public void OnEvent(CallEvent @event) => _heard?.Invoke(@event);
+        public void Cut() => _heard = null;
     }
+
+    private Bridge? _bridge;
 
     /// <summary>
     /// Joins the call that <paramref name="options"/> describes. The people
@@ -500,10 +510,20 @@ internal sealed class CallModel : Observable, IDisposable
             }
             model.Arrived(e);
         });
-        var core = await TomoshibiCoreMethods.JoinCall(options, bridge);
+        Call core;
+        try
+        {
+            core = await TomoshibiCoreMethods.JoinCall(options, bridge);
+        }
+        catch (Exception)
+        {
+            // A room that would not open leaves no call to close the speakers.
+            playback?.Dispose();
+            throw;
+        }
         lock (early)
         {
-            model = new CallModel(core, deployment, region, options.SealingWord != null, media, memory, playback);
+            model = new CallModel(core, deployment, region, options.SealingWord != null, media, memory, playback) { _bridge = bridge };
             foreach (var e in early) model.Arrived(e);
         }
         // Applied on the UI thread after the events queued above.
@@ -1035,7 +1055,38 @@ internal sealed class CallModel : Observable, IDisposable
         {
             Log.Line($"leaving: {fault.Message}");
         }
+        Release();
         Log.Line("left the call");
+    }
+
+    private bool _released;
+
+    /// <summary>
+    /// What the call held on this machine, let go once it is left, however
+    /// it ended (left, replaced, moved, ended by the server, called off as it
+    /// landed, the window closed): the speakers' audio graph, the tracks it
+    /// published, and the app's device events. Nothing did before, and every
+    /// call left behind an audio graph rendering every ten milliseconds into
+    /// the speakers, holding them as a communications stream (which Windows
+    /// turns other sounds down for by default) until the app quit, and a
+    /// model still told of every device change.
+    ///
+    /// The core's call itself is left to be collected, its way back to the
+    /// model cut (Bridge): the call screen lets its pictures go only after
+    /// the call has been left (RemotePicture's Unloaded), into a core call
+    /// that has to still be there for them.
+    /// </summary>
+    private void Release()
+    {
+        if (_released) return;
+        _released = true;
+        _media.CameraLost -= CameraLost;
+        _media.MicrophoneLost -= MicrophoneLost;
+        _media.DevicesChanged -= DevicesChanged;
+        _playback?.Dispose();
+        _camera?.Dispose();
+        _microphone?.Dispose();
+        _bridge?.Cut();
     }
 
     private void StopMedia()
@@ -1244,15 +1295,11 @@ internal sealed class CallModel : Observable, IDisposable
         return string.Join("; ", heard.Prepend(sent));
     }
 
+    /// <summary>The core's call too, for a call nothing on screen ever showed (one called off as it landed); any other is released by Leave.</summary>
     public void Dispose()
     {
-        _media.CameraLost -= CameraLost;
-        _media.MicrophoneLost -= MicrophoneLost;
-        _media.DevicesChanged -= DevicesChanged;
         StopMedia();
-        _playback?.Dispose();
-        _camera?.Dispose();
-        _microphone?.Dispose();
+        Release();
         Core.Dispose();
     }
 }

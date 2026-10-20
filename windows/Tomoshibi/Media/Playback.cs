@@ -313,6 +313,9 @@ internal sealed class Playback : IDisposable
         lock (_gate)
         {
             _disposed = true;
+            // The call's handler, which the core's lossless sink would
+            // otherwise keep alive through this player after the call.
+            Lost = null;
             _graph.Dispose();
         }
     }

@@ -862,6 +862,7 @@ internal sealed class AppModel : Observable
             if (attempt != _joinAttempt)
             {
                 await model.Leave();
+                model.Dispose();
                 return;
             }
             model.Relay = grant.Relay;
