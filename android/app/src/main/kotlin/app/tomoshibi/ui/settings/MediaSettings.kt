@@ -1,6 +1,7 @@
 package app.tomoshibi.ui.settings
 
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,7 +36,6 @@ import app.tomoshibi.model.AppModel
 import app.tomoshibi.model.CallPreferences
 import app.tomoshibi.model.DeviceMemory
 import app.tomoshibi.ui.kit.Appear
-import app.tomoshibi.ui.kit.Backdrop
 import app.tomoshibi.ui.kit.Capsule
 import app.tomoshibi.ui.kit.Font
 import app.tomoshibi.ui.kit.GlassButton
@@ -189,7 +189,8 @@ private fun DevicePreview(check: DeviceCheck) {
             .clip(shape)
             .border(1.dp, Color.White.copy(alpha = 0.08f), shape),
     ) {
-        Backdrop(Modifier.matchParentSize())
+        // A camera-off tile's grey, as CameraStage's framed preview is.
+        Box(Modifier.matchParentSize().background(Theme.surface))
         check.Picture(Modifier.matchParentSize().alpha(shown))
         Appear(!check.cameraRunning, Modifier.align(Alignment.Center)) {
             Symbol(if (check.cameraRefused) "video.slash.fill" else "video.fill", size = 28f, weight = Font.Medium, tint = Theme.muted)

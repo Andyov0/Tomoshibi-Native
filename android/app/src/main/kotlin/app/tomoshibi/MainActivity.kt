@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
         // From edge to edge, the bars drawn light over the app's own dark
         // ground: every screen keeps its controls inside the safe area, the
         // display cutout and the keyboard included, and lets its pictures
-        // and its evening room run under the bars.
+        // and its backdrop run under the bars.
         enableEdgeToEdge(SystemBarStyle.dark(AndroidColor.TRANSPARENT), SystemBarStyle.dark(AndroidColor.TRANSPARENT))
         // The window gives way to the keyboard rather than being pushed up
         // under it, so that the screens can keep a field and its button

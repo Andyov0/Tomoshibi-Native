@@ -73,7 +73,7 @@ fun ServersView(app: AppModel, wide: Boolean, back: () -> Unit, modifier: Modifi
             .pointerInput(Unit) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false) } },
     ) {
         // On a phone the page is pushed over the lobby and brings its own
-        // evening room; in a wide window it stands on the window's, which the
+        // backdrop; in a wide window it stands on the window's, which the
         // sidebar floats over too, rather than drawing a second over it with
         // a seam where it begins.
         if (!wide) {

@@ -193,7 +193,7 @@ fun ScheduleView(app: AppModel, account: Account, draft: ScheduleDraft, wide: Bo
     FloatingPopoverLayer(popovers) {
         ContentLayer {
             Box(modifier.fillMaxSize()) {
-                // In a wide window it stands on the window's own evening room,
+                // In a wide window it stands on the window's own backdrop,
                 // which the sidebar floats over too: a second one drawn over it
                 // began with a seam at the sidebar's edge.
                 if (!wide) Backdrop(Modifier.matchParentSize().alpha(0.6f))

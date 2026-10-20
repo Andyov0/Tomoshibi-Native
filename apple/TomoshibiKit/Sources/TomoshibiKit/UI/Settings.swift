@@ -15,7 +15,7 @@ import UIKit
 // The settings, drawn as the app's own rather than as a preferences pane: the
 // owner found the grouped form too plain and did not want the system's stock
 // pieces (2026-10-17). On the Mac the Settings window (⌘,) is a glass sidebar
-// of sections over the evening room; on the phone the same sections are a
+// of sections over the backdrop; on the phone the same sections are a
 // sheet that drills in. What they hold is the web's: the account page
 // (account/Account.tsx) and the choices it writes where a call reads them
 // (live/preferences.ts, live/controls.ts, live/duck.ts, live/sound.ts), under
@@ -782,7 +782,14 @@ private struct LanguageTiles: View {
     }
 }
 
-/// The colours, as lit glass beads.
+/// The colours, as flat discs with a hairline edge, the chosen one ringed
+/// and ticked.
+///
+/// They were lit glass beads, a highlight at the upper left, a shade at the
+/// foot and a glow of their own colour under each, until the owner asked
+/// for fewer gradients (2026-10-20). The ring says which one is chosen; the
+/// glow, which grew under the chosen one, said it twice. Android's swatches
+/// (ui/settings/General.kt) are drawn the same.
 private struct Swatches: View {
     let appearance: Appearance
     @State private var hovering: Accent?
@@ -807,15 +814,6 @@ private struct Swatches: View {
                     ZStack {
                         Circle()
                             .fill(accent.color)
-                            .shadow(color: accent.color.opacity(chosen ? 0.55 : 0.25), radius: chosen ? 10 : 4, y: 2)
-                        // A light from the upper left and a shade at the
-                        // foot, so each colour reads as a bead of glass.
-                        Circle()
-                            .fill(RadialGradient(colors: [Color.white.opacity(0.42), Color.white.opacity(0)],
-                                                 center: UnitPoint(x: 0.32, y: 0.26), startRadius: 0, endRadius: 15))
-                        Circle()
-                            .fill(LinearGradient(colors: [Color.black.opacity(0), Color.black.opacity(0.2)],
-                                                 startPoint: .center, endPoint: .bottom))
                         Circle()
                             .stroke(Color.white.opacity(0.25), lineWidth: 0.5)
                         if chosen {
@@ -880,9 +878,10 @@ private struct AccentPreview: View {
     private var scene: some View {
         HStack(spacing: 12) {
             ZStack(alignment: .bottomLeading) {
+                // The grey of a camera-off tile, which is what it is a
+                // picture of; it was a blue wash of its own.
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(LinearGradient(colors: [Color(red: 0.2, green: 0.25, blue: 0.32), Color(red: 0.1, green: 0.12, blue: 0.16)],
-                                         startPoint: .top, endPoint: .bottom))
+                    .fill(Theme.surface)
                 Initial(name: "Mika", size: 30)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 HStack(spacing: 4) {
@@ -1065,7 +1064,7 @@ extension View {
     }
 
     /// The fade macOS 26 draws where a scroll view meets the title bar,
-    /// which over the settings' evening room read as a grey band across the
+    /// which over the settings' backdrop read as a grey band across the
     /// top of the page.
     @ViewBuilder
     func hidesScrollEdge() -> some View {
@@ -1195,7 +1194,8 @@ private struct MediaSettings: View {
     /// this is where they are chosen ahead of any call.
     private var preview: some View {
         ZStack {
-            Backdrop()
+            // A camera-off tile's grey, as CameraStage's framed preview is.
+            Theme.surface
             if check.cameraRunning {
                 SelfView(session: check.session)
                     .transition(.opacity.animation(Theme.settle))
@@ -1440,14 +1440,14 @@ private struct WatchingSettings: View {
     }
 }
 
-/// A film on the evening room, wearing the ceiling chosen for it: drawn
+/// A film on the backdrop, wearing the ceiling chosen for it: drawn
 /// softer the lower the ceiling, so the choice is seen as well as read.
 private struct WatchPreview: View {
     let quality: String
 
     var body: some View {
         ZStack {
-            Backdrop()
+            FilmStill()
                 .blur(radius: quality == "720p" ? 6 : quality == "1080p" ? 2.5 : 0)
             Image(systemName: "play.fill")
                 .font(.system(size: 20, weight: .bold))
@@ -1466,6 +1466,30 @@ private struct WatchPreview: View {
         }
         .animation(Theme.settle, value: quality)
         .accessibilityHidden(true)
+    }
+}
+
+/// The film WatchPreview softens: a still of flat shapes, the call's grey
+/// with a lighter band along its foot and a pale disc high on the right.
+/// It was the screens' glowing backdrop, blurred; once that went flat a
+/// blur of it changed nothing that could be seen, and the ceiling's choice
+/// was read but no longer seen. Shapes with edges show the softening without
+/// a gradient. CallSettings.kt's FilmStill draws the same.
+private struct FilmStill: View {
+    var body: some View {
+        GeometryReader { geometry in
+            let size = geometry.size
+            ZStack {
+                Theme.surface
+                Theme.surfaceHigh
+                    .frame(height: size.height * 0.4)
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                Circle()
+                    .fill(Theme.foreground.opacity(0.18))
+                    .frame(width: size.height * 0.28, height: size.height * 0.28)
+                    .position(x: size.width * 0.75, y: size.height * 0.35)
+            }
+        }
     }
 }
 

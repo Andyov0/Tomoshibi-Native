@@ -40,7 +40,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.input.key.Key
@@ -150,13 +149,12 @@ fun GlassSlider(
                 .background(Color.Black.copy(alpha = 0.28f), Capsule)
                 .border(1.dp, Color.White.copy(alpha = 0.10f), Capsule),
         )
+        // One flat tone, as the web's range input fills: it faded in from the
+        // left until the owner asked for fewer gradients (2026-10-20).
         Box(
             Modifier
                 .size(maxOf(track, x), track)
-                .background(
-                    Brush.horizontalGradient(listOf(Theme.foreground.copy(alpha = 0.62f), Theme.foreground.copy(alpha = 0.95f))),
-                    Capsule,
-                ),
+                .background(Theme.foreground.copy(alpha = 0.9f), Capsule),
         )
         Box(
             Modifier
@@ -339,16 +337,18 @@ fun PanelHeading(
     }
 }
 
-/** The hairline under a panel's heading, fading at its ends (`PanelRule`). */
+/**
+ * The hairline under a panel's heading, in the palette's border colour from
+ * edge to edge (`PanelRule`); it faded out at both ends before the gradients
+ * went (2026-10-20).
+ */
 @Composable
 fun PanelRule(modifier: Modifier = Modifier) {
     Box(
         modifier
             .fillMaxWidth()
             .height(1.dp)
-            .background(
-                Brush.horizontalGradient(listOf(Color.White.copy(alpha = 0f), Color.White.copy(alpha = 0.10f), Color.White.copy(alpha = 0f))),
-            ),
+            .background(Theme.border),
     )
 }
 
@@ -364,20 +364,24 @@ fun Modifier.panelCard(tint: Color? = null): Modifier {
 }
 
 /**
- * Somebody, small: their initials on a blend of two of the web's avatar
- * colours (live/avatar.ts `AVATAR_COLOURS`), chosen by their identity so the
- * same person is the same colours in every corner and on every platform
+ * Somebody, small: their initials on one of the web's avatar colours
+ * (live/avatar.ts `AVATAR_COLOURS`), chosen by their identity so the same
+ * person is the same colour in every corner and on every platform
  * (`Monogram`).
+ *
+ * It was a blend of two of them, and the owner found the gradients cheap
+ * (2026-10-20). The colour kept is the blend's first, the one the hash has
+ * always picked first, so nobody changes colour.
  */
 @Composable
 fun Monogram(name: String, identity: String, modifier: Modifier = Modifier, size: Dp = 24.dp) {
-    val (first, second) = remember(identity) { Monograms.pair(identity) }
+    val colour = remember(identity) { Monograms.colour(identity) }
     val letters = remember(name) { Monograms.initials(name) }
     Box(
         modifier
             .size(size)
             .clearAndSetSemantics {}
-            .background(Brush.linearGradient(listOf(first, second)), CircleShape)
+            .background(colour, CircleShape)
             .border(0.75.dp, Color.White.copy(alpha = 0.14f), CircleShape),
         contentAlignment = Alignment.Center,
     ) {
@@ -403,21 +407,20 @@ object Monograms {
     )
 
     /**
-     * Which two of [colours], by index: FNV-1a over the identity's UTF-8, as
-     * the tile's avatar hashes it, in 64-bit unsigned arithmetic exactly as
-     * Swift's `&*` wraps it. Any other hash puts the same person in other
-     * colours on Android than on the iPhone and the web.
+     * Which of [colours]: FNV-1a over the identity's UTF-8, as the tile's
+     * avatar hashes it, in 64-bit unsigned arithmetic exactly as Swift's
+     * `&*` wraps it, modulo their number (TomoshibiBasics' `Monograms.index`).
+     * Any other hash puts the same person in another colour on Android than
+     * on the iPhone and the web. It is the first of the two the blend was
+     * drawn from.
      */
-    fun indices(identity: String): Pair<Int, Int> {
+    fun index(identity: String): Int {
         var hash = 1469598103934665603UL
         for (byte in identity.encodeToByteArray()) hash = (hash xor byte.toUByte().toULong()) * 1099511628211UL
-        val count = colours.size.toULong()
-        val first = (hash % count).toInt()
-        val second = (first + 1 + ((hash / 7UL) % (count - 1UL)).toInt()) % colours.size
-        return first to second
+        return (hash % colours.size.toULong()).toInt()
     }
 
-    fun pair(identity: String): Pair<Color, Color> = indices(identity).let { (a, b) -> colours[a] to colours[b] }
+    fun colour(identity: String): Color = colours[index(identity)]
 
     /**
      * The first letters of the first two words, in capitals; a question mark

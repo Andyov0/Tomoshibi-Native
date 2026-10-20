@@ -322,14 +322,19 @@ struct SelfPicture: View {
 /// nothing: the card says who is sharing, and the whole card takes the press
 /// that makes it big, rather than a button on a surface that already answers
 /// one.
+///
+/// Flat Theme.surfaceHigh, a step lighter than a person's tile, so a share
+/// standing in for its picture is told from a camera that is off; the
+/// person's colour is on the Watch button alone. It was a grey wash with a
+/// glow of that colour in the middle (the owner, 2026-10-20: fewer
+/// gradients), and the same on Android (ui/room/Tile.kt).
 struct ShareCardFace: View {
     let name: String
     var compact = false
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Theme.surfaceHigh, Theme.surface], startPoint: .top, endPoint: .bottom)
-            RadialGradient(colors: [Theme.tally.opacity(0.16), .clear], center: .center, startRadius: 0, endRadius: 160)
+            Theme.surfaceHigh
             VStack(spacing: compact ? 4 : 10) {
                 Image(systemName: "rectangle.inset.filled.and.person.filled")
                     .font(.system(size: compact ? 15 : 22, weight: .medium))
@@ -361,15 +366,15 @@ struct ShareCardFace: View {
 /// This participant's own shared screen. There is no preview of the capture
 /// to draw, so it says so, with the way to stop: a picture of your own screen
 /// inside your own screen is a hall of mirrors anyway, and what the sharer
-/// needs from this place is to know it is going out.
+/// needs from this place is to know it is going out. The same flat ground as
+/// ShareCardFace; the plate behind the symbol carries the colour.
 struct MyShareFace: View {
     var compact = false
     var stop: (() -> Void)?
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [Theme.surfaceHigh, Theme.surface], startPoint: .topLeading, endPoint: .bottomTrailing)
-            RadialGradient(colors: [Theme.tally.opacity(0.22), .clear], center: .center, startRadius: 0, endRadius: 220)
+            Theme.surfaceHigh
             VStack(spacing: compact ? 4 : 12) {
                 ZStack {
                     Circle().fill(Theme.tally.opacity(0.18)).frame(width: compact ? 34 : 64, height: compact ? 34 : 64)

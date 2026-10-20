@@ -124,14 +124,18 @@ private struct Said: View {
 
 /// Nothing has been said yet. Carries the one fact somebody needs before they
 /// type: this is not written down anywhere (ChatPanel.tsx `Empty`).
+///
+/// The symbol sits on a flat plate, the same faint white as the share card's
+/// (ShareCardFace). It sat in a glow of the person's colour, which is kept
+/// for what is saying something, and an empty list says nothing; the glow
+/// went with the other gradients (2026-10-20).
 private struct Empty: View {
     var body: some View {
         VStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(RadialGradient(colors: [Theme.tally.opacity(0.16), Theme.tally.opacity(0)],
-                                         center: .center, startRadius: 2, endRadius: 40))
-                    .frame(width: 80, height: 80)
+                    .fill(Color.white.opacity(0.08))
+                    .frame(width: 56, height: 56)
                 Image(systemName: "bubble.left.and.text.bubble.right")
                     .font(.system(size: 26, weight: .light))
                     .foregroundStyle(Theme.foreground.opacity(0.5))

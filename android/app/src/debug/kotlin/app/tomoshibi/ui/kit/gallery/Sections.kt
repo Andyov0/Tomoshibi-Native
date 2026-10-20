@@ -170,7 +170,7 @@ private fun Page(content: @Composable ColumnScope.() -> Unit) {
 
 @Composable
 private fun GlassPage() = Page {
-    Demo("Glass buttons over the evening room") {
+    Demo("Glass buttons over the backdrop") {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             GlassButton({}, shape = GlassButtonShape.Circle(44.dp), label = t("Mute microphone")) { Symbol("mic.fill", size = 16f) }
             GlassButton({}, shape = GlassButtonShape.Circle(44.dp), prominent = true, label = t("Turn camera off")) { Symbol("video.fill", size = 16f) }

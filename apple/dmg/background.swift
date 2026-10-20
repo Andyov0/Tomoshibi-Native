@@ -18,11 +18,11 @@ NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
 
 // Light, warm paper: Finder writes the icons' names in dark text over a
 // window's picture whatever the system's appearance, and over the evening
-// blue of the app the names could not be read.
-let ground = NSGradient(colors: [NSColor(red: 0.98, green: 0.97, blue: 0.95, alpha: 1), NSColor(red: 0.92, green: 0.90, blue: 0.87, alpha: 1)])!
-ground.draw(in: NSRect(x: 0, y: 0, width: width, height: height), angle: -90)
-let glow = NSGradient(colors: [NSColor(red: 1.0, green: 0.62, blue: 0.24, alpha: 0.16), NSColor(red: 1.0, green: 0.62, blue: 0.24, alpha: 0)])!
-glow.draw(fromCenter: NSPoint(x: 170, y: 210), radius: 0, toCenter: NSPoint(x: 170, y: 210), radius: 190, options: [])
+// blue of the app the names could not be read. One flat colour, the top of
+// the paper's old fade; the fade and the amber glow behind the app's icon
+// went with the app's other gradients (2026-10-20).
+NSColor(red: 0.98, green: 0.97, blue: 0.95, alpha: 1).setFill()
+NSRect(x: 0, y: 0, width: width, height: height).fill()
 
 // The arrow, between where the two icons are placed (make-dmg.sh: 170 and 470).
 let arrow = NSBezierPath()

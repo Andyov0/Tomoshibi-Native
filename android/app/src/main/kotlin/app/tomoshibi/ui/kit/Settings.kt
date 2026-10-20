@@ -18,10 +18,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import app.tomoshibi.basics.Theme
@@ -114,7 +111,9 @@ fun SettingsPageHeading(title: String, symbol: String, modifier: Modifier = Modi
 
 /**
  * A section's symbol in a rounded tile, lit in the person's colour where it
- * is the one chosen (`SectionTile`).
+ * is the one chosen (`SectionTile`): the colour itself, flat, as a prominent
+ * button wears it. It shaded from 95 to 72 per cent down the tile until the
+ * owner asked for fewer gradients (2026-10-20).
  */
 @Composable
 fun SectionTile(symbol: String, modifier: Modifier = Modifier, lit: Boolean = false, size: Float = 28f) {
@@ -126,15 +125,7 @@ fun SectionTile(symbol: String, modifier: Modifier = Modifier, lit: Boolean = fa
         modifier
             .size(size.dp)
             .background(Color.White.copy(alpha = 0.10f * (1f - glow)), shape)
-            .drawBehind {
-                if (glow > 0f) {
-                    val outline = shape.createOutline(this.size, layoutDirection, this)
-                    drawOutline(
-                        outline,
-                        Brush.verticalGradient(listOf(tally.copy(alpha = 0.95f * glow), tally.copy(alpha = 0.72f * glow))),
-                    )
-                }
-            }
+            .background(tally.copy(alpha = glow), shape)
             .border(1.dp, Color.White.copy(alpha = 0.06f + 0.16f * glow), shape),
         contentAlignment = Alignment.Center,
     ) { Symbol(symbol, size = size * 0.44f, weight = Font.Semibold, tint = ink) }

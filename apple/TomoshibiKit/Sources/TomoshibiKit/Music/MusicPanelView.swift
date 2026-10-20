@@ -310,7 +310,12 @@ private struct NowPlaying: View {
                         .opacity(0.55)
                 }
                 .overlay {
-                    LinearGradient(colors: [Color.black.opacity(0.15), Color.black.opacity(0.45)], startPoint: .top, endPoint: .bottom)
+                    // An even dimming for the words over the blurred cover,
+                    // at the darkest the fade from top to foot reached: the
+                    // card has words at its top as well as its foot, so the
+                    // fade bought them nothing but a gradient, which the
+                    // owner asked for fewer of (2026-10-20).
+                    Color.black.opacity(0.45)
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }

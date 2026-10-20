@@ -38,7 +38,6 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.shadow.Shadow
@@ -281,7 +280,11 @@ private fun NowPlaying(desk: SongDesk, state: DeskState, now: DeskEntry) {
                 }.blur(36.dp),
                 corner = 0f,
             )
-            Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.15f), Color.Black.copy(alpha = 0.45f)))))
+            // An even dimming for the words over the blurred cover, at the
+            // darkest the fade from top to foot reached: the card has words
+            // at its top as well as its foot, so the fade bought them nothing
+            // but a gradient, which the owner asked for fewer of (2026-10-20).
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.45f)))
         }
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {

@@ -392,8 +392,12 @@ struct MediaRow<Content: View>: View {
 
 // MARK: - Pictures
 
-/// A cover or a poster where there is one, and a soft square in the chosen
-/// colour with a symbol where there is not; faded in when it arrives.
+/// A cover or a poster where there is one, and a square in the chosen colour
+/// with a symbol where there is not; faded in when it arrives.
+///
+/// The square is flat: the raised grey with the colour laid over it at 18
+/// per cent, as MyShareFace's plate is. It ran from the colour into the grey
+/// corner to corner before the owner asked for fewer gradients (2026-10-20).
 struct MediaArtwork: View {
     let url: String
     var symbol = "music.note"
@@ -401,7 +405,8 @@ struct MediaArtwork: View {
 
     var body: some View {
         let placeholder = ZStack {
-            LinearGradient(colors: [Theme.tally.opacity(0.32), Theme.surfaceHigh], startPoint: .topLeading, endPoint: .bottomTrailing)
+            Theme.surfaceHigh
+            Theme.tally.opacity(0.18)
             Image(systemName: symbol)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.foreground.opacity(0.7))

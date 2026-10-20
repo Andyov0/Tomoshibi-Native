@@ -34,18 +34,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
@@ -55,7 +50,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import app.tomoshibi.basics.Accent
 import app.tomoshibi.basics.Appearance
@@ -264,20 +258,16 @@ private fun Swatch(accent: Accent, chosen: Boolean, pick: () -> Unit) {
                 }
                 .border(2.dp, accent.color, CircleShape),
         )
+        // A flat disc with a hairline edge (Settings.swift `Swatches`). It was
+        // a lit bead of glass, a highlight at the upper left, a shade at the
+        // foot and a glow of its own colour under it, until the owner asked
+        // for fewer gradients (2026-10-20); the ring says which is chosen,
+        // which the glow growing under the chosen one said twice.
         Box(
             Modifier
                 .size(34.dp)
-                .dropShadow(
-                    CircleShape,
-                    Shadow(
-                        radius = (4f + 6f * lit).dp,
-                        color = accent.color,
-                        offset = DpOffset(0.dp, 2.dp),
-                        alpha = 0.25f + 0.30f * lit,
-                    ),
-                )
                 .background(accent.color, CircleShape)
-                .drawBehind { bead() },
+                .border(0.5.dp, Color.White.copy(alpha = 0.25f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             androidx.compose.animation.AnimatedVisibility(
@@ -287,24 +277,6 @@ private fun Swatch(accent: Accent, chosen: Boolean, pick: () -> Unit) {
             ) { Symbol("checkmark", size = 13f, weight = FontWeight.ExtraBold, tint = accent.onColor) }
         }
     }
-}
-
-/** A light from the upper left and a shade at the foot, so each colour reads as a bead of glass. */
-private fun DrawScope.bead() {
-    val radius = size.minDimension / 2
-    drawCircle(
-        Brush.radialGradient(
-            listOf(Color.White.copy(alpha = 0.42f), Color.White.copy(alpha = 0f)),
-            center = Offset(size.width * 0.32f, size.height * 0.26f),
-            radius = 15.dp.toPx(),
-        ),
-        radius,
-    )
-    drawCircle(
-        Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0f), Color.Black.copy(alpha = 0.2f)), startY = size.height / 2, endY = size.height),
-        radius,
-    )
-    drawCircle(Color.White.copy(alpha = 0.25f), radius - 0.25.dp.toPx(), style = Stroke(0.5.dp.toPx()))
 }
 
 /**
@@ -356,7 +328,9 @@ private fun AccentScene() {
         Box(
             Modifier
                 .size(104.dp, 66.dp)
-                .background(Brush.verticalGradient(listOf(Color(0.2f, 0.25f, 0.32f), Color(0.1f, 0.12f, 0.16f))), rounded(12f))
+                // The grey of a camera-off tile, which is what it is a picture
+                // of; it was a blue wash of its own.
+                .background(Theme.surface, rounded(12f))
                 .border(2.dp, tally, rounded(12f)),
         ) {
             Initial("Mika", Modifier.align(Alignment.Center), size = 30.dp)

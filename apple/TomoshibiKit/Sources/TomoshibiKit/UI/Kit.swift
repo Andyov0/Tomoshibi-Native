@@ -7,7 +7,7 @@ import TomoshibiBasics
 // Form, a pull-down Menu and a confirmation dialog look like a preferences
 // pane bolted onto a call, and the web client, which draws its own, looked
 // better than the native one. Everything here is glass over the call or the
-// evening room, wears the person's chosen colour only where something is on
+// backdrop, wears the person's chosen colour only where something is on
 // or primary, and arrives and leaves with the same two curves as every other
 // view (Theme.arrive). Screens build their menus, popovers and settings out
 // of these so that they look like one app.
