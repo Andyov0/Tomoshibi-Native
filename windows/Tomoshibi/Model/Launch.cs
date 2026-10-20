@@ -114,6 +114,24 @@ public sealed record Launch
     /// <summary>Whether a test asked for a share, and so takes the first screen rather than asking the picker.</summary>
     public bool SharePicked => Share != null;
 
+    /// <summary>
+    /// A picture the generated camera shows instead of its bands
+    /// (TOMOSHIBI_CAMERA_PICTURE, a JPEG or PNG): a person, drifting slowly
+    /// across the frame, for the background blur to find, since a test never
+    /// opens a real camera.
+    /// </summary>
+    public string? CameraPicture { get; init; }
+
+    /// <summary>Blurs the background from the start (TOMOSHIBI_BLUR), as the remembered choice does for somebody who turned it on.</summary>
+    public bool Blur { get; init; }
+
+    /// <summary>
+    /// Runs the person segmenter on MediaPipe's test portrait at start and
+    /// logs how near its mask is to MediaPipe's (TOMOSHIBI_DEBUG_SEGMENT, a
+    /// folder from windows/Blur/convert.py).
+    /// </summary>
+    public string? SegmentCheck { get; init; }
+
     /// <summary>A file the measurements are written to (TOMOSHIBI_DEBUG_LOG).</summary>
     public string? LogFile { get; init; }
 
@@ -145,7 +163,7 @@ public sealed record Launch
         // says where to drive it to may.
         if (baseUrl == null)
         {
-            return new Launch { LogFile = logFile, Mute = quiet != null && quiet != "speakers", SilentSpeakers = quiet == "speakers" };
+            return new Launch { LogFile = logFile, Mute = quiet != null && quiet != "speakers", SilentSpeakers = quiet == "speakers", SegmentCheck = Get("TOMOSHIBI_DEBUG_SEGMENT") };
         }
 
         string? signInName = null, signInFile = null;
@@ -179,6 +197,9 @@ public sealed record Launch
             Share = Get("TOMOSHIBI_SHARE") is { } share && share is "screen" or "sound" or "both" ? share : null,
             WatchYoutubeApi = Get("TOMOSHIBI_WATCH_YOUTUBE_API"),
             Watch = Get("TOMOSHIBI_WATCH"),
+            CameraPicture = Get("TOMOSHIBI_CAMERA_PICTURE"),
+            Blur = Get("TOMOSHIBI_BLUR") != null,
+            SegmentCheck = Get("TOMOSHIBI_DEBUG_SEGMENT"),
             KeepIn = Get("TOMOSHIBI_KEEP") is { } keep && keep.All(c => char.IsLetterOrDigit(c) || c == '-') ? keep : null,
             LogFile = logFile,
             QuitAfterSeconds = int.TryParse(Get("TOMOSHIBI_DEBUG_QUIT_AFTER"), out var seconds) && seconds > 0 ? seconds : null,

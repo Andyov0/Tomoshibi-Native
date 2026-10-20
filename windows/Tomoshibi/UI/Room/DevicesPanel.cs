@@ -62,6 +62,10 @@ internal sealed class DevicesPanel : Grid
         _sections.Children.Add(Rows.Section(T("Speakers"), K.Card(speakerRows, 16)));
 
         var cameraRows = Choices(cameras, "video", memory.Choice(DeviceMemory.Kind.Camera), async id => await _call.UseCamera(id));
+        // The call's own blur, from the next frame, in what is sent and in
+        // the picture of yourself (Android's DevicesPanel).
+        var blur = Fields.Switch(_app.Blurring, _app.SetBlur, T("Blur my background"));
+        cameraRows.Children.Add(Rows.Row(T("Blur my background"), blur, symbol: "person.and.background.dotted", last: true));
         _sections.Children.Add(Rows.Section(T("Camera"), K.Card(cameraRows, 16)));
 
         // The language, here as well as in the settings, since a call has no settings of its own.

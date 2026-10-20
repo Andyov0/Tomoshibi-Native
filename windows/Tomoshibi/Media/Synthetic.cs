@@ -1,6 +1,9 @@
 using System.Diagnostics;
+using Tomoshibi.Basics;
 using Tomoshibi.Diagnostics;
 using uniffi.tomoshibi_core;
+using Windows.Graphics.Imaging;
+using Windows.Storage;
 
 namespace Tomoshibi.Media;
 
@@ -37,10 +40,63 @@ internal sealed class Synthetic : IDisposable
     /// <summary>How loud the generated tone has been over the last tenth of a second, as the microphone's would be.</summary>
     public readonly SoundMeter Meter = new();
 
-    public Synthetic()
+    /// <summary>The background blur the picture goes through before it is sent and shown, or none.</summary>
+    public volatile BackgroundBlur? Blur;
+
+    /// <summary>A picture of a person laid over the bands (Launch.CameraPicture), read on the generator's thread.</summary>
+    private readonly string? _picture;
+    private (byte[] Y, byte[] U, byte[] V, int Width)? _person;
+
+    public Synthetic(string? picture = null)
     {
+        _picture = picture;
         _thread = new Thread(Run) { IsBackground = true, Name = "synthetic media", Priority = ThreadPriority.AboveNormal };
         _thread.Start();
+    }
+
+    /// <summary>
+    /// The picture, the frame's height and as wide as it keeps its shape, in
+    /// planes, once: laid over each frame by copying rows, which costs
+    /// nothing beside the bands.
+    /// </summary>
+    private void LoadPicture()
+    {
+        if (_picture == null) return;
+        try
+        {
+            var file = StorageFile.GetFileFromPathAsync(_picture).AsTask().GetAwaiter().GetResult();
+            using var stream = file.OpenReadAsync().AsTask().GetAwaiter().GetResult();
+            var decoder = BitmapDecoder.CreateAsync(stream).AsTask().GetAwaiter().GetResult();
+            var width = Math.Min(Width, (uint)(decoder.PixelWidth * Height / decoder.PixelHeight) / 2 * 2);
+            var transform = new BitmapTransform { ScaledWidth = width, ScaledHeight = Height, InterpolationMode = BitmapInterpolationMode.Fant };
+            var pixels = decoder.GetPixelDataAsync(BitmapPixelFormat.Bgra8, BitmapAlphaMode.Ignore, transform,
+                ExifOrientationMode.RespectExifOrientation, ColorManagementMode.DoNotColorManage).AsTask().GetAwaiter().GetResult();
+            var (y, u, v) = Planes.FromBgra(pixels.DetachPixelData(), (int)width, (int)Height);
+            _person = (y, u, v, (int)width);
+            Log.Line($"synthetic camera: a picture {width}x{Height}");
+        }
+        catch (Exception fault)
+        {
+            Log.Line($"synthetic camera: the picture could not be read: {fault.GetType().Name}: {fault.Message}");
+        }
+    }
+
+    /// <summary>The picture over the bands, drifting from side to side so that a mask has something to follow.</summary>
+    private void LayPicture(byte[] y, byte[] u, byte[] v, long frame)
+    {
+        if (_person is not { } person) return;
+        var room = (int)Width - person.Width;
+        var drift = (int)(room / 2 + room / 3 * Math.Sin(frame * 2 * Math.PI / (FramesPerSecond * 8))) / 2 * 2;
+        for (var row = 0; row < Height; row++)
+        {
+            Array.Copy(person.Y, row * person.Width, y, row * (int)Width + drift, person.Width);
+        }
+        var cw = person.Width / 2;
+        for (var row = 0; row < Height / 2; row++)
+        {
+            Array.Copy(person.U, row * cw, u, row * (int)(Width / 2) + drift / 2, cw);
+            Array.Copy(person.V, row * cw, v, row * (int)(Width / 2) + drift / 2, cw);
+        }
     }
 
     private void Run()
@@ -51,6 +107,7 @@ internal sealed class Synthetic : IDisposable
         var (y, u, v) = (new byte[Width * Height], new byte[Width * Height / 4], new byte[Width * Height / 4]);
         var preview = new byte[PreviewWidth * PreviewHeight * 4];
         double phase = 0;
+        LoadPicture();
         while (!_stopped)
         {
             try
@@ -76,18 +133,30 @@ internal sealed class Synthetic : IDisposable
                 }
                 if (frames * 1000.0 / FramesPerSecond <= now)
                 {
-                    if (Video is { } video)
-                    {
-                        Paint(y, u, v, frames);
-                        video.PushPlanes(y, u, v, Width, Width / 2, 1, Width, Height, (long)(now * 1000), 0);
-                        Interlocked.Increment(ref FramesPushed);
-                    }
                     // Half the rate is enough for a picture of yourself, and
                     // it is the same picture the call is sent, so that what a
-                    // person sees of themselves is what the room sees.
-                    if (frames % 2 == 0 && Previewing && Previewed is { } previewed)
+                    // person sees of themselves is what the room sees: drawn
+                    // from the frame itself where the frame is more than the
+                    // bands (a person laid over them, a blur), which a
+                    // picture painted on its own would not show.
+                    var previewing = frames % 2 == 0 && Previewing && Previewed != null;
+                    var blur = Blur;
+                    var fromFrame = blur != null || _person != null;
+                    if (Video != null || (previewing && fromFrame))
                     {
-                        PaintPreview(preview, frames);
+                        Paint(y, u, v, frames);
+                        LayPicture(y, u, v, frames);
+                        blur?.Process(y, u, v, (int)Width, (int)Height);
+                        if (Video is { } video)
+                        {
+                            video.PushPlanes(y, u, v, Width, Width / 2, 1, Width, Height, (long)(now * 1000), 0);
+                            Interlocked.Increment(ref FramesPushed);
+                        }
+                    }
+                    if (previewing && Previewed is { } previewed)
+                    {
+                        if (fromFrame) Planes.ToBgra(y, u, v, (int)Width, (int)Height, (int)(Width / PreviewWidth), preview);
+                        else PaintPreview(preview, frames);
                         previewed(preview, PreviewWidth, PreviewHeight);
                     }
                     frames++;

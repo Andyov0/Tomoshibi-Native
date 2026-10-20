@@ -28,6 +28,34 @@ internal sealed class CallMedia : IDisposable
     /// <summary>A picture of yourself, as BGRA rows, on a capture thread; the buffer may be reused, so a listener copies what it keeps.</summary>
     public event Action<byte[], int, int>? Previewed;
 
+    private BackgroundBlur? _blur;
+
+    /// <summary>Told, on a thread of the segmenter's, when blur cannot be done here: the segmenter would not start.</summary>
+    public event Action? BlurFailed;
+
+    /// <summary>
+    /// Whether the background behind the person is blurred, in what is sent
+    /// and in every picture of yourself (BackgroundBlur), from the next
+    /// frame. The app's rather than a call's, as the camera is: the join
+    /// screen shows the blur the call will send, as the web's does. The
+    /// segmenter exists only while this is on.
+    /// </summary>
+    public bool Blurring
+    {
+        get => _blur != null;
+        set
+        {
+            if (value == (_blur != null)) return;
+            var old = _blur;
+            _blur = value ? new BackgroundBlur() : null;
+            if (_blur != null) _blur.Failed += _ => BlurFailed?.Invoke();
+            if (_synthetic != null) _synthetic.Blur = _blur;
+            if (_cameraFeed != null) _cameraFeed.Blur = _blur;
+            old?.Dispose();
+            Log.Line(value ? "blur on" : "blur off");
+        }
+    }
+
     public CallMedia(Launch launch)
     {
         Launch = launch;
@@ -77,7 +105,7 @@ internal sealed class CallMedia : IDisposable
             {
                 if (_synthetic == null)
                 {
-                    _synthetic = new Synthetic();
+                    _synthetic = new Synthetic(Launch.CameraPicture) { Blur = _blur };
                     _synthetic.Previewed += (pixels, width, height) => Previewed?.Invoke(pixels, width, height);
                 }
                 return _synthetic;
@@ -164,6 +192,7 @@ internal sealed class CallMedia : IDisposable
                 return;
             }
             _cameraFeed = await CameraFeed.Start(device.Capture, device.Source, _cameraInput);
+            _cameraFeed.Blur = _blur;
             _cameraFeed.Previewed += (pixels, width, height) => Previewed?.Invoke(pixels, width, height);
         }
         catch (Exception fault)
@@ -191,5 +220,6 @@ internal sealed class CallMedia : IDisposable
     {
         _synthetic?.Dispose();
         _cameraFeed?.Dispose();
+        _blur?.Dispose();
     }
 }

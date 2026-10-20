@@ -132,7 +132,7 @@ something the deployment serves, so an `https://` link opens in the browser,
 whose page offers the app.
 
 Not in this phase, and left as marked stubs rather than as controls that do
-nothing: background blur and MSIX.
+nothing: MSIX.
 
 ## The machine it is built on
 
@@ -276,6 +276,22 @@ NordSecurity publishes one.
 - **Local sound** goes in through `push_pcm`: a generated 440 Hz tone at
   -20 dBFS, or, with `TOMOSHIBI_SOURCE=devices`, the microphone through an
   audio graph.
+- **Background blur** finds the person with the web's own segmenter,
+  MediaPipe's selfie model (`web/public/segment`), converted to ONNX by
+  `Blur/convert.py` (one MediaPipe operator rewritten as TensorFlow Lite's
+  own, then tf2onnx; its run against MediaPipe is written at the top of the
+  script) and run by `Windows.AI.MachineLearning`, which every Windows 10
+  and 11 has, on the processor: 7 ms a frame in the VM, its mask within
+  0.00002 of MediaPipe's on MediaPipe's test portrait
+  (`TOMOSHIBI_DEBUG_SEGMENT`). The blur and the blend are Android's
+  (`Tomoshibi.Basics\BlurMath.cs`): the frame shrunk to a quarter, blurred
+  there with the web's radius scaled to the picture, and laid under the
+  person through the mask, the segmenter running on a thread of its own so
+  that a frame never waits for it. About 11 ms for a 1280x720 frame on the
+  capture thread in a release build in the VM. Applied before the frame is
+  sent and before the picture of yourself is drawn, the join screen's
+  included, as the web's preview is; the camera's frames go through it as
+  I420 (`Media\CameraBlur.cs`), the generated ones too.
 
 Synthetic is the default in this phase, so that no launch can capture whoever
 sits at a machine whose devices are another's (a VM shares its host's). The
@@ -313,6 +329,9 @@ Read from the environment, the same names the Apple apps read:
 | `TOMOSHIBI_ENDED=left\|closed\|removed\|lost` | Opens on that ending, for pictures of it. |
 | `TOMOSHIBI_LANGUAGE=en\|zh-Hans\|zh-Hant\|ja` | Speaks this language for the launch, without keeping it. |
 | `TOMOSHIBI_SHOW=…` | Opens something over the screen: `start`, `join`, `schedule`, `servers`, `settings[:general\|media\|account\|about]`, and in a call `chat`, `devices`, `sound`, `host`, `share`, `leave`. Once, in the first call. |
+| `TOMOSHIBI_BLUR` | Blurs the background from the start. |
+| `TOMOSHIBI_CAMERA_PICTURE=file` | The generated camera shows this picture (a person) drifting over its bands, for the blur to find. |
+| `TOMOSHIBI_DEBUG_SEGMENT=folder` | Runs the segmenter on `portrait-input.bin` and logs how near its mask is to `portrait-mediapipe.bin` (both from `Blur/convert.py`). |
 | `TOMOSHIBI_WATCH=link` | Watches this video together straight after joining, once the server says this person may. |
 | `TOMOSHIBI_WATCH_YOUTUBE_API=url` | Where the YouTube player's page loads YouTube's IFrame API from: the kit's stand-in, so that no test reaches YouTube. |
 | `TOMOSHIBI_SHARE=screen\|sound\|both` | Shares straight after joining: a generated screen and chord unless `TOMOSHIBI_SOURCE=devices`, and then the first screen without the picker. |

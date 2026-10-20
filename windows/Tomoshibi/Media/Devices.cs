@@ -17,7 +17,7 @@ namespace Tomoshibi.Media;
 /// interleaved-chroma form). Only with TOMOSHIBI_SOURCE=devices in this
 /// phase; the tests never open it.
 /// </summary>
-internal sealed class CameraFeed : IDisposable
+internal sealed partial class CameraFeed : IDisposable
 {
     private readonly MediaCapture _capture;
     private readonly MediaFrameReader _reader;
@@ -86,6 +86,13 @@ internal sealed class CameraFeed : IDisposable
         using var frame = reader.TryAcquireLatestFrame();
         var bitmap = frame?.VideoMediaFrame?.SoftwareBitmap;
         if (bitmap == null) return;
+        // Blurred behind the person before it is sent or shown (CameraBlur.cs).
+        if (Blur is { } blur)
+        {
+            Blurred(bitmap, blur, frame!.SystemRelativeTime);
+            bitmap.Dispose();
+            return;
+        }
         if (Previewed is { } previewed && Interlocked.Increment(ref _arrived) % 3 == 0)
         {
             using var bgra = SoftwareBitmap.Convert(bitmap, BitmapPixelFormat.Bgra8, BitmapAlphaMode.Premultiplied);

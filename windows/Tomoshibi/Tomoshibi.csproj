@@ -62,6 +62,18 @@
     </Content>
   </ItemGroup>
 
+  <!--
+    The web's person segmenter as ONNX, for the background blur
+    (Media/BackgroundBlur.cs); made from web/public/segment by
+    windows/Blur/convert.py.
+  -->
+  <ItemGroup>
+    <Content Include="..\Blur\selfie_segmenter.onnx">
+      <Link>segment\selfie_segmenter.onnx</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <!-- The core, for the architecture being built. -->
   <ItemGroup>
     <None Include="Native\$(RuntimeIdentifier)\tomoshibi_core.dll" Condition="Exists('Native\$(RuntimeIdentifier)\tomoshibi_core.dll')">

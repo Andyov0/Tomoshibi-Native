@@ -95,6 +95,29 @@ internal sealed class AppModel : Observable
         Lobby = new LobbyModel(this, _defaults);
         media.CameraId = DeviceMemory.Choice(DeviceMemory.Kind.Camera);
         media.MicrophoneId = DeviceMemory.Choice(DeviceMemory.Kind.Microphone);
+        // Blurred from the first frame where blur is chosen, the join
+        // screen's picture of yourself included (PreJoin.tsx asks the same of
+        // the web's preview). Blur that cannot be done here is turned off and
+        // said, rather than the whole picture staying blurred with nobody in
+        // it (Android's CallMedia).
+        media.Blurring = launch.Blur || DeviceMemory.Blur;
+        var ui = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        media.BlurFailed += () => ui?.TryEnqueue(() =>
+        {
+            SetBlur(false);
+            Call?.PressFailed();
+        });
+    }
+
+    /// <summary>Whether the background behind the camera is blurred (CallMedia.Blurring).</summary>
+    public bool Blurring => _media.Blurring;
+
+    /// <summary>Blurs the background or stops, from the next frame, and remembers it as the web does (<c>meet-live.blur</c>).</summary>
+    public void SetBlur(bool on)
+    {
+        _media.Blurring = on;
+        DeviceMemory.Blur = on;
+        Notify();
     }
 
     private Screen _screen = Screen.Starting;

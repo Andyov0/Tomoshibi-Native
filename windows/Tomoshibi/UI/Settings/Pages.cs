@@ -255,8 +255,7 @@ internal static class General
 /// starts on when you join, and which devices; the voice as it is.
 ///
 /// TODO(windows 2b): the level meter under the picture needs the microphone
-/// opened while the settings show; blurring the background needs a
-/// segmentation model on Windows.
+/// opened while the settings show.
 /// </summary>
 internal static class MediaSettings
 {
@@ -299,6 +298,10 @@ internal static class MediaSettings
             memory.Remember(DeviceMemory.Kind.Camera, id);
             app.Media.CameraId = id;
         }), symbol: "video"));
+        // The web's "Blur my background" tick, kept as the web keeps it
+        // (meet-live.blur) and applied at once: to the picture above, and to
+        // a call that is on.
+        devices.Children.Add(Rows.Row(T("Blur my background"), Fields.Switch(app.Blurring, app.SetBlur, T("Blur my background")), symbol: "person.and.background.dotted"));
         devices.Children.Add(Rows.Row(T("Microphone"), Pick(microphones, memory.Choice(DeviceMemory.Kind.Microphone), id =>
         {
             memory.Remember(DeviceMemory.Kind.Microphone, id);

@@ -54,6 +54,20 @@ public partial class App : Application
         // written into the owner's book.
         Hearing.Shared = new Hearing(kept);
 
+        if (launch.SegmentCheck is { } portraits)
+        {
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    Log.Line(Segmenter.Check(portraits));
+                }
+                catch (Exception fault)
+                {
+                    Log.Line($"segment check: {fault.GetType().Name}: {fault.Message}");
+                }
+            });
+        }
         var media = new CallMedia(launch);
         var app = new AppModel(launch, media, kept, secrets) { OpenedWith = Program.OpenedWith };
         if (Program.OpenedWith != null) Log.Line("opened with a link");
