@@ -117,6 +117,8 @@ class Updates(
     private var walkedAway = false
     /** A build that arrived and was not installed (the confirmation declined), kept for a second try. */
     private var ready: Pair<String, File>? = null
+    /** Until a check has answered: whether a build kept by the run before ([UpdateSource.keep]) is still to be looked at. */
+    private var carrying = false
 
     /** Starts asking: now, and every six hours after. Once for the life of the model. */
     fun start() {
@@ -124,7 +126,10 @@ class Updates(
         started = true
         // Whatever an earlier run downloaded was installed, failed, or was
         // left behind; none of it is trusted to be the build offered now.
-        runCatching { source.clear() }
+        // The one exception is a build the person was sent to allow
+        // installing (allow), which the first check looks at again.
+        runCatching { source.clear(keepingKept = true) }
+        carrying = true
         scope.launch {
             while (true) {
                 val answered = check(asked = false)
@@ -151,6 +156,10 @@ class Updates(
             installer.stop()
         } else if (inLobby && now is Step.Held) {
             download(now.offer)
+        } else if (inLobby && now is Step.Permission && now.asked && installer.allowed) {
+            // Allowed in a run of the app before this one (carriedOver),
+            // which reached the lobby only after the check had answered.
+            install(now.offer, now.file)
         }
     }
 
@@ -202,6 +211,12 @@ class Updates(
     fun allow() {
         val now = step as? Step.Permission ?: return
         step = now.copy(asked = true, refused = false)
+        // Android 11 ends the app when the permission is given (the system
+        // mounts its storage again), and a phone short of memory may end it
+        // while the page is up: the app the person comes back to is a new
+        // run, which would otherwise have deleted the build at its start and
+        // offered it to be downloaded all over again.
+        runCatching { source.keep(now.file) }
         installer.askToBeAllowed()
     }
 
@@ -213,6 +228,9 @@ class Updates(
     fun resumed() {
         val now = step as? Step.Permission ?: return
         if (!now.asked) return
+        // Back in the same run: the build is not needed by another, and kept
+        // for one it would be installed at its start without being asked.
+        runCatching { source.keep(null) }
         if (installer.allowed) {
             install(now.offer, now.file)
         } else {
@@ -234,17 +252,62 @@ class Updates(
             if (asked) said = Said.Current
             // A build offered and since taken back is not offered any more.
             if (step is Step.Offered) step = Step.None
+            if (carrying) {
+                carrying = false
+                runCatching { source.clear() }
+            }
             return true
         }
         if (asked) {
             said = null
             later = later - found.version
         }
+        if (carrying) {
+            carrying = false
+            if (carriedOver(found)) return true
+        }
         when (val now = step) {
             Step.None -> step = Step.Offered(found)
             is Step.Offered -> if (now.offer.version != found.version) step = Step.Offered(found)
             // Whatever is under way goes on; a newer build is offered once it is over.
             else -> {}
+        }
+        return true
+    }
+
+    /**
+     * The person was sent to allow installs in the run of the app before
+     * this one, which ended there: the build it kept, if it is the one on
+     * offer now, is taken up where that run left it, as though they had
+     * just come back to it (resumed). Anything else it kept is let go.
+     */
+    private suspend fun carriedOver(found: Offer): Boolean {
+        val file = try {
+            source.kept(found)
+        } catch (fault: CancellationException) {
+            throw fault
+        } catch (fault: Exception) {
+            null
+        }
+        val now = step
+        // Nothing is under way before a check has answered; were something,
+        // its files would be left alone and only the kept one let go.
+        if (now != Step.None && now !is Step.Offered) {
+            runCatching { source.keep(null) }
+            return false
+        }
+        if (file == null) {
+            runCatching { source.clear() }
+            return false
+        }
+        // Taken up once: a build kept past this run as well would be
+        // installed at the next start whatever the person said here.
+        runCatching { source.keep(null) }
+        if (installer.allowed) {
+            step = Step.Permission(found, file, asked = true)
+            if (free) install(found, file)
+        } else {
+            step = Step.Permission(found, file, refused = true)
         }
         return true
     }
@@ -394,8 +457,18 @@ interface UpdateSource {
     /** A download of [offer], which starts when it is run. */
     fun download(offer: Offer): Transfer
 
-    /** Removes every build and part of one that was downloaded. */
-    fun clear()
+    /** Removes every build and part of one that was downloaded, and the build [keep] kept unless [keepingKept]. */
+    fun clear(keepingKept: Boolean = false)
+
+    /**
+     * Keeps [file], a build that arrived, past the end of this run of the
+     * app for the next one to find ([kept]); null lets go of it, to go with
+     * everything else at the next start.
+     */
+    fun keep(file: File?)
+
+    /** The build kept by [keep], if it is still there and is [offer]'s, byte for byte; null otherwise. */
+    suspend fun kept(offer: Offer): File?
 }
 
 /** One download, run once. */

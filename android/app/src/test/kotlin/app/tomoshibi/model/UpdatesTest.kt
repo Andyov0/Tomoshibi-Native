@@ -30,11 +30,13 @@ import org.junit.Test
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class UpdatesTest {
+    /** Where the builds are, which outlives a run of the app as the cache folder does. */
     private class FakeSource : UpdateSource {
         var answer: () -> Offer? = { null }
         var asked = 0
         var cleared = 0
         val transfers = mutableListOf<FakeTransfer>()
+        var kept: File? = null
 
         override suspend fun latest(running: String): Offer? {
             asked++
@@ -43,13 +45,22 @@ class UpdatesTest {
 
         override fun download(offer: Offer): Transfer = FakeTransfer(offer).also { transfers += it }
 
-        override fun clear() {
+        override fun clear(keepingKept: Boolean) {
             cleared++
-            transfers.forEach { it.file.delete() }
+            val keeping = kept.takeIf { keepingKept }
+            transfers.forEach { if (it.file != keeping) it.file.delete() }
+            kept = keeping
         }
+
+        override fun keep(file: File?) {
+            kept = file
+        }
+
+        override suspend fun kept(offer: Offer): File? =
+            kept?.takeIf { file -> file.exists() && transfers.any { it.file == file && it.offer == offer } }
     }
 
-    private class FakeTransfer(offer: Offer) : Transfer {
+    private class FakeTransfer(val offer: Offer) : Transfer {
         /** A real file, since a build kept for a second try is used only while it is still there. */
         override val file: File = File.createTempFile("Tomoshibi-${offer.version}-", ".apk").apply { deleteOnExit() }
         val outcome = CompletableDeferred<Exception?>()
@@ -392,6 +403,105 @@ class UpdatesTest {
         runCurrent()
         assertEquals(1, source.transfers.size)
         assertEquals(listOf(transfer.file), installer.installs)
+    }
+
+    /** The person sent to allow installs; Android 11 then ends the app, and this is the run that starts after it. */
+    private fun TestScope.backInANewRun(allowed: Boolean, found: String = "0.1.0.8", inLobby: Boolean = true): Pair<Updates, FakeTransfer> {
+        installer.allowed = false
+        val (first, transfer) = downloaded()
+        first.allow()
+        assertEquals(1, installer.asked)
+        installer.allowed = allowed
+        source.answer = { offer(found) }
+        val second = updates()
+        if (inLobby) second.lobby(true)
+        second.start()
+        runCurrent()
+        return second to transfer
+    }
+
+    @Test
+    fun permissionGivenAsTheAppIsEndedInstallsTheBuildInTheRunAfter() = runTest {
+        installer.allowed = false
+        val (first, transfer) = downloaded()
+        first.allow()
+        // Allowed, and the system ends the app; the person comes back to a
+        // new run of it, which asks about updates afresh.
+        installer.allowed = true
+        val second = updates()
+        second.lobby(true)
+        second.resumed()
+        second.start()
+        runCurrent()
+        assertEquals("downloaded again though it was here", 1, source.transfers.size)
+        assertEquals("the build was not installed on coming back", listOf(transfer.file), installer.installs)
+        assertEquals(Step.Installing(offer("0.1.0.8")), second.step)
+
+        // Declined there: the run after that installs nothing unasked.
+        installer.answer.complete(Installed.Declined)
+        runCurrent()
+        val third = updates()
+        third.lobby(true)
+        third.start()
+        runCurrent()
+        assertEquals("installed at a start nobody asked it at", 1, installer.installs.size)
+        assertEquals(Step.Offered(offer("0.1.0.8")), third.step)
+    }
+
+    @Test
+    fun aBuildKeptForTheRunAfterWaitsForTheLobbyAndForTheAnswer() = runTest {
+        val (second, _) = backInANewRun(allowed = true, inLobby = false)
+        assertTrue("installed outside the lobby", installer.installs.isEmpty())
+        assertFalse(second.shown)
+        second.lobby(true)
+        runCurrent()
+        assertEquals(1, installer.installs.size)
+        assertEquals(1, source.transfers.size)
+    }
+
+    @Test
+    fun comingBackToANewRunWithoutAllowingItIsARefusal() = runTest {
+        val (second, transfer) = backInANewRun(allowed = false)
+        assertEquals(Step.Permission(offer("0.1.0.8"), transfer.file, refused = true), second.step)
+        assertTrue(second.shown)
+        assertTrue(installer.installs.isEmpty())
+        // Allowed on a second try, in this run.
+        second.allow()
+        installer.allowed = true
+        second.resumed()
+        runCurrent()
+        assertEquals(listOf(transfer.file), installer.installs)
+        assertEquals(1, source.transfers.size)
+    }
+
+    @Test
+    fun aBuildKeptForAVersionNoLongerOfferedIsLetGo() = runTest {
+        val (second, transfer) = backInANewRun(allowed = true, found = "0.1.0.9")
+        assertEquals(Step.Offered(offer("0.1.0.9")), second.step)
+        assertTrue(installer.installs.isEmpty())
+        assertFalse("a build nobody offers was kept", transfer.file.exists())
+    }
+
+    @Test
+    fun aBuildIsKeptForTheRunAfterOnlyWhileThePersonIsAway() = runTest {
+        // Allowed and back in the same run, the confirmation declined: the
+        // next start of the app installs nothing unasked.
+        installer.allowed = false
+        val (first, transfer) = downloaded()
+        first.allow()
+        installer.allowed = true
+        first.resumed()
+        runCurrent()
+        assertEquals(listOf(transfer.file), installer.installs)
+        installer.answer.complete(Installed.Declined)
+        runCurrent()
+        val next = updates()
+        next.lobby(true)
+        next.start()
+        runCurrent()
+        assertEquals("installed at a start nobody asked it at", 1, installer.installs.size)
+        assertEquals(Step.Offered(offer("0.1.0.8")), next.step)
+        assertFalse(transfer.file.exists())
     }
 
     @Test

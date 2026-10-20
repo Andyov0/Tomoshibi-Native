@@ -50,7 +50,9 @@ class UpdatesAroundAJoinTest {
         val transfers = mutableListOf<Download>()
         override suspend fun latest(running: String): Offer = offer
         override fun download(offer: Offer): Transfer = Download().also { transfers += it }
-        override fun clear() {}
+        override fun clear(keepingKept: Boolean) {}
+        override fun keep(file: File?) {}
+        override suspend fun kept(offer: Offer): File? = null
     }
 
     private class Download : Transfer {
