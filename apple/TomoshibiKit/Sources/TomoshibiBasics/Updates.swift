@@ -138,6 +138,11 @@ public final class Updates {
             holding = true
             step = .held(offer, received: received, total: total)
             transfer?.cancel()
+        } else if !inLobby, case .installing = step {
+            // Checking the copy takes seconds, and replacing the app ends it:
+            // a meeting started in them would be ended by it. Given up before
+            // anything is replaced, the build kept for Update back here.
+            installer.stop()
         } else if inLobby, case let .held(offer, _, _) = step {
             download(offer)
         }
@@ -302,6 +307,9 @@ public final class Updates {
             case let .failed(sentence):
                 source.clear()
                 step = .offered(offer, problem: sentence)
+            case .stopped:
+                ready = (offer.version, file)
+                step = .offered(offer)
             }
         }
     }
@@ -391,9 +399,14 @@ public protocol UpdateInstaller: AnyObject {
     func install(_ file: URL, version: String) async -> Installation
     /// Shows this copy of the app in Finder.
     func reveal()
+    /// Gives up the install under way before anything is replaced, which
+    /// then returns `stopped`; too late to, it changes nothing.
+    func stop()
 }
 
 public enum Installation: Equatable, Sendable {
     case done
     case failed(String)
+    /// Given up by `stop`, the build untouched.
+    case stopped
 }

@@ -29,6 +29,8 @@ private let log = Logger(subsystem: "app.tomoshibi", category: "update")
 @MainActor
 final class MacInstaller: UpdateInstaller {
     private let app = Bundle.main.bundleURL
+    /// Set by `stop` while a build is being checked; read once it has been.
+    private var stopping = false
 
     var misplacement: Misplacement? { Self.misplacement(of: app) }
 
@@ -36,7 +38,12 @@ final class MacInstaller: UpdateInstaller {
         NSWorkspace.shared.activateFileViewerSelecting([Self.original(of: app) ?? app])
     }
 
+    func stop() {
+        stopping = true
+    }
+
     func install(_ file: URL, version: String) async -> Installation {
+        stopping = false
         let app = app
         let identifier = Bundle.main.bundleIdentifier ?? "app.tomoshibi.mac"
         let signing = UpdateTrust.signing()
@@ -48,6 +55,12 @@ final class MacInstaller: UpdateInstaller {
             return .failed(refusal.sentence)
         case let .success(url):
             staged = url
+        }
+        // The person left the lobby while the copy was checked, perhaps for
+        // a call, which replacing the app would end.
+        if stopping {
+            try? FileManager.default.removeItem(at: staged.deletingLastPathComponent())
+            return .stopped
         }
 
         let placed = await Task.detached { () -> Bool in

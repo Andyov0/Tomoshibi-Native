@@ -323,6 +323,25 @@ class UpdatesTest {
     }
 
     @Test
+    fun anInstallIsGivenUpWhenTheLobbyIsLeftAndTheBuildKept() = runTest {
+        val (updates, transfer) = downloaded()
+        assertTrue(updates.step is Step.Installing)
+        // A link opened from the notification shade took the app to a
+        // meeting's door with the system's confirmation still up.
+        updates.lobby(false)
+        runCurrent()
+        assertEquals("an install went on outside the lobby", 1, installer.stopped)
+        assertEquals("said something about an install nobody refused", Step.Offered(offer("0.1.0.8")), updates.step)
+        assertFalse(updates.shown)
+        updates.lobby(true)
+        installer.answer = CompletableDeferred()
+        updates.accept()
+        runCurrent()
+        assertEquals("downloaded again though it was here", 1, source.transfers.size)
+        assertEquals(listOf(transfer.file, transfer.file), installer.installs)
+    }
+
+    @Test
     fun aConfirmationLeftOpenCanBeGivenUp() = runTest {
         val (updates, _) = downloaded()
         assertTrue(updates.step is Step.Installing)

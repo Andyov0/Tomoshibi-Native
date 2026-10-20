@@ -98,13 +98,24 @@ final class UpdatesTests: XCTestCase {
         var installs: [URL] = []
         var answer: Installation = .done
         var revealed = 0
+        var stopped = 0
+        /// Holds the install until `stop`, as checking a copy takes seconds.
+        var holds = false
+        private var held: CheckedContinuation<Installation, Never>?
 
         func install(_ file: URL, version: String) async -> Installation {
             installs.append(file)
-            return answer
+            guard holds else { return answer }
+            return await withCheckedContinuation { held = $0 }
         }
 
         func reveal() { revealed += 1 }
+
+        func stop() {
+            stopped += 1
+            held?.resume(returning: .stopped)
+            held = nil
+        }
     }
 
     struct NoNetwork: Error {}
@@ -291,6 +302,30 @@ final class UpdatesTests: XCTestCase {
         source.transfers[1].finish()
         await settle()
         XCTAssertEqual(updates.step, .none)
+        updates.stop()
+    }
+
+    func testAnInstallIsGivenUpWhenTheLobbyIsLeftAndTheBuildKept() async {
+        let updates = await offered()
+        installer.holds = true
+        updates.accept()
+        await settle()
+        source.transfers[0].finish()
+        await settle()
+        XCTAssertEqual(updates.step, .installing(offer("0.1.0.8")))
+        // Start pressed while the copy was being checked.
+        updates.lobby(false)
+        await settle()
+        XCTAssertEqual(installer.stopped, 1, "an install went on outside the lobby")
+        XCTAssertEqual(updates.step, .offered(offer("0.1.0.8")))
+        XCTAssertFalse(updates.shown)
+
+        installer.holds = false
+        updates.lobby(true)
+        updates.accept()
+        await settle()
+        XCTAssertEqual(source.transfers.count, 1, "downloaded again though it was here")
+        XCTAssertEqual(installer.installs.count, 2)
         updates.stop()
     }
 

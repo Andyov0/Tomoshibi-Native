@@ -113,6 +113,8 @@ class Updates(
     private var transferJob: Job? = null
     /** Set when the transfer is stopped because the person left the lobby, not because they cancelled. */
     private var holding = false
+    /** Set when the person left the lobby during an install, which is then given up without a word. */
+    private var walkedAway = false
     /** A build that arrived and was not installed (the confirmation declined), kept for a second try. */
     private var ready: Pair<String, File>? = null
 
@@ -140,6 +142,13 @@ class Updates(
             holding = true
             step = Step.Held(now.offer, now.received, now.total)
             transfer?.cancel()
+        } else if (!inLobby && now is Step.Installing) {
+            // The system's confirmation is given up rather than left to be
+            // answered, or to be put up when the app is next in front, in
+            // whatever the person went on to: a call is ended by the
+            // install. The build is kept for Update back in the lobby.
+            walkedAway = true
+            installer.stop()
         } else if (inLobby && now is Step.Held) {
             download(now.offer)
         }
@@ -309,6 +318,7 @@ class Updates(
             return
         }
         step = Step.Installing(offer)
+        walkedAway = false
         scope.launch {
             val installed = try {
                 installer.install(file)
@@ -329,7 +339,7 @@ class Updates(
                 // so that "Update" again asks again without downloading it.
                 Installed.Declined -> {
                     ready = offer.version to file
-                    step = Step.Offered(offer, t("The update was not installed."))
+                    step = if (walkedAway) Step.Offered(offer) else Step.Offered(offer, t("The update was not installed."))
                 }
                 is Installed.Failed -> {
                     forget()
