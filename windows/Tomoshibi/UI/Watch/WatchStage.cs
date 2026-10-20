@@ -368,9 +368,12 @@ internal sealed class PlayerStage : Grid
             // Not "everybody else goes on watching" for what the site
             // refused: what it refuses here, it refuses everybody.
             K.Text(Sentence(lost, site), 11.5, ink: Ink.White(0.6f), align: TextAlignment.Center));
-        if (WatchWords.Openable(link))
+        // The sharer's link, which may have a web host and still not be an
+        // address (a port that is not a number): no button rather than a
+        // press that throws (WebAddress).
+        if (WatchWords.Openable(link) && WebAddress.Of(link) is { } address)
         {
-            var open = WatchStage.StageButton(T("Open the link"), "arrow.up.right.square", () => _ = Windows.System.Launcher.LaunchUriAsync(new Uri(link)));
+            var open = WatchStage.StageButton(T("Open the link"), "arrow.up.right.square", () => _ = Windows.System.Launcher.LaunchUriAsync(address));
             open.HorizontalAlignment = HorizontalAlignment.Center;
             open.Margin = new Thickness(0, 4, 0, 0);
             column.Children.Add(open);

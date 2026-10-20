@@ -642,9 +642,9 @@ internal static class About
         {
             var build = string.IsNullOrEmpty(info.Build) ? "—" : info.Build[..Math.Min(12, info.Build.Length)];
             rows.Add(Rows.Row(T("Server"), K.Text(build, 12.5, mono: true, ink: Ink.Muted), symbol: "server.rack", last: string.IsNullOrEmpty(info.Source)));
-            if (!string.IsNullOrEmpty(info.Source))
+            if (WebAddress.Of(info.Source) is { } address)
             {
-                var source = info.Source;
+                var source = info.Source!;
                 var line = Rows.Row("AGPL-3.0 · source", K.Symbol("arrow.up.right", 11.5, Ink.Muted), source, "chevron.left.forwardslash.chevron.right", last: true);
                 var tap = new Tap(line, Look.Clear, 48, padding: 0)
                 {
@@ -654,7 +654,7 @@ internal static class About
                 };
                 tap.Height = double.NaN;
                 tap.Named("AGPL-3.0 · source");
-                tap.Click += async (_, _) => await Windows.System.Launcher.LaunchUriAsync(new Uri(source));
+                tap.Click += async (_, _) => await Windows.System.Launcher.LaunchUriAsync(address);
                 rows.Add(tap);
             }
         }

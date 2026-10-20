@@ -134,13 +134,13 @@ internal static class Faces
     {
         var grid = new Grid { Width = size, Height = size };
         grid.Children.Add(Initial(name, size));
-        if (address != null)
+        if (WebAddress.Of(address) is { } source)
         {
             var picture = new Ellipse();
             Motion.Hide(picture);
             var image = new BitmapImage { DecodePixelWidth = (int)(size * 2), DecodePixelType = DecodePixelType.Logical };
             image.ImageOpened += (_, _) => Motion.FadeTo(picture, 1);
-            image.UriSource = new Uri(address);
+            image.UriSource = source;
             picture.Fill = new ImageBrush { ImageSource = image, Stretch = Stretch.UniformToFill };
             grid.Children.Add(picture);
         }

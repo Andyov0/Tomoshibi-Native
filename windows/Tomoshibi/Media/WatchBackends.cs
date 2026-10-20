@@ -125,6 +125,14 @@ internal sealed class FileBackend : IWatchBackend
     {
         _prepared = false;
         _ended = false;
+        // Where the video is, as the sharer or the gateway said: a string that
+        // is not a whole address fails over like any other load, where `new
+        // Uri` threw into a task nobody read and the stage waited for good.
+        if (WebAddress.Of(_url) is not { } address)
+        {
+            if (!_gone) _owner.BackendFailed(this, "not an address", false);
+            return;
+        }
         MediaSource source;
         if (_hls)
         {
@@ -134,7 +142,7 @@ internal sealed class FileBackend : IWatchBackend
             AdaptiveMediaSourceCreationResult made;
             try
             {
-                made = await AdaptiveMediaSource.CreateFromUriAsync(new Uri(_url));
+                made = await AdaptiveMediaSource.CreateFromUriAsync(address);
             }
             catch (Exception fault)
             {
@@ -159,7 +167,7 @@ internal sealed class FileBackend : IWatchBackend
         }
         else
         {
-            source = MediaSource.CreateFromUri(new Uri(_url));
+            source = MediaSource.CreateFromUri(address);
         }
         Player.Source = new MediaPlaybackItem(source);
         if (at is { } from)

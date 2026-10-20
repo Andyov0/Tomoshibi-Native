@@ -178,7 +178,10 @@ internal static class MediaKit
             }
             else
             {
-                bitmap.UriSource = new Uri(url);
+                // Somebody else's string (WebAddress): nothing to show where
+                // it is not a whole address.
+                if (WebAddress.Of(url) is not { } address) return;
+                bitmap.UriSource = address;
             }
             if (Pictures.Count > 64) Pictures.Clear();
             Pictures[url] = bitmap;
