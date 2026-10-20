@@ -17,6 +17,7 @@ import app.tomoshibi.model.UpdateInstaller
 import java.io.File
 import java.lang.ref.WeakReference
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -39,7 +40,11 @@ private const val TAG = "Tomoshibi"
  * else the system refuses (STATUS_FAILURE_CONFLICT) and the build is not
  * installed.
  */
-class SystemInstaller(private val context: Context) : UpdateInstaller {
+class SystemInstaller(
+    private val context: Context,
+    /** Where the build is copied into the session: a test's own, to stop an install in the middle of the copy. */
+    private val io: CoroutineDispatcher = Dispatchers.IO,
+) : UpdateInstaller {
     override val allowed: Boolean get() = context.packageManager.canRequestPackageInstalls()
 
     override fun askToBeAllowed() {
@@ -47,49 +52,72 @@ class SystemInstaller(private val context: Context) : UpdateInstaller {
         Foreground.start(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")))
     }
 
-    /** The session waiting for the person's answer, for [stop]. */
-    private var current: Int? = null
+    /**
+     * The install under way, for [stop]: from the moment it is asked for,
+     * not from the commit. The build, 56 MB, takes a second or more to copy
+     * into the session, and a stop that found nothing to stop in that time
+     * did nothing: Cancel on the banner, or leaving the lobby for a call,
+     * and the system's confirmation came up all the same a moment later,
+     * over whatever the person had gone on to.
+     */
+    private var current: InstallResults.Handover? = null
 
     override fun stop() {
-        val id = current ?: return
+        val handover = current ?: return
         current = null
-        runCatching { context.packageManager.packageInstaller.abandonSession(id) }
-        InstallResults.waiting.remove(id)?.complete(Installed.Declined)
+        handover.stopped = true
+        // Still being copied: install() gives it up rather than commit it.
+        val id = handover.session ?: return
+        InstallResults.giveUp(context, id)
     }
 
     override suspend fun install(file: File): Installed {
         val installer = context.packageManager.packageInstaller
-        val answer = CompletableDeferred<Installed>()
-        val session = withContext(Dispatchers.IO) {
-            val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
-                setAppPackageName(context.packageName)
-                setSize(file.length())
-            }
-            val id = installer.createSession(params)
-            InstallResults.waiting[id] = answer
-            try {
-                installer.openSession(id).use { open ->
-                    open.openWrite("Tomoshibi.apk", 0, file.length()).use { out ->
-                        file.inputStream().use { it.copyTo(out, 1 shl 16) }
-                        open.fsync(out)
-                    }
-                    // Mutable, as the system fills in the status and the
-                    // confirmation; explicit, which Android 14 asks of a
-                    // mutable one.
-                    val result = Intent(context, InstallResults::class.java).setAction(InstallResults.ACTION)
-                    val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
-                    open.commit(PendingIntent.getBroadcast(context, id, result, flags).intentSender)
+        val handover = InstallResults.Handover()
+        current = handover
+        val session = try {
+            withContext(io) {
+                val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+                    setAppPackageName(context.packageName)
+                    setSize(file.length())
                 }
-            } catch (fault: Exception) {
-                InstallResults.waiting.remove(id)
-                runCatching { installer.abandonSession(id) }
-                throw fault
+                val id = installer.createSession(params)
+                InstallResults.waiting[id] = handover
+                val committed = try {
+                    installer.openSession(id).use { open ->
+                        open.openWrite("Tomoshibi.apk", 0, file.length()).use { out ->
+                            file.inputStream().use { it.copyTo(out, 1 shl 16) }
+                            open.fsync(out)
+                        }
+                        // Stopped while the build was copied: never
+                        // committed, so the system never asks.
+                        if (handover.stopped) return@use false
+                        // Mutable, as the system fills in the status and the
+                        // confirmation; explicit, which Android 14 asks of a
+                        // mutable one.
+                        val result = Intent(context, InstallResults::class.java).setAction(InstallResults.ACTION)
+                        val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+                        open.commit(PendingIntent.getBroadcast(context, id, result, flags).intentSender)
+                        true
+                    }
+                } catch (fault: Exception) {
+                    InstallResults.waiting.remove(id)
+                    runCatching { installer.abandonSession(id) }
+                    throw fault
+                }
+                if (!committed) InstallResults.giveUp(context, id)
+                id
             }
-            id
+        } catch (fault: Exception) {
+            if (current === handover) current = null
+            throw fault
         }
-        Log.i(TAG, "update handed to the installer (session $session)")
-        current = session
-        return answer.await().also { if (current == session) current = null }
+        handover.session = session
+        // Stopped between the look before the commit and here: given up now,
+        // and its confirmation, should the system already have sent it, is
+        // not put up (InstallResults).
+        if (handover.stopped) InstallResults.giveUp(context, session) else Log.i(TAG, "update handed to the installer (session $session)")
+        return handover.answer.await().also { if (current === handover) current = null }
     }
 }
 
@@ -106,17 +134,49 @@ class InstallResults : BroadcastReceiver() {
                 @Suppress("DEPRECATION")
                 intent.getParcelableExtra(Intent.EXTRA_INTENT)
             }
-            if (confirm != null) Foreground.start(confirm) else waiting.remove(session)?.complete(Installed.Failed(t("The update could not be installed.")))
+            // Stopped (Cancel, or the lobby left), or nobody here waits for
+            // it (an earlier run of the app committed it): given up rather
+            // than put up over whatever the app is showing now, a call or the
+            // door of one, where saying yes would replace the app and end
+            // the call. One held for the app's return is asked again then.
+            val handover = waiting[session]
+            if (handover == null || handover.stopped) {
+                giveUp(context, session)
+                return
+            }
+            if (confirm != null) {
+                Foreground.start(confirm) { waiting[session]?.stopped == false }
+            } else {
+                waiting.remove(session)?.answer?.complete(Installed.Failed(t("The update could not be installed.")))
+            }
             return
         }
-        waiting.remove(session)?.complete(outcome(status))
+        waiting.remove(session)?.answer?.complete(outcome(status))
+    }
+
+    /** One install, from the moment it is asked for until the system's answer. */
+    internal class Handover {
+        val answer = CompletableDeferred<Installed>()
+
+        /** Set by [SystemInstaller.stop], on the main thread, and read where the build is copied. */
+        @Volatile
+        var stopped = false
+
+        /** Once committed. */
+        var session: Int? = null
     }
 
     companion object {
         const val ACTION = "app.tomoshibi.UPDATE_INSTALLED"
 
         /** Sessions the app is waiting to hear about. */
-        internal val waiting = java.util.concurrent.ConcurrentHashMap<Int, CompletableDeferred<Installed>>()
+        internal val waiting = java.util.concurrent.ConcurrentHashMap<Int, Handover>()
+
+        /** Abandons [session], so that no confirmation of it can install anything, and answers whoever waits for it. */
+        internal fun giveUp(context: Context, session: Int) {
+            runCatching { context.packageManager.packageInstaller.abandonSession(session) }
+            waiting.remove(session)?.answer?.complete(Installed.Declined)
+        }
 
         internal fun outcome(status: Int): Installed = when (status) {
             PackageInstaller.STATUS_SUCCESS -> Installed.Done
@@ -143,20 +203,29 @@ class InstallResults : BroadcastReceiver() {
  */
 object Foreground {
     private var activity: WeakReference<Activity>? = null
-    private val held = ArrayDeque<Intent>()
+    private val held = ArrayDeque<Pair<Intent, () -> Boolean>>()
 
     fun resumed(activity: Activity) {
         this.activity = WeakReference(activity)
-        while (held.isNotEmpty()) open(activity, held.removeFirst())
+        while (held.isNotEmpty()) {
+            val (intent, wanted) = held.removeFirst()
+            if (wanted()) open(activity, intent)
+        }
     }
 
     fun paused(activity: Activity) {
         if (this.activity?.get() === activity) this.activity = null
     }
 
-    fun start(intent: Intent) {
+    /**
+     * Opens [intent] now, or once the app is in front again if [wanted] still
+     * says so then: a confirmation held while the app was behind another,
+     * for an install given up meanwhile, opened on whatever screen the
+     * person came back to.
+     */
+    fun start(intent: Intent, wanted: () -> Boolean = { true }) {
         val now = activity?.get()
-        if (now == null) held.addLast(intent) else open(now, intent)
+        if (now == null) held.addLast(intent to wanted) else open(now, intent)
     }
 
     private fun open(activity: Activity, intent: Intent) {

@@ -52,8 +52,13 @@ public final class Updates {
     public private(set) var said: Said?
     /// Versions put away with "Later", for this run of the app only.
     private var later: Set<String> = []
-    /// In the lobby, where an update may be shown, downloaded and installed.
+    /// In the lobby, where an update may be shown, downloaded and installed:
+    /// on its screen, and not on the way out of it (`joining`).
     private var free = false
+    /// On the lobby's screen, as the app last said (`lobby`).
+    private var onLobby = false
+    /// A join pressed in the lobby is out (`joining`).
+    private var settingOff = false
 
     public let running: String
     @ObservationIgnored private let source: UpdateSource
@@ -132,6 +137,27 @@ public final class Updates {
     /// Told whenever the screen changes: the lobby is the only place an
     /// update is shown or worked on.
     public func lobby(_ inLobby: Bool) {
+        onLobby = inLobby
+        reconsider()
+    }
+
+    /// Told when a join is out and again when it is over, landed or not.
+    ///
+    /// A join pressed in the lobby leaves it only once it lands, seconds
+    /// later: the Mac's start and join sheet asks whether the meeting is
+    /// live, then the deployment for a grant, then the room to let it in,
+    /// all with the lobby's screen behind the sheet. An install that came to
+    /// its swap in those seconds saw a lobby, replaced the app and quit it,
+    /// and the call being entered ended as it began. So a join out counts as
+    /// the lobby left, from the press; one that is refused or called off is
+    /// back in it, and a download held for it carries on.
+    public func joining(_ out: Bool) {
+        settingOff = out
+        reconsider()
+    }
+
+    private func reconsider() {
+        let inLobby = onLobby && !settingOff
         guard inLobby != free else { return }
         free = inLobby
         if !inLobby, case let .downloading(offer, received, total) = step {

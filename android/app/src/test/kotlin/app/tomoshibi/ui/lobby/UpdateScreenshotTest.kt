@@ -70,7 +70,9 @@ class UpdateScreenshotTest(private val language: Language) {
     private object Nowhere : UpdateSource, UpdateInstaller {
         override suspend fun latest(running: String): Offer? = null
         override fun download(offer: Offer): Transfer = error("nothing is downloaded in a picture")
-        override fun clear() {}
+        override fun clear(keepingKept: Boolean) {}
+        override fun keep(file: File?) {}
+        override suspend fun kept(offer: Offer): File? = null
         override val allowed = false
         override fun askToBeAllowed() {}
         override suspend fun install(file: File): Installed = Installed.Declined
