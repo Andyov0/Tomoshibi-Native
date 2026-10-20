@@ -127,7 +127,7 @@ class AppModel(
         private set(value) {
             if (value != screenState) Log.i(TAG, "screen ${value.name.lowercase()}")
             screenState = value
-            updates?.lobby(value == Screen.Lobby)
+            tellUpdates()
         }
 
     /**
@@ -139,8 +139,21 @@ class AppModel(
     var updates: Updates? = null
         internal set(value) {
             field = value
-            value?.lobby(screen == Screen.Lobby)
+            tellUpdates()
         }
+
+    /**
+     * Whether the person is in the lobby as far as an update is concerned:
+     * on its screen, and with no join from it out. A join from the lobby's
+     * start and join sheet leaves the screen at the lobby until the call has
+     * landed, a second or more of asking the deployment and entering the room;
+     * an install begun in that time put the system's "Do you want to update
+     * this app?" up over the call that had just begun, and saying yes to it
+     * ended the call.
+     */
+    private fun tellUpdates() {
+        updates?.lobby(screen == Screen.Lobby && !joining)
+    }
 
     var deployment by mutableStateOf<Deployment?>(null)
         private set
@@ -746,8 +759,13 @@ class AppModel(
      * joins as the same participant, and the server put out whichever arrived
      * first.
      */
-    var joining by mutableStateOf(false)
-        private set
+    private var joiningState by mutableStateOf(false)
+    var joining: Boolean
+        get() = joiningState
+        private set(value) {
+            joiningState = value
+            tellUpdates()
+        }
 
     /** Moved on by [cancelJoin]; a join compares the value it started with after every wait. */
     private var joinAttempt = 0
@@ -829,13 +847,16 @@ class AppModel(
             model.onEnded = { reason -> scope.launch { ended(reason, model) } }
             call = model
             landed = true
-            joining = false
             room = grant.room
             lobby.remember(grant.room)
             // The invitation is kept for as long as this call is: a move to
             // another relay and "Join again" both join once more.
             problem = null
             screen = Screen.Call
+            // After the screen, not before: the other way round the updates
+            // were told of the lobby again for the moment between, and a
+            // download held for the join started up only to be held again.
+            joining = false
             Log.i(TAG, "in call ${grant.room} as ${model.localIdentity} with ${model.people.size} others")
             // After joining rather than before, so somebody is in the room
             // the moment they join and their devices come up a beat later,
