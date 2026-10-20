@@ -19,5 +19,8 @@ url = "2"
 base64 = "0.22"
 rand = "0.9"
 futures-util = "0.3"
+# SHA-256 for a downloaded update (api/updates.rs). Already in the tree as
+# rustls's cryptography, so a hash costs no crate that was not built anyway.
+ring = "0.17"
 
 [dev-dependencies]

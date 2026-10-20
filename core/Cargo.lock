@@ -2806,6 +2806,7 @@ dependencies = [
  "futures-util",
  "rand 0.9.5",
  "reqwest",
+ "ring",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
