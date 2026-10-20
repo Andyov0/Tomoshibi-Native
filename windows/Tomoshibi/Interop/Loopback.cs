@@ -14,11 +14,8 @@ namespace Tomoshibi.Interop;
 /// with its sound bearable; including one tree is how somebody shares a
 /// single app's sound.
 ///
-/// Called through vtables, as ComCalls is, with a completion handler made by
-/// hand: <c>ActivateAudioInterfaceAsync</c> wants an agile COM object to
-/// call back, and a handler that says it is agile (IAgileObject) is called
-/// on whatever thread finishes the activation, which here only sets an
-/// event. Slots are the audioclient.h order: IAudioClient Initialize 3,
+/// Called through vtables, as ComCalls is, activated as the microphone is
+/// (AudioActivation). Slots are the audioclient.h order: IAudioClient Initialize 3,
 /// GetBufferSize 4, Start 10, Stop 11, SetEventHandle 13, GetService 14;
 /// IAudioCaptureClient GetBuffer 3, ReleaseBuffer 4, GetNextPacketSize 5.
 /// </summary>
@@ -29,9 +26,6 @@ internal sealed unsafe class Loopback : IDisposable
 
     private static readonly Guid AudioClientId = new("1cb9ad4c-dbfa-4c32-b178-c2f568a703b2");
     private static readonly Guid CaptureClientId = new("c8adbd64-e71e-48a0-a4de-185c395cd317");
-    private static readonly Guid CompletionHandlerId = new("41d949ab-9862-444a-80f6-c261334da5eb");
-    private static readonly Guid AgileId = new("94ea2b94-e9cc-49e0-c0ff-ee64ca8f5b90");
-    private static readonly Guid UnknownId = new("00000000-0000-0000-c000-000000000046");
 
     private const uint LoopbackFlag = 0x00020000;
     private const uint EventCallback = 0x00040000;
@@ -47,15 +41,6 @@ internal sealed unsafe class Loopback : IDisposable
         public int ProcessLoopbackMode;
     }
 
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Blob
-    {
-        public ushort Type;
-        public ushort Reserved1, Reserved2, Reserved3;
-        public uint Size;
-        public IntPtr Data;
-    }
-
     [StructLayout(LayoutKind.Sequential, Pack = 2)]
     private struct WaveFormat
     {
@@ -68,17 +53,9 @@ internal sealed unsafe class Loopback : IDisposable
         public ushort Size;
     }
 
-    [DllImport("mmdevapi.dll", ExactSpelling = true, CharSet = CharSet.Unicode)]
-    private static extern int ActivateAudioInterfaceAsync(string path, in Guid riid, Blob* parameters, IntPtr handler, out IntPtr operation);
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern IntPtr CreateEventW(IntPtr attributes, int manual, int initial, IntPtr name);
-
-    [DllImport("kernel32.dll")]
-    private static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
-
-    [DllImport("kernel32.dll")]
-    private static extern int CloseHandle(IntPtr handle);
+    private static IntPtr CreateEventW(IntPtr attributes, int manual, int initial, IntPtr name) => AudioActivation.CreateEventW(attributes, manual, initial, name);
+    private static uint WaitForSingleObject(IntPtr handle, uint milliseconds) => AudioActivation.WaitForSingleObject(handle, milliseconds);
+    private static int CloseHandle(IntPtr handle) => AudioActivation.CloseHandle(handle);
 
     private IntPtr _client;
     private IntPtr _capture;
@@ -153,39 +130,8 @@ internal sealed unsafe class Loopback : IDisposable
     private static IntPtr Activate(uint process, bool include)
     {
         var parameters = new ActivationParams { ActivationType = 1, TargetProcessId = process, ProcessLoopbackMode = include ? 0 : 1 };
-        var blob = new Blob { Type = 65 /* VT_BLOB */, Size = (uint)sizeof(ActivationParams), Data = (IntPtr)(&parameters) };
-        var handler = Completion.Make();
-        try
-        {
-            Marshal.ThrowExceptionForHR(ActivateAudioInterfaceAsync(@"VAD\Process_Loopback", in AudioClientId, &blob, handler, out var operation));
-            try
-            {
-                if (!Completion.Wait(handler, 5000)) throw new TimeoutException("the sound capture was not activated");
-                int result;
-                IntPtr activated;
-                var get = (delegate* unmanaged[Stdcall]<IntPtr, int*, IntPtr*, int>)Slot(operation, 3);
-                Marshal.ThrowExceptionForHR(get(operation, &result, &activated));
-                Marshal.ThrowExceptionForHR(result);
-                try
-                {
-                    var id = AudioClientId;
-                    Marshal.ThrowExceptionForHR(Marshal.QueryInterface(activated, in id, out var client));
-                    return client;
-                }
-                finally
-                {
-                    Marshal.Release(activated);
-                }
-            }
-            finally
-            {
-                Marshal.Release(operation);
-            }
-        }
-        finally
-        {
-            Completion.Release(handler);
-        }
+        var blob = new AudioActivation.Blob { Type = 65 /* VT_BLOB */, Size = (uint)sizeof(ActivationParams), Data = (IntPtr)(&parameters) };
+        return AudioActivation.Activate(@"VAD\Process_Loopback", AudioClientId, &blob);
     }
 
     private void Run()
@@ -236,90 +182,5 @@ internal sealed unsafe class Loopback : IDisposable
         if (_client != IntPtr.Zero) Marshal.Release(_client);
         _capture = _client = IntPtr.Zero;
         CloseHandle(_ready);
-    }
-
-    /// <summary>
-    /// An IActivateAudioInterfaceCompletionHandler made by hand in unmanaged
-    /// memory: a vtable of four functions and a reference count beside the
-    /// event it sets, answering IAgileObject as the activation requires.
-    /// </summary>
-    private static class Completion
-    {
-        [StructLayout(LayoutKind.Sequential)]
-        private struct Object
-        {
-            public IntPtr Vtable;
-            public int References;
-            public IntPtr Done;
-        }
-
-        private static readonly IntPtr Vtable = MakeVtable();
-
-        private static IntPtr MakeVtable()
-        {
-            var table = (IntPtr*)NativeMemory.Alloc((nuint)(4 * sizeof(IntPtr)));
-            table[0] = (IntPtr)(delegate* unmanaged[Stdcall]<IntPtr, Guid*, IntPtr*, int>)&QueryInterface;
-            table[1] = (IntPtr)(delegate* unmanaged[Stdcall]<IntPtr, uint>)&AddRef;
-            table[2] = (IntPtr)(delegate* unmanaged[Stdcall]<IntPtr, uint>)&ReleaseOne;
-            table[3] = (IntPtr)(delegate* unmanaged[Stdcall]<IntPtr, IntPtr, int>)&ActivateCompleted;
-            return (IntPtr)table;
-        }
-
-        public static IntPtr Make()
-        {
-            var made = (Object*)NativeMemory.Alloc((nuint)sizeof(Object));
-            made->Vtable = Vtable;
-            made->References = 1;
-            made->Done = CreateEventW(IntPtr.Zero, 1, 0, IntPtr.Zero);
-            return (IntPtr)made;
-        }
-
-        public static bool Wait(IntPtr handler, uint milliseconds) => WaitForSingleObject(((Object*)handler)->Done, milliseconds) == 0;
-
-        public static void Release(IntPtr handler) => Drop(handler);
-
-        // An entry point the system calls may not be called from managed
-        // code, so each is a door onto one of these.
-        private static uint Add(IntPtr self) => (uint)Interlocked.Increment(ref ((Object*)self)->References);
-
-        private static uint Drop(IntPtr self)
-        {
-            var left = Interlocked.Decrement(ref ((Object*)self)->References);
-            if (left == 0)
-            {
-                CloseHandle(((Object*)self)->Done);
-                NativeMemory.Free((void*)self);
-            }
-            return (uint)left;
-        }
-
-        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvStdcall) })]
-        private static int QueryInterface(IntPtr self, Guid* id, IntPtr* found)
-        {
-            if (*id == UnknownId || *id == CompletionHandlerId || *id == AgileId)
-            {
-                Add(self);
-                *found = self;
-                return 0;
-            }
-            *found = IntPtr.Zero;
-            return unchecked((int)0x80004002); // E_NOINTERFACE
-        }
-
-        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvStdcall) })]
-        private static uint AddRef(IntPtr self) => Add(self);
-
-        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvStdcall) })]
-        private static uint ReleaseOne(IntPtr self) => Drop(self);
-
-        [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvStdcall) })]
-        private static int ActivateCompleted(IntPtr self, IntPtr operation)
-        {
-            SetEvent(((Object*)self)->Done);
-            return 0;
-        }
-
-        [DllImport("kernel32.dll")]
-        private static extern int SetEvent(IntPtr handle);
     }
 }

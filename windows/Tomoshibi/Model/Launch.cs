@@ -86,6 +86,14 @@ public sealed record Launch
     public bool RealDevices { get; init; } = true;
 
     /// <summary>
+    /// Made-up devices for a test (TOMOSHIBI_DEVICES=file, ScriptedDevices):
+    /// cameras, microphones and speakers listed from a file the test writes
+    /// and rewrites, so that picking, switching and unplugging can be
+    /// driven with nothing real opened. Always with the generated sources.
+    /// </summary>
+    public string? DevicesFile { get; init; }
+
+    /// <summary>
     /// Keeps what this rehearsal is told in a store of the test's own
     /// (TOMOSHIBI_KEEP=name: %LOCALAPPDATA%\Tomoshibi-tests\name), never
     /// the owner's, so that a test can sign in, quit, and see the next launch
@@ -175,7 +183,9 @@ public sealed record Launch
             Camera = Get("TOMOSHIBI_CAMERA") != null,
             // Synthetic unless asked: a test given a deployment of its own
             // never reaches a real device by forgetting a switch.
-            RealDevices = string.Equals(Get("TOMOSHIBI_SOURCE"), "devices", StringComparison.OrdinalIgnoreCase),
+            // Made-up devices are never real ones, whatever else was asked.
+            RealDevices = Get("TOMOSHIBI_DEVICES") == null && string.Equals(Get("TOMOSHIBI_SOURCE"), "devices", StringComparison.OrdinalIgnoreCase),
+            DevicesFile = Get("TOMOSHIBI_DEVICES"),
             Share = Get("TOMOSHIBI_SHARE") is { } share && share is "screen" or "sound" or "both" ? share : null,
             WatchYoutubeApi = Get("TOMOSHIBI_WATCH_YOUTUBE_API"),
             Watch = Get("TOMOSHIBI_WATCH"),
