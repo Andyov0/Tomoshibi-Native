@@ -326,15 +326,51 @@ that machine for sideloading only): 0.1.0.1 and 0.1.0.2 built as bundles of
 about 220 MB holding both architectures; 0.1.0.1 installed (Windows took the
 arm64 package), launched from its entry, signed in to the local deployment
 through the switches file, and was upgraded in place by installing 0.1.0.2
-over it; a `tomoshibi://` activation started it cold ("opened with a link")
-and, with it running, was handed to the running app ("handed a link") with
-no second process left; it uninstalled to nothing, the scheme's registration
-with it. Opening such a link through the
+over it, and again by updating itself (below); a `tomoshibi://` activation
+started it cold ("opened with a link") and, with it running, was handed to
+the running app ("handed a link") with no second process left; it
+uninstalled to nothing, the scheme's registration with it. Opening such a
+link through the
 shell put up Windows' own "Pick an app" the first time, as Windows does for a
 scheme nobody has chosen an app for; the test activated the package through
 `Windows.System.Launcher` with the package named instead, rather than pick a
 default for the person. A distributed build needs a real code-signing
 certificate (see the report of phase 2b for what that takes).
+
+### Updates
+
+`Tomoshibi.Basics\Updates.cs` is Android's `Updates.kt`: asked at start and
+every six hours, a failed check asked again in ten minutes and never said; an
+offer shown only in the lobby (sign-in included), never on the join screens,
+in a call or at its end; a download held when the lobby is left and carried
+on when back; an install under way given up when the lobby is left, the
+build kept, so that "Update" again installs it without downloading it;
+"Later" for the rest of the run; a check asked for in the settings always
+answering. The core asks and downloads (`CheckForUpdate`, `DownloadUpdate`),
+as the app (`Tomoshibi/<version> (Windows ...)`), and refuses a file that is
+not the build it described. `Model\AppUpdates.cs` installs with
+`PackageManager.AddPackageByUriAsync` and `ForceTargetAppShutdown`, after
+reading the bundle's own manifest (this app's name and publisher, the
+version offered) and the subjects of the certificates its signature carries
+(this app's publisher); Windows then checks the signature itself and that the
+machine trusts it. The app registers to be restarted, and Windows opens it
+again once the new version is in place. Android's permission and
+confirmation steps have no Windows counterpart. Only a debug build given a
+deployment, or a release build, asks at all; an unpackaged build is offered
+updates like any other and says it cannot update itself here when asked to
+install one.
+
+Tested end to end with the packages above against a local deployment of
+the newer server (which has `/api/apps/latest/windows`) whose shelf held
+0.1.0.2: the installed 0.1.0.1 offered it in the lobby, downloaded the 220 MB
+on "Update" with the progress shown, installed it, and Windows opened it again
+three seconds later as 0.1.0.2 with nothing more to offer. A 0.1.0.3 signed
+by another certificate (CN=Tomoshibi Impostor) was offered, downloaded and
+refused before Windows was handed it: "The update is not signed by
+Tomoshibi's developer, so it was not installed." The banner's steps, posed for pictures
+(`TOMOSHIBI_SHOW=update:offered|downloading|installing|failed|current`, and
+`:about` to open the settings there), are in the kit's shots beside
+Android's and the Mac's.
 
 ## Switches
 
@@ -358,6 +394,7 @@ Read from the environment, the same names the Apple apps read:
 | `TOMOSHIBI_ENDED=left\|closed\|removed\|lost` | Opens on that ending, for pictures of it. |
 | `TOMOSHIBI_LANGUAGE=en\|zh-Hans\|zh-Hant\|ja` | Speaks this language for the launch, without keeping it. |
 | `TOMOSHIBI_SHOW=…` | Opens something over the screen: `start`, `join`, `schedule`, `servers`, `settings[:general\|media\|account\|about]`, and in a call `chat`, `devices`, `sound`, `host`, `share`, `leave`. Once, in the first call. |
+| `TOMOSHIBI_SHOW=update:…` | Poses an update at a step (`offered`, `downloading`, `installing`, `failed`, `current`) and asks the deployment nothing; `:about` after it opens the settings there. |
 | `TOMOSHIBI_BLUR` | Blurs the background from the start. |
 | `TOMOSHIBI_CAMERA_PICTURE=file` | The generated camera shows this picture (a person) drifting over its bands, for the blur to find. |
 | `TOMOSHIBI_DEBUG_SEGMENT=folder` | Runs the segmenter on `portrait-input.bin` and logs how near its mask is to `portrait-mediapipe.bin` (both from `Blur/convert.py`). |

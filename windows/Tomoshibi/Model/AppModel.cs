@@ -128,6 +128,25 @@ internal sealed class AppModel : Observable
         {
             if (value != _screen) Log.Line($"screen {value.ToString().ToLowerInvariant()}");
             Set(ref _screen, value);
+            Updates?.Lobby(value == Screen.Lobby);
+        }
+    }
+
+    private Updates? _updates;
+
+    /// <summary>
+    /// The app's own updates (Basics.Updates), told of every change of
+    /// screen, since the lobby is the only place one is shown or worked on.
+    /// None in a debug build started by hand, which has no test deployment to
+    /// ask and would ask the home one.
+    /// </summary>
+    public Updates? Updates
+    {
+        get => _updates;
+        set
+        {
+            _updates = value;
+            value?.Lobby(_screen == Screen.Lobby);
         }
     }
 
@@ -333,6 +352,7 @@ internal sealed class AppModel : Observable
     {
         if (_started) return;
         _started = true;
+        Updates?.Start();
         _relayTimer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
         _relayTimer.Interval = TimeSpan.FromSeconds(60);
         _relayTimer.Tick += async (_, _) =>

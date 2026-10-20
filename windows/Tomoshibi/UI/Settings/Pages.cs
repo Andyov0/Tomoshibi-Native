@@ -7,6 +7,7 @@ using Tomoshibi.Basics;
 using Tomoshibi.Media;
 using Tomoshibi.Model;
 using Tomoshibi.UI.Kit;
+using Tomoshibi.UI.Lobby;
 using static Tomoshibi.Basics.Words;
 
 namespace Tomoshibi.UI.Settings;
@@ -496,16 +497,25 @@ internal static class About
 {
     public static StackPanel Page(AppModel app)
     {
-        var version = Assembly.GetExecutingAssembly().GetName().Version;
-        var appVersion = version == null ? "" : $"{version.Major}.{version.Minor}.{version.Build} ({version.Revision})";
+        // The package's version where the app is installed from one, which is
+        // what an update is compared with: 0.1.0.7 written 0.1.0 (7), as the
+        // other apps write theirs.
+        var parts = ClientDescription.Version.Split('.');
+        var appVersion = parts.Length == 4 ? $"{parts[0]}.{parts[1]}.{parts[2]} ({parts[3]})" : ClientDescription.Version;
         var mark = new Mark(76);
         var header = K.Row(18, mark, K.Column(4, K.Text("Tomoshibi", 26, K.Bold), K.Text(appVersion, 13, mono: true, ink: Ink.Muted)));
         foreach (var child in header.Children) ((FrameworkElement)child).VerticalAlignment = VerticalAlignment.Center;
         var rows = new List<UIElement>
         {
             Rows.Row(T("Version"), K.Text(appVersion, 12.5, mono: true, ink: Ink.Muted), symbol: "app.badge"),
-            Rows.Row(T("Media core"), K.Text(uniffi.tomoshibi_core.TomoshibiCoreMethods.CoreVersion(), 12.5, mono: true, ink: Ink.Muted), symbol: "cpu", last: app.Info == null),
         };
+        // Only where the app looks for updates at all: not in a debug build
+        // started by hand, which would ask the home deployment.
+        if (app.Updates is { } updates) rows.Add(UpdateRow(updates));
+        rows.AddRange(new UIElement[]
+        {
+            Rows.Row(T("Media core"), K.Text(uniffi.tomoshibi_core.TomoshibiCoreMethods.CoreVersion(), 12.5, mono: true, ink: Ink.Muted), symbol: "cpu", last: app.Info == null),
+        });
         if (app.Info is { } info)
         {
             var build = string.IsNullOrEmpty(info.Build) ? "—" : info.Build[..Math.Min(12, info.Build.Length)];
@@ -527,5 +537,102 @@ internal static class About
             }
         }
         return K.Column(22, header, Rows.Section(T("About"), Rows.Card(rows.ToArray())));
+    }
+
+    /// <summary>
+    /// Where the app's updates stand, and the check somebody can ask for
+    /// (About.kt <c>UpdateRow</c>, Settings.swift): the version on offer with
+    /// "Update", a download's progress with "Cancel", and the answer to a
+    /// check, which says so even when there is nothing newer. What it says
+    /// changes with a fade.
+    /// </summary>
+    private static UIElement UpdateRow(Updates updates)
+    {
+        var line = K.Text("", 11.5, ink: Ink.Muted);
+        var lineHolder = new Unfolding();
+        var words = K.Column(2, K.Text(T("Updates"), 13.5), lineHolder);
+        words.VerticalAlignment = VerticalAlignment.Center;
+        var action = new Grid { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(22, 0, 0, 0) };
+        var row = K.Line(12, K.Fixed(Rows.Tile("arrow.clockwise")), K.Flex(words), K.Fixed(action));
+        row.MinHeight = 48;
+        row.Padding = new Thickness(14, 9, 14, 9);
+        var column = K.Column(0, row, K.Rule(52));
+        column.Named(T("Updates"), "settings.updates");
+        string? saidLine = null;
+        string? saidAction = null;
+
+        void Refresh()
+        {
+            var step = updates.Now;
+            var said = updates.Answer;
+            var text = step switch
+            {
+                Updates.Step.Downloading d => T("{received} of {total}", ("received", UpdateBanner.Megabytes(d.Received)), ("total", UpdateBanner.Megabytes(d.Total))),
+                Updates.Step.Held h => T("{received} of {total}", ("received", UpdateBanner.Megabytes(h.Received)), ("total", UpdateBanner.Megabytes(h.Total))),
+                Updates.Step.Installing i => T("Installing Tomoshibi {version}", ("version", i.Offer.Version)),
+                Updates.Step.Offered o => o.Problem ?? T("Version {version} is available.", ("version", o.Offer.Version)),
+                _ => said switch
+                {
+                    Updates.Said.Checking => T("Checking for updates…"),
+                    Updates.Said.Current => T("You have the latest version."),
+                    Updates.Said.Failed => T("Could not check for updates. Try again later."),
+                    _ => null,
+                },
+            };
+            var problem = step is Updates.Step.Offered { Problem: not null };
+            if (text != saidLine)
+            {
+                // Progress is said in place; anything else fades across.
+                var progressOnly = saidLine != null && text != null && step is Updates.Step.Downloading or Updates.Step.Held && saidAction == "cancel";
+                saidLine = text;
+                if (progressOnly)
+                {
+                    line.Text = text!;
+                }
+                else
+                {
+                    line = K.Text(text ?? "", 11.5, ink: problem ? Ink.Danger : Ink.Muted);
+                    lineHolder.Show(text == null ? null : line);
+                }
+            }
+            var kind = step switch
+            {
+                Updates.Step.Offered => "update",
+                Updates.Step.Downloading or Updates.Step.Held => "cancel",
+                _ => said == Updates.Said.Checking ? "checking" : step is Updates.Step.None ? "check" : "check-off",
+            };
+            if (kind == saidAction) return;
+            saidAction = kind;
+            action.Children.Clear();
+            var label = kind switch { "update" => T("Update"), "cancel" => T("Cancel"), _ => T("Check for updates") };
+            var button = Tap.Words(label, look: kind == "update" ? Look.Prominent : Look.Plain, height: 30, size: 13);
+            button.Named(label, kind switch { "update" => "settings.update", "cancel" => "settings.cancelUpdate", _ => "settings.checkUpdates" });
+            button.Click += (_, _) =>
+            {
+                switch (kind)
+                {
+                    case "update": updates.Accept(); break;
+                    case "cancel": updates.Cancel(); break;
+                    default: updates.CheckNow(); break;
+                }
+            };
+            button.IsEnabled = kind == "update" || kind == "cancel" || kind == "check";
+            if (kind == "checking")
+            {
+                button.Content = K.Row(6, K.Spinner(12), K.Text(T("Check for updates"), 13, K.Semibold, lines: 1));
+            }
+            button.Arrives();
+            action.Children.Add(button);
+        }
+
+        Refresh();
+        column.Loaded += (_, _) =>
+        {
+            updates.Changed -= Refresh;
+            updates.Changed += Refresh;
+            Refresh();
+        };
+        column.Unloaded += (_, _) => updates.Changed -= Refresh;
+        return column;
     }
 }

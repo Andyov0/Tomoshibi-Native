@@ -75,6 +75,8 @@ internal sealed class LobbyScreen : Screen
             case "schedule": Go(Place.Scheduled); break;
             case "servers": Go(Place.Servers); break;
             case { } show when show.StartsWith("settings"): OpenSettings(show.Contains(':') ? show[(show.IndexOf(':') + 1)..] : null); break;
+            // A posed update (App.PoseUpdate) seen from the settings' About.
+            case { } show when show.StartsWith("update:") && show.EndsWith(":about"): OpenSettings("about"); break;
         }
     }
 
@@ -295,10 +297,26 @@ internal sealed class LobbyScreen : Screen
         var greeting = K.Column(6,
             Shadowed.Text(K.Text(T("Hello, {name}", ("name", _account.Name)), 34, K.Bold)),
             Shadowed.Text(K.Text(T("Start one from the sidebar when you are ready."), 15, ink: Ink.White(0.78f))));
-        greeting.Margin = new Thickness(36, Shared.TitleBar + 40, 24, 0);
-        greeting.VerticalAlignment = VerticalAlignment.Top;
+        // A newer build, at the top of the content beside the sidebar
+        // (Lobby.kt puts it there), opening a space above the greeting rather
+        // than lying over it; clear of the server menu at the corner.
+        var top = K.Column(0);
+        if (App.Updates is { } updates)
+        {
+            // As wide as the content up to 560, from its leading edge: a
+            // column that stops there rather than a card the width of what
+            // it says, which changes from one step to the next.
+            var lane = new Grid();
+            lane.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MaxWidth = 560 });
+            lane.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0, GridUnitType.Star) });
+            lane.Children.Add(new UpdateBanner(updates, inline: true, top: App.OffersRelayChoice ? 16 : 0, below: 22));
+            top.Children.Add(lane);
+        }
+        top.Children.Add(greeting);
+        top.Margin = new Thickness(36, Shared.TitleBar + 40, 24, 0);
+        top.VerticalAlignment = VerticalAlignment.Top;
         greeting.Rises();
-        grid.Children.Add(greeting);
+        grid.Children.Add(top);
         var switches = K.Glass(Shared.DeviceSwitches(App, 44), 30, new Thickness(8));
         switches.HorizontalAlignment = HorizontalAlignment.Center;
         switches.VerticalAlignment = VerticalAlignment.Bottom;
@@ -484,7 +502,9 @@ internal sealed class LobbyScreen : Screen
         hero.Rises();
         _homeLists = K.Flowing(22);
         _homeLists.Rises(60);
-        content.Children.Add(title);
+        // A newer build, under the large title, opening a space for itself.
+        if (App.Updates is { } updates) content.Children.Add(K.Column(0, title, new UpdateBanner(updates, inline: true, top: 22)));
+        else content.Children.Add(title);
         content.Children.Add(hero);
         content.Children.Add(_homeLists);
         var column = K.Column(0, K.Spacer(height: Shared.TitleBar + 52), content, K.Spacer(height: 96));

@@ -125,6 +125,9 @@ internal sealed class SignInScreen : Screen
         Children.Add(new Backdrop());
         Children.Add(layout);
         Children.Add(Shared.LanguageMenu());
+        // Somebody not signed in gets their updates too; below the language
+        // menu, which it would otherwise cover.
+        if (App.Updates is { } updates) Children.Add(new Lobby.UpdateBanner(updates, top: Shared.TitleBar + 62));
         Children.Add(_toast);
         Update();
     }
