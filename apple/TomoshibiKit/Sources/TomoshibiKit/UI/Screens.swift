@@ -177,7 +177,7 @@ enum DebugWindow {
 }
 #endif
 
-/// A screen that is a single card of glass over the evening room.
+/// A screen that is a single card of glass over the backdrop.
 private struct CardScreen<Content: View>: View {
     var width: CGFloat = 420
     @ViewBuilder var content: Content

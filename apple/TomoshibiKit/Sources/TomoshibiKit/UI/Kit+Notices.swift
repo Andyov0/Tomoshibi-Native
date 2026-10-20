@@ -40,9 +40,11 @@ struct GlassSlider: View {
                     .fill(Color.black.opacity(0.28))
                     .overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 1))
                     .frame(height: lit ? 6 : 5)
+                // One flat tone, as the web's range input fills: it faded in
+                // from the left until the owner asked for fewer gradients
+                // (2026-10-20).
                 Capsule()
-                    .fill(LinearGradient(colors: [Theme.foreground.opacity(0.62), Theme.foreground.opacity(0.95)],
-                                         startPoint: .leading, endPoint: .trailing))
+                    .fill(Theme.foreground.opacity(0.9))
                     .frame(width: max(lit ? 6 : 5, x), height: lit ? 6 : 5)
                 Circle()
                     .fill(Color.white)
@@ -242,11 +244,12 @@ extension PanelHeading where Trailing == EmptyView {
     }
 }
 
-/// The hairline under a panel's heading, fading at its ends.
+/// The hairline under a panel's heading, in the palette's border colour from
+/// edge to edge; it faded out at both ends before the gradients went
+/// (2026-10-20).
 struct PanelRule: View {
     var body: some View {
-        LinearGradient(colors: [Color.white.opacity(0), Color.white.opacity(0.10), Color.white.opacity(0)],
-                       startPoint: .leading, endPoint: .trailing)
+        Theme.border
             .frame(height: 1)
     }
 }
@@ -267,10 +270,16 @@ extension View {
 
 // MARK: - People
 
-/// Somebody, small: their initials on a blend of two of the web's avatar
-/// colours (live/avatar.ts `AVATAR_COLOURS`), chosen by their identity so the
-/// same person is the same colours in every corner. The tile's own avatar is
-/// drawn for a tile and is a speck at this size.
+/// Somebody, small: their initials on one of the web's avatar colours
+/// (live/avatar.ts `AVATAR_COLOURS`), chosen by their identity so the same
+/// person is the same colour in every corner and on every platform. The
+/// tile's own avatar is drawn for a tile and is a speck at this size.
+///
+/// It was a blend of two of them, and the owner found the gradients cheap
+/// (2026-10-20). The colour kept is the blend's first, the one the hash has
+/// always picked first, so nobody changes colour; the second is no longer
+/// worked out. Android's Monograms (ui/kit/Notices.kt) picks the same, and
+/// both are held to one list of answers (MonogramTests.swift, MonogramTest.kt).
 struct Monogram: View {
     let name: String
     let identity: String
@@ -287,9 +296,8 @@ struct Monogram: View {
     ]
 
     var body: some View {
-        let (first, second) = Self.pair(identity)
         ZStack {
-            Circle().fill(LinearGradient(colors: [first, second], startPoint: .topLeading, endPoint: .bottomTrailing))
+            Circle().fill(Self.colour(identity))
             Circle().stroke(Color.white.opacity(0.14), lineWidth: 0.75)
             Text(initials)
                 .font(.system(size: size * 0.40, weight: .semibold, design: .rounded))
@@ -306,13 +314,9 @@ struct Monogram: View {
         return letters.isEmpty ? "?" : String(letters).uppercased()
     }
 
-    /// FNV-1a over the identity, as the tile's avatar hashes it.
-    private static func pair(_ identity: String) -> (Color, Color) {
-        var hash: UInt64 = 1469598103934665603
-        for byte in identity.utf8 { hash = (hash ^ UInt64(byte)) &* 1099511628211 }
-        let first = Int(hash % UInt64(colours.count))
-        let second = (first + 1 + Int((hash / 7) % UInt64(colours.count - 1))) % colours.count
-        return (colours[first], colours[second])
+    /// Which of `colours` (TomoshibiBasics' Monograms, where a test holds it).
+    private static func colour(_ identity: String) -> Color {
+        colours[Monograms.index(identity, of: colours.count)]
     }
 }
 

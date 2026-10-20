@@ -871,7 +871,9 @@ struct SettingsPageHeading: View {
 }
 
 /// A section's symbol in a rounded tile, lit in the person's colour where it
-/// is the one chosen.
+/// is the one chosen: the colour itself, flat, as a prominent button wears
+/// it. It shaded from 95 to 72 per cent down the tile until the owner asked
+/// for fewer gradients (2026-10-20).
 struct SectionTile: View {
     let symbol: String
     var lit = false
@@ -884,9 +886,7 @@ struct SectionTile: View {
             .frame(width: size, height: size)
             .background {
                 RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-                    .fill(lit ? AnyShapeStyle(LinearGradient(colors: [Theme.tally.opacity(0.95), Theme.tally.opacity(0.72)],
-                                                              startPoint: .top, endPoint: .bottom))
-                              : AnyShapeStyle(Color.white.opacity(0.10)))
+                    .fill(lit ? Theme.tally : Color.white.opacity(0.10))
             }
             .overlay(RoundedRectangle(cornerRadius: size * 0.28, style: .continuous).stroke(Color.white.opacity(lit ? 0.22 : 0.06)))
             .animation(Theme.settle, value: lit)

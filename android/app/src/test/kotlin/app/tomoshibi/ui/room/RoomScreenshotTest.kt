@@ -109,6 +109,26 @@ class RoomScreenshotTest(private val language: Language) {
         shoot("four", call)
     }
 
+    /**
+     * Every camera off and one person talking: the tally's edge round the
+     * tile and the name in it are all that say who it is, now that the
+     * tiles are flat grey with nothing glowing in them.
+     */
+    @Test
+    fun camerasOffSomebodySpeaking() {
+        val call = room(3, camerasOff = setOf(0, 1, 2))
+        call.apply(CallEvent.Speaking(listOf("p-mei")))
+        shoot("cameras-off-speaking", call)
+    }
+
+    @Test
+    @Config(qualifiers = WIDE)
+    fun wideCamerasOffSomebodySpeaking() {
+        val call = room(3, camerasOff = setOf(0, 1, 2))
+        call.apply(CallEvent.Speaking(listOf("p-mei")))
+        shoot("wide-cameras-off-speaking", call)
+    }
+
     @Test
     fun nine() = shoot("nine", room(8, camerasOff = setOf(2, 5)))
 
@@ -130,6 +150,14 @@ class RoomScreenshotTest(private val language: Language) {
         call.apply(CallEvent.Chat("3", "p-kenji", "Kenji Sato", "Looks good to me", 1_760_000_090_000))
         RoomState.of(call).panel = RoomPanel.Messages
         shoot("messages", call)
+    }
+
+    /** The messages before anybody has written: the one place the empty state's plate is seen. */
+    @Test
+    fun messagesEmpty() {
+        val call = room(2)
+        RoomState.of(call).panel = RoomPanel.Messages
+        shoot("messages-empty", call)
     }
 
     @Test
@@ -251,6 +279,19 @@ class RoomScreenshotTest(private val language: Language) {
         val call = room(4)
         call.apply(CallEvent.TrackPublished("p-kenji", track("TR_p-kenji_screen", uniffi.tomoshibi_protocol.MediaSource.SCREEN_SHARE)))
         shoot("wide-share", call)
+    }
+
+    /**
+     * A share that is not on the stage, which is drawn as its card
+     * (ShareCardFace) in the strip: somebody's camera is pinned instead.
+     */
+    @Test
+    @Config(qualifiers = WIDE)
+    fun wideShareOffTheStage() {
+        val call = room(4)
+        call.apply(CallEvent.TrackPublished("p-kenji", track("TR_p-kenji_screen", uniffi.tomoshibi_protocol.MediaSource.SCREEN_SHARE)))
+        val state = RoomState.of(call)
+        shoot("wide-share-card", call) { state.pin = state.pin.pin("p-mei/camera") }
     }
 
     @Test

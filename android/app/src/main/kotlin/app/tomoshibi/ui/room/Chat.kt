@@ -43,7 +43,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
@@ -180,6 +179,11 @@ internal fun clock(at: Instant): String {
 /**
  * Nothing has been said yet (`Empty`). Carries the one fact somebody needs
  * before they type: this is not written down anywhere.
+ *
+ * The symbol sits on a flat plate, the same faint white as the share card's
+ * ([ShareCardFace]). It sat in a glow of the person's colour, which is kept
+ * for what is saying something, and an empty list says nothing; the glow went
+ * with the other gradients (2026-10-20).
  */
 @Composable
 private fun Empty() {
@@ -190,8 +194,8 @@ private fun Empty() {
     ) {
         Box(
             Modifier
-                .size(80.dp)
-                .background(Brush.radialGradient(listOf(Theme.tally.copy(alpha = 0.16f), Theme.tally.copy(alpha = 0f))), CircleShape),
+                .size(56.dp)
+                .background(Color.White.copy(alpha = 0.08f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Symbol("bubble.left.and.text.bubble.right", size = 26f, weight = Font.Regular, tint = Theme.foreground.copy(alpha = 0.5f))

@@ -5,6 +5,7 @@ import android.util.Log
 import androidx.camera.view.PreviewView
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
@@ -36,14 +37,21 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collectLatest
 
 /**
- * The camera, live, where somebody has it on; the evening room otherwise
+ * The camera, live, where somebody has it on; a flat ground otherwise
  * (`CameraStage`). Mark it as a glass source where glass floats over it.
+ *
+ * Framed (a corner given), it is a card on a page, the lobby's or the start
+ * sheet's, and with the camera off it is the grey of a camera-off tile in the
+ * call (Theme.surface), which is what the person will look like when they
+ * join: the call's darkest ground there vanished into the black page round
+ * the phone's lobby card. Filling the screen it is the screen's ground
+ * ([Backdrop]), so the glass card over it stands out of it.
  */
 @Composable
 fun CameraStage(app: AppModel, modifier: Modifier = Modifier, cornerRadius: Dp = 0.dp) {
     val shape = if (cornerRadius > 0.dp) ContinuousShape(cornerRadius) else RectangleShape
     Box(modifier.clip(shape)) {
-        Backdrop(Modifier.matchParentSize())
+        if (cornerRadius > 0.dp) Box(Modifier.matchParentSize().background(Theme.surface)) else Backdrop(Modifier.matchParentSize())
         Appear(
             app.startWithCamera,
             Modifier.matchParentSize(),
@@ -123,7 +131,7 @@ fun FeedSelfViews(app: AppModel) {
             } catch (fault: CancellationException) {
                 throw fault
             } catch (fault: Exception) {
-                // Refused, or no camera: the evening room stays, as it does
+                // Refused, or no camera: the flat ground stays, as it does
                 // on Apple where the session runs and shows nothing.
                 Log.w("Tomoshibi", "the preview did not start: ${fault.javaClass.simpleName}")
             }

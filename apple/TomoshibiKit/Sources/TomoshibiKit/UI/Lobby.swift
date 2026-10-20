@@ -311,7 +311,14 @@ extension View {
     func toast(_ app: AppModel) -> some View { modifier(ToastModifier(app: app)) }
 }
 
-/// The camera, live, where somebody has it on; the evening room otherwise.
+/// The camera, live, where somebody has it on; a flat ground otherwise.
+///
+/// Framed (a corner given), it is a card on a page, the lobby's or the start
+/// sheet's, and with the camera off it is the grey of a camera-off tile in
+/// the call (Theme.surface), which is what the person will look like when
+/// they join: the call's own darkest ground there vanished into the black
+/// page round the iPhone's lobby card. Filling the screen it is the screen's
+/// ground (Backdrop), so the glass card over it stands out of it.
 struct CameraStage: View {
     @Bindable var app: AppModel
     var cornerRadius: CGFloat = 0
@@ -319,7 +326,11 @@ struct CameraStage: View {
 
     var body: some View {
         ZStack {
-            Backdrop()
+            if cornerRadius > 0 {
+                Theme.surface
+            } else {
+                Backdrop()
+            }
             if app.startWithCamera {
                 SelfView(session: preview.session, capture: preview)
                     .transition(.opacity.animation(Theme.settle))

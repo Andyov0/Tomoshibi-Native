@@ -115,7 +115,7 @@ import java.time.Instant
 // The screens before and after a call that are not the lobby (Screens.swift).
 
 /**
- * A screen that is a single card of glass over the evening room
+ * A screen that is a single card of glass over the backdrop
  * (`CardScreen`), with the language in its corner.
  */
 @Composable

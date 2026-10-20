@@ -194,13 +194,14 @@ private struct ToastCard: View {
         HStack(alignment: .top, spacing: 10) {
             // notices.ts: the edge is the whole of the severity system. A
             // wash of colour over a card this small says less than a rail
-            // beside it.
+            // beside it. The rail is flat; it glowed in its own colour until
+            // the owner asked for fewer gradients (2026-10-20), and the
+            // colour alone already says which kind of notice it is.
             Capsule()
                 .fill(edge)
                 .frame(width: 3)
                 .frame(maxHeight: .infinity)
                 .padding(.vertical, 1)
-                .shadow(color: toast.kind == .info ? .clear : edge.opacity(0.6), radius: 4)
             VStack(alignment: .leading, spacing: 3) {
                 Text(toast.title)
                     .font(.system(size: 13, weight: .medium))

@@ -42,6 +42,7 @@ mod meetings;
 mod music;
 mod rooms;
 pub(crate) mod text;
+mod updates;
 mod watch;
 
 use std::{sync::Arc, time::Duration};
@@ -66,6 +67,10 @@ pub use rooms::{
     knock_ask_every_ms, knock_give_up_after_ms, DeploymentInfo, DoorAnswer, DoorState,
     HostStanding, InviteInfo, JoinForward, JoinGrant, Joining, KnockTicket, Knocker, MadeInvite,
     Opening,
+};
+pub use updates::{
+    update_notes, version_is_newer, AppBuild, UpdateCheck, UpdateDownload, UpdateError,
+    UpdatePlatform, UpdateProgress,
 };
 pub use watch::{
     read_resolved, watch_media_link, MediaItem, MediaServer, ResolvedLink, ResolvedPlay,

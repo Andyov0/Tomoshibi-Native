@@ -8,7 +8,6 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -31,7 +30,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorMatrix
@@ -382,34 +380,20 @@ fun GlassButton(
 }
 
 /**
- * What the screens before a call stand on when there is no picture yet: an
- * evening room, a cool wall with one warm lamp in it, the light Tomoshibi is
- * named for (`Backdrop`). Glass needs something under it to be glass, and a
- * flat dark ground makes every pane look like a grey box; mark it with
- * [glassSource] so the glass over it has it to refract.
+ * What the screens before a call stand on when there is no picture yet: the
+ * call's own ground, flat (`Backdrop`).
+ *
+ * It was an evening room, a dark blue wash with three coloured glows in it,
+ * on the argument that glass needs something under it to be glass. The
+ * owner found the gradients cheap (2026-10-20) and asked for fewer of them;
+ * the glow behind the sign-in card and the lobby was the largest. The
+ * darkest colour of the palette is what the call itself stands on, so the
+ * screens before it and the call read as one place, and the panes over it
+ * are told apart by their own fill and edge rather than by what they blur.
+ * Still mark it with [glassSource]: the glass over it then shades it as it
+ * shades a picture, which is the same tone the stand-in fill gives.
  */
 @Composable
 fun Backdrop(modifier: Modifier = Modifier) {
-    Canvas(modifier.clearAndSetSemantics {}) {
-        val w = size.width
-        val h = size.height
-        val far = maxOf(w, h)
-        drawRect(
-            Brush.linearGradient(
-                listOf(Color(0.122f, 0.165f, 0.216f), Color(0.071f, 0.094f, 0.129f), Color(0.035f, 0.047f, 0.067f)),
-                start = Offset.Zero,
-                end = Offset(w, h),
-            ),
-        )
-        fun glow(colour: Color, opacity: Float, at: Offset, radius: Float) {
-            drawCircle(
-                Brush.radialGradient(listOf(colour.copy(alpha = opacity), colour.copy(alpha = 0f)), center = at, radius = radius),
-                radius = radius,
-                center = at,
-            )
-        }
-        glow(Color(0.204f, 0.384f, 0.549f), 0.75f, Offset(w * 0.28f, h * 0.82f), far * 0.55f)
-        glow(Color(0.369f, 0.361f, 0.902f), 0.32f, Offset(w * 0.95f, h * 0.95f), far * 0.4f)
-        glow(Color(1.0f, 0.80f, 0.627f), 0.5f, Offset(w * 0.74f, h * 0.26f), far * 0.3f)
-    }
+    Box(modifier.clearAndSetSemantics {}.background(Theme.background))
 }

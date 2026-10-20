@@ -35,7 +35,6 @@ import app.tomoshibi.basics.Theme
 import app.tomoshibi.basics.t
 import app.tomoshibi.model.AppModel
 import app.tomoshibi.model.CallPreferences
-import app.tomoshibi.ui.kit.Backdrop
 import app.tomoshibi.ui.kit.Chip
 import app.tomoshibi.ui.kit.Font
 import app.tomoshibi.ui.kit.GlassSwitch
@@ -80,7 +79,7 @@ internal fun WatchingSettings(preferences: CallPreferences) {
 }
 
 /**
- * A film on the evening room, wearing the ceiling chosen for it: drawn
+ * A film on the backdrop, wearing the ceiling chosen for it: drawn
  * softer the lower the ceiling (Settings.swift `WatchPreview`).
  */
 @Composable
@@ -103,13 +102,30 @@ private fun WatchPreview(quality: String) {
             .border(1.dp, Color.White.copy(alpha = 0.08f), shape)
             .clearAndSetSemantics {},
     ) {
-        Backdrop(Modifier.matchParentSize().blur(softness, BlurredEdgeTreatment.Rectangle))
+        FilmStill(Modifier.matchParentSize().blur(softness, BlurredEdgeTreatment.Rectangle))
         Box(Modifier.align(Alignment.Center).size(54.dp).glassSurface(CircleShape), contentAlignment = Alignment.Center) {
             Symbol("play.fill", size = 20f, weight = Font.Bold, tint = Theme.foreground)
         }
         Crossfade(quality, Modifier.align(Alignment.BottomEnd).padding(12.dp), animationSpec = Theme.settle(), label = "chip") { shown ->
             Chip(watchLabel(shown), symbol = "sparkles.tv", lit = shown != "auto")
         }
+    }
+}
+
+/**
+ * The film [WatchPreview] softens: a still of flat shapes, the call's grey
+ * with a lighter band along its foot and a pale disc high on the right
+ * (Settings.swift `FilmStill`). It was the screens' glowing backdrop,
+ * blurred; once that went flat a blur of it changed nothing that could be
+ * seen, and the ceiling's choice was read but no longer seen. Shapes with
+ * edges show the softening without a gradient.
+ */
+@Composable
+private fun FilmStill(modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        drawRect(Theme.surface)
+        drawRect(Theme.surfaceHigh, topLeft = Offset(0f, size.height * 0.6f), size = Size(size.width, size.height * 0.4f))
+        drawCircle(Theme.foreground.copy(alpha = 0.18f), radius = size.height * 0.14f, center = Offset(size.width * 0.75f, size.height * 0.35f))
     }
 }
 

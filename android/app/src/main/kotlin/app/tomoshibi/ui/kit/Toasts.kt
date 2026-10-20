@@ -40,13 +40,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.layout
@@ -338,13 +336,15 @@ private fun ToastLine(toast: CallToast, attachment: (@Composable () -> Unit)?, a
         horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         // notices.ts: the edge is the whole of the severity system. A wash of
-        // colour over a card this small says less than a rail beside it.
+        // colour over a card this small says less than a rail beside it. The
+        // rail is flat; it glowed in its own colour until the owner asked for
+        // fewer gradients (2026-10-20), and the colour alone already says
+        // which kind of notice it is.
         Box(
             Modifier
                 .padding(vertical = 1.dp)
                 .width(3.dp)
                 .fillMaxHeight()
-                .then(if (toast.kind == CallToast.Kind.Info) Modifier else Modifier.dropShadow(Capsule, Shadow(4.dp, edge, alpha = 0.6f)))
                 .background(edge, Capsule),
         )
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {

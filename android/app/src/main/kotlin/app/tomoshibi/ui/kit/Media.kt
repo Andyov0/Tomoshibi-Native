@@ -51,7 +51,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.geometry.Offset
@@ -401,9 +400,13 @@ fun MediaRow(
 }
 
 /**
- * A cover or a poster where there is one, and a soft square in the chosen
- * colour with a symbol where there is not; faded in when it arrives
+ * A cover or a poster where there is one, and a square in the chosen colour
+ * with a symbol where there is not; faded in when it arrives
  * (`MediaArtwork`). Its size is the modifier's.
+ *
+ * The square is flat: the raised grey with the colour laid over it at 18 per
+ * cent, as MyShareFace's plate is. It ran from the colour into the grey
+ * corner to corner before the owner asked for fewer gradients (2026-10-20).
  */
 @Composable
 fun MediaArtwork(url: String, modifier: Modifier = Modifier, symbol: String = "music.note", corner: Float = 8f) {
@@ -412,7 +415,8 @@ fun MediaArtwork(url: String, modifier: Modifier = Modifier, symbol: String = "m
         modifier
             .clearAndSetSemantics {}
             .clip(shape)
-            .background(Brush.linearGradient(listOf(Theme.tally.copy(alpha = 0.32f), Theme.surfaceHigh)))
+            .background(Theme.surfaceHigh)
+            .background(Theme.tally.copy(alpha = 0.18f))
             .border(1.dp, Color.White.copy(alpha = 0.08f), shape),
         contentAlignment = Alignment.Center,
     ) {

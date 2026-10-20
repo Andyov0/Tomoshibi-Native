@@ -595,7 +595,7 @@ private fun WideLobby(app: AppModel, account: Account, state: LobbyState) {
         BoxWithConstraints(Modifier.fillMaxSize().background(Theme.background)) {
             val standing = hinge.effectivePosture(maxWidth.value, maxHeight.value, density) == Posture.Tabletop
             // The ground the sidebar floats over: the picture at home, the
-            // evening room in the other sections.
+            // backdrop in the other sections.
             Backdrop(Modifier.fillMaxSize().glassSource())
             AnimatedContent(
                 standing,

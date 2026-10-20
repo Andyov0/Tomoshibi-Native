@@ -45,7 +45,7 @@ import java.util.TimeZone
  * (412 points, a pixel and a half to the point, which keeps the pictures
  * small enough to keep beside the code), in English and in simplified
  * Chinese (the symbols, which say nothing, in English alone), over the
- * evening room the screens before a call stand on. Recorded with
+ * backdrop the screens before a call stand on. Recorded with
  * `./gradlew :app:recordRoborazziDebug` into src/test/screenshots/kit and
  * held to them with `verifyRoborazziDebug`.
  *
@@ -87,7 +87,7 @@ class KitScreenshotTest(private val language: Language) {
 
     private fun file(name: String) = "$DIRECTORY/$name-${language.code}.png"
 
-    /** The page on the evening room, as wide as a phone and as tall as it is. */
+    /** The page on the backdrop, as wide as a phone and as tall as it is. */
     private fun page(content: @Composable () -> Unit) {
         compose.setContent {
             GlassBackdrop {

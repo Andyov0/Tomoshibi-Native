@@ -46,11 +46,9 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.shadow.Shadow
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
@@ -474,17 +472,22 @@ internal fun SelfView(call: CallModel, modifier: Modifier = Modifier) {
  * deliver nothing: the card says who is sharing, and the whole card takes the
  * press that makes it big, rather than a button on a surface that already
  * answers one.
+ *
+ * Flat Theme.surfaceHigh, a step lighter than a person's tile, so a share
+ * standing in for its picture is told from a camera that is off; the
+ * person's colour is on the Watch button alone. It was a grey wash with a
+ * glow of that colour in the middle (the owner, 2026-10-20: fewer
+ * gradients), and the same in Tile.swift.
  */
 @Composable
 internal fun ShareCardFace(name: String, compact: Boolean = false) {
     val tally = Theme.tally
-    BoxWithConstraints(
+    Box(
         Modifier
             .fillMaxSize()
-            .background(Brush.verticalGradient(listOf(Theme.surfaceHigh, Theme.surface))),
+            .background(Theme.surfaceHigh),
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.matchParentSize().background(Brush.radialGradient(listOf(tally.copy(alpha = 0.16f), Color.Transparent), radius = 160f * LocalDensity.current.density)))
         Column(
             Modifier.padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 10.dp),
@@ -526,18 +529,19 @@ internal fun ShareCardFace(name: String, compact: Boolean = false) {
  * This participant's own shared screen (`MyShareFace`). There is no preview
  * of the capture to draw, so it says so, with the way to stop: a picture of
  * your own screen inside your own screen is a hall of mirrors anyway, and
- * what the sharer needs from this place is to know it is going out.
+ * what the sharer needs from this place is to know it is going out. The
+ * same flat ground as [ShareCardFace]; the plate behind the symbol carries
+ * the colour.
  */
 @Composable
 internal fun MyShareFace(compact: Boolean = false, stop: (() -> Unit)?) {
     val tally = Theme.tally
-    BoxWithConstraints(
+    Box(
         Modifier
             .fillMaxSize()
-            .background(Brush.linearGradient(listOf(Theme.surfaceHigh, Theme.surface))),
+            .background(Theme.surfaceHigh),
         contentAlignment = Alignment.Center,
     ) {
-        Box(Modifier.matchParentSize().background(Brush.radialGradient(listOf(tally.copy(alpha = 0.22f), Color.Transparent), radius = 220f * LocalDensity.current.density)))
         Column(
             Modifier.padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 12.dp),
