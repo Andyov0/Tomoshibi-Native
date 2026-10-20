@@ -368,10 +368,9 @@ internal static class Pieces
         };
         if (lit)
         {
-            var brush = new Microsoft.UI.Xaml.Media.LinearGradientBrush { StartPoint = new Windows.Foundation.Point(0.5, 0), EndPoint = new Windows.Foundation.Point(0.5, 1) };
-            brush.GradientStops.Add(new Microsoft.UI.Xaml.Media.GradientStop { Color = Ink.Of(Ink.TallyShade.WithAlpha(0.95f)), Offset = 0 });
-            brush.GradientStops.Add(new Microsoft.UI.Xaml.Media.GradientStop { Color = Ink.Of(Ink.TallyShade.WithAlpha(0.72f)), Offset = 1 });
-            tile.Background = brush;
+            // The colour itself, flat, as a prominent button wears it; it
+            // shaded down the tile until the gradients went.
+            tile.Background = Ink.Tally;
             tile.BorderBrush = Ink.White(0.22f);
         }
         else

@@ -12,52 +12,18 @@ using Windows.UI;
 namespace Tomoshibi.UI.Kit;
 
 /// <summary>
-/// The "evening room" the apps draw wherever there is no picture (Android's
-/// ui/kit/Glass.kt <c>Backdrop</c>): a dusk gradient from the top left, a
-/// blue glow low on the left, a violet one in the far corner and a warm
-/// lamp high on the right. The glows are circles, sized by the longer side.
+/// The ground the apps draw wherever there is no picture (Android's
+/// ui/kit/Glass.kt <c>Backdrop</c>): the theme's background, flat. It was a
+/// dusk gradient under three coloured glows until the owner found the
+/// gradients cheap and asked for fewer (2026-10-20); a place that laid it at
+/// part opacity over something else still does.
 /// </summary>
 internal sealed class Backdrop : Grid
 {
-    private readonly (RadialGradientBrush Brush, float X, float Y, float Radius)[] _glows;
-
     public Backdrop()
     {
         IsHitTestVisible = false;
-        var dusk = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
-        dusk.GradientStops.Add(new GradientStop { Color = Color.FromArgb(255, 0x1F, 0x2A, 0x37), Offset = 0 });
-        dusk.GradientStops.Add(new GradientStop { Color = Color.FromArgb(255, 0x12, 0x18, 0x21), Offset = 0.5 });
-        dusk.GradientStops.Add(new GradientStop { Color = Color.FromArgb(255, 0x09, 0x0C, 0x11), Offset = 1 });
-        Children.Add(new Rectangle { Fill = dusk });
-        _glows = new[]
-        {
-            (Glow(Color.FromArgb(0xBF, 0x34, 0x62, 0x8C)), 0.28f, 0.82f, 0.55f),
-            (Glow(Color.FromArgb(0x52, 0x5E, 0x5C, 0xE6)), 0.95f, 0.95f, 0.40f),
-            (Glow(Color.FromArgb(0x80, 0xFF, 0xCC, 0xA0)), 0.74f, 0.26f, 0.30f),
-        };
-        foreach (var glow in _glows) Children.Add(new Rectangle { Fill = glow.Brush });
-        SizeChanged += (_, e) => Place(e.NewSize.Width, e.NewSize.Height);
-    }
-
-    private static RadialGradientBrush Glow(Color color)
-    {
-        var brush = new RadialGradientBrush { MappingMode = BrushMappingMode.Absolute };
-        brush.GradientStops.Add(new GradientStop { Color = color, Offset = 0 });
-        brush.GradientStops.Add(new GradientStop { Color = Color.FromArgb(0, color.R, color.G, color.B), Offset = 1 });
-        return brush;
-    }
-
-    private void Place(double width, double height)
-    {
-        var longest = Math.Max(width, height);
-        foreach (var (brush, x, y, radius) in _glows)
-        {
-            var centre = new Point(width * x, height * y);
-            brush.Center = centre;
-            brush.GradientOrigin = centre;
-            brush.RadiusX = longest * radius;
-            brush.RadiusY = longest * radius;
-        }
+        Background = Ink.Background;
     }
 }
 
@@ -120,16 +86,7 @@ internal static class Faces
     private static Color Rgb(float r, float g, float b) => Ink.Of(new Shade(r, g, b));
 
     /// <summary>FNV-1a over the UTF-8 bytes, 64 bits, as Notices.kt and Tile.kt hash a name to a colour.</summary>
-    public static ulong Hash(string text)
-    {
-        var hash = 1469598103934665603UL;
-        foreach (var b in Encoding.UTF8.GetBytes(text))
-        {
-            hash ^= b;
-            hash *= 1099511628211UL;
-        }
-        return hash;
-    }
+    public static ulong Hash(string text) => Monograms.Hash(text);
 
     /// <summary>The first letter of the first two words, upper case; a question mark for nobody.</summary>
     public static string Initials(string name, int words = 2)
@@ -154,20 +111,16 @@ internal static class Faces
     }
 
     /// <summary>
-    /// The call's monogram (kit/Notices.kt <c>Monogram</c>): a circle shaded
-    /// between two colours picked by the name's hash, a fine edge, and up to
-    /// two initials.
+    /// The call's monogram (kit/Notices.kt <c>Monogram</c>): a circle in one
+    /// of six colours chosen by the identity (Monograms.Index, the same
+    /// answers as the iPhone's and Android's), a fine edge, and up to two
+    /// initials of the name. One colour, where it was a blend of two: the
+    /// first of the two, so nobody changes colour.
     /// </summary>
     public static Grid Monogram(string name, string identity, double size)
     {
-        var hash = Hash(string.IsNullOrEmpty(name) ? identity : name);
-        var a = (int)(hash % 6);
-        var b = (a + 1 + (int)(hash / 7 % 5)) % 6;
-        var shade = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 1) };
-        shade.GradientStops.Add(new GradientStop { Color = MonogramPalette[a], Offset = 0 });
-        shade.GradientStops.Add(new GradientStop { Color = MonogramPalette[b], Offset = 1 });
         var grid = new Grid { Width = size, Height = size };
-        grid.Children.Add(new Ellipse { Fill = shade, Stroke = Ink.White(0.14f), StrokeThickness = 0.75 });
+        grid.Children.Add(new Ellipse { Fill = new SolidColorBrush(MonogramPalette[Monograms.Index(identity, MonogramPalette.Length)]), Stroke = Ink.White(0.14f), StrokeThickness = 0.75 });
         var initials = Initials(string.IsNullOrEmpty(name) ? identity : name);
         grid.Children.Add(K.Text(initials, size * (initials.Length > 1 ? 0.36 : 0.40), K.Semibold, Ink.White(0.94f), align: TextAlignment.Center).At(HorizontalAlignment.Center, VerticalAlignment.Center));
         return grid.Quiet();

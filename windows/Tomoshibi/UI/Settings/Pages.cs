@@ -87,16 +87,9 @@ internal static class General
             var chosen = accent == appearance.Accent;
             var colour = accent.Color();
             var bead = new Grid { Width = 42, Height = 42 };
+            // The colour, flat, with a fine light edge (General.kt `Swatch`):
+            // a bead of glass, lit and shaded, until the gradients went.
             bead.Children.Add(new Ellipse { Width = 34, Height = 34, Fill = Ink.Brush(colour), Stroke = Ink.White(0.25f), StrokeThickness = 0.5 });
-            // Lit from the upper left and shaded underneath, a bead rather than a dot (General.kt `Swatch`).
-            var light = new RadialGradientBrush { Center = new Windows.Foundation.Point(0.32, 0.26), GradientOrigin = new Windows.Foundation.Point(0.32, 0.26), RadiusX = 0.45, RadiusY = 0.45 };
-            light.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.White.WithAlpha(0.42f)), Offset = 0 });
-            light.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.White.WithAlpha(0f)), Offset = 1 });
-            bead.Children.Add(new Ellipse { Width = 34, Height = 34, Fill = light });
-            var shade = new LinearGradientBrush { StartPoint = new Windows.Foundation.Point(0.5, 0.5), EndPoint = new Windows.Foundation.Point(0.5, 1) };
-            shade.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.Black.WithAlpha(0f)), Offset = 0 });
-            shade.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.Black.WithAlpha(0.2f)), Offset = 1 });
-            bead.Children.Add(new Ellipse { Width = 34, Height = 34, Fill = shade });
             if (chosen)
             {
                 bead.Children.Add(new Ellipse { Width = 42, Height = 42, Stroke = Ink.Brush(colour), StrokeThickness = 2 });
@@ -126,7 +119,7 @@ internal static class General
             CornerRadius = new CornerRadius(12),
             BorderBrush = Ink.Tally,
             BorderThickness = new Thickness(2),
-            Background = Ink.Brush(new Shade(0.2f, 0.25f, 0.32f)),
+            Background = Ink.Surface,
             Child = K.Stack(Faces.Initial("Mika", 30).At(HorizontalAlignment.Center, VerticalAlignment.Center), tag),
         };
         var join = new Border { Height = 28, CornerRadius = new CornerRadius(14), Background = Ink.Tally, Padding = new Thickness(16, 0, 16, 0), Child = K.Text(T("Join"), 12.5, K.Semibold, Ink.TallyForeground, lines: 1).At(HorizontalAlignment.Center, VerticalAlignment.Center) };

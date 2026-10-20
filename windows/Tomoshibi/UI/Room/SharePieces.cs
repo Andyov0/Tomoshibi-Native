@@ -21,8 +21,9 @@ internal static class SharePieces
     /// </summary>
     public static Grid ShareCard(string name, bool compact)
     {
-        var grid = new Grid { Background = Gradient(Theme.SurfaceHigh, Theme.Surface, vertical: true) };
-        grid.Children.Add(new Border { Background = Glow(Appearance.Shared.Tally.WithAlpha(0.16f)) });
+        // Flat, the raised surface: a grey blend under an accent glow until the
+        // gradients went (2026-10-20).
+        var grid = new Grid { Background = Ink.SurfaceHigh };
         var column = K.Column(compact ? 4 : 10);
         column.HorizontalAlignment = HorizontalAlignment.Center;
         column.VerticalAlignment = VerticalAlignment.Center;
@@ -65,8 +66,7 @@ internal static class SharePieces
     /// </summary>
     public static Grid MyShare(bool compact, Action? stop)
     {
-        var grid = new Grid { Background = Gradient(Theme.SurfaceHigh, Theme.Surface, vertical: false) };
-        grid.Children.Add(new Border { Background = Glow(Appearance.Shared.Tally.WithAlpha(0.22f)) });
+        var grid = new Grid { Background = Ink.SurfaceHigh };
         var column = K.Column(compact ? 4 : 12);
         column.HorizontalAlignment = HorizontalAlignment.Center;
         column.VerticalAlignment = VerticalAlignment.Center;
@@ -144,26 +144,6 @@ internal static class SharePieces
         column.Padding = new Thickness(24, 0, 24, 0);
         grid.Children.Add(column);
         return grid;
-    }
-
-    private static Brush Gradient(Shade from, Shade to, bool vertical)
-    {
-        var brush = new LinearGradientBrush
-        {
-            StartPoint = new Windows.Foundation.Point(0, 0),
-            EndPoint = vertical ? new Windows.Foundation.Point(0, 1) : new Windows.Foundation.Point(1, 1),
-        };
-        brush.GradientStops.Add(new GradientStop { Color = Ink.Of(from), Offset = 0 });
-        brush.GradientStops.Add(new GradientStop { Color = Ink.Of(to), Offset = 1 });
-        return brush;
-    }
-
-    private static Brush Glow(Shade tint)
-    {
-        var brush = new RadialGradientBrush { RadiusX = 0.6, RadiusY = 0.6 };
-        brush.GradientStops.Add(new GradientStop { Color = Ink.Of(tint), Offset = 0 });
-        brush.GradientStops.Add(new GradientStop { Color = Ink.Of(tint.WithAlpha(0)), Offset = 1 });
-        return brush;
     }
 }
 

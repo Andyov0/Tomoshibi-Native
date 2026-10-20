@@ -31,15 +31,8 @@ internal static class Panels
         return line;
     }
 
-    /// <summary>A rule fading out at both ends.</summary>
-    public static Border Rule()
-    {
-        var brush = new LinearGradientBrush { StartPoint = new Windows.Foundation.Point(0, 0.5), EndPoint = new Windows.Foundation.Point(1, 0.5) };
-        brush.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.White.WithAlpha(0f)), Offset = 0 });
-        brush.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.White.WithAlpha(0.10f)), Offset = 0.5 });
-        brush.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.White.WithAlpha(0f)), Offset = 1 });
-        return new Border { Height = 1, Background = brush };
-    }
+    /// <summary>The hairline under a panel's heading: the border colour, the panel's full width (it faded at both ends until the gradients went).</summary>
+    public static Border Rule() => new() { Height = 1, Background = Ink.Border };
 
     /// <summary>
     /// A message's words with its addresses as links (Linked.tsx): only
@@ -105,11 +98,9 @@ internal sealed class ChatPanel : Grid
     public ChatPanel(CallModel call, Action close, double tallest)
     {
         _call = call;
-        var glow = new Grid { Width = 80, Height = 80, HorizontalAlignment = HorizontalAlignment.Center };
-        var radial = new RadialGradientBrush();
-        radial.GradientStops.Add(new GradientStop { Color = Ink.Of(Ink.TallyShade.WithAlpha(0.16f)), Offset = 0 });
-        radial.GradientStops.Add(new GradientStop { Color = Ink.Of(Ink.TallyShade.WithAlpha(0f)), Offset = 1 });
-        glow.Children.Add(new Microsoft.UI.Xaml.Shapes.Ellipse { Fill = radial });
+        // A plain disc, where an accent glow was until the gradients went.
+        var glow = new Grid { Width = 56, Height = 56, HorizontalAlignment = HorizontalAlignment.Center };
+        glow.Children.Add(new Microsoft.UI.Xaml.Shapes.Ellipse { Fill = Ink.White(0.08f) });
         glow.Children.Add(K.Symbol("bubble.left.and.text.bubble.right", 26, Ink.ForegroundAt(0.5f)));
         var emptyWords = K.Text(T("Messages disappear when the call ends."), 12, ink: Ink.Muted, align: TextAlignment.Center);
         emptyWords.MaxWidth = 200;

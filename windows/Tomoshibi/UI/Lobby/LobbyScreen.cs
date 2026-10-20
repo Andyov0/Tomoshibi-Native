@@ -253,7 +253,8 @@ internal sealed class LobbyScreen : Screen
         // The camera fills the window behind the sidebar on the home, and the
         // evening room shows in the other sections.
         _stage = new Shared.CameraStage(App);
-        _stage.Children.RemoveAt(0);
+        // Clear: the window's own ground is behind it already.
+        _stage.Background = null;
         var cameraLayer = new Grid { Children = { _stage } };
         Children.Add(cameraLayer);
         var sidebarWidth = _width < 760 ? 250 : 284;

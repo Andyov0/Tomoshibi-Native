@@ -170,15 +170,22 @@ internal sealed class DeskTab : MusicTabView
             K.Flex(K.Text(T("Lower the music while anybody talks"), 11.5, ink: Ink.Muted).At(HorizontalAlignment.Left, VerticalAlignment.Center)),
             K.Fixed(duck)));
         column.Children.Add(Presses(state, now));
-        return new Border
+        var card = new Grid { CornerRadius = new CornerRadius(18), Background = Ink.White(0.05f), BorderBrush = Ink.White(0.09f), BorderThickness = new Thickness(1) };
+        if (now.Cover.StartsWith("http", StringComparison.Ordinal))
         {
-            Child = column,
-            CornerRadius = new CornerRadius(18),
-            Background = Ink.White(0.05f),
-            BorderBrush = Ink.White(0.09f),
-            BorderThickness = new Thickness(1),
-            Padding = new Thickness(14),
-        };
+            // Lit from behind by its own cover, blurred and dimmed evenly
+            // (MusicPanel.kt): the cover decoded a dozen pixels wide and
+            // stretched over the card is the blur, and black at 45 per cent
+            // over it, flat, is the dimming, where a gradient was until the
+            // gradients went.
+            var blurred = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage { DecodePixelWidth = 12, UriSource = new Uri(now.Cover) };
+            var behind = new Image { Source = blurred, Stretch = Microsoft.UI.Xaml.Media.Stretch.UniformToFill, Opacity = 0.55, RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5), RenderTransform = new Microsoft.UI.Xaml.Media.ScaleTransform { ScaleX = 1.6, ScaleY = 1.6 } };
+            card.Children.Add(behind);
+            card.Children.Add(new Border { Background = Ink.Black(0.45f) });
+        }
+        column.Padding = new Thickness(14);
+        card.Children.Add(column);
+        return card;
     }
 
     private UIElement Presses(DeskState state, DeskEntry now)

@@ -140,10 +140,10 @@ internal static class MediaKit
     /// </summary>
     public static Grid Artwork(string url, double width, double height, string symbol = "music.note", double corner = 8, Func<string, Task<byte[]?>>? load = null)
     {
-        var ground = new LinearGradientBrush { StartPoint = new Windows.Foundation.Point(0, 0), EndPoint = new Windows.Foundation.Point(1, 1) };
-        ground.GradientStops.Add(new GradientStop { Color = Ink.Of(Appearance.Shared.Tally.WithAlpha(0.32f)), Offset = 0 });
-        ground.GradientStops.Add(new GradientStop { Color = Ink.Of(Theme.SurfaceHigh), Offset = 1 });
-        var grid = new Grid { Width = width, Height = height, CornerRadius = new CornerRadius(corner), Background = ground, BorderBrush = Ink.White(0.08f), BorderThickness = new Thickness(1) };
+        // The raised surface under an accent tint, flat: a blend of the two
+        // until the gradients went.
+        var grid = new Grid { Width = width, Height = height, CornerRadius = new CornerRadius(corner), Background = Ink.SurfaceHigh, BorderBrush = Ink.White(0.08f), BorderThickness = new Thickness(1) };
+        grid.Children.Add(new Border { Background = Ink.TallyAt(0.18f) });
         grid.Children.Add(K.Symbol(symbol, 13, Ink.ForegroundAt(0.7f)).At(HorizontalAlignment.Center, VerticalAlignment.Center));
         if (url.StartsWith("http", StringComparison.Ordinal))
         {

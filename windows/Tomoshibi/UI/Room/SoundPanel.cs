@@ -185,8 +185,8 @@ internal sealed class SoundPanel : Grid
         /// <summary>
         /// The other apps' slider (Notices.kt <c>GlassSlider</c>) on a
         /// Windows one, which keeps the keyboard and the screen reader: a
-        /// dark track with a hairline, the part below the value in white
-        /// that brightens along it, a white thumb, in twentieths. Left as it
+        /// dark track with a hairline, the part below the value in white,
+        /// a white thumb, in twentieths. Left as it
         /// comes, the system's slider is drawn in the accent colour, which
         /// here is the tally, the colour of things that are on.
         /// </summary>
@@ -203,16 +203,7 @@ internal sealed class SoundPanel : Grid
                 VerticalAlignment = VerticalAlignment.Center,
             };
             var track = Ink.Black(0.28f);
-            var fill = new Microsoft.UI.Xaml.Media.LinearGradientBrush
-            {
-                StartPoint = new Windows.Foundation.Point(0, 0.5),
-                EndPoint = new Windows.Foundation.Point(1, 0.5),
-                GradientStops =
-                {
-                    new Microsoft.UI.Xaml.Media.GradientStop { Color = Ink.Of(Theme.Foreground.WithAlpha(0.62f)), Offset = 0 },
-                    new Microsoft.UI.Xaml.Media.GradientStop { Color = Ink.Of(Theme.Foreground.WithAlpha(0.95f)), Offset = 1 },
-                },
-            };
+            var fill = Ink.ForegroundAt(0.9f);
             var thumb = Ink.Brush(Shade.White);
             foreach (var state in new[] { "", "PointerOver", "Pressed", "Disabled" })
             {

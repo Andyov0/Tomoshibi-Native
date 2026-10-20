@@ -292,7 +292,9 @@ internal static class Shared
         {
             _app = app;
             CornerRadius = new CornerRadius(radius);
-            Children.Add(new Backdrop());
+            // The surface where it sits on a rounded card, as a tile with its
+            // camera off is; the background where it fills the screen.
+            Background = radius > 0 ? Ink.Surface : Ink.Background;
             Update();
         }
 
