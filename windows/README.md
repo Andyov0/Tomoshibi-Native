@@ -87,9 +87,23 @@ The panel's buttons are drawn for a pointer (28 across) rather than a
 fingertip (48), and keep the keyboard where it was when the panel is drawn
 again.
 
+Watching together is Android's: the protocol crate's theatre and keeper on
+the call's `watch` topic, the show first among the pictures whenever one is
+believed, its panel (a link to paste, the queue, the media servers for
+somebody given them) and its stage (the controls, which drive everybody;
+"does not reach you" with the reason; the relay's stop and its try again).
+A file or a playlist plays in Windows' media player, a playlist through
+AdaptiveMediaSource held to the viewer's ceiling and to the size it is shown
+at by its renditions' bandwidths; YouTube plays in its own player in a
+WebView2 whose page is answered as if from the deployment's address, so it
+is embedded from the origin the web embeds it from. Where the video is
+fails, or does not begin within eight seconds, it plays from the relay. The
+controls show while the pointer moves over the video and for three seconds
+after, where Android shows them for a while after a touch.
+
 Not in this phase, and left as marked stubs rather than as controls that do
-nothing: watching together, music and their settings, background blur,
-links handed over by the system (`tomoshibi://` and app links), and MSIX.
+nothing: music and its settings, background blur, links handed over by the
+system (`tomoshibi://` and app links), and MSIX.
 
 ## The machine it is built on
 
@@ -270,6 +284,8 @@ Read from the environment, the same names the Apple apps read:
 | `TOMOSHIBI_ENDED=left\|closed\|removed\|lost` | Opens on that ending, for pictures of it. |
 | `TOMOSHIBI_LANGUAGE=en\|zh-Hans\|zh-Hant\|ja` | Speaks this language for the launch, without keeping it. |
 | `TOMOSHIBI_SHOW=…` | Opens something over the screen: `start`, `join`, `schedule`, `servers`, `settings[:general\|media\|account\|about]`, and in a call `chat`, `devices`, `sound`, `host`, `share`, `leave`. Once, in the first call. |
+| `TOMOSHIBI_WATCH=link` | Watches this video together straight after joining, once the server says this person may. |
+| `TOMOSHIBI_WATCH_YOUTUBE_API=url` | Where the YouTube player's page loads YouTube's IFrame API from: the kit's stand-in, so that no test reaches YouTube. |
 | `TOMOSHIBI_SHARE=screen\|sound\|both` | Shares straight after joining: a generated screen and chord unless `TOMOSHIBI_SOURCE=devices`, and then the first screen without the picker. |
 | `TOMOSHIBI_KEEP=name` | Keeps what the launch is told in a store of the test's own, `%LOCALAPPDATA%\Tomoshibi-tests\name`, so that a later launch can find the sealed session. |
 
@@ -289,7 +305,9 @@ to it, and the browser (Chrome for Testing, `--mute-audio`, fake devices) on
 the Mac as well; it treats that plain-http origin as secure
 (`--unsafely-treat-insecure-origin-as-secure`), or it would have no
 `getUserMedia`. The app, in the VM, is launched with `TOMOSHIBI_BASE` naming
-that deployment, `TOMOSHIBI_MUTE`, and the synthetic sources.
+that deployment, `TOMOSHIBI_MUTE`, and the synthetic sources. A muted launch plays a video
+watched together at nought, and its YouTube player in a WebView2 started with
+every sound off.
 
 The app's log says what it drew and heard; the browser's `inbound-rtp` stats
 and `interop/channels.js` say what it received.

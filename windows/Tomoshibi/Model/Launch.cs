@@ -101,6 +101,16 @@ public sealed record Launch
     /// </summary>
     public string? Share { get; init; }
 
+    /// <summary>
+    /// Where the YouTube player's page loads YouTube's IFrame API from
+    /// (TOMOSHIBI_WATCH_YOUTUBE_API): a stand-in served by the kit's own
+    /// gateway, so that a test of the YouTube player never reaches YouTube.
+    /// </summary>
+    public string? WatchYoutubeApi { get; init; }
+
+    /// <summary>A video to watch together straight after joining (TOMOSHIBI_WATCH), for pictures of the show.</summary>
+    public string? Watch { get; init; }
+
     /// <summary>Whether a test asked for a share, and so takes the first screen rather than asking the picker.</summary>
     public bool SharePicked => Share != null;
 
@@ -167,6 +177,8 @@ public sealed record Launch
             // never reaches a real device by forgetting a switch.
             RealDevices = string.Equals(Get("TOMOSHIBI_SOURCE"), "devices", StringComparison.OrdinalIgnoreCase),
             Share = Get("TOMOSHIBI_SHARE") is { } share && share is "screen" or "sound" or "both" ? share : null,
+            WatchYoutubeApi = Get("TOMOSHIBI_WATCH_YOUTUBE_API"),
+            Watch = Get("TOMOSHIBI_WATCH"),
             KeepIn = Get("TOMOSHIBI_KEEP") is { } keep && keep.All(c => char.IsLetterOrDigit(c) || c == '-') ? keep : null,
             LogFile = logFile,
             QuitAfterSeconds = int.TryParse(Get("TOMOSHIBI_DEBUG_QUIT_AFTER"), out var seconds) && seconds > 0 ? seconds : null,

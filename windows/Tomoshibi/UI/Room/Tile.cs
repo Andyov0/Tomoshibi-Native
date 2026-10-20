@@ -486,6 +486,9 @@ internal sealed class Tile : Grid
     {
         face ??= new Face.Picture();
         _name.Text = label;
+        // The video watched together carries no name: its own stage says
+        // what it is (RoomView.kt `TileMarks("", unlabelled = true)`).
+        _plate.Visibility = label.Length == 0 ? Visibility.Collapsed : Visibility.Visible;
         // The ring lights at once and is held 700 ms after speech stops, so
         // that it does not flicker between two words (Tile.kt `steady`).
         if (speaking) _quietSince = DateTime.MaxValue;

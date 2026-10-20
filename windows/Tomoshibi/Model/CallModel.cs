@@ -97,6 +97,12 @@ internal sealed class CallModel : Observable, IDisposable
     public readonly Call Core;
     public readonly Deployment Deployment;
     public readonly string? Region;
+
+    /// <summary>Where the person's choices are kept (in memory for a rehearsal): a video's volume, the watching ceiling.</summary>
+    public IDefaults? Choices => _memory.Defaults;
+
+    /// <summary>How the app was launched, for the features layered over the call: a muted launch mutes their sound too.</summary>
+    public Launch Launch => _media.Launch;
     public readonly bool Sealed;
     private readonly CallMedia _media;
     private readonly DeviceMemory _memory;

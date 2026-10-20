@@ -116,6 +116,16 @@ internal static class Symbols
         ["magnifyingglass"] = "\uE721",
         ["arrow.uturn.backward"] = "\uE72B",
         ["folder"] = "\uE8B7",
+        // Watching together's (WatchStage.kt, MediaBrowser.kt): the nearest
+        // Segoe has to each, a globe for a video the connection cannot reach.
+        ["folder.fill"] = "\uE8B7",
+        ["play.circle.fill"] = "\uE768",
+        ["forward.end.fill"] = "\uE893",
+        ["list.bullet.rectangle"] = "\uE8FD",
+        ["film.stack"] = "\uE8B2",
+        ["icloud.slash"] = "\uE774",
+        ["arrow.up.right.square"] = "\uE8A7",
+        ["externaldrive.badge.exclamationmark"] = "\uE7BA",
         ["tv"] = "\uE7F4",
         ["antenna.radiowaves.left.and.right"] = "\uEC05",
         ["hand.thumbsup.fill"] = "\uE8E1",

@@ -5,6 +5,8 @@ using Microsoft.UI.Xaml.Input;
 using Tomoshibi.Basics;
 using Tomoshibi.Diagnostics;
 using Tomoshibi.Model;
+using Tomoshibi.Model.Watch;
+using Tomoshibi.UI.Watch;
 using Tomoshibi.UI.Kit;
 using Tomoshibi.UI.Screens;
 using uniffi.tomoshibi_core;
@@ -31,6 +33,9 @@ internal sealed class RoomScreen : Screen
 
     private readonly HostFeature _host;
     private readonly Arrivals _doorRows = new();
+    private readonly WatchEngine _watch;
+    /// <summary>The watching stage, made once for the room and lent to whichever tile shows it, so the video is not loaded again when the stage and the strip trade places.</summary>
+    private WatchStage? _watchStage;
     private Grid? _watchersHost;
     private WatchersCard? _watchers;
     private bool? _watchersCompact;
@@ -84,6 +89,11 @@ internal sealed class RoomScreen : Screen
         _ = _host.Run();
         _host.Changed += Update;
         call.Sharing.Changed += Update;
+        // Made with the room, as the Swift room makes its features, so that
+        // the show is followed from the first moment rather than from the
+        // first time somebody opens its panel.
+        _watch = WatchEngine.Of(call);
+        _watch.Changed += Update;
         Background = Ink.Background;
         Children.Add(_pictures);
         Children.Add(_chrome);
@@ -136,6 +146,7 @@ internal sealed class RoomScreen : Screen
         Call.Changed -= Update;
         _host.Changed -= Update;
         Call.Sharing.Changed -= Update;
+        _watch.Changed -= Update;
         _stats.Stop();
         _idle.Stop();
         Report();
@@ -236,6 +247,7 @@ internal sealed class RoomScreen : Screen
         _toasts!.Update();
         (_panelShown as SoundPanel)?.Update();
         (_panelShown as HostPanel)?.Update();
+        (_panelShown as WatchPanel)?.Update();
         UpdateNotice();
         UpdateAlone();
         UpdateStrain();
@@ -291,7 +303,11 @@ internal sealed class RoomScreen : Screen
         var order = Call.People.Count + 1 > Plan.TilesPerPage ? Call.Speaking.Order(identities) : identities;
         var rank = order.Select((id, i) => (id, i)).ToDictionary(p => p.id, p => p.i);
         surfaces = all.ToDictionary(s => s.Id);
-        var ids = new List<string> { "me/camera" };
+        var ids = new List<string>();
+        // The video watched together first, whenever a show is believed,
+        // with or without a video in it (surface.ts `surfaces`).
+        if (_watch.OnStage) ids.Add(WatchStage);
+        ids.Add("me/camera");
         // This participant's own share is a picture of its own (surface.ts ~91).
         if (Call.Sharing.Active) ids.Add(MyShare);
         ids.AddRange(all.Select((s, i) => (s, i))
@@ -306,6 +322,7 @@ internal sealed class RoomScreen : Screen
         if (ActualWidth <= 0 || ActualHeight <= 0 || _bar == null) return;
         var ids = Pictures(out var surfaces);
         var shares = surfaces.Values.Where(s => s.Kind == Surface.Kinds.Screen).Select(s => s.Id).ToList();
+        if (_watch.OnStage) shares.Insert(0, WatchStage);
         _pin = _pin.Update(ids, shares);
         // The sharer whose screen is on this participant's stage, or "" (the
         // web's `watched`): written to the `watching` attribute so a sharer
@@ -376,6 +393,16 @@ internal sealed class RoomScreen : Screen
             tile.Show(T("{name} (you)", ("name", Call.LocalName)), Call.LocalIdentity, Call.LocalName, null, Call.CameraOn, mine: true,
                 speaking: Call.MeSpeaking && Call.MicrophoneOn, muted: !Call.MicrophoneOn, hand: Call.HandUp,
                 selected: onStage, onStage: onStage, filled: _filled, Call.Reactions.Where(r => r.From == Call.LocalIdentity), controls: controls);
+            return;
+        }
+        if (id == WatchStage)
+        {
+            tile.Show("", Call.LocalIdentity, T("Watch together"), null, false, mine: false, speaking: false, muted: false, hand: false,
+                selected: onStage, onStage: onStage, filled: _filled, Array.Empty<ShownReaction>(),
+                face: new Tile.Face.Drawn("watch", () => _watchStage ??= new WatchStage(_watch, () =>
+                {
+                    if (_panel != Panel.Watch) Toggle(Panel.Watch);
+                })), controls: controls);
             return;
         }
         if (id == MyShare)
@@ -726,9 +753,9 @@ internal sealed class RoomScreen : Screen
             {
                 _panelShown = new HostPanel(_host, () => Toggle(Panel.Host));
             }
-            else if (_panel is { } feature && PanelMakers.TryGetValue(feature, out var make))
+            else if (_panel == Panel.Watch)
             {
-                _panelShown = make(this, () => Toggle(feature));
+                _panelShown = new WatchPanel(_watch, () => Toggle(Panel.Watch));
             }
             if (_panelShown is FrameworkElement shown)
             {
@@ -751,8 +778,6 @@ internal sealed class RoomScreen : Screen
         }
     }
 
-    /// <summary>The panels the features layered over the call bring (watching together, the music), made by the feature's own code.</summary>
-    public static readonly Dictionary<Panel, Func<RoomScreen, Action, UIElement>> PanelMakers = new();
 
     // The bar stepping aside
 
@@ -782,6 +807,14 @@ internal sealed class RoomScreen : Screen
     {
         var pictures = _tiles.Values.Where(t => t.Picture != null).Select(t => $"video {t.Picture!.Sid} drawn={t.Picture.FramesDrawn}{(t.Picture.Whole ? " whole" : "")}");
         Log.Line($"stats {string.Join("; ", pictures.Append(Call.Reading()))}");
+        // Where the video watched together stands here, beside the show's
+        // own reckoning, for a test comparing this player with a browser's.
+        if (_watch.Player is { } watching)
+        {
+            var source = watching.PlaysAsYoutube ? "youtube" : watching.Relayed ? "relay" : "direct";
+            var at = watching.Backend is { } backend ? $"{backend.Time:F2} playing={backend.Playing} ready={backend.Ready}" : "none";
+            Log.Line($"watch {watching.Video.Key} {source} at={at} shown={watching.Position:F2} waiting={watching.Waiting} lost={watching.Unreachable?.ToString() ?? "-"} show={(_watch.Show?.Playing == true ? "playing" : "paused")}");
+        }
         if (App.Launch.LogFile != null) _ = Receiving();
     }
 

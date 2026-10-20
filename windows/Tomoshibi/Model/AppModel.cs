@@ -795,6 +795,7 @@ internal sealed class AppModel : Observable
                 if (share is "screen" or "both") await model.ShareScreen();
                 if (share is "sound" or "both") await model.ShareSound();
             }
+            if (_launch.Watch is { } link && Rehearsal && Call == model) _ = WatchFromLaunch(model, link);
             if (_launch.QuitAfterSeconds is { } seconds && Rehearsal) _ = QuitAfter(seconds);
         }
         catch (ProtocolException fault)
@@ -816,6 +817,19 @@ internal sealed class AppModel : Observable
             if (!landed) Joining = false;
             Ask(-1);
         }
+    }
+
+    /// <summary>
+    /// The launch's video, added once the server has said this person may
+    /// start a show (TOMOSHIBI_WATCH): asked of the server once the call is
+    /// joined, so the answer is waited for, a tenth of a second at a time,
+    /// for at most ten seconds.
+    /// </summary>
+    private static async Task WatchFromLaunch(CallModel model, string link)
+    {
+        var engine = Watch.WatchEngine.Of(model);
+        for (var i = 0; i < 100 && !engine.Ready && !model.Over.IsCancellationRequested; i++) await Task.Delay(100);
+        if (!model.Over.IsCancellationRequested) await engine.Add(link);
     }
 
     private async Task QuitAfter(int seconds)
