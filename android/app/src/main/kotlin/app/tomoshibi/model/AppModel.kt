@@ -10,6 +10,8 @@ import app.tomoshibi.BuildConfig
 import app.tomoshibi.basics.NoticeTimes
 import app.tomoshibi.basics.t
 import app.tomoshibi.media.CallMedia
+import app.tomoshibi.media.SystemInstaller
+import java.io.File
 import java.net.URI
 import java.net.URLDecoder
 import java.time.Instant
@@ -125,6 +127,19 @@ class AppModel(
         private set(value) {
             if (value != screenState) Log.i(TAG, "screen ${value.name.lowercase()}")
             screenState = value
+            updates?.lobby(value == Screen.Lobby)
+        }
+
+    /**
+     * The app's own updates (Updates), told of every change of screen, since
+     * the lobby is the only place one is shown or worked on. None in a test's
+     * model, and none in a debug build started by hand, which has no test
+     * deployment to ask and would ask the real one.
+     */
+    var updates: Updates? = null
+        internal set(value) {
+            field = value
+            value?.lobby(screen == Screen.Lobby)
         }
 
     var deployment by mutableStateOf<Deployment?>(null)
@@ -340,6 +355,7 @@ class AppModel(
         if (started) return
         started = true
         scope.launch { keepRelaysFresh() }
+        updates?.start()
         val launch = launch
         if (rehearsal && launch != null) {
             serverAddress = launch.base
@@ -1208,7 +1224,19 @@ class AppModel(
             // notification and the small window (CallMedia.follow). After
             // the model is made, never from inside it, so a test's model has
             // none of it.
-            ).also(media::follow)
+            ).also(media::follow).also { app ->
+                // Asked of the deployment the app talks to: the test's in a
+                // rehearsal, and in a release build home, which is the only
+                // one its core will speak to.
+                if (!BuildConfig.DEBUG || launch != null) {
+                    app.updates = Updates(
+                        CoreUpdateSource(launch?.base ?: homeDeployment(), File(context.cacheDir, "updates")),
+                        SystemInstaller(context),
+                        ClientDescription.version,
+                        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+                    )
+                }
+            }
         }
 
         /** api.ts `explain`, for the room the person was trying. */
