@@ -299,7 +299,7 @@ internal sealed class SongDesk : Observable, IBarOffer
         _prepared.Clear();
         _output?.Stop();
         _output = null;
-        if (_monitor != null) Call.Speakers?.Detach(_monitor.Key);
+        if (_monitor != null) Call.Speakers?.Detach(_monitor);
     }
 
     // The desk's words and wishes
@@ -518,7 +518,7 @@ internal sealed class SongDesk : Observable, IBarOffer
         if (_published is { } track) _ = Unpublish(track);
         _output = null;
         _published = null;
-        if (_monitor != null) Call.Speakers?.Detach(_monitor.Key);
+        if (_monitor != null) Call.Speakers?.Detach(_monitor);
         _monitor = null;
         PlayingHere = false;
         _duck.Left(MusicDuck.Local);

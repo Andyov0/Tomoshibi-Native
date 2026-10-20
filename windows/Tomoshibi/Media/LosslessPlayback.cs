@@ -139,11 +139,15 @@ internal sealed class LosslessPlayback : LosslessSink, IDisposable
         foreach (var stream in all) EndLater(stream);
     }
 
-    /// <summary>Fades the stream out, and takes it out of the player once it is silent.</summary>
+    /// <summary>
+    /// Fades the stream out, and takes it out of the player once it is
+    /// silent: that stream, not whatever then plays under its key, which is
+    /// the one replacing it when the rate or the channels changed.
+    /// </summary>
     private void EndLater(Stream stream)
     {
         stream.Ending = true;
-        _ = Task.Delay(FadeOut).ContinueWith(_ => _playback?.Detach(stream.Key), TaskScheduler.Default);
+        _ = Task.Delay(FadeOut).ContinueWith(_ => _playback?.Detach(stream), TaskScheduler.Default);
     }
 
     public void Dispose() => CloseAll();

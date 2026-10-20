@@ -425,3 +425,48 @@ public sealed class Resampler
 
     private static int Gcd(int a, int b) => b == 0 ? a : Gcd(b, a % b);
 }
+
+/// <summary>
+/// Something played that is asked for its sound rather than handed it: a
+/// lossless stream, a song the song desk sends, each at its own rate and
+/// brought to the player's by its own filter. Rendered on the player's own
+/// thread, into interleaved stereo at 48 kHz, added to what is there.
+/// </summary>
+public abstract class PulledSound
+{
+    /// <summary>Whose sound it is and which (a person's music, their screen's sound): for the log, not for finding it.</summary>
+    public readonly string Key;
+    protected PulledSound(string key) => Key = key;
+
+    /// <summary>Adds <paramref name="frames"/> frames into <paramref name="stereo"/>; the player's thread.</summary>
+    public abstract void Render(float[] stereo, int frames);
+}
+
+/// <summary>
+/// The nodes a player plays its pulled sounds through, one for each sound,
+/// held by the sound itself and never by its key.
+///
+/// Two sounds can have one key for a moment. A lossless stream whose rate or
+/// channels change is a new stream under the same person's key, coming in
+/// from silence while the old one fades out (LosslessPlayback); the old one
+/// is taken out once it is silent. Held by key, putting the new one in took
+/// the old one out at once, unfaded, and taking the old one out 300 ms
+/// later took out the new one: a listener heard nothing of a song after one
+/// at another rate, for the whole song, since the core holds the song's
+/// ordinary track back at the server while its lossless stream lasts.
+/// </summary>
+public sealed class PulledNodes<TNode>
+{
+    private readonly Dictionary<PulledSound, TNode> _nodes = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>Plays <paramref name="sound"/> through <paramref name="node"/>, beside any other under the same key.</summary>
+    public void Add(PulledSound sound, TNode node) => _nodes[sound] = node;
+
+    /// <summary>Takes this sound out, and only it; its node, to be stopped, or false where it was not playing.</summary>
+    public bool Remove(PulledSound sound, [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out TNode node) => _nodes.Remove(sound, out node);
+
+    public IReadOnlyCollection<PulledSound> Sounds => _nodes.Keys;
+    public IReadOnlyCollection<TNode> Nodes => _nodes.Values;
+    public int Count => _nodes.Count;
+    public void Clear() => _nodes.Clear();
+}

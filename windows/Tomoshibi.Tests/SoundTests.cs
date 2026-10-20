@@ -216,3 +216,49 @@ public class ResamplerTests
         Assert.True(Math.Abs(44_101.0 / 48_000 - (double)step / phases) <= 1e-6);
     }
 }
+
+/*
+ * The player's pulled sounds, as a lossless stream replaced under one key
+ * puts them: a song at 48 kHz, then one at 44.1 kHz from the same person, is
+ * a new stream under the same key while the old one fades out, and the old
+ * one is taken out 300 ms later. Held by key, the new one was taken out with
+ * it and the rest of the song was never heard.
+ */
+public class PulledNodesTests
+{
+    private sealed class Stream(string key) : PulledSound(key)
+    {
+        public override void Render(float[] stereo, int frames) { }
+    }
+
+    [Fact]
+    public void AStreamReplacedUnderItsKeyFadesBesideTheNewOneAndGoesAlone()
+    {
+        var nodes = new PulledNodes<string>();
+        var first = new Stream("lee/music");
+        nodes.Add(first, "48 kHz");
+        var second = new Stream("lee/music");
+        nodes.Add(second, "44.1 kHz");
+        // Both play for the fade: the old one going out, the new one coming in.
+        Assert.Equal(2, nodes.Count);
+        Assert.True(nodes.Remove(first, out var stopped));
+        Assert.Equal("48 kHz", stopped);
+        Assert.Same(second, Assert.Single(nodes.Sounds));
+        Assert.Equal("44.1 kHz", Assert.Single(nodes.Nodes));
+    }
+
+    [Fact]
+    public void ASoundTakenOutTwiceTakesNothingElseTheSecondTime()
+    {
+        var nodes = new PulledNodes<string>();
+        var stopped = new Stream("lee/screen");
+        var started = new Stream("lee/screen");
+        nodes.Add(stopped, "stopped");
+        Assert.True(nodes.Remove(stopped, out _));
+        nodes.Add(started, "started again");
+        // A share stopped and started again at once: the end of the first
+        // arrives after the second has begun.
+        Assert.False(nodes.Remove(stopped, out _));
+        Assert.Same(started, Assert.Single(nodes.Sounds));
+    }
+}

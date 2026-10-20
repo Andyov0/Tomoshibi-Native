@@ -1,3 +1,4 @@
+using Tomoshibi.Basics;
 using Tomoshibi.Diagnostics;
 using Tomoshibi.Interop;
 using Windows.Devices.Enumeration;
@@ -7,21 +8,6 @@ using Windows.Media.MediaProperties;
 using Windows.Media.Render;
 
 namespace Tomoshibi.Media;
-
-/// <summary>
-/// Something played that is asked for its sound rather than handed it: a
-/// lossless stream, a song the song desk sends, each at its own rate and
-/// brought to the player's by its own filter. Rendered on the audio graph's
-/// own thread, into interleaved stereo at 48 kHz, added to what is there.
-/// </summary>
-internal abstract class PulledSound
-{
-    public readonly string Key;
-    protected PulledSound(string key) => Key = key;
-
-    /// <summary>Adds <paramref name="frames"/> frames into <paramref name="stereo"/>; the audio graph's thread.</summary>
-    public abstract void Render(float[] stereo, int frames);
-}
 
 /// <summary>
 /// Plays every remote sound through one audio graph to the chosen speakers:
@@ -62,13 +48,14 @@ internal sealed class Playback : IDisposable
         /// <summary>The quanta this graph has rendered: that it is the one playing, read by the tests.</summary>
         public long Quanta;
         public readonly Dictionary<string, AudioFrameInputNode> Pushed = new();
-        public readonly Dictionary<string, AudioFrameInputNode> Pulled = new();
+        /// <summary>Held by the sound, not its key (PulledNodes): a stream replaced under one key fades out beside the one replacing it.</summary>
+        public readonly PulledNodes<AudioFrameInputNode> Pulled = new();
 
         public void Dispose()
         {
             Audio.Stop();
             foreach (var node in Pushed.Values) node.Dispose();
-            foreach (var node in Pulled.Values) node.Dispose();
+            foreach (var node in Pulled.Nodes) node.Dispose();
             Pushed.Clear();
             Pulled.Clear();
             Audio.Dispose();
@@ -81,7 +68,6 @@ internal sealed class Playback : IDisposable
     private readonly Dictionary<string, float> _ducks = new();
 
     private float Level(string sid) => (_gains.TryGetValue(sid, out var gain) ? gain : 1f) * (_ducks.TryGetValue(sid, out var duck) ? duck : 1f);
-    private readonly Dictionary<string, PulledSound> _pulled = new();
     private readonly object _gate = new();
     private bool _disposed;
 
@@ -189,7 +175,7 @@ internal sealed class Playback : IDisposable
             }
             old = _graph;
             _graph = fresh;
-            foreach (var sound in _pulled.Values) Connect(fresh, sound);
+            foreach (var sound in old.Pulled.Sounds) Connect(fresh, sound);
         }
         Watch(fresh);
         // After the new graph has taken over, so that nothing played between
@@ -268,30 +254,22 @@ internal sealed class Playback : IDisposable
         }
     }
 
-    /// <summary>Starts asking <paramref name="sound"/> for its samples, on whichever speakers are current.</summary>
+    /// <summary>Starts asking <paramref name="sound"/> for its samples, on whichever speakers are current, beside any other sound under its key.</summary>
     public void Attach(PulledSound sound)
     {
         lock (_gate)
         {
             if (_disposed) return;
-            Detach(sound.Key, locked: true);
-            _pulled[sound.Key] = sound;
             Connect(_graph, sound);
         }
     }
 
-    public void Detach(string key) => Detach(key, locked: false);
-
-    private void Detach(string key, bool locked)
+    /// <summary>Stops asking <paramref name="sound"/>, and only it: another under its key plays on.</summary>
+    public void Detach(PulledSound sound)
     {
-        if (!locked)
+        lock (_gate)
         {
-            lock (_gate) Detach(key, true);
-            return;
-        }
-        _pulled.Remove(key);
-        if (_graph.Pulled.Remove(key, out var node))
-        {
+            if (_disposed || !_graph.Pulled.Remove(sound, out var node)) return;
             node.Stop();
             node.Dispose();
         }
@@ -313,7 +291,7 @@ internal sealed class Playback : IDisposable
             Hand(input, scratch, frames);
         };
         node.AddOutgoingConnection(graph.Output);
-        graph.Pulled[sound.Key] = node;
+        graph.Pulled.Add(sound, node);
         node.Start();
     }
 
@@ -335,7 +313,6 @@ internal sealed class Playback : IDisposable
         lock (_gate)
         {
             _disposed = true;
-            _pulled.Clear();
             _graph.Dispose();
         }
     }
