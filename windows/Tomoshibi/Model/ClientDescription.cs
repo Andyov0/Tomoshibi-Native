@@ -14,10 +14,35 @@ namespace Tomoshibi.Model;
 /// </summary>
 internal static class ClientDescription
 {
+    /// <summary>Whether the app runs from an installed package, which is what can be updated.</summary>
+    public static bool Packaged { get; private set; }
+
+    /// <summary>
+    /// The version this app is, in four parts: the package's where it is
+    /// packaged, which is what the deployment's apps.json names and what an
+    /// update is compared with, the assembly's otherwise.
+    /// </summary>
+    public static string Version { get; } = ReadVersion();
+
+    private static string ReadVersion()
+    {
+        try
+        {
+            var v = Windows.ApplicationModel.Package.Current.Id.Version;
+            Packaged = true;
+            return $"{v.Major}.{v.Minor}.{v.Build}.{v.Revision}";
+        }
+        catch (Exception)
+        {
+            // Unpackaged: there is no package to ask.
+            var version = Assembly.GetExecutingAssembly().GetName().Version;
+            return version == null ? "" : $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
+        }
+    }
+
     public static void Tell()
     {
-        var version = Assembly.GetExecutingAssembly().GetName().Version;
-        var dotted = version == null ? "" : $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
+        var dotted = Version;
         // .NET reports the version Windows really is (10.0.26200 for Windows
         // 11 25H2), not the compatibility shim's 6.2 that an unmanifested
         // Win32 caller of GetVersionEx is told.

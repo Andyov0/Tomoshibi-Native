@@ -150,9 +150,35 @@ public sealed record Launch
     public static Launch FromEnvironment()
     {
 #if DEBUG
-        static string? Get(string name)
+        // A packaged app is started by the system, which hands it no
+        // environment: a test launching the package (from its tile, or by a
+        // tomoshibi:// link) writes the same switches into this file instead,
+        // NAME=value a line, so that such a launch too names the deployment it
+        // is to use and never falls through to the home one. The environment
+        // wins over the file. A packaged debug build only: an unpackaged one
+        // is always given its environment, and a test running one beside the
+        // package must not pick up the package's switches. A release reads
+        // neither.
+        var written = new Dictionary<string, string>();
+        try
+        {
+            var file = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Tomoshibi-tests", "switches.env");
+            if (ClientDescription.Packaged && File.Exists(file))
+            {
+                foreach (var line in File.ReadAllLines(file))
+                {
+                    var at = line.IndexOf('=');
+                    if (at > 0 && line.StartsWith("TOMOSHIBI_", StringComparison.Ordinal)) written[line[..at].Trim()] = line[(at + 1)..].Trim();
+                }
+            }
+        }
+        catch (Exception)
+        {
+        }
+        string? Get(string name)
         {
             var value = Environment.GetEnvironmentVariable(name);
+            if (string.IsNullOrWhiteSpace(value)) written.TryGetValue(name, out value);
             return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
         }
 

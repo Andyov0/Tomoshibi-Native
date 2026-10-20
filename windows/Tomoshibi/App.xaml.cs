@@ -22,7 +22,7 @@ public partial class App : Application
     {
         var launch = Program.Launch;
         Log.Open(launch.LogFile);
-        Log.Line($"Tomoshibi for Windows, core {uniffi.tomoshibi_core.TomoshibiCoreMethods.CoreVersion()}, {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}");
+        Log.Line($"Tomoshibi {ClientDescription.Version} for Windows{(ClientDescription.Packaged ? ", packaged" : "")}, core {uniffi.tomoshibi_core.TomoshibiCoreMethods.CoreVersion()}, {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}");
         // Before the first deployment is made, which reads it then.
         ClientDescription.Tell();
 

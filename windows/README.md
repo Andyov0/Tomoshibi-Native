@@ -131,9 +131,6 @@ handler, which needs a `windows-app-web-link` file served by the site) is not
 something the deployment serves, so an `https://` link opens in the browser,
 whose page offers the app.
 
-Not in this phase, and left as marked stubs rather than as controls that do
-nothing: MSIX.
-
 ## The machine it is built on
 
 Windows 11 on Arm (build 26200), in the owner's Parallels VM. Everything below
@@ -299,13 +296,45 @@ device paths compile and are not yet checked on real hardware.
 
 ## Packaging
 
-Unpackaged, with the Windows App SDK and .NET carried in the output
-(`WindowsPackageType=None`, `WindowsAppSDKSelfContained`, `SelfContained`):
-the build directory runs as it is, with no installer, signing certificate or
-package registration, and a launch inherits its environment, which is how the
-`TOMOSHIBI_*` switches reach it; a packaged app is started by activation and
-does not. An MSIX for distribution, with an identity for notifications and
-the camera prompt, belongs with the full UI.
+The tests build it unpackaged, with the Windows App SDK and .NET carried in
+the output (`WindowsPackageType=None`, `WindowsAppSDKSelfContained`,
+`SelfContained`): the build directory runs as it is, and a launch inherits
+its environment, which is how the `TOMOSHIBI_*` switches reach it.
+
+For distribution `package.ps1` builds the same project as MSIX
+(`WindowsPackageType=MSIX`, `Package.appxmanifest`) for arm64 and for x64,
+puts the two in one `Tomoshibi-<version>.msixbundle`, which is the file the
+deployment's shelf and an update hand out, and signs it with a certificate
+found by its thumbprint in the current user's store, so that no password is
+ever on a command line. The version given is written into the manifest's
+identity, four dotted numbers as `apps.json` writes them, and the
+certificate's subject into its publisher: Windows installs a newer version
+over an older one only from the same publisher, and the app checks the same
+before it installs an update. Windows picks the package for the machine out
+of the bundle. The package registers `tomoshibi://`, and asks for the
+camera and the microphone as a packaged app must.
+
+A package is started by the system and hands the app no environment; a
+packaged debug build reads its switches from
+`%LOCALAPPDATA%\Tomoshibi-tests\switches.env` instead (`NAME=value` a
+line), so that a test of the package, launched from its entry or by a link,
+still names the local deployment. An unpackaged build never reads that file,
+and a release build reads neither.
+
+Tested in the VM with a self-signed certificate (`CN=Tomoshibi`, trusted on
+that machine for sideloading only): 0.1.0.1 and 0.1.0.2 built as bundles of
+about 220 MB holding both architectures; 0.1.0.1 installed (Windows took the
+arm64 package), launched from its entry, signed in to the local deployment
+through the switches file, and was upgraded in place by installing 0.1.0.2
+over it; a `tomoshibi://` activation started it cold ("opened with a link")
+and, with it running, was handed to the running app ("handed a link") with
+no second process left; it uninstalled to nothing, the scheme's registration
+with it. Opening such a link through the
+shell put up Windows' own "Pick an app" the first time, as Windows does for a
+scheme nobody has chosen an app for; the test activated the package through
+`Windows.System.Launcher` with the package named instead, rather than pick a
+default for the person. A distributed build needs a real code-signing
+certificate (see the report of phase 2b for what that takes).
 
 ## Switches
 

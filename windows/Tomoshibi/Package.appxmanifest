@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The package (windows\package.ps1 builds it). The identity's version is the
+  four-part version the deployment's apps.json names and the app compares an
+  update with (ClientDescription.Version); package.ps1 writes the one it is
+  given into its own copy. The publisher is the signing certificate's
+  subject, which an update must share: Windows installs a newer version over
+  an older one only from the same publisher, and the app checks it too
+  before installing.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap rescap">
+
+  <Identity Name="Tomoshibi" Publisher="CN=Tomoshibi" Version="0.1.0.1" />
+
+  <Properties>
+    <DisplayName>Tomoshibi</DisplayName>
+    <PublisherDisplayName>Tomoshibi</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en" />
+    <Resource Language="zh-Hans" />
+    <Resource Language="zh-Hant" />
+    <Resource Language="ja" />
+  </Resources>
+
+  <Applications>
+    <Application Id="App" Executable="$targetnametoken$.exe" EntryPoint="$targetentrypoint$">
+      <uap:VisualElements
+        DisplayName="Tomoshibi"
+        Description="Tomoshibi"
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png" />
+      <Extensions>
+        <!-- tomoshibi://<deployment>/?invite=T#/room and its kin, as the
+             iPhone, the Mac and Android register the scheme. -->
+        <uap:Extension Category="windows.protocol">
+          <uap:Protocol Name="tomoshibi">
+            <uap:DisplayName>Tomoshibi</uap:DisplayName>
+          </uap:Protocol>
+        </uap:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <Capability Name="internetClient" />
+    <rescap:Capability Name="runFullTrust" />
+    <DeviceCapability Name="microphone" />
+    <DeviceCapability Name="webcam" />
+  </Capabilities>
+</Package>
