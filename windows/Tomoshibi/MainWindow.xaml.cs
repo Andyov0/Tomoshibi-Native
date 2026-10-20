@@ -136,6 +136,30 @@ public sealed partial class MainWindow : Window
     [DllImport("user32.dll")]
     private static extern uint GetDpiForWindow(IntPtr window);
 
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr window);
+
+    /// <summary>
+    /// In front of whatever the person is using, restored if it was
+    /// minimised: for a link handed over by a later launch (a tomoshibi://
+    /// link clicked in a browser, the app started again from Start), which
+    /// is opened here. Activate alone restored the window behind the
+    /// browser and only flashed it in the taskbar, so the link seemed to do
+    /// nothing and was clicked again. Windows lets it come forward because
+    /// the launch that handed the link, which the person started, allowed it
+    /// (Program, AllowSetForegroundWindow).
+    /// </summary>
+    internal void ComeForward()
+    {
+        if (AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized } presenter) presenter.Restore();
+        Activate();
+        // Refused where nothing allowed it: the window is then restored
+        // behind and its taskbar button flashes, which is all Windows lets a
+        // process do uninvited.
+        var forward = SetForegroundWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));
+        Log.Line(forward ? "came forward" : "restored, but Windows kept another window in front");
+    }
+
     private int Scaled(int points)
     {
         var dpi = GetDpiForWindow(WinRT.Interop.WindowNative.GetWindowHandle(this));

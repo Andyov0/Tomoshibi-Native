@@ -57,6 +57,12 @@ internal static class Program
             var first = AppInstance.FindOrRegisterForKey(key);
             if (!first.IsCurrent && activated != null)
             {
+                // This launch was started by the person (a click on a link,
+                // Start), so it may put a window in front; the app it hands
+                // the link to may not, and its window stayed behind. The
+                // right is passed on before the link, as Windows asks of a
+                // process handing over to another.
+                AllowSetForegroundWindow(first.ProcessId);
                 // Redirected off this thread, which must not wait on itself
                 // (the documented pattern); then this process ends.
                 var done = new ManualResetEventSlim();
@@ -83,6 +89,9 @@ internal static class Program
         });
         return 0;
     }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool AllowSetForegroundWindow(uint process);
 
     /// <summary>One app per person, one per test store, and none for a test's throwaway launches.</summary>
     private static string? InstanceKey()

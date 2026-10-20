@@ -109,7 +109,7 @@ public partial class App : Application
         var ui = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         Program.Handed.Listen(link => ui.TryEnqueue(() =>
         {
-            _window?.Activate();
+            _window?.ComeForward();
             if (link == null) return;
             Log.Line("handed a link");
             _ = app.Open(link);
