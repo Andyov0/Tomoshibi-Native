@@ -342,9 +342,9 @@ internal sealed class AppModel : Observable
             {
                 Prepare(_launch.Prepare);
             }
-            else if (_launch.Open != null)
+            else if ((_launch.Open ?? OpenedWith) is { } link)
             {
-                await Open(_launch.Open);
+                await Open(link);
             }
             else if (_launch.Ended != null)
             {
@@ -361,7 +361,11 @@ internal sealed class AppModel : Observable
             return;
         }
         await Connect();
+        if (OpenedWith is { } opened) await Open(opened);
     }
+
+    /// <summary>The link the app was launched with (Program.OpenedWith): opened once the deployment has answered.</summary>
+    public string? OpenedWith { get; set; }
 
     public async Task Connect()
     {
@@ -447,10 +451,10 @@ internal sealed class AppModel : Observable
     /// (<c>https://&lt;deployment&gt;/?invite=T#/room</c> and its kin). Not
     /// over a call: the call stays, and says how to get to the link.
     ///
-    /// TODO(windows 2b): the system hands the app no links yet; tomoshibi://
-    /// and the deployment's https links need a packaged app with a protocol
-    /// and an app-link registration (MSIX). A link pasted into the sign-in
-    /// screen or the join bar comes here, as does TOMOSHIBI_OPEN.
+    /// The packaged app is handed <c>tomoshibi://</c> links by the system (its
+    /// manifest registers the scheme), at launch or while it runs
+    /// (Program); a link pasted into the sign-in screen or the join bar comes
+    /// here too, as does TOMOSHIBI_OPEN.
     /// </summary>
     public async Task Open(string link)
     {

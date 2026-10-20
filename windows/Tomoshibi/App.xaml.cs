@@ -20,7 +20,7 @@ public partial class App : Application
 
     protected override void OnLaunched(LaunchActivatedEventArgs args)
     {
-        var launch = Launch.FromEnvironment();
+        var launch = Program.Launch;
         Log.Open(launch.LogFile);
         Log.Line($"Tomoshibi for Windows, core {uniffi.tomoshibi_core.TomoshibiCoreMethods.CoreVersion()}, {System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture}");
         // Before the first deployment is made, which reads it then.
@@ -55,9 +55,20 @@ public partial class App : Application
         Hearing.Shared = new Hearing(kept);
 
         var media = new CallMedia(launch);
-        var app = new AppModel(launch, media, kept, secrets);
+        var app = new AppModel(launch, media, kept, secrets) { OpenedWith = Program.OpenedWith };
+        if (Program.OpenedWith != null) Log.Line("opened with a link");
         _window = new MainWindow(app);
         _window.Activate();
+        // A link handed over by a later launch: the window comes forward and
+        // the link is opened here, on the UI thread.
+        var ui = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        Program.Handed += link => ui.TryEnqueue(() =>
+        {
+            _window?.Activate();
+            if (link == null) return;
+            Log.Line("handed a link");
+            _ = app.Open(link);
+        });
         _ = app.Start();
     }
 

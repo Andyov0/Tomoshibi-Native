@@ -113,9 +113,26 @@ timer, since Windows' own sleep rounds up to its 15.6 ms tick. The holder
 hears it through the call's speakers behind a volume of their own; whoever
 listens sets it in the sound panel's music row, which the panel shares.
 
+A link the app is opened with (an invitation, `?invite=<token>#/<room>`, or
+a meeting's `#/<room>`, in the deployment's own form or as `tomoshibi://`) is
+read in `Program.Main`, before XAML, and opened once the deployment has
+answered, as the other apps open one. One app runs at a time for a person
+(`AppInstance` keyed "tomoshibi"): a second launch with a link hands it to
+the first, whose window comes forward and opens it, and ends. A test's
+launches each run on their own unless they share a store (`TOMOSHIBI_KEEP`),
+which is how the hand-over is tested. `tomoshibi://` means `https://` on the
+same host, as on Apple and Android, so against the kit's `http://` deployment
+such a link is refused as being for another server; the deployment's own
+`http://` form is what the kit opens end to end. The system hands
+`tomoshibi://` to the packaged app only (its manifest registers the scheme);
+an unpackaged build reads a link from its command line. Windows' counterpart
+of Android's verified app links and Apple's associated domains (an app URI
+handler, which needs a `windows-app-web-link` file served by the site) is not
+something the deployment serves, so an `https://` link opens in the browser,
+whose page offers the app.
+
 Not in this phase, and left as marked stubs rather than as controls that do
-nothing: background blur, links handed over by the system (`tomoshibi://`
-and app links), and MSIX.
+nothing: background blur and MSIX.
 
 ## The machine it is built on
 
