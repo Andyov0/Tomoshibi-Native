@@ -255,6 +255,9 @@ NordSecurity publishes one.
   `TOMOSHIBI_MUTE=speakers` opens the graph on the device with its output at
   nought, so that a test can change the speakers with nothing reaching them;
   the log then says which speakers play and how many quanta they rendered.
+  Speakers that stop under the call (unplugged, or the system's own changing
+  under a graph that does not follow) move the call to the system's, as the
+  web's SDK moves its output; the choice remembered is kept for the next call.
 - **Lossless sound** from others (the web's `lossless` data streams) comes
   from the core whole and is played by the app as a pulled sound: a cushion,
   a windowed-sinc resampler to the graph's rate and an eased gain
@@ -268,11 +271,30 @@ NordSecurity publishes one.
   sound or, on its own, as a track or as lossless data; in a test a generated
   chord (`Media\SoundCapture.cs`).
 - **Local video** goes in through `push_planes`: a generated picture
-  (`Media\Synthetic.cs`) or, with `TOMOSHIBI_SOURCE=devices`, the camera
-  through `Windows.Media.Capture` as NV12 (`Media\Devices.cs`).
+  (`Media\Synthetic.cs`) or the camera through `Windows.Media.Capture`
+  (`Media\Devices.cs`), opened at the format closest to what the web sends
+  from a computer, 1280x720 at thirty (share.rs `camera_capture`; the choice
+  in `Tomoshibi.Basics\Devices.cs`, `CameraFormats`), read as NV12 at the size
+  sent, which the frame reader scales to, and paced to thirty by Android's
+  rule (`FramePacer`). The track is published at the size the camera came
+  back at, as the web's encodings follow its capture's.
 - **Local sound** goes in through `push_pcm`: a generated 440 Hz tone at
-  -20 dBFS, or, with `TOMOSHIBI_SOURCE=devices`, the microphone through an
-  audio graph.
+  -20 dBFS, or the microphone through WASAPI (`Interop\WasapiCapture.cs`),
+  48 kHz mono in shared mode. A call's voice is a communications stream,
+  which is where Windows applies the endpoint's echo canceller, noise
+  suppression and gain control; original sound is raw where the microphone
+  offers it and ordinary where not (Android's VOICE_COMMUNICATION,
+  UNPROCESSED and MIC). The echo canceller is told which speakers the call
+  plays to (`IAcousticEchoCancellationControl`, Windows 11 22H2 and later),
+  and the log names the effects the stream runs (`IAudioEffectsManager`).
+- **Devices come and go** (`Media\DeviceList.cs`): Windows' lists are
+  watched, and the devices panel and the settings follow them. A camera or a
+  microphone unplugged under a call carries on, on the same track, on the
+  first camera still there or the system's microphone, as the web's SDK
+  restarts an ended track; with none left the call turns it off and says so
+  (`DeviceRules` in `Tomoshibi.Basics`). The settings' audio and video page
+  opens the camera and the microphone while it shows, for the picture and
+  the level, as Android's does.
 - **Background blur** finds the person with the web's own segmenter,
   MediaPipe's selfie model (`web/public/segment`), converted to ONNX by
   `Blur/convert.py` (one MediaPipe operator rewritten as TensorFlow Lite's
@@ -288,11 +310,17 @@ NordSecurity publishes one.
   capture thread in a release build in the VM. Applied before the frame is
   sent and before the picture of yourself is drawn, the join screen's
   included, as the web's preview is; the camera's frames go through it as
-  I420 (`Media\CameraBlur.cs`), the generated ones too.
+  I420 after they are paced to the rate sent (`Media\CameraBlur.cs`), and
+  a test's generated and made-up cameras too.
 
-Synthetic is the default in this phase, so that no launch can capture whoever
-sits at a machine whose devices are another's (a VM shares its host's). The
-device paths compile and are not yet checked on real hardware.
+Synthetic is the default for every test, so that no test can capture
+whoever sits at a machine whose devices are another's (a VM shares its
+host's); a person's own launch uses the real devices. The real camera and
+microphone paths are not yet checked on real hardware: the VM's only
+devices are its host's. What is checked is everything above them, with a
+test's made-up devices (`TOMOSHIBI_DEVICES`), each made-up camera a picture
+of its own hue and each microphone a tone of its own, so that the browser
+in the room says which one is being sent.
 
 ## Packaging
 
@@ -387,6 +415,7 @@ Read from the environment, the same names the Apple apps read:
 | `TOMOSHIBI_MUTE` | Plays nothing; only measures. Always set in tests. `=speakers` opens the speakers and plays silence to them. |
 | `TOMOSHIBI_MIC`, `TOMOSHIBI_CAMERA` | Joins with each published. |
 | `TOMOSHIBI_SOURCE=devices` | The real camera and microphone instead of the synthetic ones. |
+| `TOMOSHIBI_DEVICES=file` | Made-up devices, listed from the file and read again as it changes: a line each, `kind<tab>name[<tab>number]`, kinds `camera`, `microphone`, `speakers`; the number is a camera's hue in degrees or a microphone's tone in hertz. Always with the generated sources. |
 | `TOMOSHIBI_DEBUG_LOG=file` | Writes what the app does and, every two seconds, what it sent and received. |
 | `TOMOSHIBI_DEBUG_QUIT_AFTER=seconds` | Leaves and quits. |
 | `TOMOSHIBI_PREPARE=room` | To this room's join screen. |

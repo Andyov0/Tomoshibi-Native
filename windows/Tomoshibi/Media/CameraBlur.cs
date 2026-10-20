@@ -18,7 +18,7 @@ internal sealed partial class CameraFeed
     /// picture of yourself drawn from what was sent rather than from the
     /// camera, so that what a person sees of themselves is what the room sees.
     /// </summary>
-    private unsafe void Blurred(SoftwareBitmap bitmap, BackgroundBlur blur, TimeSpan? time)
+    private unsafe void Blurred(SoftwareBitmap bitmap, BackgroundBlur blur, long micros)
     {
         using var nv12 = bitmap.BitmapPixelFormat == BitmapPixelFormat.Nv12 ? null : SoftwareBitmap.Convert(bitmap, BitmapPixelFormat.Nv12);
         var picture = nv12 ?? bitmap;
@@ -59,7 +59,6 @@ internal sealed partial class CameraFeed
         blur.Process(_y, _u, _v, width, height);
         if (Input is { } input)
         {
-            var micros = (long)(time ?? TimeSpan.Zero).TotalMicroseconds;
             input.PushPlanes(_y, _u, _v, (uint)width, (uint)cw, 1, (uint)width, (uint)height, micros, 0);
             Interlocked.Increment(ref FramesPushed);
         }

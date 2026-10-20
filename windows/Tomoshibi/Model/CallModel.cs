@@ -323,7 +323,7 @@ internal sealed class CallModel : Observable, IDisposable
     }
 
     /// <summary>How loud this participant's own microphone has been, the generated tone's in a test.</summary>
-    public double MicrophoneLevel => _microphoneFeed?.Meter.Rms ?? (_microphone != null ? _media.SyntheticSource.Meter.Rms : 0);
+    public double MicrophoneLevel => _microphone != null ? _media.MicrophoneRms : 0;
 
     /// <summary>The speakers the call plays through, for a feature that plays something of its own there (the song desk's monitor).</summary>
     public Playback? Speakers => _playback;
@@ -364,16 +364,71 @@ internal sealed class CallModel : Observable, IDisposable
     }
 
     /// <summary>
-    /// Plays the call through these speakers from now on (the devices panel):
-    /// the call carries on there at once. Remembered once it took; one that
-    /// would not open says nothing, as on the web, and the sound stays where
-    /// it was.
+    /// Plays the call through these speakers from now on (the devices panel,
+    /// the settings): the call carries on there at once. Remembered once it
+    /// took; one that would not open says nothing, as on the web, and the
+    /// sound stays where it was.
     /// </summary>
     public async Task<bool> UseSpeakers(string? id)
     {
-        if (_playback != null && !await _playback.UseOutput(id)) return false;
+        if (!await PlayTo(id)) return false;
         _memory.Remember(DeviceMemory.Kind.Speakers, id);
         return true;
+    }
+
+    /// <summary>
+    /// The speakers the call plays to: a device, or null for the system's.
+    /// Kept in a launch that plays nothing too (TOMOSHIBI_MUTE), so that a
+    /// test can see the call follow a choice and an unplugging without
+    /// anything reaching a speaker.
+    /// </summary>
+    public string? SpeakersInUse => _playback?.Device ?? _speakers;
+    private string? _speakers;
+
+    private async Task<bool> PlayTo(string? id, bool again = false)
+    {
+        if (_playback != null && !await _playback.UseOutput(id, again)) return false;
+        _speakers = id;
+        _media.SpeakersDevice = id;
+        if (_playback == null) Log.Line($"playing to {(id == null ? "the system's speakers" : id)} (muted)");
+        return true;
+    }
+
+    /// <summary>
+    /// The speakers playing went away: the call goes on through the system's,
+    /// as the web's SDK moves its output to the first device listed
+    /// (livekit-client <c>selectDefaultDevices</c>). The choice remembered is
+    /// kept, for the next call once they are plugged in again.
+    /// </summary>
+    private async Task FollowSpeakers(bool failed = false)
+    {
+        if (_over_) return;
+        var using_ = SpeakersInUse;
+        var present = (await _media.Devices.List(DeviceKind.Speakers)).Select(d => d.Id).ToList();
+        var (move, _) = DeviceRules.Follow(using_, present, systemHasOne: true);
+        if (move == DeviceRules.Move.Switch || (failed && present.Count > 0))
+        {
+            Log.Line($"the speakers in use went away; on to the system's");
+            if (!await PlayTo(null, again: failed)) Log.Line("the system's speakers would not open either");
+        }
+        Notify();
+    }
+
+    private void DevicesChanged() => _ = FollowSpeakers();
+
+    private void CameraLost()
+    {
+        if (_camera == null) return;
+        _ = SetCamera(false);
+        DeviceFailed(camera: true);
+    }
+
+    private void MicrophoneLost()
+    {
+        _microphone?.SetMuted(true);
+        MicrophoneOn = false;
+        Notify();
+        DeviceFailed(camera: false);
     }
 
     /// <summary>Whether the app's window is out of sight: readings taken then are not evidence of a freeze (the web skips a hidden tab).</summary>
@@ -381,7 +436,6 @@ internal sealed class CallModel : Observable, IDisposable
 
     private AudioInput? _microphone;
     private VideoInput? _camera;
-    private MicrophoneFeed? _microphoneFeed;
     private bool _microphoneStarting;
     private bool _cameraStarting;
     /// <summary>Left, or ended under it: a start that woke after the call had gone would open a device with nobody to send to.</summary>
@@ -406,6 +460,14 @@ internal sealed class CallModel : Observable, IDisposable
         Lossless = new LosslessPlayback(playback);
         Sharing = media.Sharing;
         Sharing.Keep(memory.Defaults);
+        // To the speakers last picked where they open, otherwise the system's
+        // (Playback.Open), which a muted launch keeps the same account of.
+        _speakers = playback?.Device ?? memory.Choice(DeviceMemory.Kind.Speakers);
+        media.SpeakersDevice = playback?.Device;
+        media.CameraLost += CameraLost;
+        media.MicrophoneLost += MicrophoneLost;
+        media.DevicesChanged += DevicesChanged;
+        if (playback != null) playback.Lost += () => _ui.TryEnqueue(() => _ = FollowSpeakers(failed: true));
     }
 
     private sealed class Bridge(Action<CallEvent> heard) : CallObserver
@@ -446,6 +508,9 @@ internal sealed class CallModel : Observable, IDisposable
         }
         // Applied on the UI thread after the events queued above.
         model._ui.TryEnqueue(() => model._settled = true);
+        // A muted launch's speakers remembered but not plugged in are the
+        // system's, as Playback.Open makes them for a launch that plays.
+        model._ui.TryEnqueue(() => _ = model.FollowSpeakers());
         // It has to play from the first call: the core asks for a stream
         // whenever a browser offers one and holds the sound's Opus track back
         // at the server meanwhile, sink or no sink.
@@ -655,18 +720,13 @@ internal sealed class CallModel : Observable, IDisposable
                 {
                     var input = await Core.PublishAudio(new SoundKind.Voice(_memory.OriginalSound));
                     _microphone = input;
-                    Log.Line($"published microphone {input.Sid()} ({(_media.RealDevices ? "device" : "synthetic")})");
+                    Log.Line($"published microphone {input.Sid()} ({(_media.RealDevices ? "device" : _media.Scripted ? "scripted" : "synthetic")})");
                     if (_over_) return;
-                    if (_media.RealDevices)
-                    {
-                        _microphoneFeed = await MicrophoneFeed.Start(input, _media.MicrophoneId);
-                        if (_microphoneFeed == null) throw new InvalidOperationException("no microphone");
-                    }
-                    else
-                    {
-                        _media.SyntheticSource.Audio = input;
-                    }
                 }
+                // Every time, not only with the track: a microphone unplugged
+                // under the call left the track muted and nothing open, and
+                // turning it on again unmuted a track that sent nothing.
+                if (!await _media.StartMicrophone(_microphone, _memory.OriginalSound)) throw new InvalidOperationException("no microphone");
                 _microphone.SetMuted(false);
                 Dismiss("device.microphone");
             }
@@ -702,10 +762,22 @@ internal sealed class CallModel : Observable, IDisposable
             try
             {
                 if (_over_) return;
-                var (width, height) = _media.CameraSize;
-                var input = await Core.PublishVideo(new VideoKind.Camera(), width, height);
+                // Opened first, so the track is published at the size the
+                // camera sends (the web's encodings follow the capture's size).
+                if (await _media.PrepareCamera() is not { } size) throw new InvalidOperationException("no camera");
+                VideoInput input;
+                try
+                {
+                    input = await Core.PublishVideo(new VideoKind.Camera(), size.Width, size.Height);
+                }
+                catch (Exception)
+                {
+                    await _media.Unpublish();
+                    throw;
+                }
                 if (_over_)
                 {
+                    await _media.Unpublish();
                     await Quietly(input.Unpublish);
                     return;
                 }
@@ -754,28 +826,33 @@ internal sealed class CallModel : Observable, IDisposable
         }
     }
 
-    /// <summary>Another microphone, at once where it is on: its feed is started on the new device for the same track. Remembered once it took.</summary>
+    /// <summary>
+    /// Another microphone, at once where it is on, for the same track; with
+    /// it off, the one it comes on with. Remembered once it took; one that
+    /// will not open says so and throws, so that the list puts its tick back
+    /// (DeviceMenu.tsx <c>select</c>), and the call keeps the one it had.
+    /// </summary>
     public async Task UseMicrophone(string? id)
     {
-        _media.MicrophoneId = id;
-        if (_media.RealDevices && _microphone is { } input && _microphoneFeed != null)
+        if (!await _media.UseMicrophone(id))
         {
-            _microphoneFeed.Dispose();
-            _microphoneFeed = await MicrophoneFeed.Start(input, id);
-            if (_microphoneFeed == null)
-            {
-                DeviceFailed(camera: false);
-                return;
-            }
+            DeviceFailed(camera: false);
+            throw new InvalidOperationException("the microphone picked would not open");
         }
         _memory.Remember(DeviceMemory.Kind.Microphone, id);
+        Notify();
     }
 
-    /// <summary>Another camera, the same track (CallModel.kt <c>useCamera</c>); with the camera off, the one it turns on with. Remembered.</summary>
+    /// <summary>Another camera, the same track (CallModel.kt <c>useCamera</c>); with the camera off, the one it turns on with. Remembered once it took.</summary>
     public async Task UseCamera(string? id)
     {
-        await _media.UseCamera(id);
+        if (!await _media.UseCamera(id))
+        {
+            DeviceFailed(camera: true);
+            throw new InvalidOperationException("the camera picked would not open");
+        }
         _memory.Remember(DeviceMemory.Kind.Camera, id);
+        Notify();
     }
 
     /// <summary>
@@ -790,15 +867,7 @@ internal sealed class CallModel : Observable, IDisposable
         if (_microphone is not { } old) return;
         var fresh = await Core.PublishAudio(new SoundKind.Voice(original));
         _microphone = fresh;
-        if (_media.RealDevices)
-        {
-            _microphoneFeed?.Dispose();
-            _microphoneFeed = await MicrophoneFeed.Start(fresh, _media.MicrophoneId);
-        }
-        else
-        {
-            _media.SyntheticSource.Audio = fresh;
-        }
+        if (!await _media.StartMicrophone(fresh, original)) DeviceFailed(camera: false);
         fresh.SetMuted(!MicrophoneOn);
         await Quietly(old.Unpublish);
         Notify();
@@ -972,10 +1041,8 @@ internal sealed class CallModel : Observable, IDisposable
     private void StopMedia()
     {
         Lossless.CloseAll();
-        if (!_media.RealDevices) _media.SyntheticSource.Audio = null;
+        _media.StopMicrophone();
         _ = _media.Unpublish();
-        _microphoneFeed?.Dispose();
-        _microphoneFeed = null;
         lock (_sounds)
         {
             foreach (var sound in _sounds.Values) sound.Dispose();
@@ -1163,7 +1230,7 @@ internal sealed class CallModel : Observable, IDisposable
     /// <summary>A line for the log: what has gone out, and every sound heard since the last reading.</summary>
     public string Reading()
     {
-        var sent = $"sent video {_media.FramesSent} frames, audio {_media.SyntheticSource.ChunksPushed + (_microphoneFeed?.ChunksPushed ?? 0)} chunks";
+        var sent = $"sent video {_media.FramesSent} frames, audio {_media.ChunksSent} chunks";
         List<string> heard;
         lock (_sounds)
         {
@@ -1179,6 +1246,9 @@ internal sealed class CallModel : Observable, IDisposable
 
     public void Dispose()
     {
+        _media.CameraLost -= CameraLost;
+        _media.MicrophoneLost -= MicrophoneLost;
+        _media.DevicesChanged -= DevicesChanged;
         StopMedia();
         _playback?.Dispose();
         _camera?.Dispose();

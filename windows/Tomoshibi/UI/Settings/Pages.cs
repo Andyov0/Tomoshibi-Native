@@ -8,6 +8,7 @@ using Tomoshibi.Media;
 using Tomoshibi.Model;
 using Tomoshibi.UI.Kit;
 using Tomoshibi.UI.Lobby;
+using Tomoshibi.UI.Room;
 using static Tomoshibi.Basics.Words;
 
 namespace Tomoshibi.UI.Settings;
@@ -252,88 +253,209 @@ internal static class General
 }
 
 /// <summary>
-/// Audio and video (settings/MediaSettings.kt): the picture of yourself, what
-/// starts on when you join, and which devices; the voice as it is.
+/// Audio and video (settings/MediaSettings.kt): the picture of yourself with
+/// how loudly the microphone hears you over its foot, what starts on when
+/// you join, and which devices; the voice as it is.
 ///
-/// TODO(windows 2b): the level meter under the picture needs the microphone
-/// opened while the settings show.
+/// The camera and the microphone are open while the page shows, and only
+/// then (CallMedia.StartCheck, Android's DeviceCheck): the web's join screen
+/// answers exactly those two questions about the two devices (PreJoin.tsx,
+/// MicLevel.tsx), and this is where they are chosen ahead of any call. A
+/// device picked is remembered at once and shown at once, and a call that
+/// is on moves to it (AppModel.ChooseDevice). The lists follow the devices
+/// as they come and go.
 /// </summary>
 internal static class MediaSettings
 {
     public static StackPanel Page(AppModel app)
     {
         var page = K.Column(22);
-        var preview = new Shared.CameraStage(app, 20);
-        var frame = new Grid { Children = { preview }, BorderBrush = Ink.White(0.08f), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(20) };
-        frame.SizeChanged += (_, e) => frame.Height = e.NewSize.Width * 9 / 16;
-        if (!app.StartWithCamera) frame.Children.Add(K.Symbol("video.fill", 28, Ink.Muted).Arrives());
-        page.Children.Add(frame);
+        page.Children.Add(new DeviceCheck(app));
 
         var microphone = Fields.Switch(app.StartWithMicrophone, on => app.StartWithMicrophone = on, T("Start with the microphone on"));
-        var camera = Fields.Switch(app.StartWithCamera, on =>
-        {
-            app.StartWithCamera = on;
-            preview.Update();
-        }, T("Start with the camera on"));
+        var camera = Fields.Switch(app.StartWithCamera, on => app.StartWithCamera = on, T("Start with the camera on"));
         var original = Fields.Switch(app.DeviceMemory.OriginalSound, on => app.DeviceMemory.OriginalSound = on, T("Original sound"));
         page.Children.Add(Rows.Section(T("When you join"), Rows.Card(
             Rows.Row(T("Start with the microphone on"), microphone, symbol: "mic.fill"),
             Rows.Row(T("Start with the camera on"), camera, symbol: "video.fill"),
             Rows.Row(T("Original sound"), original, T("No noise suppression or automatic volume. For headphones and music."), "waveform", last: true))));
 
-        var devices = K.Column(0);
-        var section = Rows.Section(T("Devices"), Rows.Card(devices), app.DeviceMemory.Choices().Count > 0 ? T("Calls start on the microphone, camera and speakers you last picked in one, while they are plugged in.") : null);
-        page.Children.Add(section);
-        _ = FillDevices(app, devices);
+        page.Children.Add(new DeviceChoices(app));
         return page;
     }
+}
 
-    private static async Task FillDevices(AppModel app, StackPanel devices)
+/// <summary>
+/// The camera as the room will see it, with how loudly the microphone hears
+/// you over its foot (MediaSettings.kt <c>DevicePreview</c>): open while the
+/// page shows, closed when it goes.
+/// </summary>
+internal sealed class DeviceCheck : Grid
+{
+    private readonly AppModel _app;
+    private readonly LevelMeter _meter = new(12);
+    private readonly Grid _symbol = new();
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _timer;
+    private bool _loud;
+
+    public DeviceCheck(AppModel app)
     {
-        var memory = app.DeviceMemory;
+        _app = app;
+        CornerRadius = new CornerRadius(20);
+        BorderBrush = Ink.White(0.08f);
+        BorderThickness = new Thickness(1);
+        // A camera-off tile's grey, as the call's framed preview is.
+        Background = Ink.Surface;
+        SizeChanged += (_, e) => Height = e.NewSize.Width * 9 / 16;
+        // Under the picture, showing until the camera's first frame covers it.
+        Children.Add(K.Symbol("video.fill", 28, Ink.Muted));
+        Children.Add(new SelfView(app.Media).Arrives(1f));
+        Paint(false);
+        var pill = K.Line(9, K.Fixed(_symbol), K.Fixed(K.Text(T("Hearing you"), 12, K.Medium, lines: 1).At(HorizontalAlignment.Left, VerticalAlignment.Center)), K.Fixed(_meter));
+        var glass = K.Glass(pill, 16, new Thickness(12, 0, 12, 0), shadow: false);
+        glass.Height = 32;
+        glass.HorizontalAlignment = HorizontalAlignment.Left;
+        glass.VerticalAlignment = VerticalAlignment.Bottom;
+        glass.Margin = new Thickness(12);
+        Children.Add(glass.Arrives(1f, fromY: 6));
+        _timer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
+        _timer.Interval = TimeSpan.FromMilliseconds(33);
+        _timer.Tick += (_, _) =>
+        {
+            var shown = VoiceCapture.Shown(_app.Media.MicrophoneRms);
+            _meter.Show(shown);
+            Paint(shown > 0.08);
+        };
+        Loaded += (_, _) =>
+        {
+            _ = _app.Media.StartCheck();
+            _timer.Start();
+        };
+        Unloaded += (_, _) =>
+        {
+            _timer.Stop();
+            _app.Media.StopCheck();
+        };
+    }
+
+    private bool? _painted;
+
+    private void Paint(bool loud)
+    {
+        _loud = loud;
+        if (_painted == loud) return;
+        _painted = loud;
+        _symbol.Children.Clear();
+        _symbol.Children.Add(K.Symbol("mic.fill", 12, _loud ? Ink.Tally : Ink.Foreground));
+    }
+}
+
+/// <summary>
+/// Which camera, microphone and speakers calls start on (MediaSettings.kt
+/// <c>DeviceChoice</c>): Windows' own drop-downs, the system's first ("Same
+/// as the system", kept as no choice at all), read again whenever a device
+/// comes or goes; and Forget, while anything is picked.
+/// </summary>
+internal sealed class DeviceChoices : StackPanel
+{
+    private readonly AppModel _app;
+    private readonly StackPanel _rows = K.Column(0);
+    private readonly StackPanel _forget = K.Column(0);
+    private readonly StackPanel _footer = K.Column(0);
+    private int _filling;
+
+    public DeviceChoices(AppModel app)
+    {
+        _app = app;
+        Spacing = 8;
+        Children.Add(K.Text(T("Devices"), 12, K.Semibold, Ink.Muted).Pad(6, 0, 0, 0));
+        Children.Add(K.Card(K.Column(0, _rows, _forget), 16));
+        Children.Add(_footer);
+        Loaded += (_, _) =>
+        {
+            _app.Media.DevicesChanged += Fill;
+            Fill();
+        };
+        Unloaded += (_, _) => _app.Media.DevicesChanged -= Fill;
+    }
+
+    private async void Fill()
+    {
+        var mine = ++_filling;
         var cameras = await DeviceList.Cameras();
         var microphones = await DeviceList.Microphones();
         var speakers = await DeviceList.Speakers();
-        devices.Children.Add(Rows.Row(T("Camera"), Pick(cameras, memory.Choice(DeviceMemory.Kind.Camera), id =>
-        {
-            memory.Remember(DeviceMemory.Kind.Camera, id);
-            app.Media.CameraId = id;
-        }), symbol: "video"));
+        if (mine != _filling) return;
+        var memory = _app.DeviceMemory;
+        var picked = memory.Choices().Count > 0;
+        _rows.Children.Clear();
+        _rows.Children.Add(AdaptiveRow(T("Camera"), "video", Pick(cameras, DeviceMemory.Kind.Camera)));
         // The web's "Blur my background" tick, kept as the web keeps it
         // (meet-live.blur) and applied at once: to the picture above, and to
-        // a call that is on.
-        devices.Children.Add(Rows.Row(T("Blur my background"), Fields.Switch(app.Blurring, app.SetBlur, T("Blur my background")), symbol: "person.and.background.dotted"));
-        devices.Children.Add(Rows.Row(T("Microphone"), Pick(microphones, memory.Choice(DeviceMemory.Kind.Microphone), id =>
-        {
-            memory.Remember(DeviceMemory.Kind.Microphone, id);
-            app.Media.MicrophoneId = id;
-        }), symbol: "mic", last: speakers.Count == 0));
-        if (speakers.Count > 0) devices.Children.Add(Rows.Row(T("Speakers"), Pick(speakers, memory.Choice(DeviceMemory.Kind.Speakers), id => memory.Remember(DeviceMemory.Kind.Speakers, id)), symbol: "speaker.wave.2", last: memory.Choices().Count == 0));
-        if (memory.Choices().Count > 0)
+        // a call that is on. Under the camera, as on Android (MediaSettings.kt).
+        _rows.Children.Add(Rows.Row(T("Blur my background"), Fields.Switch(_app.Blurring, _app.SetBlur, T("Blur my background")), symbol: "person.and.background.dotted"));
+        _rows.Children.Add(AdaptiveRow(T("Microphone"), "mic", Pick(microphones, DeviceMemory.Kind.Microphone), last: speakers.Count == 0 && !picked));
+        if (speakers.Count > 0) _rows.Children.Add(AdaptiveRow(T("Speakers"), "speaker.wave.2", Pick(speakers, DeviceMemory.Kind.Speakers), last: !picked));
+        Picked();
+    }
+
+    /// <summary>Forget and the footer, arriving with the first device picked and leaving when they are forgotten.</summary>
+    private void Picked()
+    {
+        var picked = _app.DeviceMemory.Choices().Count > 0;
+        if (picked && _forget.Children.Count == 0)
         {
             var forget = Tap.Words(T("Forget"), height: 30);
             forget.HorizontalAlignment = HorizontalAlignment.Right;
             forget.Margin = new Thickness(14, 9, 14, 9);
-            forget.Click += (_, _) =>
+            forget.Click += async (_, _) =>
             {
-                memory.ForgetChoices();
-                app.Media.CameraId = null;
-                app.Media.MicrophoneId = null;
-                forget.IsEnabled = false;
+                await _app.ForgetDevices();
+                Fill();
             };
-            devices.Children.Add(forget);
+            _forget.Children.Add(forget.Arrives(1f, fromY: -6));
+            _footer.Children.Add(K.Text(T("Calls start on the microphone, camera and speakers you last picked in one, while they are plugged in."), 11.5, ink: Ink.Muted).Pad(6, 0, 6, 0).Arrives(1f));
+        }
+        else if (!picked && _forget.Children.Count > 0)
+        {
+            _forget.Children.Clear();
+            _footer.Children.Clear();
         }
     }
 
-    /// <summary>Windows' own drop-down of the devices, the system's first ("Same as the system").</summary>
-    private static ComboBox Pick(IReadOnlyList<DeviceOption> options, string? chosen, Action<string?> pick)
+    /// <summary>
+    /// A row whose drop-down goes under its words where the two will not fit
+    /// side by side (Pieces.kt <c>AdaptiveRow</c>, Settings.swift's
+    /// <c>ViewThatFits</c>): on a phone's width "Microphone" beside a list
+    /// of device names was broken across two lines.
+    /// </summary>
+    private static StackPanel AdaptiveRow(string title, string symbol, ComboBox control, bool last = false)
+    {
+        var row = new AdaptiveRowPanel(Rows.Tile(symbol), K.Text(title, 13.5, lines: 1), control);
+        var column = K.Column(0, row);
+        if (!last) column.Children.Add(K.Rule(52));
+        return column;
+    }
+
+    /// <summary>
+    /// One kind's drop-down. A device remembered but not plugged in is shown
+    /// as the system's, which is what a call would start on (preferences.ts
+    /// <c>restorable</c>), and stays remembered for when it is.
+    /// </summary>
+    private ComboBox Pick(IReadOnlyList<DeviceOption> options, DeviceMemory.Kind kind)
     {
         var box = new ComboBox { MinWidth = 200, MaxWidth = 280 };
+        box.Named(T(kind switch { DeviceMemory.Kind.Camera => "Camera", DeviceMemory.Kind.Microphone => "Microphone", _ => "Speakers" }));
         box.Items.Add(T("Same as the system"));
         foreach (var option in options) box.Items.Add(option.Name);
-        var index = options.ToList().FindIndex(o => o.Id == chosen);
+        var index = options.ToList().FindIndex(o => o.Id == _app.DeviceMemory.Choice(kind));
         box.SelectedIndex = index < 0 ? 0 : index + 1;
-        box.SelectionChanged += (_, _) => pick(box.SelectedIndex <= 0 ? null : options[box.SelectedIndex - 1].Id);
+        box.SelectionChanged += async (_, _) =>
+        {
+            if (box.SelectedIndex < 0) return;
+            await _app.ChooseDevice(kind, box.SelectedIndex == 0 ? null : options[box.SelectedIndex - 1].Id);
+            Picked();
+        };
         return box;
     }
 }
@@ -634,5 +756,78 @@ internal static class About
         };
         column.Unloaded += (_, _) => updates.Changed -= Refresh;
         return column;
+    }
+}
+
+/// <summary>
+/// The tile, the words and the control of a settings row, side by side where
+/// they fit and the control under the words where they do not (Pieces.kt
+/// <c>AdaptiveRow</c>). Decided in the panel's own measure: deciding it in a
+/// SizeChanged handler measured the children again inside layout, and a
+/// phone's width threw "Layout cycle detected".
+/// </summary>
+internal sealed class AdaptiveRowPanel : Panel
+{
+    private const double PadX = 14, PadY = 9, Gap = 12, ControlGap = 22, LineGap = 8;
+    private readonly FrameworkElement _tile, _words, _control;
+    private bool _side = true;
+
+    public AdaptiveRowPanel(FrameworkElement tile, FrameworkElement words, FrameworkElement control)
+    {
+        _tile = tile;
+        _words = words;
+        _control = control;
+        Children.Add(tile);
+        Children.Add(words);
+        Children.Add(control);
+        MinHeight = 48;
+    }
+
+    protected override Windows.Foundation.Size MeasureOverride(Windows.Foundation.Size available)
+    {
+        var unbounded = new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity);
+        _tile.Measure(unbounded);
+        _words.Measure(unbounded);
+        _control.Measure(unbounded);
+        var inner = double.IsInfinity(available.Width) ? double.PositiveInfinity : Math.Max(0, available.Width - 2 * PadX);
+        var tile = _tile.DesiredSize;
+        var control = _control.DesiredSize;
+        _side = tile.Width + Gap + _words.DesiredSize.Width + ControlGap + control.Width <= inner;
+        double height;
+        if (_side)
+        {
+            height = Math.Max(Math.Max(tile.Height, _words.DesiredSize.Height), control.Height);
+        }
+        else
+        {
+            _words.Measure(new Windows.Foundation.Size(Math.Max(0, inner - tile.Width - Gap), double.PositiveInfinity));
+            height = Math.Max(tile.Height, _words.DesiredSize.Height) + LineGap + control.Height;
+        }
+        var width = double.IsInfinity(available.Width) ? tile.Width + Gap + _words.DesiredSize.Width + ControlGap + control.Width + 2 * PadX : available.Width;
+        return new Windows.Foundation.Size(width, Math.Max(MinHeight, height + 2 * PadY));
+    }
+
+    protected override Windows.Foundation.Size ArrangeOverride(Windows.Foundation.Size final)
+    {
+        var tile = _tile.DesiredSize;
+        var control = _control.DesiredSize;
+        var lead = PadX + tile.Width + Gap;
+        if (_side)
+        {
+            var middle = final.Height / 2;
+            _tile.Arrange(new Windows.Foundation.Rect(PadX, middle - tile.Height / 2, tile.Width, tile.Height));
+            var wordsWidth = Math.Max(0, final.Width - lead - ControlGap - control.Width - PadX);
+            _words.Arrange(new Windows.Foundation.Rect(lead, middle - _words.DesiredSize.Height / 2, wordsWidth, _words.DesiredSize.Height));
+            _control.Arrange(new Windows.Foundation.Rect(final.Width - PadX - control.Width, middle - control.Height / 2, control.Width, control.Height));
+        }
+        else
+        {
+            var top = Math.Max(tile.Height, _words.DesiredSize.Height);
+            _tile.Arrange(new Windows.Foundation.Rect(PadX, PadY + (top - tile.Height) / 2, tile.Width, tile.Height));
+            _words.Arrange(new Windows.Foundation.Rect(lead, PadY + (top - _words.DesiredSize.Height) / 2, Math.Max(0, final.Width - lead - PadX), _words.DesiredSize.Height));
+            var width = Math.Min(control.Width, Math.Max(0, final.Width - lead - PadX));
+            _control.Arrange(new Windows.Foundation.Rect(lead, PadY + top + LineGap, width, control.Height));
+        }
+        return final;
     }
 }

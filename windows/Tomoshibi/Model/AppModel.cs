@@ -88,7 +88,10 @@ internal sealed class AppModel : Observable
         // A relay the person picked on their own deployment means nothing on
         // a test's.
         _relayChoice = Rehearsal ? null : _defaults.String(RelayKey);
-        DeviceMemory = new DeviceMemory(Rehearsal ? null : _defaults);
+        // A rehearsal's own store (TOMOSHIBI_KEEP) keeps the devices picked,
+        // so that a test can see the next launch start on them; one without
+        // keeps them only in memory, as everything else.
+        DeviceMemory = new DeviceMemory(Rehearsal && _launch.KeepIn == null ? null : _defaults);
         var joining = DeviceMemory.JoiningChoice;
         _startWithMicrophone = joining.Microphone;
         _startWithCamera = joining.Camera;
@@ -312,6 +315,48 @@ internal sealed class AppModel : Observable
     }
 
     private void RememberDevices() => DeviceMemory.Remember(new DeviceMemory.Joining(StartWithCamera, StartWithMicrophone));
+
+    /// <summary>
+    /// A device picked in the settings (MediaSettings.kt <c>DeviceChoice</c>):
+    /// remembered at once, as the page's choice is a preference rather than
+    /// a switch, and taken at once by whatever is using that kind of device:
+    /// the picture and the meter on the page, and a call that is on, which
+    /// moves to it (or back to the system's, for null) as it would from its
+    /// own devices panel.
+    /// </summary>
+    public async Task ChooseDevice(DeviceMemory.Kind kind, string? id)
+    {
+        DeviceMemory.Remember(kind, id);
+        try
+        {
+            switch (kind)
+            {
+                case DeviceMemory.Kind.Camera:
+                    if (Call is { } withCamera) await withCamera.UseCamera(id);
+                    else await _media.UseCamera(id);
+                    break;
+                case DeviceMemory.Kind.Microphone:
+                    if (Call is { } withMicrophone) await withMicrophone.UseMicrophone(id);
+                    else await _media.CheckMicrophone(id);
+                    break;
+                default:
+                    if (Call is { } withSpeakers) await withSpeakers.UseSpeakers(id);
+                    break;
+            }
+        }
+        catch (Exception fault)
+        {
+            // The call has said so; the choice stays for the next one.
+            Log.Line($"{kind} not taken now: {fault.Message}");
+        }
+    }
+
+    /// <summary>The devices picked are forgotten (the settings' Forget): from now on, the system's.</summary>
+    public async Task ForgetDevices()
+    {
+        foreach (var kind in Enum.GetValues<DeviceMemory.Kind>()) await ChooseDevice(kind, null);
+        DeviceMemory.ForgetChoices();
+    }
 
     public string? Invite { get; private set; }
     public InviteInfo? Invitation { get; private set; }

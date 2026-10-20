@@ -91,6 +91,25 @@ internal sealed class Playback : IDisposable
     {
         _graph = graph;
         _silent = silent;
+        Watch(graph);
+    }
+
+    /// <summary>
+    /// The speakers stopped under the call: unplugged, turned off, or, for
+    /// the system's own, the system choosing others, which a graph does not
+    /// follow by itself. Told once a graph, on an audio thread; the call
+    /// moves to the system's speakers (CallModel.FollowSpeakers).
+    /// </summary>
+    public event Action? Lost;
+
+    private void Watch(Graph graph)
+    {
+        graph.Audio.UnrecoverableErrorOccurred += (_, args) =>
+        {
+            if (graph != _graph) return;
+            Log.Line($"the speakers stopped: {args.Error}");
+            Lost?.Invoke();
+        };
     }
 
     /// <summary>The speakers it plays to: the system's own where none was picked or the one picked is gone.</summary>
@@ -153,9 +172,11 @@ internal sealed class Playback : IDisposable
     /// the sound stays where it was, as the web's does (preferences.ts
     /// <c>setSinkId</c> failing).
     /// </summary>
-    public async Task<bool> UseOutput(string? device)
+    public async Task<bool> UseOutput(string? device, bool again = false)
     {
-        if (device == _graph.Device) return true;
+        // Again: the same choice on a graph that stopped (Lost), which has
+        // to be made anew to play at all.
+        if (device == _graph.Device && !again) return true;
         var fresh = await Make(device, _silent);
         if (fresh == null) return false;
         Graph old;
@@ -170,6 +191,7 @@ internal sealed class Playback : IDisposable
             _graph = fresh;
             foreach (var sound in _pulled.Values) Connect(fresh, sound);
         }
+        Watch(fresh);
         // After the new graph has taken over, so that nothing played between
         // the two is lost to a graph already stopped.
         lock (_gate) old.Dispose();

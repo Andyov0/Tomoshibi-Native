@@ -25,7 +25,24 @@ internal sealed class Synthetic : IDisposable
     /// <summary>Ten milliseconds, the core's audio frame.</summary>
     private const int Chunk = Rate / 100;
     /// <summary>A frequency a spectrum finds at once, and nobody's voice.</summary>
-    private const double Tone = 440.0;
+    public const double Tone = 440.0;
+
+    /// <summary>
+    /// The tone's frequency: a test's made-up microphones each have their
+    /// own (ScriptedDevices), so that a browser hearing the call can tell
+    /// which microphone is being sent.
+    /// </summary>
+    public volatile float ToneHz = (float)Tone;
+
+    /// <summary>
+    /// The ground's hue in degrees, held still, or turning when NaN: a test's
+    /// made-up cameras each have their own (ScriptedDevices), so that a
+    /// browser seeing the call can tell which camera is being sent.
+    /// </summary>
+    public volatile float Hue = float.NaN;
+
+    /// <summary>Whether the tone is measured though it goes nowhere: the settings' microphone check.</summary>
+    public volatile bool Metering;
 
     private readonly Thread _thread;
     private volatile bool _stopped;
@@ -117,18 +134,21 @@ internal sealed class Synthetic : IDisposable
                 // than sending less than real time.
                 for (; chunks * 10 <= now; chunks++)
                 {
-                    if (Audio is not { } audio) continue;
+                    var audio = Audio;
+                    if (audio == null && !Metering) continue;
+                    var tone = ToneHz;
                     for (var i = 0; i < Chunk; i++)
                     {
                         // A tenth of full scale: -20 dBFS.
                         var sample = (short)(Math.Sin(phase) * 3277);
-                        phase += 2 * Math.PI * Tone / Rate;
+                        phase += 2 * Math.PI * tone / Rate;
                         pcm[2 * i] = (byte)sample;
                         pcm[2 * i + 1] = (byte)(sample >> 8);
                     }
                     phase %= 2 * Math.PI;
-                    audio.PushPcm(pcm);
                     Meter.Add(pcm);
+                    if (audio == null) continue;
+                    audio.PushPcm(pcm);
                     Interlocked.Increment(ref ChunksPushed);
                 }
                 if (frames * 1000.0 / FramesPerSecond <= now)
@@ -144,7 +164,7 @@ internal sealed class Synthetic : IDisposable
                     var fromFrame = blur != null || _person != null;
                     if (Video != null || (previewing && fromFrame))
                     {
-                        Paint(y, u, v, frames);
+                        Paint(y, u, v, frames, Hue);
                         LayPicture(y, u, v, frames);
                         blur?.Process(y, u, v, (int)Width, (int)Height);
                         if (Video is { } video)
@@ -156,7 +176,7 @@ internal sealed class Synthetic : IDisposable
                     if (previewing && Previewed is { } previewed)
                     {
                         if (fromFrame) Planes.ToBgra(y, u, v, (int)Width, (int)Height, (int)(Width / PreviewWidth), preview);
-                        else PaintPreview(preview, frames);
+                        else PaintPreview(preview, frames, Hue);
                         previewed(preview, PreviewWidth, PreviewHeight);
                     }
                     frames++;
@@ -176,7 +196,7 @@ internal sealed class Synthetic : IDisposable
     /// crosses it every four seconds, on a ground whose hue turns: anything
     /// that freezes or tears shows at once.
     /// </summary>
-    private static void Paint(byte[] y, byte[] u, byte[] v, long frame)
+    private static void Paint(byte[] y, byte[] u, byte[] v, long frame, float hue)
     {
         var bar = (int)(frame * Width / (FramesPerSecond * 4) % Width);
         for (var row = 0; row < Height; row++)
@@ -185,7 +205,7 @@ internal sealed class Synthetic : IDisposable
             line.Fill((byte)(48 + (row + frame * 2) % 160));
             line.Slice(bar, Math.Min(96, (int)Width - bar)).Fill(235);
         }
-        var turn = frame * 2 * Math.PI / (FramesPerSecond * 10);
+        var turn = Turn(frame, hue);
         u.AsSpan().Fill((byte)(128 + 60 * Math.Cos(turn)));
         v.AsSpan().Fill((byte)(128 + 60 * Math.Sin(turn)));
     }
@@ -209,9 +229,9 @@ internal sealed class Synthetic : IDisposable
     /// in colour: the bands are the luma, the ground's hue the chroma, which
     /// is uniform, so each row is one colour and the bar a brighter one.
     /// </summary>
-    private static void PaintPreview(byte[] bgra, long frame)
+    private static void PaintPreview(byte[] bgra, long frame, float hue)
     {
-        var turn = frame * 2 * Math.PI / (FramesPerSecond * 10);
+        var turn = Turn(frame, hue);
         var cb = 60 * Math.Cos(turn);
         var cr = 60 * Math.Sin(turn);
         var bar = (int)(frame * Width / (FramesPerSecond * 4) % Width) / 4;
@@ -232,6 +252,10 @@ internal sealed class Synthetic : IDisposable
             }
         }
     }
+
+    /// <summary>The ground's hue as an angle in the chroma plane: turning once every ten seconds, or held at a made-up camera's own.</summary>
+    private static double Turn(long frame, float hue) =>
+        float.IsNaN(hue) ? frame * 2 * Math.PI / (FramesPerSecond * 10) : hue * Math.PI / 180;
 
     /// <summary>BT.601 from a luma and two chroma offsets about 128.</summary>
     private static (byte R, byte G, byte B) Rgb(double y, double cb, double cr)
