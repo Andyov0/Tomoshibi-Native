@@ -2096,6 +2096,10 @@ private struct AboutSettings: View {
                 SettingsRow(title: t("Version"), symbol: "app.badge") {
                     Text(version).font(.system(size: 12.5, design: .monospaced)).foregroundStyle(Theme.muted)
                 }
+                // Only where the app looks for updates at all: the Mac, and
+                // not a debug build started by hand, which would ask the
+                // real deployment.
+                if let updates = app.updates { UpdateRow(updates: updates) }
                 SettingsRow(title: t("Media core"), symbol: "cpu", last: app.info == nil) {
                     Text(coreVersion()).font(.system(size: 12.5, design: .monospaced)).foregroundStyle(Theme.muted)
                 }
@@ -2143,6 +2147,85 @@ private struct AboutSettings: View {
         return "\(short) (\(build))"
     }
 
+}
+
+/// Where the app's updates stand, and the check somebody can ask for
+/// (About.kt `UpdateRow`): the version on offer with "Update", a download's
+/// progress with "Cancel", and the answer to a check, which says so even when
+/// there is nothing newer. What it says changes with a fade.
+private struct UpdateRow: View {
+    let updates: Updates
+
+    var body: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .frame(width: 26, height: 26)
+                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.10)))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(t("Updates")).font(.system(size: 13.5))
+                    if let line {
+                        Text(line)
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(problem ? Theme.danger : Theme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .id(line)
+                            .transition(.asymmetric(insertion: .opacity.animation(Theme.settle), removal: .opacity.animation(Theme.leave)))
+                    }
+                }
+                .animation(Theme.settle, value: line)
+                Spacer(minLength: 10)
+                action
+                    .transition(.asymmetric(insertion: .opacity.animation(Theme.settle), removal: .opacity.animation(Theme.leave)))
+            }
+            .padding(.horizontal, 14).padding(.vertical, 9)
+            .frame(minHeight: 48)
+            Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1).padding(.leading, 52)
+        }
+        .accessibilityIdentifier("settings.updates")
+    }
+
+    private var problem: Bool {
+        if case .offered(_, problem: .some) = updates.step { return true }
+        return false
+    }
+
+    private var line: String? {
+        switch updates.step {
+        case let .downloading(_, received, total), let .held(_, received, total):
+            return t("{received} of {total}", ["received": megabytes(received), "total": megabytes(total)])
+        case let .installing(offer):
+            return t("Installing Tomoshibi {version}", ["version": offer.version])
+        case let .misplaced(_, place):
+            return UpdateBanner.explain(place)
+        case let .offered(offer, problem):
+            return problem ?? t("Version {version} is available.", ["version": offer.version])
+        case .none:
+            switch updates.said {
+            case .checking: return t("Checking for updates…")
+            case .current: return t("You have the latest version.")
+            case .failed: return t("Could not check for updates. Try again later.")
+            case nil: return nil
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var action: some View {
+        switch updates.step {
+        case .offered:
+            PillButton(title: t("Update"), role: .prominent) { updates.accept() }
+                .accessibilityIdentifier("settings.update")
+        case .downloading:
+            PillButton(title: t("Cancel")) { updates.cancel() }
+                .accessibilityIdentifier("settings.cancelUpdate")
+        default:
+            PillButton(title: t("Check for updates"), busy: updates.said == .checking) { updates.checkNow() }
+                .disabled(updates.step != .none || updates.said == .checking)
+                .accessibilityIdentifier("settings.checkUpdates")
+        }
+    }
 }
 
 // MARK: - The Mac's window

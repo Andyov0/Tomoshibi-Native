@@ -36,7 +36,15 @@ public final class AppModel {
         case lost
     }
 
-    public private(set) var screen: Screen = .starting
+    public private(set) var screen: Screen = .starting {
+        didSet { updates?.lobby(screen == .lobby) }
+    }
+    /// The app's own updates (Updates), told of every change of screen,
+    /// since the lobby is the only place one is shown or worked on. On the
+    /// Mac only: the iPhone is updated by TestFlight and the App Store. None
+    /// in a debug build started by hand, which has no test deployment to ask
+    /// and would ask the real one.
+    public private(set) var updates: Updates?
     public private(set) var deployment: Deployment?
     public private(set) var info: DeploymentInfo?
     public private(set) var account: Account?
@@ -195,6 +203,19 @@ public final class AppModel {
         // next time it was opened by hand.
         Appearance.shared.keeps = !rehearsal
         Localization.shared.keeps = !rehearsal
+        #if os(macOS)
+        // Asked of the deployment the app talks to: the test's in a
+        // rehearsal, and in a release build home, the only one its core will
+        // speak to.
+        #if DEBUG
+        let base = rehearsal ? ProcessInfo.processInfo.environment["TOMOSHIBI_BASE"] : nil
+        #else
+        let base: String? = Self.home
+        #endif
+        if let base {
+            updates = Updates(source: CoreUpdateSource(base: base), installer: MacInstaller(), running: ClientDescription.version)
+        }
+        #endif
     }
 
     private var passphraseKey: String { "passphrase:" + (deployment?.baseUrl() ?? serverAddress) }
@@ -241,6 +262,7 @@ public final class AppModel {
     public func start() async {
         guard !started else { return }
         started = true
+        updates?.start()
         let environment = ProcessInfo.processInfo.environment
         #if DEBUG
         if rehearsal { AppDebug.start(self) }
