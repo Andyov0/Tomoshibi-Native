@@ -329,6 +329,70 @@ final class UpdatesTests: XCTestCase {
         updates.stop()
     }
 
+    /// The Mac's start and join sheet: the screen stays the lobby's until
+    /// the call lands, and an install that reached its swap while the join
+    /// was out replaced the app under the call being entered.
+    func testAJoinPressedInTheLobbyGivesUpTheInstallBeforeItLands() async {
+        let updates = await offered()
+        installer.holds = true
+        updates.accept()
+        await settle()
+        source.transfers[0].finish()
+        await settle()
+        XCTAssertEqual(updates.step, .installing(offer("0.1.0.8")))
+
+        // Start pressed; the screen has not changed.
+        updates.joining(true)
+        await settle()
+        XCTAssertEqual(installer.stopped, 1, "an install went on under a join from the lobby")
+        XCTAssertEqual(updates.step, .offered(offer("0.1.0.8")))
+        XCTAssertFalse(updates.shown)
+        updates.accept()
+        XCTAssertEqual(installer.installs.count, 1, "installed while a join was out")
+
+        // Refused at the door: back in the lobby, and Update installs the
+        // build kept.
+        updates.joining(false)
+        XCTAssertTrue(updates.shown)
+        installer.holds = false
+        updates.accept()
+        await settle()
+        XCTAssertEqual(source.transfers.count, 1, "downloaded again though it was here")
+        XCTAssertEqual(installer.installs.count, 2)
+        updates.stop()
+    }
+
+    func testADownloadIsHeldWhileAJoinFromTheLobbyIsOutAndGoesOnWhenItFails() async {
+        let updates = await offered()
+        updates.accept()
+        await settle()
+        updates.joining(true)
+        await settle()
+        XCTAssertTrue(source.transfers[0].cancelled, "a download went on under a join from the lobby")
+        XCTAssertEqual(updates.step, .held(offer("0.1.0.8"), received: 0, total: 30_000_000))
+
+        // The join lands: the screen changes, then the join is over, and
+        // nothing starts again in between.
+        updates.lobby(false)
+        updates.joining(false)
+        await settle()
+        XCTAssertEqual(source.transfers.count, 1, "the download started again under the call")
+
+        // The call ends: back in the lobby, the download carries on.
+        updates.lobby(true)
+        await settle()
+        XCTAssertEqual(source.transfers.count, 2, "the download did not carry on in the lobby")
+
+        // A join that is refused gives the lobby back as well.
+        updates.joining(true)
+        await settle()
+        updates.joining(false)
+        await settle()
+        XCTAssertEqual(source.transfers.count, 3, "the download did not carry on after a failed join")
+        XCTAssertTrue(updates.shown)
+        updates.stop()
+    }
+
     func testADamagedDownloadSaysSoAndASupersededOneAsksAgain() async {
         let updates = await offered()
         updates.accept()

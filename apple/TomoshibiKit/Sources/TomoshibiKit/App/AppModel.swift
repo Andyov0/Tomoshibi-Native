@@ -40,7 +40,8 @@ public final class AppModel {
         didSet { updates?.lobby(screen == .lobby) }
     }
     /// The app's own updates (Updates), told of every change of screen,
-    /// since the lobby is the only place one is shown or worked on. On the
+    /// since the lobby is the only place one is shown or worked on, and of
+    /// every join from the moment it is pressed (`settingOff`). On the
     /// Mac only: the iPhone is updated by TestFlight and the App Store. None
     /// in a debug build started by hand, which has no test deployment to ask
     /// and would ask the real one.
@@ -678,7 +679,36 @@ public final class AppModel {
     /// one go beside it: two connections under one identity, the later
     /// replacing the earlier, would put the wanted call out in favour of the
     /// one that was called off.
-    public private(set) var joining = false
+    public private(set) var joining = false {
+        didSet { settingOffChanged() }
+    }
+
+    /// Presses in the lobby on their way into a room that `join` has not
+    /// taken over yet (`headingIn`).
+    private var heading = 0 {
+        didSet { settingOffChanged() }
+    }
+
+    /// Somebody has pressed their way towards a room and is not in it yet.
+    /// The screen stays the lobby's until the call lands, seconds later, and
+    /// an update told only of the screen went on installing through them:
+    /// it replaced the app and quit it under a call being entered from the
+    /// start and join sheet. Updates counts this as the lobby left.
+    private var settingOff: Bool { joining || heading > 0 }
+
+    private func settingOffChanged() {
+        updates?.joining(settingOff)
+    }
+
+    /// Runs what a press in the lobby does on its way into a room before it
+    /// joins (the start and join sheet asks whether a meeting is live under
+    /// the name first), counted as a join from the press, so that an update
+    /// is given up before the question rather than after it.
+    public func headingIn(_ going: () async -> Void) async {
+        heading += 1
+        defer { heading -= 1 }
+        await going()
+    }
 
     /// Moved on by `cancelJoin`; a join compares the value it started with
     /// after every wait, and one that no longer stands lands nowhere.
@@ -779,7 +809,6 @@ public final class AppModel {
             }
             call = model
             landed = true
-            joining = false
             room = grant.room
             lobby.remember(room: grant.room)
             // The invitation is kept for as long as this call is: a move to
@@ -788,6 +817,11 @@ public final class AppModel {
             // door of the room they had just been in.
             problem = nil
             screen = .call
+            // After the screen has changed rather than before: in between,
+            // a join from the lobby that had landed would have said to
+            // Updates that it was back in the lobby with nothing out, and a
+            // held download would have started again under the call.
+            joining = false
             // After joining rather than before, so somebody is in the room the
             // moment they join and their devices come up a beat later, and each
             // on its own, never through the catch below (App.tsx `onJoin`): a

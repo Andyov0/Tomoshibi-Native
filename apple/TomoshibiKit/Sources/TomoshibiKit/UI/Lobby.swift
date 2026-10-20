@@ -1517,21 +1517,26 @@ struct MeetingSheet: View {
         app.problem = nil
         going = Task {
             defer { working = false }
-            let live = (try? await deployment.roomLive(room: target)) ?? nil
-            // Cancelled while the question was out: nothing more is asked.
-            if Task.isCancelled { return }
-            if starting, live == true {
-                app.problem = t("A meeting is already happening under that name.")
-                return
+            // A join from the press, the question included: an update
+            // installing behind the sheet is given up now rather than left
+            // to replace the app under the call this is about to enter.
+            await app.headingIn {
+                let live = (try? await deployment.roomLive(room: target)) ?? nil
+                // Cancelled while the question was out: nothing more is asked.
+                if Task.isCancelled { return }
+                if starting, live == true {
+                    app.problem = t("A meeting is already happening under that name.")
+                    return
+                }
+                // A room from the recent list goes in whether or not it is live:
+                // pressed before the sheet had settled which it is, it is that room
+                // somebody means, and entering it starts it again if it has ended.
+                if !starting, !again, live == false {
+                    app.problem = t("No meeting is happening under that name.")
+                    return
+                }
+                await app.enter(room: target)
             }
-            // A room from the recent list goes in whether or not it is live:
-            // pressed before the sheet had settled which it is, it is that room
-            // somebody means, and entering it starts it again if it has ended.
-            if !starting, !again, live == false {
-                app.problem = t("No meeting is happening under that name.")
-                return
-            }
-            await app.enter(room: target)
         }
     }
 }
