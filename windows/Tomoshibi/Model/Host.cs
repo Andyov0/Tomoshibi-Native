@@ -463,7 +463,13 @@ internal sealed class HostFeature : Observable
                 }
                 else
                 {
-                    _ = Call.HearShared(person.Id, sound == Sound.Music, (float)setting.Volume, setting.Blocked);
+                    // Music silenced, not only blocked, keeps its lossless
+                    // stream from being asked for (SongDesk.kt `hear`):
+                    // hearing.ts `silenced` counts a volume of nought, and a
+                    // stream asked for and played at nothing is upload the
+                    // sender spends on nobody.
+                    var held = sound == Sound.Music ? setting.Silenced : setting.Blocked;
+                    _ = Call.HearShared(person.Id, sound == Sound.Music, (float)setting.Volume, held);
                 }
             }
         }

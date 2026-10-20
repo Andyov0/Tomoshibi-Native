@@ -77,6 +77,10 @@ internal sealed class Playback : IDisposable
 
     private Graph _graph;
     private readonly Dictionary<string, float> _gains = new();
+    /// <summary>The song desk's turning down of a sound under speech, and its fade-in, multiplied with the listener's own level (duck.ts).</summary>
+    private readonly Dictionary<string, float> _ducks = new();
+
+    private float Level(string sid) => (_gains.TryGetValue(sid, out var gain) ? gain : 1f) * (_ducks.TryGetValue(sid, out var duck) ? duck : 1f);
     private readonly Dictionary<string, PulledSound> _pulled = new();
     private readonly object _gate = new();
     private bool _disposed;
@@ -186,7 +190,7 @@ internal sealed class Playback : IDisposable
                 var format = AudioEncodingProperties.CreatePcm(rate, channels, 32);
                 format.Subtype = MediaEncodingSubtypes.Float;
                 node = graph.Audio.CreateFrameInputNode(format);
-                node.OutgoingGain = _gains.TryGetValue(sid, out var gain) ? gain : 1.0;
+                node.OutgoingGain = Level(sid);
                 node.AddOutgoingConnection(graph.Output);
                 graph.Pushed[sid] = node;
             }
@@ -218,7 +222,17 @@ internal sealed class Playback : IDisposable
         lock (_gate)
         {
             _gains[sid] = Math.Clamp(gain, 0f, 1f);
-            if (_graph.Pushed.TryGetValue(sid, out var node)) node.OutgoingGain = _gains[sid];
+            if (_graph.Pushed.TryGetValue(sid, out var node)) node.OutgoingGain = Level(sid);
+        }
+    }
+
+    /// <summary>How far the song desk turns one pushed sound down just now, from nought to as it is; kept for a sound that arrives later.</summary>
+    public void SetDuck(string sid, float factor)
+    {
+        lock (_gate)
+        {
+            _ducks[sid] = Math.Clamp(factor, 0f, 1f);
+            if (_graph.Pushed.TryGetValue(sid, out var node)) node.OutgoingGain = Level(sid);
         }
     }
 
@@ -227,6 +241,7 @@ internal sealed class Playback : IDisposable
         lock (_gate)
         {
             _gains.Remove(sid);
+            _ducks.Remove(sid);
             if (_graph.Pushed.Remove(sid, out var node)) node.Dispose();
         }
     }

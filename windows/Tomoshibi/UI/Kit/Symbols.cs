@@ -126,6 +126,12 @@ internal static class Symbols
         ["icloud.slash"] = "\uE774",
         ["arrow.up.right.square"] = "\uE8A7",
         ["externaldrive.badge.exclamationmark"] = "\uE7BA",
+        // The song desk's (MusicPanel.kt): a person for "lower the music while
+        // anybody talks", upload's arrow to a line for "play next".
+        ["person.wave.2.fill"] = "\uE77B",
+        ["arrow.up.to.line"] = "\uE898",
+        ["music.magnifyingglass"] = "\uE721",
+        ["plus.circle.fill"] = "\uECC8",
         ["tv"] = "\uE7F4",
         ["antenna.radiowaves.left.and.right"] = "\uEC05",
         ["hand.thumbsup.fill"] = "\uE8E1",

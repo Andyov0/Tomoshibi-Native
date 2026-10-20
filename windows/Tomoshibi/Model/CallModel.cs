@@ -307,6 +307,27 @@ internal sealed class CallModel : Observable, IDisposable
     /// <summary>The level one remote sound plays at here, from nought to as sent (the sound panel, the song desk's music).</summary>
     public void SetVolume(string sid, float level) => _playback?.SetGain(sid, level);
 
+    /// <summary>The song desk's turning down of one remote sound under speech, multiplied with the listener's level (duck.ts).</summary>
+    public void SetDuck(string sid, float factor) => _playback?.SetDuck(sid, factor);
+
+    /// <summary>Whether a remote sound is being heard here, which is when its level can be read.</summary>
+    public bool Hears(string sid)
+    {
+        lock (_sounds) return _sounds.ContainsKey(sid);
+    }
+
+    /// <summary>How loud a remote sound has been over the last tenth of a second, or nothing for one not heard here.</summary>
+    public double? Level(string sid)
+    {
+        lock (_sounds) return _sounds.TryGetValue(sid, out var sound) ? sound.Meter.Rms : null;
+    }
+
+    /// <summary>How loud this participant's own microphone has been, the generated tone's in a test.</summary>
+    public double MicrophoneLevel => _microphoneFeed?.Meter.Rms ?? (_microphone != null ? _media.SyntheticSource.Meter.Rms : 0);
+
+    /// <summary>The speakers the call plays through, for a feature that plays something of its own there (the song desk's monitor).</summary>
+    public Playback? Speakers => _playback;
+
     /// <summary>
     /// The listener's setting for a person's shared screen sound or music
     /// (hearing.ts): the level on any lossless stream standing in for it, and

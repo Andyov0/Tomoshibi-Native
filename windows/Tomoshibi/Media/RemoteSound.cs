@@ -10,6 +10,8 @@ namespace Tomoshibi.Media;
 internal sealed class RemoteSound : PcmSink, IDisposable
 {
     public readonly string Sid;
+    /// <summary>How loud it has been over the last tenth of a second, for the song desk's duck.</summary>
+    public readonly SoundMeter Meter = new();
     private readonly Playback? _playback;
     private readonly object _gate = new();
     private long _chunks;
@@ -38,6 +40,7 @@ internal sealed class RemoteSound : PcmSink, IDisposable
             _squares += squares;
             _samples += count;
         }
+        Meter.Add(squares, count);
         _playback?.Play(Sid, pcm, sampleRate, channels);
     }
 

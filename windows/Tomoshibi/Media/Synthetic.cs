@@ -34,6 +34,8 @@ internal sealed class Synthetic : IDisposable
 
     public long FramesPushed;
     public long ChunksPushed;
+    /// <summary>How loud the generated tone has been over the last tenth of a second, as the microphone's would be.</summary>
+    public readonly SoundMeter Meter = new();
 
     public Synthetic()
     {
@@ -69,6 +71,7 @@ internal sealed class Synthetic : IDisposable
                     }
                     phase %= 2 * Math.PI;
                     audio.PushPcm(pcm);
+                    Meter.Add(pcm);
                     Interlocked.Increment(ref ChunksPushed);
                 }
                 if (frames * 1000.0 / FramesPerSecond <= now)

@@ -137,6 +137,8 @@ internal sealed class MicrophoneFeed : IDisposable
     private readonly AudioFrameOutputNode _output;
     private readonly AudioInput _input;
     public long ChunksPushed;
+    /// <summary>How loud the microphone has been over the last tenth of a second, for the song desk's duck.</summary>
+    public readonly SoundMeter Meter = new();
 
     private MicrophoneFeed(AudioGraph graph, AudioFrameOutputNode output, AudioInput input)
     {
@@ -207,6 +209,7 @@ internal sealed class MicrophoneFeed : IDisposable
             pcm[2 * i + 1] = (byte)(sample >> 8);
         }
         _input.PushPcm(pcm);
+        Meter.Add(pcm);
         Interlocked.Increment(ref ChunksPushed);
     }
 

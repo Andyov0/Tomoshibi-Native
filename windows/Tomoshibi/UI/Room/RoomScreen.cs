@@ -5,7 +5,9 @@ using Microsoft.UI.Xaml.Input;
 using Tomoshibi.Basics;
 using Tomoshibi.Diagnostics;
 using Tomoshibi.Model;
+using Tomoshibi.Model.Music;
 using Tomoshibi.Model.Watch;
+using Tomoshibi.UI.Music;
 using Tomoshibi.UI.Watch;
 using Tomoshibi.UI.Kit;
 using Tomoshibi.UI.Screens;
@@ -34,6 +36,7 @@ internal sealed class RoomScreen : Screen
     private readonly HostFeature _host;
     private readonly Arrivals _doorRows = new();
     private readonly WatchEngine _watch;
+    private readonly SongDesk _music;
     /// <summary>The watching stage, made once for the room and lent to whichever tile shows it, so the video is not loaded again when the stage and the strip trade places.</summary>
     private WatchStage? _watchStage;
     private Grid? _watchersHost;
@@ -94,6 +97,11 @@ internal sealed class RoomScreen : Screen
         // first time somebody opens its panel.
         _watch = WatchEngine.Of(call);
         _watch.Changed += Update;
+        // The desk too, so that music anybody plays is turned down under
+        // speech from the start rather than from the first time somebody
+        // opens its panel (RoomView.kt `watchShowing`).
+        _music = SongDesk.Of(call);
+        _music.Changed += Update;
         Background = Ink.Background;
         Children.Add(_pictures);
         Children.Add(_chrome);
@@ -147,6 +155,7 @@ internal sealed class RoomScreen : Screen
         _host.Changed -= Update;
         Call.Sharing.Changed -= Update;
         _watch.Changed -= Update;
+        _music.Changed -= Update;
         _stats.Stop();
         _idle.Stop();
         Report();
@@ -756,6 +765,10 @@ internal sealed class RoomScreen : Screen
             else if (_panel == Panel.Watch)
             {
                 _panelShown = new WatchPanel(_watch, () => Toggle(Panel.Watch));
+            }
+            else if (_panel == Panel.Music)
+            {
+                _panelShown = new MusicPanel(_music, () => Toggle(Panel.Music));
             }
             if (_panelShown is FrameworkElement shown)
             {

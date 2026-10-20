@@ -101,9 +101,21 @@ fails, or does not begin within eight seconds, it plays from the relay. The
 controls show while the pointer moves over the video and for three seconds
 after, where Android shows them for a while after a touch.
 
+The song desk is Android's: the protocol crate's desk on the call's
+`jukebox` topic, made with the room so that music anybody plays is turned
+down under speech from the start. A song is fetched with the app's session
+and decoded by Media Foundation's transcoder into two files read as they
+play, 48 kHz for the Opus track and the file's own rate in floats for the
+lossless stream, so that a five-minute song is never held in memory; one
+track is published for the whole of the music and fed one 10 ms block at a
+time by a pacer on a thread of its own, woken by a high-resolution waitable
+timer, since Windows' own sleep rounds up to its 15.6 ms tick. The holder
+hears it through the call's speakers behind a volume of their own; whoever
+listens sets it in the sound panel's music row, which the panel shares.
+
 Not in this phase, and left as marked stubs rather than as controls that do
-nothing: music and its settings, background blur, links handed over by the
-system (`tomoshibi://` and app links), and MSIX.
+nothing: background blur, links handed over by the system (`tomoshibi://`
+and app links), and MSIX.
 
 ## The machine it is built on
 
