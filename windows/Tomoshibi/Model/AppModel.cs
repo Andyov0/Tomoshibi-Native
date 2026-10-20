@@ -150,6 +150,7 @@ internal sealed class AppModel : Observable
         {
             _updates = value;
             value?.Lobby(_screen == Screen.Lobby);
+            value?.Joining(Joining);
         }
     }
 
@@ -823,6 +824,7 @@ internal sealed class AppModel : Observable
         if (Deployment is not { } deployment) return;
         if (Joining) return;
         Joining = true;
+        Updates?.Joining(true);
         Ask(+1);
         var attempt = _joinAttempt;
         var landed = false;
@@ -908,6 +910,10 @@ internal sealed class AppModel : Observable
         finally
         {
             if (!landed) Joining = false;
+            // A join that lands leaves the lobby by the screen changing,
+            // which the update is told of; one that does not, lands back in
+            // the lobby, and a download held for it carries on.
+            Updates?.Joining(false);
             Ask(-1);
         }
     }

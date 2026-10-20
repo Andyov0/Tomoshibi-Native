@@ -301,6 +301,44 @@ public class UpdatesTests
         Assert.Equal(new[] { transfer.File, transfer.File }, _installer.Installs);
     }
 
+    /// <summary>
+    /// A join pressed in the lobby leaves it only once it lands, and an
+    /// install that came to its swap in those seconds saw a lobby, replaced
+    /// the app and ended the call being entered. A join out counts as the
+    /// lobby left, from the press.
+    /// </summary>
+    [Fact]
+    public void AJoinPressedInTheLobbyGivesUpTheInstallBeforeItLands()
+    {
+        var (updates, transfer) = Downloaded();
+        Assert.IsType<Step.Installing>(updates.Now);
+        updates.Joining(true);
+        Assert.Equal(1, _installer.Stopped);
+        Assert.False(updates.Shown);
+        updates.Joining(false);
+        _installer.Answer = new TaskCompletionSource<Installed>();
+        updates.Accept();
+        Assert.Equal(new[] { transfer.File, transfer.File }, _installer.Installs);
+    }
+
+    /// <summary>
+    /// A download held for a join that is refused or called off carries on
+    /// when the lobby is back, and one that is out is not downloaded through.
+    /// </summary>
+    [Fact]
+    public void ADownloadIsHeldWhileAJoinFromTheLobbyIsOutAndGoesOnWhenItFails()
+    {
+        var updates = Offered();
+        updates.Accept();
+        updates.Joining(true);
+        Assert.True(Assert.Single(_source.Transfers).Cancelled);
+        Assert.IsType<Step.Held>(updates.Now);
+        Assert.False(updates.Shown);
+        updates.Joining(false);
+        Assert.Equal(2, _source.Transfers.Count);
+        Assert.IsType<Step.Downloading>(updates.Now);
+    }
+
     [Fact]
     public void AnInstallGivenUpByCancelSaysSoAndKeepsTheBuild()
     {

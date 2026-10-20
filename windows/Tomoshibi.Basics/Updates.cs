@@ -225,6 +225,36 @@ public sealed class Updates
     /// <summary>Told whenever the screen changes: the lobby is the only place an update is shown or worked on.</summary>
     public void Lobby(bool inLobby)
     {
+        if (inLobby == _onLobby) return;
+        _onLobby = inLobby;
+        Reconsider();
+    }
+
+    /// <summary>
+    /// Told when a join is out and again when it is over, landed or not.
+    ///
+    /// A join pressed in the lobby leaves it only once it lands, seconds
+    /// later: the start and join sheet asks whether the meeting is live,
+    /// then the deployment for a grant, then the room to let it in, all with
+    /// the lobby's screen behind the sheet. An install that came to its swap
+    /// in those seconds saw a lobby, replaced the app and Windows ended it,
+    /// and the call being entered ended as it began. So a join out counts as
+    /// the lobby left, from the press; one that is refused or called off is
+    /// back in it, and a download held for it carries on.
+    /// </summary>
+    public void Joining(bool outOnAJoin)
+    {
+        if (outOnAJoin == _settingOff) return;
+        _settingOff = outOnAJoin;
+        Reconsider();
+    }
+
+    private bool _onLobby;
+    private bool _settingOff;
+
+    private void Reconsider()
+    {
+        var inLobby = _onLobby && !_settingOff;
         if (inLobby == _free) return;
         _free = inLobby;
         switch (Now)
