@@ -64,6 +64,50 @@ foreach ($a in "arm64", "x64") {
 if ($LASTEXITCODE -ne 0) { throw "the setup did not build" }
 
 $setup = Join-Path $Out "Tomoshibi-Setup-$Version.exe"
+
+# Inno Setup pads the strings of the setup's version stamp with spaces to a
+# width of its own ("Tomoshibi" and fifty-one spaces). Tomoshibi 0.1.0.2 reads
+# the product name there untrimmed and so refused every setup as not the
+# version offered: nobody on it could update. The padding is turned to nulls,
+# which end each string where Windows reads it while the stamp keeps every
+# size it had, so the setup's name and version read as they are.
+$bytes = [System.IO.File]::ReadAllBytes($setup)
+# Byte for character, to search with IndexOf: the stamp is among the
+# loader's resources, at the head of the file.
+$latin = [System.Text.Encoding]::GetEncoding(28591)
+$head = $latin.GetString($bytes, 0, [Math]::Min($bytes.Length, 8MB))
+function Find([string]$text, [int]$from, [int]$to) {
+    $head.IndexOf($latin.GetString([System.Text.Encoding]::Unicode.GetBytes($text)), $from, $to - $from, [StringComparison]::Ordinal)
+}
+$at = Find "VS_VERSION_INFO" 0 $head.Length
+if ($at -lt 6) { throw "no version stamp in the setup" }
+$start = $at - 6
+$end = $start + [BitConverter]::ToUInt16($bytes, $start)
+$cleared = 0
+foreach ($key in "CompanyName", "FileDescription", "FileVersion", "LegalCopyright", "ProductName", "ProductVersion", "OriginalFileName", "Comments") {
+    # A String: its length, its value's length in characters, its type, then
+    # the key; the value starts on the next four-byte boundary of the stamp.
+    $k = Find "$key`0" $start $end
+    if ($k -lt 6) { continue }
+    $count = [BitConverter]::ToUInt16($bytes, $k - 4)
+    if ($count -eq 0) { continue }
+    $v = $k + ($key.Length + 1) * 2
+    $v += (4 - (($v - $start) % 4)) % 4
+    for ($c = $v + ($count - 1) * 2; $c -ge $v; $c -= 2) {
+        if ($bytes[$c + 1] -ne 0) { break }
+        if ($bytes[$c] -eq 0) { continue }
+        if ($bytes[$c] -ne 0x20) { break }
+        $bytes[$c] = 0
+        $cleared++
+    }
+}
+[System.IO.File]::WriteAllBytes($setup, $bytes)
+$stamp = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($setup)
+if ($stamp.ProductName -cne "Tomoshibi" -or $stamp.ProductVersion -cne $Version) {
+    throw "the setup's stamp reads '$($stamp.ProductName)' '$($stamp.ProductVersion)'"
+}
+"stamp unpadded ($cleared spaces): '$($stamp.ProductName)' '$($stamp.ProductVersion)'"
+
 $file = Get-Item $setup
 $hash = (Get-FileHash -Algorithm SHA256 $setup).Hash.ToLowerInvariant()
 "built $($file.Name), $($file.Length) bytes, sha256 $hash"
