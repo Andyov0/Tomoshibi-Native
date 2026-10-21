@@ -120,9 +120,9 @@ class CallMedia(context: Context, val muted: Boolean = false) {
      * the video everybody is watching, or a shared screen -- keeps its own
      * wide shape and so the large window. A camera keeps the camera's. With
      * no picture at all, a call of voices or a song playing, the window is
-     * square, which is the smallest Android makes it: it was drawn sixteen by
-     * nine around a single initial, the owner's "画中画大小太大了"
-     * (2026-10-19).
+     * square, the least long Android makes it (CallWindow `windowShape` says
+     * how it is sized): it was drawn sixteen by nine around a single initial,
+     * the owner's "画中画大小太大了" (2026-10-19).
      */
     private suspend fun window(app: AppModel, call: CallModel) {
         snapshotFlow {

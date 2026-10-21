@@ -83,6 +83,12 @@ object PlainRoomNames {
 class FakeDeployment(private val arranged: List<Arrangement> = emptyList()) : Deployment(uniffi.tomoshibi_protocol.NoHandle) {
     var live: Boolean? = null
     val asked = mutableListOf<String>()
+    /** How many times the deployment was told to sign out. */
+    var signedOut = 0
+
+    override suspend fun signOut() {
+        signedOut++
+    }
 
     override fun baseUrl(): String = BASE
     override fun meetingLink(token: String, room: String): String = "${BASE}?meeting=$token#/$room"

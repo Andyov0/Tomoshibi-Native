@@ -70,24 +70,28 @@ fun TomoshibiApp(app: AppModel, modifier: Modifier = Modifier) {
             // The screens that have a way back say it as their Back button
             // does (Screens.swift `BackButton`).
             BackHandler(enabled = backFor(app) != null) { backFor(app)?.invoke() }
-            AnimatedContent(
-                targetState = shown(app),
-                contentKey = { it.key },
-                transitionSpec = { (Theme.arrive togetherWith Theme.depart).using(SizeTransform(clip = false)) },
-                label = "screen",
-            ) { now ->
-                GlassBackdrop {
-                    when (now.key) {
-                        Key.Starting -> StartingScreen()
-                        Key.Unreachable -> UnreachableScreen(app)
-                        Key.SignIn -> SignInView(app)
-                        Key.Lobby -> now.account?.let { LobbyView(app, it) }
-                        Key.Prejoin -> PreJoinScreen(app)
-                        Key.Knocking -> KnockingScreen(app)
-                        Key.Waiting -> WaitingScreen(app)
-                        Key.Call -> now.call?.let { RoomView(app, it, Modifier.fillMaxSize()) }
-                        Key.Moving -> MovingOverlay(now.moving ?: "")
-                        Key.Ended -> EndedScreen(app)
+            // The question before signing out, over whichever screen and
+            // sheet it was asked from.
+            SignOutPrompt(app) {
+                AnimatedContent(
+                    targetState = shown(app),
+                    contentKey = { it.key },
+                    transitionSpec = { (Theme.arrive togetherWith Theme.depart).using(SizeTransform(clip = false)) },
+                    label = "screen",
+                ) { now ->
+                    GlassBackdrop {
+                        when (now.key) {
+                            Key.Starting -> StartingScreen()
+                            Key.Unreachable -> UnreachableScreen(app)
+                            Key.SignIn -> SignInView(app)
+                            Key.Lobby -> now.account?.let { LobbyView(app, it) }
+                            Key.Prejoin -> PreJoinScreen(app)
+                            Key.Knocking -> KnockingScreen(app)
+                            Key.Waiting -> WaitingScreen(app)
+                            Key.Call -> now.call?.let { RoomView(app, it, Modifier.fillMaxSize()) }
+                            Key.Moving -> MovingOverlay(now.moving ?: "")
+                            Key.Ended -> EndedScreen(app)
+                        }
                     }
                 }
             }

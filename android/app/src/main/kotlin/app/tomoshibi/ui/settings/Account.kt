@@ -207,7 +207,7 @@ private fun Profile(app: AppModel, account: Account, say: (String?) -> Unit) {
                             shape = GlassButtonShape.Capsule(32.dp),
                         ) { ProfileButtonLabel(t("Remove"), "trash") }
                     }
-                    GlassButton({ scope.launch { app.signOut() } }, Modifier.testTag("settings.signout"), shape = GlassButtonShape.Capsule(32.dp)) {
+                    GlassButton({ app.signOutAsked = true }, Modifier.testTag("settings.signout"), shape = GlassButtonShape.Capsule(32.dp)) {
                         ProfileButtonLabel(t("Sign out"), "rectangle.portrait.and.arrow.right")
                     }
                 }

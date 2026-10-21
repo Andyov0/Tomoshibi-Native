@@ -295,12 +295,25 @@ internal class PlaneReader(
     private val framebuffers = IntArray(2)
     private val targets = IntArray(2)
 
-    // The planes, read straight into the arrays that are handed to the core.
+    // The planes, read straight into the arrays that are handed to the core,
+    // through wrappers made once for each array rather than three a frame.
     private var stride = 0
     private var y = ByteArray(0)
     private var u = ByteArray(0)
     private var v = ByteArray(0)
+    private var yBuffer: ByteBuffer = ByteBuffer.wrap(y)
+    private var uBuffer: ByteBuffer = ByteBuffer.wrap(u)
+    private var vBuffer: ByteBuffer = ByteBuffer.wrap(v)
     private var hasFrame = false
+
+    // Where the shaders' inputs are, looked up once: by name, every frame,
+    // was six questions to the driver a frame for answers that never change.
+    private var pictureAt = 0
+    private var transformAt = 0
+    private var widthScaleAt = 0
+    private var stepAt = 0
+    private var coefficientsAt = 0
+    private var positionAt = 0
 
     /** When the next frame is due, on the display's clock. */
     private var due = 0L
@@ -343,6 +356,12 @@ internal class PlaneReader(
         texture2.setOnFrameAvailableListener(this, handler)
         surface = Surface(texture2)
         program = link(VERTEX, FRAGMENT)
+        pictureAt = GLES20.glGetUniformLocation(program, "uPicture")
+        transformAt = GLES20.glGetUniformLocation(program, "uTransform")
+        widthScaleAt = GLES20.glGetUniformLocation(program, "uWidthScale")
+        stepAt = GLES20.glGetUniformLocation(program, "uStep")
+        coefficientsAt = GLES20.glGetUniformLocation(program, "uCoefficients")
+        positionAt = GLES20.glGetAttribLocation(program, "aPosition")
         allocate()
     }
 
@@ -397,6 +416,9 @@ internal class PlaneReader(
         y = ByteArray(stride * height)
         u = ByteArray(stride / 2 * chromaHeight)
         v = ByteArray(stride / 2 * chromaHeight)
+        yBuffer = ByteBuffer.wrap(y)
+        uBuffer = ByteBuffer.wrap(u)
+        vBuffer = ByteBuffer.wrap(v)
     }
 
     override fun onFrameAvailable(texture: SurfaceTexture) {
@@ -458,47 +480,56 @@ internal class PlaneReader(
         if (++sent % 300 == 0) Log.i(TAG, "screen sent $sent frames ${width}x$height")
     }
 
-    /** One frame into the three planes, and the planes into their arrays. */
+    /**
+     * One frame into the three planes, and the planes into their arrays.
+     *
+     * All three planes are drawn before any is read. A read waits for the GPU
+     * to finish everything asked of it so far; read between the passes, as
+     * luma once was before chroma had been drawn, the thread waited for the
+     * GPU twice a frame, sixty times a second, and the GPU sat idle while the
+     * first plane was copied out.
+     */
     private fun draw() {
         val chromaHeight = (height + 1) / 2
         GLES20.glUseProgram(program)
         GLES20.glActiveTexture(GLES20.GL_TEXTURE0)
         GLES20.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, texture)
-        GLES20.glUniform1i(GLES20.glGetUniformLocation(program, "uPicture"), 0)
-        GLES20.glUniformMatrix4fv(GLES20.glGetUniformLocation(program, "uTransform"), 1, false, transform, 0)
+        GLES20.glUniform1i(pictureAt, 0)
+        GLES20.glUniformMatrix4fv(transformAt, 1, false, transform, 0)
         // The planes are rows of `stride` samples drawn across a picture
         // `width` wide: what the last few samples of a row read past the
         // picture's edge is padding nobody reads.
-        GLES20.glUniform1f(GLES20.glGetUniformLocation(program, "uWidthScale"), stride.toFloat() / width)
-        val position = GLES20.glGetAttribLocation(program, "aPosition")
+        GLES20.glUniform1f(widthScaleAt, stride.toFloat() / width)
         quad.position(0)
-        GLES20.glVertexAttribPointer(position, 2, GLES20.GL_FLOAT, false, 0, quad)
-        GLES20.glEnableVertexAttribArray(position)
-        val step = GLES20.glGetUniformLocation(program, "uStep")
-        val coefficients = GLES20.glGetUniformLocation(program, "uCoefficients")
+        GLES20.glVertexAttribPointer(positionAt, 2, GLES20.GL_FLOAT, false, 0, quad)
+        GLES20.glEnableVertexAttribArray(positionAt)
 
         // Luma: each pixel of the framebuffer is four samples, a source pixel apart.
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, framebuffers[0])
         GLES20.glViewport(0, 0, stride / 4, height)
-        GLES20.glUniform1f(step, 1f / width)
-        GLES20.glUniform4fv(coefficients, 1, Y_COEFFICIENTS, 0)
+        GLES20.glUniform1f(stepAt, 1f / width)
+        GLES20.glUniform4fv(coefficientsAt, 1, Y_COEFFICIENTS, 0)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
-        // Read into the arrays themselves (Android's GL bindings take an
-        // array-backed buffer), so nothing is copied again on the way.
-        GLES20.glReadPixels(0, 0, stride / 4, height, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, ByteBuffer.wrap(y))
         // Chroma: four samples two source pixels apart, each sampled between
         // two pixels and two rows, which the texture's linear filter averages.
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, framebuffers[1])
         GLES20.glViewport(0, 0, stride / 8, chromaHeight)
-        GLES20.glUniform1f(step, 2f / width)
-        GLES20.glUniform4fv(coefficients, 1, U_COEFFICIENTS, 0)
+        GLES20.glUniform1f(stepAt, 2f / width)
+        GLES20.glUniform4fv(coefficientsAt, 1, U_COEFFICIENTS, 0)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
         GLES20.glViewport(stride / 8, 0, stride / 8, chromaHeight)
-        GLES20.glUniform4fv(coefficients, 1, V_COEFFICIENTS, 0)
+        GLES20.glUniform4fv(coefficientsAt, 1, V_COEFFICIENTS, 0)
         GLES20.glDrawArrays(GLES20.GL_TRIANGLE_STRIP, 0, 4)
-        GLES20.glDisableVertexAttribArray(position)
-        GLES20.glReadPixels(0, 0, stride / 8, chromaHeight, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, ByteBuffer.wrap(u))
-        GLES20.glReadPixels(stride / 8, 0, stride / 8, chromaHeight, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, ByteBuffer.wrap(v))
+        GLES20.glDisableVertexAttribArray(positionAt)
+
+        // Read into the arrays themselves (Android's GL bindings take an
+        // array-backed buffer), so nothing is copied again on the way. The
+        // first read waits for all three passes; the others find them done.
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, framebuffers[0])
+        GLES20.glReadPixels(0, 0, stride / 4, height, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, yBuffer.rewind())
+        GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, framebuffers[1])
+        GLES20.glReadPixels(0, 0, stride / 8, chromaHeight, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, uBuffer.rewind())
+        GLES20.glReadPixels(stride / 8, 0, stride / 8, chromaHeight, GLES20.GL_RGBA, GLES20.GL_UNSIGNED_BYTE, vBuffer.rewind())
         GLES20.glBindFramebuffer(GLES20.GL_FRAMEBUFFER, 0)
         val error = GLES20.glGetError()
         if (error != GLES20.GL_NO_ERROR) Log.w(TAG, "the screen's planes were drawn with GL error $error")

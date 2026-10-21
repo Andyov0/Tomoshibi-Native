@@ -14,8 +14,8 @@ android {
         applicationId = "app.tomoshibi.android"
         minSdk = 29
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.1.2"
+        versionCode = 5
+        versionName = "0.1.3"
         ndk { abiFilters += "arm64-v8a" }
     }
 

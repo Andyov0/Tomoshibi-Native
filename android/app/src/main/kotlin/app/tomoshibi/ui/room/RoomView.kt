@@ -11,10 +11,12 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateValueAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -122,7 +124,9 @@ import app.tomoshibi.ui.kit.keepDeparting
 import app.tomoshibi.ui.kit.narrowWindow
 import app.tomoshibi.ui.kit.rounded
 import app.tomoshibi.ui.music.MusicPanel
+import app.tomoshibi.ui.settings.DeviceLists
 import app.tomoshibi.ui.settings.DevicesPanel
+import app.tomoshibi.ui.settings.LocalCallCameras
 import app.tomoshibi.ui.watch.WatchPanel
 import app.tomoshibi.ui.watch.WatchStage
 import app.tomoshibi.ui.watch.watchShowing
@@ -346,6 +350,12 @@ private fun Room(app: AppModel, call: CallModel, state: RoomState, host: HostFea
         LaunchedEffect(stageOwner) { runCatching { call.setWatching(stageOwner) } }
         LaunchedEffect(hides) { if (hides) state.idle.run() }
         LaunchedEffect(state.panel) { call.chatOpen = state.panel == RoomPanel.Messages }
+        // The devices panel's lists, read ahead off the main thread and kept
+        // current, so that the panel opens on them rather than asking the
+        // audio and camera services in the frame it starts to slide in.
+        val context = LocalContext.current
+        val cameras = LocalCallCameras.current
+        LaunchedEffect(call, cameras) { DeviceLists.of(call, cameras).keep(context) }
 
         Box(Modifier.padding(frame.padding).size(whole.width.dp, whole.height.dp)) {
             Box(Modifier.size(size.width.dp, size.height.dp)) {
@@ -997,7 +1007,20 @@ private fun Panel(
             // Below the row at the top wherever it cannot stand beside it:
             // over it, the panel hid the room's name and its signal.
             .padding(top = clear),
-        transitionSpec = { Theme.slideIn togetherWith Theme.slideOut },
+        // In from the trailing edge and faded, as the Swift panel's
+        // `Theme.slideIn` (`.move(edge: .trailing)` with `.opacity`), moved
+        // and faded on its layer alone. AnimatedContent's own size change,
+        // its default, grew the box the panel is drawn in from nothing on a
+        // spring: the panel measured again every frame of its slide and
+        // unrolled from its corner under a clip that cut its glass and its
+        // shadow, which the Swift panel never did. The fade is laid on each
+        // thing drawn ([glassFade]) rather than as fadeIn's offscreen layer,
+        // which drew the whole panel, blur and all, into a buffer of its
+        // size every frame and cut its shadow off square.
+        transitionSpec = {
+            (slideInHorizontally(Theme.settle()) { it } togetherWith slideOutHorizontally(Theme.leave()) { it })
+                .using(SizeTransform(clip = false) { _, _ -> snap() })
+        },
         contentAlignment = Alignment.TopEnd,
         label = "panel",
     ) { open ->
@@ -1006,8 +1029,10 @@ private fun Panel(
             return@AnimatedContent
         }
         val close = { state.panel = null }
+        val fade by glassFade()
         Column(
             Modifier
+                .glassLayer({ fade })
                 .width(width.dp)
                 .heightIn(max = tallest.dp)
                 // Where it covers the call rather than standing beside it,

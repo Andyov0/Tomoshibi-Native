@@ -230,7 +230,31 @@ object CallWindow {
         return RemoteAction(Icon.createWithResource(activity, icon), title, title, intent)
     }
 
-    /** The window's shape for what it shows: that picture's, kept within Android's bounds, or square with no picture, the smallest window Android draws. */
+    /**
+     * The window's shape for what it shows: that picture's, kept within
+     * Android's bounds, or square with no picture.
+     *
+     * The shape is all an app may say about the window's size; the size is
+     * the system's (WMShell's PhoneSizeSpecSource, the same on Android 14, 15
+     * and 16): 60 per cent of the largest window of that shape, which is
+     * worked out from the display's shorter side alone. So the same window is
+     * about twice as large on an unfolded Fold (shorter side 1856 pixels) as
+     * on its cover screen (968). A square comes out 0.47 of that side each
+     * way, the shortest longest side of any shape (16:9 is 0.6 across and
+     * 9:16 is 0.6 down), though not the least area: about 8 per cent more
+     * than 16:9.
+     *
+     * Nothing an app sets makes the window smaller on the large screen alone.
+     * An activity's `<layout android:minWidth android:minHeight>` makes the
+     * system open the window at that size (PipBoundsAlgorithm
+     * `getMinimalSize`, PhoneSizeSpecSource `getDefaultSize`), but for every
+     * screen the activity is shown on, a phone's included; Android 16 alone
+     * drops one larger than its own size, and judges that against the size
+     * the last one already set, so by its source a Fold that opened the
+     * window unfolded would open it on the cover screen at the unfolded size
+     * too. A shape wider than 16:9 is less area only by being a strip, which
+     * crops a face.
+     */
     internal fun windowShape(shape: Pair<Int, Int>?): Pair<Int, Int> = shape?.let { (w, h) -> aspect(w, h) } ?: (1 to 1)
 
     /** The picture's shape within what Android allows a small window to be (between 1:2.39 and 2.39:1). */

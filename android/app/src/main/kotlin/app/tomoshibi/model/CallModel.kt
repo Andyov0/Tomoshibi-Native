@@ -172,6 +172,9 @@ class CallModel internal constructor(
     }
     private var cameraMade = false
 
+    /** The camera if it has been made, for what can be asked of it without making one (the devices panel's tick). */
+    val cameraIfMade: CameraCapture? get() = if (cameraMade) camera else null
+
     /** Lossless streams standing in for somebody's shared sound or music. */
     val lossless = LosslessPlayback(audio)
 

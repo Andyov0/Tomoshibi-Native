@@ -635,6 +635,15 @@ class AppModel(
         }
     }
 
+    /**
+     * Whether Sign out was pressed and the app is asking whether to
+     * (SignOutPrompt; AppModel.swift `signOutAsked`): snapshot state. Sign
+     * out once signed out on the press, and a press meant for the item beside
+     * it did it too (2026-10-22). Both of its places, the account menu and
+     * the account's settings, ask here rather than signing out.
+     */
+    var signOutAsked by mutableStateOf(false)
+
     suspend fun signOut() {
         val deployment = deployment ?: return
         quietly { deployment.signOut() }

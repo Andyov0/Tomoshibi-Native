@@ -1,5 +1,6 @@
 package app.tomoshibi.ui.settings
 
+import android.content.Context
 import android.media.AudioDeviceInfo
 import android.media.AudioDeviceInfo.TYPE_BLUETOOTH_A2DP
 import android.media.AudioDeviceInfo.TYPE_BLUETOOTH_SCO
@@ -25,6 +26,8 @@ import app.tomoshibi.model.AppModel
 import app.tomoshibi.model.CallModel
 import app.tomoshibi.model.MemoryDefaults
 import app.tomoshibi.model.MemorySecrets
+import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.Dispatchers
 import uniffi.tomoshibi_core.Call
 import uniffi.tomoshibi_core.NoHandle
@@ -166,6 +169,8 @@ internal fun fakeCall(): CallModel {
 }
 
 internal object FakeCameras : CallCameras {
-    override fun list(call: CallModel) = listOf(CameraChoice("1", CameraChoice.Facing.Front), CameraChoice("0", CameraChoice.Facing.Back))
-    override fun current(call: CallModel) = "1"
+    override fun list(context: Context, call: CallModel) = listOf(CameraChoice("1", CameraChoice.Facing.Front), CameraChoice("0", CameraChoice.Facing.Back))
+    override fun current(call: CallModel, present: List<CameraChoice>) = "1"
+    // Read where asked, so that what a test draws does not wait on a thread.
+    override val reading: CoroutineContext = EmptyCoroutineContext
 }

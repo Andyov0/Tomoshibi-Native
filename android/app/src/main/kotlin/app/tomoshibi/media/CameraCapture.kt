@@ -131,36 +131,51 @@ class CameraCapture(context: Context) {
     @Volatile internal var sent = 0
         private set
 
-    /** The cameras somebody can pick, front first. */
-    fun cameras(): List<CameraChoice> {
-        val manager = context.getSystemService(CameraManager::class.java) ?: return emptyList()
-        return try {
-            manager.cameraIdList.map { id ->
-                val facing = when (manager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING)) {
-                    CameraCharacteristics.LENS_FACING_FRONT -> CameraChoice.Facing.Front
-                    CameraCharacteristics.LENS_FACING_BACK -> CameraChoice.Facing.Back
-                    else -> CameraChoice.Facing.External
-                }
-                CameraChoice(id, facing)
-            }.sortedBy { it.facing.ordinal }
-        } catch (fault: Exception) {
-            Log.w(TAG, "the cameras could not be listed: ${fault.message}")
-            emptyList()
-        }
+    /** The cameras somebody can pick, front first ([cameras]). */
+    fun cameras(): List<CameraChoice> = cameras(context)
+
+    /** The camera that is sending, or that would be sent if the camera went on now. */
+    val current: String? get() = current(cameras())
+
+    /**
+     * Which of [present] is sending, or would be sent if the camera went on
+     * now: what the devices panel ticks. Asks nothing of the camera service,
+     * so the panel can tick from a list it read away from the main thread.
+     */
+    fun current(present: List<CameraChoice>): String? {
+        device?.let { return it.id }
+        preferred?.let { id -> if (present.any { it.id == id }) return id }
+        return fallback(present)?.id
     }
 
-    /** The camera that is sending, or that would be sent if the camera went on now: what the devices panel ticks. */
-    val current: String?
-        get() {
-            device?.let { return it.id }
-            val present = cameras()
-            preferred?.let { id -> if (present.any { it.id == id }) return id }
-            return fallback(present)?.id
+    companion object {
+        /**
+         * The cameras somebody can pick, front first. One question to the
+         * camera service for each camera, its whole description each time
+         * (a few milliseconds apiece on a phone with several): safe from any
+         * thread, and for the devices panel read off the main one.
+         */
+        fun cameras(context: Context): List<CameraChoice> {
+            val manager = context.getSystemService(CameraManager::class.java) ?: return emptyList()
+            return try {
+                manager.cameraIdList.map { id ->
+                    val facing = when (manager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING)) {
+                        CameraCharacteristics.LENS_FACING_FRONT -> CameraChoice.Facing.Front
+                        CameraCharacteristics.LENS_FACING_BACK -> CameraChoice.Facing.Back
+                        else -> CameraChoice.Facing.External
+                    }
+                    CameraChoice(id, facing)
+                }.sortedBy { it.facing.ordinal }
+            } catch (fault: Exception) {
+                Log.w(TAG, "the cameras could not be listed: ${fault.message}")
+                emptyList()
+            }
         }
 
-    /** The camera used when nothing was picked: the front one, as on a phone everywhere. */
-    private fun fallback(present: List<CameraChoice>): CameraChoice? =
-        present.firstOrNull { it.facing == CameraChoice.Facing.Front } ?: present.firstOrNull()
+        /** The camera used when nothing was picked: the front one, as on a phone everywhere. */
+        fun fallback(present: List<CameraChoice>): CameraChoice? =
+            present.firstOrNull { it.facing == CameraChoice.Facing.Front } ?: present.firstOrNull()
+    }
 
     /**
      * Starts sending [chosen] (or the preferred camera, or the front one) to

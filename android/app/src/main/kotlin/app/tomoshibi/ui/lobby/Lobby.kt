@@ -935,7 +935,6 @@ private fun RecentForget(room: String, action: () -> Unit, modifier: Modifier = 
  */
 @Composable
 private fun AccountMenu(app: AppModel, account: Account, state: LobbyState) {
-    val scope = LocalAppScope.current
     val popovers = state.popovers
     FloatingPopover(
         "account",
@@ -951,7 +950,8 @@ private fun AccountMenu(app: AppModel, account: Account, state: LobbyState) {
                     t("Sign out"),
                     {
                         popovers.close()
-                        scope.launch { app.signOut() }
+                        // Asked first (SignOutPrompt), over the whole window.
+                        app.signOutAsked = true
                     },
                     symbol = "rectangle.portrait.and.arrow.right",
                     role = MenuRole.Destructive,

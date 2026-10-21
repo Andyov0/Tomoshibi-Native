@@ -391,9 +391,13 @@ private fun CloseDot(action: () -> Unit) {
     ) { Symbol("xmark", size = 8.5f, weight = Font.Bold, tint = if (press.lit) Theme.foreground else Theme.muted) }
 }
 
-/** One item of a list that arrives and leaves: where it is, and whether it is still wanted. */
-internal class Departing<T>(val key: Any, var item: T, var place: Int) {
-    val visible = MutableTransitionState(false).apply { targetState = true }
+/**
+ * One item of a list that arrives and leaves: where it is, and whether it is
+ * still wanted. [shown] is an item that was there from the start, which has
+ * no arrival of its own to play.
+ */
+internal class Departing<T>(val key: Any, var item: T, var place: Int, shown: Boolean = false) {
+    val visible = MutableTransitionState(shown).apply { targetState = true }
 }
 
 /**
@@ -401,10 +405,17 @@ internal class Departing<T>(val key: Any, var item: T, var place: Int) {
  * each with the state its arrival and departure animate from: a list whose
  * items are simply gone on the next frame is the thing the owner does not
  * accept.
+ *
+ * [arriveAtFirst] false: what the list holds the first time it is drawn is
+ * drawn as it is, because it arrives with whatever brings the list in (a
+ * panel sliding in whole); only what is added afterwards plays its arrival.
  */
 @Composable
-internal fun <T> keepDeparting(items: List<T>, key: (T) -> Any): List<Departing<T>> {
+internal fun <T> keepDeparting(items: List<T>, arriveAtFirst: Boolean = true, key: (T) -> Any): List<Departing<T>> {
     val kept = remember { ArrayList<Departing<T>>() }
+    val first = remember { BooleanArray(1) { true } }
+    val already = first[0] && !arriveAtFirst
+    first[0] = false
     val keys = items.map(key)
     for (entry in kept) {
         val index = keys.indexOf(entry.key)
@@ -418,7 +429,7 @@ internal fun <T> keepDeparting(items: List<T>, key: (T) -> Any): List<Departing<
     }
     items.forEachIndexed { index, item ->
         val k = keys[index]
-        if (kept.none { it.key == k }) kept.add(Departing(k, item, index))
+        if (kept.none { it.key == k }) kept.add(Departing(k, item, index, shown = already))
     }
     kept.removeAll { !it.visible.targetState && !it.visible.currentState && it.visible.isIdle }
     return kept.toList()
