@@ -45,7 +45,9 @@ internal sealed class CoreUpdateSource : IUpdateSource
         // In the app's own local folder, which needs no permission; a part
         // left by a download stopped is carried on from by the next one
         // (the core keeps <file>.<hash>.part).
-        var file = Path.Combine(_folder, $"Tomoshibi-{build.Version}.msixbundle");
+        // What this install was made from: a bundle for a packaged app, the
+        // setup program for the app as it is given out (SetupInstaller).
+        var file = Path.Combine(_folder, ClientDescription.Packaged ? $"Tomoshibi-{build.Version}.msixbundle" : $"Tomoshibi-Setup-{build.Version}.exe");
         return new CoreTransfer(_deployment.Value.DownloadUpdate(build, file), file, _ui);
     }
 
@@ -253,6 +255,71 @@ internal sealed partial class PackageInstaller : IUpdateInstaller
         0x800B0100 or 0x800B0109 or 0x800B0004 => T("The update is not signed by Tomoshibi's developer, so it was not installed."),
         _ => T("The update could not be installed."),
     };
+}
+
+/// <summary>
+/// Installs a build by running its setup program, for the app as it is given
+/// out: not a package but an ordinary program, installed for the person in
+/// their own folder by an unsigned setup (windows/installer). The owner chose
+/// that over a code-signing certificate (2026-10-20), the first install being
+/// let through by hand at the SmartScreen prompt; an MSIX cannot be, since
+/// Windows refuses one whose signature it does not trust.
+///
+/// What is run is what the core checked: the size and SHA-256 the deployment
+/// gave over TLS, beside the build. With no signature to read, that is the
+/// whole of the trust, and the setup's own version stamp is read only to
+/// refuse a file that is not the setup offered. Downloaded by the app rather
+/// than a browser, it carries no mark of the web, so SmartScreen does not ask
+/// again. The setup runs silently, closes this app if it is still open, and
+/// opens the new one when it is done; this app quits once it is started.
+/// </summary>
+internal sealed class SetupInstaller : IUpdateInstaller
+{
+    private readonly Action _quit;
+    private volatile bool _stopped;
+
+    /// <param name="quit">Ends the app, on its own thread, once the setup is running.</param>
+    public SetupInstaller(Action quit) => _quit = quit;
+
+    public Task<Installed> Install(string file, string version)
+    {
+        _stopped = false;
+        try
+        {
+            var stamp = System.Diagnostics.FileVersionInfo.GetVersionInfo(file);
+            if (stamp.ProductName != "Tomoshibi" || stamp.ProductVersion?.Trim() != version)
+            {
+                Log.Line($"update: the setup is {stamp.ProductName} {stamp.ProductVersion}, not Tomoshibi {version}");
+                return Task.FromResult<Installed>(new Installed.Failed(T("The update is not the version that was offered, so it was not installed.")));
+            }
+        }
+        catch (Exception fault)
+        {
+            Log.Line($"update: the setup could not be read: {fault.Message}");
+            return Task.FromResult<Installed>(new Installed.Failed(T("The update could not be opened.")));
+        }
+        // Given up between the press and here: nothing has been started.
+        if (_stopped) return Task.FromResult<Installed>(new Installed.Stopped());
+        try
+        {
+            var setup = new System.Diagnostics.ProcessStartInfo(file)
+            {
+                Arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /SP-",
+                UseShellExecute = false,
+            };
+            Log.Line($"update: running the setup for {version}");
+            System.Diagnostics.Process.Start(setup);
+        }
+        catch (Exception fault)
+        {
+            Log.Line($"update: the setup did not start: {fault.HResult:X8} {fault.Message}");
+            return Task.FromResult<Installed>(new Installed.Failed(T("The update could not be installed.")));
+        }
+        _quit();
+        return Task.FromResult<Installed>(new Installed.Done());
+    }
+
+    public void Stop() => _stopped = true;
 }
 
 /// <summary>The real clock, for the checks' six hours.</summary>

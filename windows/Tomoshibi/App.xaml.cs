@@ -83,7 +83,11 @@ public partial class App : Application
         {
             var source = new CoreUpdateSource(launch.Base ?? uniffi.tomoshibi_protocol.TomoshibiProtocolMethods.HomeDeployment(), UpdatesFolder(launch),
                 Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread());
-            app.Updates = new Updates(source, new PackageInstaller(), ClientDescription.Version, new RealUpdateClock());
+            var quitOn = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            IUpdateInstaller installer = ClientDescription.Packaged
+                ? new PackageInstaller()
+                : new SetupInstaller(() => quitOn.TryEnqueue(() => Current.Exit()));
+            app.Updates = new Updates(source, installer, ClientDescription.Version, new RealUpdateClock());
             // Each step said once in the log, which a test reads.
             var said = "";
             app.Updates.Changed += () =>
