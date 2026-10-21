@@ -33,6 +33,10 @@ public struct RoomView: View {
     /// otherwise run under it (`watchersTop`).
     @State private var furnitureFrame: CGRect = .zero
     @State private var watchersWidth: CGFloat = 0
+    /// How wide the stage's own controls are ("Their camera" and filling the
+    /// screen), for them to move down below the row at the top where they
+    /// would run under it (`stageControlsTop`).
+    @State private var stageControlsWidth: CGFloat = 0
     @State private var problem: String?
     @State private var watch: WatchFeature
     @State private var music: MusicFeature
@@ -789,7 +793,7 @@ public struct RoomView: View {
                           press: { pressed(picture.id) }, select: { select(picture.id) }) {
                     SelfPicture(model: model, compact: compact)
                 } overlay: { hovering in
-                    stageControls(for: picture, revealed: reveal(hovering), edge: edge)
+                    stageControls(for: picture, revealed: reveal(hovering), edge: edge, spot: spot, furnished: !filled || shown)
                 }
             }
             .contextMenu { pictureMenu(picture, onStage: onStage, label: model.localName, person: nil, sound: .voice, identity: model.localIdentity) }
@@ -799,7 +803,7 @@ public struct RoomView: View {
                       press: { pressed(picture.id) }, select: { select(picture.id) }) {
                 MyShareFace(compact: compact, stop: stopSharing)
             } overlay: { hovering in
-                stageControls(for: picture, revealed: reveal(hovering), edge: edge)
+                stageControls(for: picture, revealed: reveal(hovering), edge: edge, spot: spot, furnished: !filled || shown)
             }
             .contextMenu { pictureMenu(picture, onStage: onStage, label: t("{name} (screen)", ["name": model.localName]), person: nil, sound: .screen, identity: model.localIdentity) }
         case let .remote(surface):
@@ -830,7 +834,7 @@ public struct RoomView: View {
                               press: { pressed(picture.id) }, select: { select(picture.id) }) {
                         SurfacePicture(surface: surface, call: model.call, compact: compact)
                     } overlay: { hovering in
-                        stageControls(for: picture, revealed: reveal(hovering), edge: edge)
+                        stageControls(for: picture, revealed: reveal(hovering), edge: edge, spot: spot, furnished: !filled || shown)
                     }
                 }
                 .contextMenu { pictureMenu(picture, onStage: onStage, label: label, person: person, sound: sound, identity: person.id) }
@@ -839,17 +843,36 @@ public struct RoomView: View {
     }
 
     @ViewBuilder
-    private func stageControls(for picture: Picture, revealed: Bool, edge: EdgeInsets) -> some View {
+    private func stageControls(for picture: Picture, revealed: Bool, edge: EdgeInsets, spot: CGRect, furnished: Bool) -> some View {
         if revealed {
             let other = counterpart(of: picture)
+            let top = stageControlsTop(spot: spot, edge: edge, furnished: furnished)
             StageControls(other: other?.kind, filled: filled,
                           switchTo: { if let other { withAnimation(Theme.settle) { pin.pin(other.id) } } },
                           fill: { filled ? unfill() : fill() })
-                .padding(12)
-                .padding(edge)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { stageControlsWidth = $0 }
+                .padding(.top, top)
+                .padding(.leading, 12 + edge.leading)
+                .padding(.bottom, 12 + edge.bottom)
+                .padding(.trailing, 12 + edge.trailing)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .animation(Theme.settle, value: top)
                 .transition(Theme.arrive)
         }
+    }
+
+    /// How far below the stage's top its controls sit: in its corner, or,
+    /// where the room's name and the signal at the top of the room run across
+    /// to them, below that row. On a phone the stage starts at the top of the
+    /// room, and "Their camera" was drawn over the signal's reading.
+    private func stageControlsTop(spot: CGRect, edge: EdgeInsets, furnished: Bool) -> CGFloat {
+        let corner = 12 + edge.top
+        guard furnished else { return corner }
+        let left = spot.maxX - 12 - edge.trailing - stageControlsWidth
+        let reaches = furnitureFrame.maxX + 8 > left
+            && furnitureFrame.maxY + 8 > spot.minY + corner
+            && furnitureFrame.minY < spot.minY + corner + 32
+        return reaches ? furnitureFrame.maxY + 8 - spot.minY : corner
     }
 
     /// The same person's other picture, which the switch on the stage offers
