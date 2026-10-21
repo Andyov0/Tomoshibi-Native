@@ -25,10 +25,18 @@ struct SignOutPrompt: ViewModifier {
                         .contentShape(Rectangle())
                         .onTapGesture { answer(signOut: false) }
                         .transition(.asymmetric(insertion: .opacity.animation(Theme.settle), removal: .opacity.animation(Theme.leave)))
+                        // Fixed order while both leave: without it SwiftUI drew
+                        // the departing glass over the departing card, so on
+                        // Cancel the card went dark in the first frame and came
+                        // back as the glass faded (owner, 2026-10-22: "点取消之后
+                        // 动画会卡一下"; a recording read frame by frame showed the
+                        // red button fall from 245 to 68 at once, then rise).
+                        .zIndex(0)
                     card
                         .transition(.asymmetric(
                             insertion: .scale(scale: 0.96).combined(with: .opacity).animation(Theme.settle),
                             removal: .scale(scale: 0.98).combined(with: .opacity).animation(Theme.leave)))
+                        .zIndex(1)
                 }
             }
             .animation(Theme.settle, value: app.signOutAsked == place)

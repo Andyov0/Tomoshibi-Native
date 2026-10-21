@@ -118,5 +118,28 @@ final class LobbyTouchTests: XCTestCase {
         XCTAssertTrue(app.staticTexts["pasted-link-room"].waitForExistence(timeout: 10),
                       "a link pasted into the join bar opens its room")
     }
-}
 
+    /// Sign out asks first, from the account page of the settings; Cancel
+    /// takes the question away and leaves the account signed in. The marks
+    /// go to the log, for a recording of the screen to be cut at them (that
+    /// is how the card going dark under the glass on Cancel was found).
+    func testSignOutCancelKeepsTheAccount() throws {
+        let app = lobby(["TOMOSHIBI_DEBUG_SETTINGS": "account"])
+        let settings = app.buttons["Settings"]
+        XCTAssertTrue(settings.waitForExistence(timeout: 30), "the lobby's settings button")
+        settings.tap()
+        let signOut = app.buttons["Sign out"]
+        XCTAssertTrue(signOut.waitForExistence(timeout: 10), "the account page's Sign out")
+        sleep(1)
+        print("MOTION-MARK ask \(Date().timeIntervalSince1970)")
+        signOut.tap()
+        let cancel = app.buttons["signout.cancel"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5), "the question, asked")
+        sleep(1)
+        print("MOTION-MARK cancel \(Date().timeIntervalSince1970)")
+        cancel.tap()
+        XCTAssertTrue(cancel.waitForNonExistence(timeout: 3), "the question, gone on Cancel")
+        sleep(1)
+        XCTAssertTrue(app.buttons["Sign out"].exists, "still signed in, the account page still there")
+    }
+}
