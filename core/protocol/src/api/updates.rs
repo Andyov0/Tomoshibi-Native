@@ -176,6 +176,39 @@ pub fn version_is_newer(offered: String, running: String) -> bool {
     }
 }
 
+/// The version an app calls itself and the deployment offers it, from the
+/// version people are told and the build: the version alone for its first
+/// build, and the build as a fourth part for every later one, so that 0.1.4
+/// build 2 is 0.1.4.2 (owner, 2026-10-22: a small fix keeps the version and
+/// takes the next build; a new version is for new features or a large
+/// update). The first build has no fourth part because 0.1.4 is what every
+/// app out there already compares and installs as 0.1.4, and 0.1.4.2 is after
+/// it by `version_is_newer`'s own rule; a 0.1.4.1 would be after 0.1.4 too,
+/// and offered to the app that is already it. A build that is not a number is
+/// taken for the first.
+#[uniffi::export]
+pub fn version_with_build(version: String, build: String) -> String {
+    let version = version.trim();
+    match build.trim().parse::<u64>() {
+        Ok(build) if build > 1 => format!("{version}.{build}"),
+        _ => version.to_owned(),
+    }
+}
+
+/// How a version is written for people: a later build of a version as the
+/// version with the build in brackets after it, 0.1.4.2 as "0.1.4 (2)", and
+/// the first build as the version alone, 0.1.4 and 0.1.4.1 both as "0.1.4"
+/// (the deployment joins the build on as 0.1.4.1 for the Macs from before
+/// 0.1.2). Anything else is written as it is.
+#[uniffi::export]
+pub fn version_label(version: String) -> String {
+    match segments(&version).as_deref() {
+        Some([a, b, c, build]) if *build > 1 => format!("{a}.{b}.{c} ({build})"),
+        Some([a, b, c, _]) => format!("{a}.{b}.{c}"),
+        _ => version.trim().to_owned(),
+    }
+}
+
 /// The notes to show beside a build for somebody reading `language`: in
 /// that language, else in the language without its region or script, else
 /// in English, else none at all, which is a banner with no notes rather than
@@ -822,6 +855,33 @@ mod tests {
             "leading noughts are the same number"
         );
         assert!(newer(" 0.1.0.8 ", "0.1.0.7"));
+    }
+
+    #[test]
+    fn a_later_build_is_the_version_with_its_build_as_a_fourth_part() {
+        let joined = |v: &str, b: &str| version_with_build(v.into(), b.into());
+        assert_eq!(joined("0.1.4", "1"), "0.1.4", "the first build is the version alone");
+        assert_eq!(joined("0.1.4", "2"), "0.1.4.2");
+        assert_eq!(joined("0.1.4", "12"), "0.1.4.12");
+        assert_eq!(joined("0.1.4", ""), "0.1.4", "no build is the first");
+        assert_eq!(joined("0.1.4", "2a"), "0.1.4", "nor is one that is not a number");
+        assert!(newer(&joined("0.1.4", "2"), &joined("0.1.4", "1")), "a later build is newer");
+        assert!(newer(&joined("0.1.4", "3"), &joined("0.1.4", "2")));
+        assert!(!newer(&joined("0.1.4", "1"), "0.1.4"), "the first build is not offered to itself");
+        assert!(newer(&joined("0.1.5", "1"), &joined("0.1.4", "9")), "a new version is after every build of the last");
+        assert!(newer(&joined("0.1.4", "2"), "0.1.3"), "and an app from before builds were said takes them");
+    }
+
+    #[test]
+    fn a_later_build_is_labelled_with_its_build_in_brackets() {
+        let label = |v: &str| version_label(v.into());
+        assert_eq!(label("0.1.4.2"), "0.1.4 (2)");
+        assert_eq!(label("0.1.4.12"), "0.1.4 (12)");
+        assert_eq!(label("0.1.4"), "0.1.4");
+        assert_eq!(label("0.1.4.1"), "0.1.4", "the old Macs' joined first build");
+        assert_eq!(label(" 0.1.4.2 "), "0.1.4 (2)");
+        assert_eq!(label("0.1"), "0.1");
+        assert_eq!(label("beta"), "beta");
     }
 
     #[test]
