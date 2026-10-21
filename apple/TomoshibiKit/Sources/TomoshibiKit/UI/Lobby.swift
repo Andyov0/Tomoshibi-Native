@@ -128,8 +128,8 @@ struct LobbyView: View {
         .onChange(of: app.offersRelayChoice) { if !app.offersRelayChoice, state.place == .servers { state.place = .home } }
         .onChange(of: state.place) { state.popovers.close() }
         // Over the sign-in, since somebody not signed in gets their updates
-        // too; signed in, it is in the stage beside the sidebar
-        // (SidebarLobby), and on the iPhone over its lobby (PhoneLobby). Under
+        // too; signed in, it is in the sidebar's foot (SidebarLobby), and on
+        // the iPhone over its lobby under the title (PhoneLobby). Under
         // the sheets, which cover it as they cover the rest.
         .overlay(alignment: .top) {
             if app.account == nil, let updates = app.updates { UpdateBanner(updates: updates, top: 52) }
@@ -781,12 +781,6 @@ struct SidebarLobby: View {
             .transition(.asymmetric(insertion: .opacity.combined(with: .offset(y: 10)).animation(Theme.settle),
                                     removal: .opacity.animation(Theme.leave)))
             .animation(Theme.settle, value: state.place)
-            // Beside the sidebar rather than centred on the window, where a
-            // narrow window put it over the sidebar's buttons; below the
-            // server menu in the stage's corner.
-            .overlay(alignment: .top) {
-                if let updates = app.updates { UpdateBanner(updates: updates, top: 52) }
-            }
             .floatingPopoverLayer(state.popovers)
         }
         #if os(iOS)
@@ -862,6 +856,9 @@ private struct LobbySidebar: View {
         }
         .safeAreaInset(edge: .bottom) {
             VStack(alignment: .leading, spacing: 8) {
+                // A newer build, in the foot above the account, where it
+                // covers nothing: over the stage it lay across the greeting.
+                if let updates = app.updates { UpdateBanner(updates: updates, inSidebar: true) }
                 FleetLine(app: app).padding(.horizontal, 6)
                 AccountMenu(app: app, account: account, state: state)
             }

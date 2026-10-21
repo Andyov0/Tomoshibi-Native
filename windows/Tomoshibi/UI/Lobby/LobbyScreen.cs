@@ -346,17 +346,6 @@ internal sealed class LobbyScreen : Screen
         // (Lobby.kt puts it there), opening a space above the greeting rather
         // than lying over it; clear of the server menu at the corner.
         var top = K.Column(0);
-        if (App.Updates is { } updates)
-        {
-            // As wide as the content up to 560, from its leading edge: a
-            // column that stops there rather than a card the width of what
-            // it says, which changes from one step to the next.
-            var lane = new Grid();
-            lane.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MaxWidth = 560 });
-            lane.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(0, GridUnitType.Star) });
-            lane.Children.Add(new UpdateBanner(updates, inline: true, top: App.OffersRelayChoice ? 16 : 0, below: 22));
-            top.Children.Add(lane);
-        }
         top.Children.Add(greeting);
         top.Margin = new Thickness(36, Shared.TitleBar + 40, 24, 0);
         top.VerticalAlignment = VerticalAlignment.Top;
@@ -401,15 +390,23 @@ internal sealed class LobbyScreen : Screen
         var scroller = new ScrollViewer { Content = _sidebarLists, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
 
         _sidebarFoot = new Grid();
+        // A newer build, in the foot above the relays' line and the account,
+        // where it covers nothing: over the stage it lay across the greeting.
+        // Apart from the foot, which is filled again whenever the relays
+        // answer, so that the card is not made again with them.
+        var foot = K.Column(0);
+        if (App.Updates is { } updates)
+            foot.Children.Add(new UpdateBanner(updates, sidebar: true, top: 0, below: 0) { Margin = new Thickness(10, 0, 10, 0) });
+        foot.Children.Add(_sidebarFoot);
         var shell = new Grid();
         shell.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         shell.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
         shell.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetRow(scroller, 1);
-        Grid.SetRow(_sidebarFoot, 2);
+        Grid.SetRow(foot, 2);
         shell.Children.Add(actions);
         shell.Children.Add(scroller);
-        shell.Children.Add(_sidebarFoot);
+        shell.Children.Add(foot);
         return K.Glass(shell, 22);
     }
 

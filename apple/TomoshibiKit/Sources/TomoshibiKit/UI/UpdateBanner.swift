@@ -18,15 +18,24 @@ struct UpdateBanner: View {
     /// What it clears below the top of where it is put: the server menu in
     /// the corner of the lobby's stage, the sign-in's language menu.
     var top: CGFloat = 12
+    /// In the sidebar's foot, above the account, where it covers nothing:
+    /// over the stage it lay across the greeting. As wide as the sidebar, its
+    /// notes to three lines, and coming up from below rather than down.
+    var inSidebar = false
     @State private var said: Updates.Step = .none
+    /// The edge's light, which comes up once and goes as the card arrives,
+    /// so that something new at the edge of the eye is seen.
+    @State private var lit = false
 
     var body: some View {
         ZStack {
             if updates.shown && !installing {
                 card
                     .transition(.asymmetric(
-                        insertion: .move(edge: .top).combined(with: .opacity).animation(Theme.settle),
-                        removal: .move(edge: .top).combined(with: .opacity).animation(Theme.leave)))
+                        insertion: .move(edge: inSidebar ? .bottom : .top).combined(with: .opacity)
+                            .combined(with: .scale(scale: 0.96, anchor: inSidebar ? .bottom : .top)).animation(Theme.settle),
+                        removal: .move(edge: inSidebar ? .bottom : .top).combined(with: .opacity).animation(Theme.leave)))
+                    .onAppear { flash() }
             }
         }
         .animation(Theme.settle, value: updates.shown && !installing)
@@ -34,25 +43,39 @@ struct UpdateBanner: View {
         .onChange(of: updates.step) { if updates.shown || updates.step != .none { said = updates.step } }
     }
 
+    /// Once, a moment after it has settled: the tally's edge up and away.
+    private func flash() {
+        lit = false
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(360))
+            withAnimation(.easeOut(duration: 0.45)) { lit = true }
+            try? await Task.sleep(for: .milliseconds(520))
+            withAnimation(.easeIn(duration: 0.9)) { lit = false }
+        }
+    }
+
     private var installing: Bool {
         if case .installing = updates.step { true } else { false }
     }
 
     private var card: some View {
-        content(said)
+        let radius: CGFloat = inSidebar ? 16 : 20
+        return content(said)
             .id(kind(said))
             .transition(.asymmetric(insertion: .opacity.animation(Theme.settle), removal: .opacity.animation(Theme.leave)))
             .animation(Theme.settle, value: kind(said))
-            .padding(14)
-            .frame(maxWidth: 520)
+            .padding(inSidebar ? 12 : 14)
+            .frame(maxWidth: inSidebar ? .infinity : 520)
             // Flat, as the screens are drawn: the surface colour with the
             // theme's edge, and a shadow because it floats over the stage.
             // Not glass: it is something to read, not a control.
-            .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Theme.surface))
-            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Theme.border, lineWidth: 1))
-            .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
-            .padding(.horizontal, 16)
-            .padding(.top, top)
+            .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(inSidebar ? Theme.surfaceHigh : Theme.surface))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Theme.border, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Theme.tally.opacity(lit ? 0.85 : 0), lineWidth: 1.5))
+            .shadow(color: Theme.tally.opacity(lit ? 0.35 : 0), radius: 14)
+            .shadow(color: .black.opacity(inSidebar ? 0 : 0.35), radius: 18, y: 8)
+            .padding(.horizontal, inSidebar ? 0 : 16)
+            .padding(.top, inSidebar ? 0 : top)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("update.banner")
     }
@@ -66,7 +89,7 @@ struct UpdateBanner: View {
             Said(badge: problem == nil ? "sparkles" : "exclamationmark.circle.fill", warning: problem != nil,
                  title: t("Tomoshibi {version} is available", ["version": offer.version]),
                  lines: [offer.notes(Localization.shared.language.rawValue)].compactMap { $0 },
-                 problem: problem) {
+                 problem: problem, narrow: inSidebar) {
                 PillButton(title: t("Later"), height: 30) { updates.putAway() }
                     .accessibilityIdentifier("update.later")
                 PillButton(title: problem == nil ? t("Update") : t("Try again"), role: .prominent, height: 30) { updates.accept() }
@@ -76,14 +99,14 @@ struct UpdateBanner: View {
             Said(badge: "arrow.clockwise",
                  title: t("Downloading Tomoshibi {version}", ["version": offer.version]),
                  lines: [t("{received} of {total}", ["received": megabytes(received), "total": megabytes(total)])],
-                 progress: total > 0 ? min(1, Double(received) / Double(total)) : 0) {
+                 progress: total > 0 ? min(1, Double(received) / Double(total)) : 0, narrow: inSidebar) {
                 PillButton(title: t("Cancel"), height: 30) { updates.cancel() }
                     .accessibilityIdentifier("update.cancel")
             }
         case let .misplaced(_, place):
             Said(badge: "exclamationmark.circle.fill", warning: true,
                  title: t("Tomoshibi cannot update itself here"),
-                 lines: [Self.explain(place)]) {
+                 lines: [Self.explain(place)], narrow: inSidebar) {
                 PillButton(title: t("Later"), height: 30) { updates.putAway() }
                     .accessibilityIdentifier("update.later")
                 PillButton(title: t("Show in Finder"), role: .prominent, height: 30) { updates.reveal() }
@@ -182,6 +205,8 @@ private struct Said<Buttons: View>: View {
     let lines: [String]
     var problem: String?
     var progress: Double?
+    /// In the sidebar: what changed to three lines, under the title.
+    var narrow = false
     @ViewBuilder var buttons: Buttons
 
     var body: some View {
@@ -199,7 +224,7 @@ private struct Said<Buttons: View>: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(title).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.foreground)
                 ForEach(lines, id: \.self) { line in
-                    Text(line).font(.system(size: 12.5)).foregroundStyle(Theme.muted).lineLimit(6)
+                    Text(line).font(.system(size: 12.5)).foregroundStyle(Theme.muted).lineLimit(narrow ? 3 : 6)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if let problem {

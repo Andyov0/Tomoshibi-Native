@@ -31,10 +31,12 @@ internal sealed class UpdateBanner : Grid
 {
     private readonly Updates _updates;
     private readonly bool _inline;
+    private readonly bool _sidebar;
     private readonly double _top;
     private readonly double _below;
     private Border? _card;
     private Border? _holder;
+    private Border? _lit;
     private Unfolding? _body;
     private Unfolding? _space;
     private string? _said;
@@ -46,9 +48,16 @@ internal sealed class UpdateBanner : Grid
     /// <param name="inline">In a column, opening a space, rather than floating over the content.</param>
     /// <param name="top">What it clears below the top of where it is put.</param>
     /// <param name="below">Inline, the space it keeps below itself while it is open.</param>
-    public UpdateBanner(Updates updates, bool inline = false, double top = 12, double below = 0)
+    /// <param name="sidebar">
+    /// In the sidebar's foot, above the account, where it covers nothing (over
+    /// the stage it lay across the greeting): as wide as the sidebar, on its
+    /// raised grey, its notes to three lines. Always in the flow there.
+    /// </param>
+    public UpdateBanner(Updates updates, bool inline = false, double top = 12, double below = 0, bool sidebar = false)
     {
         _updates = updates;
+        _sidebar = sidebar;
+        inline |= sidebar;
         _inline = inline;
         _top = top;
         _below = below;
@@ -111,20 +120,23 @@ internal sealed class UpdateBanner : Grid
     private void Arrive()
     {
         _body = new Unfolding();
+        var radius = _sidebar ? 16 : 20;
         _card = new Border
         {
-            Background = Ink.Surface,
+            Background = _sidebar ? Ink.SurfaceHigh : Ink.Surface,
             BorderBrush = Ink.Border,
             BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(20),
-            Padding = new Thickness(14),
+            CornerRadius = new CornerRadius(radius),
+            Padding = new Thickness(_sidebar ? 12 : 14),
             Child = _body,
         }.Named("update.banner");
+        var lit = Light(radius);
         if (_inline)
         {
             // In a holder that carries the margins, so that they open and
             // close with the card rather than standing empty when it is gone.
-            _space!.Show(new Border { Child = _card, Padding = new Thickness(0, _top, 0, _below) });
+            _space!.Show(new Border { Child = new Grid { Children = { _card, lit } }, Padding = new Thickness(0, _top, 0, _below) });
+            Flash(lit);
             return;
         }
         _card.MaxWidth = 520;
@@ -134,15 +146,25 @@ internal sealed class UpdateBanner : Grid
         // From above the window's edge: its own height and what it clears.
         _holder = K.Holding(_card).Arrives(1f, fromY: -(float)(_top + 160));
         Children.Add(_holder);
+        lit.Margin = _card.Margin;
+        lit.MaxWidth = _card.MaxWidth;
+        _lit = lit;
+        Children.Add(lit);
+        Flash(lit);
     }
 
     private void Leave()
     {
         if (_card == null) return;
         if (_inline) _space!.Show(null);
-        else Children.Remove(_holder);
+        else
+        {
+            Children.Remove(_holder);
+            Children.Remove(_lit);
+        }
         _card = null;
         _holder = null;
+        _lit = null;
         _body = null;
         _said = null;
         _progressLine = null;
@@ -229,7 +251,45 @@ internal sealed class UpdateBanner : Grid
     }
 
     /// <summary>The symbol in a lit circle, the title, what there is to say, and the buttons at the trailing end.</summary>
-    private static Grid Said(string? badge, string title, string[] lines, Tap[] buttons, bool warning = false, string? problem = null, UIElement[]? extra = null)
+    /// <summary>
+    /// The edge's light: the tally's border over the card, which comes up once
+    /// and goes as the card arrives (Flash), so that something new at the edge
+    /// of the eye is seen. Through XAML's own opacity, never the visual's: the
+    /// card it lies over takes presses (K.Holding).
+    /// </summary>
+    private static Border Light(double radius) => new()
+    {
+        BorderBrush = Ink.TallyAt(0.85f),
+        BorderThickness = new Thickness(1.5),
+        CornerRadius = new CornerRadius(radius),
+        Opacity = 0,
+        IsHitTestVisible = false,
+    };
+
+    /// <summary>Once, a moment after the card has settled: the light up over 450 ms and away over 900.</summary>
+    private void Flash(Border lit)
+    {
+        void After(int ms, Action then)
+        {
+            var timer = DispatcherQueue.CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(ms);
+            timer.IsRepeating = false;
+            timer.Tick += (_, _) => then();
+            timer.Start();
+        }
+        After(360, () =>
+        {
+            lit.OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(450) };
+            lit.Opacity = 1;
+            After(520, () =>
+            {
+                lit.OpacityTransition = new ScalarTransition { Duration = TimeSpan.FromMilliseconds(900) };
+                lit.Opacity = 0;
+            });
+        });
+    }
+
+    private Grid Said(string? badge, string title, string[] lines, Tap[] buttons, bool warning = false, string? problem = null, UIElement[]? extra = null)
     {
         var tint = warning ? Ink.Danger : Ink.Tally;
         var circle = new Border
@@ -247,7 +307,7 @@ internal sealed class UpdateBanner : Grid
             inside.VerticalAlignment = VerticalAlignment.Center;
         }
         var words = K.Column(4, K.Text(title, 14, K.Semibold));
-        foreach (var line in lines) words.Children.Add(K.Text(line, 12.5, ink: Ink.Muted, lines: 6));
+        foreach (var line in lines) words.Children.Add(K.Text(line, 12.5, ink: Ink.Muted, lines: _sidebar ? 3 : 6));
         if (problem != null) words.Children.Add(K.Text(problem, 12.5, ink: Ink.Danger));
         foreach (var part in extra ?? []) words.Children.Add(part);
         var row = K.Row(8, buttons);
