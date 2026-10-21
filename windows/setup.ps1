@@ -19,7 +19,7 @@ checks before running a setup it downloaded. Needs Inno Setup 6.3 or later.
 What the shelf's apps.json needs (size and SHA-256) is printed last.
 #>
 param(
-    [Parameter(Mandatory)] [ValidatePattern('^\d+\.\d+\.\d+\.\d+$')] [string] $Version,
+    [Parameter(Mandatory)] [ValidatePattern('^\d+\.\d+\.\d+$')] [string] $Version,
     [ValidateSet("Debug", "Release")] [string] $Configuration = "Release",
     [string] $Out = (Join-Path $PSScriptRoot "..\out"),
     [string] $Iscc = ""

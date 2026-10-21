@@ -13,7 +13,7 @@
 ; and passes Version, ArmDir, X64Dir and OutDir.
 
 #ifndef Version
-  #error Version is required, as in /DVersion=0.1.0.2
+  #error Version is required, as in /DVersion=0.1.2
 #endif
 
 [Setup]

@@ -678,8 +678,7 @@ internal static class About
         // The package's version where the app is installed from one, which is
         // what an update is compared with: 0.1.0.7 written 0.1.0 (7), as the
         // other apps write theirs.
-        var parts = ClientDescription.Version.Split('.');
-        var appVersion = parts.Length == 4 ? $"{parts[0]}.{parts[1]}.{parts[2]} ({parts[3]})" : ClientDescription.Version;
+        var appVersion = ClientDescription.Version;
         var mark = new Mark(76);
         var header = K.Row(18, mark, K.Column(4, K.Text("Tomoshibi", 26, K.Bold), K.Text(appVersion, 13, mono: true, ink: Ink.Muted)));
         foreach (var child in header.Children) ((FrameworkElement)child).VerticalAlignment = VerticalAlignment.Center;

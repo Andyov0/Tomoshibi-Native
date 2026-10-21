@@ -18,9 +18,9 @@ internal static class ClientDescription
     public static bool Packaged { get; private set; }
 
     /// <summary>
-    /// The version this app is, in four parts: the package's where it is
-    /// packaged, which is what the deployment's apps.json names and what an
-    /// update is compared with, the assembly's otherwise.
+    /// The version this app is: the package's four parts where it is packaged,
+    /// and otherwise the assembly's first three, 0.1.2, as people are told it
+    /// and apps.json names it (owner, 2026-10-22: no build number after it).
     /// </summary>
     public static string Version { get; } = ReadVersion();
 
@@ -36,7 +36,7 @@ internal static class ClientDescription
         {
             // Unpackaged: there is no package to ask.
             var version = Assembly.GetExecutingAssembly().GetName().Version;
-            return version == null ? "" : $"{version.Major}.{version.Minor}.{version.Build}.{version.Revision}";
+            return version == null ? "" : $"{version.Major}.{version.Minor}.{version.Build}";
         }
     }
 

@@ -79,7 +79,7 @@ internal class SystemSettingsPlatform(private val context: Context) : SettingsPl
     }
     private val routing by lazy { SystemAudioRouting(context) }
 
-    override val appVersion: String get() = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
+    override val appVersion: String get() = BuildConfig.VERSION_NAME
     override fun coreVersion(): String = uniffi.tomoshibi_core.coreVersion()
     override fun normaliseRoomName(typed: String): String = uniffi.tomoshibi_protocol.normaliseRoomName(typed)
     override fun validRoomName(name: String): Boolean = uniffi.tomoshibi_protocol.validRoomName(name)

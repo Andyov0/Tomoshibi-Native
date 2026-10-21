@@ -267,7 +267,8 @@ final class MacInstaller: UpdateInstaller {
         guard let info = NSDictionary(contentsOf: staged.appendingPathComponent("Contents/Info.plist")) as? [String: Any] else {
             return .notTheBuild("no Info.plist")
         }
-        let said = [info["CFBundleShortVersionString"], info["CFBundleVersion"]].compactMap { $0 as? String }.joined(separator: ".")
+        // The version alone, as ClientDescription writes it and apps.json names it.
+        let said = info["CFBundleShortVersionString"] as? String ?? ""
         guard info["CFBundleIdentifier"] as? String == identifier else { return .notTheBuild("another app") }
         guard said == version else { return .notTheBuild("version \(said), not \(version)") }
         if let refusal = UpdateTrust.refusal(of: staged, identifier: identifier, signing: signing) { return .untrusted(refusal) }

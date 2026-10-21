@@ -2145,11 +2145,9 @@ private struct AboutSettings: View {
         }
     }
 
+    /// The version alone, with no build number after it (ClientDescription).
     private var version: String {
-        let info = Bundle.main.infoDictionary
-        let short = info?["CFBundleShortVersionString"] as? String ?? "0"
-        let build = info?["CFBundleVersion"] as? String ?? "0"
-        return "\(short) (\(build))"
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
     }
 
 }

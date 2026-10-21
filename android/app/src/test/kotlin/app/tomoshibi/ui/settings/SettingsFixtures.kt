@@ -81,7 +81,7 @@ internal fun Any.poke(property: String, value: Any?) {
 /** Devices, a check that opens nothing, and the core's rules as the web writes them. */
 internal class FakePlatform : SettingsPlatform {
     val check = FakeCheck()
-    override val appVersion = "0.1.0 (1)"
+    override val appVersion = "0.1.2"
     override fun coreVersion() = "0.1.0"
 
     /** names.ts, near enough for a test: lowercase, and anything else a dash. */
