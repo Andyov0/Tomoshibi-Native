@@ -286,10 +286,15 @@ internal sealed class SetupInstaller : IUpdateInstaller
         _stopped = false;
         try
         {
+            // Inno Setup pads the strings of its version stamp with spaces,
+            // and a stamp read untrimmed refused every real setup as not the
+            // one offered.
             var stamp = System.Diagnostics.FileVersionInfo.GetVersionInfo(file);
-            if (stamp.ProductName != "Tomoshibi" || stamp.ProductVersion?.Trim() != version)
+            var name = stamp.ProductName?.Trim(' ', '\0');
+            var said = stamp.ProductVersion?.Trim(' ', '\0');
+            if (name != "Tomoshibi" || said != version)
             {
-                Log.Line($"update: the setup is {stamp.ProductName} {stamp.ProductVersion}, not Tomoshibi {version}");
+                Log.Line($"update: the setup is {name} {said}, not Tomoshibi {version}");
                 return Task.FromResult<Installed>(new Installed.Failed(T("The update is not the version that was offered, so it was not installed.")));
             }
         }
