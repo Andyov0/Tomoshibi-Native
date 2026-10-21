@@ -67,6 +67,24 @@ internal static class K
     /// <summary>One of the apps' symbols (Symbols.cs maps their names to the Windows ones).</summary>
     public static FrameworkElement Symbol(string name, double size = 14, Brush? ink = null) => Symbols.Make(name, size, ink ?? Ink.Foreground);
 
+    /// <summary>
+    /// A column at most <paramref name="most"/> across, centred in a scroller
+    /// that moves it up and down. A scroller places its content by the width
+    /// the content asks for, not the width it is laid out at: a page whose
+    /// rows asked for less than the column (the settings' About, at 391 of
+    /// 620) was centred as if that narrow and drawn the column's full width,
+    /// past the scroller's right edge, where it was cut off. Held to the
+    /// scroller's width, to its most, it asks for what it is.
+    /// </summary>
+    public static ScrollViewer Scrolling(FrameworkElement column, double most)
+    {
+        column.MaxWidth = most;
+        column.HorizontalAlignment = HorizontalAlignment.Center;
+        var scroller = new ScrollViewer { Content = column, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        scroller.SizeChanged += (_, e) => column.Width = Math.Min(most, e.NewSize.Width);
+        return scroller;
+    }
+
     public static StackPanel Column(double spacing, params UIElement[] children)
     {
         var panel = new StackPanel { Orientation = Orientation.Vertical, Spacing = spacing };

@@ -336,8 +336,7 @@ internal sealed class SettingsView : Grid
         body.Rises(50);
         column.Children.Add(body);
         column.Padding = wide ? new Thickness(28, 44, 28, 32) : new Thickness(16, 0, 16, 34);
-        column.MaxWidth = 620;
-        var scroller = new ScrollViewer { Content = column, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var scroller = K.Scrolling(column, 620);
         if (!animated) Swap(scroller, 0, 0);
         else if (wide) Swap(scroller, 0, 10);
         else Swap(scroller, 400, 0);

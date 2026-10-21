@@ -38,7 +38,6 @@ internal sealed class ServersView : Grid
         _measure = Tap.Words(T("Measure again"), "arrow.clockwise", height: 32, size: 12.5);
         _measure.Click += async (_, _) => await app.Lobby.Measure();
         var column = K.Column(20);
-        column.MaxWidth = 680;
         column.Padding = new Thickness(wide ? 28 : 16, Shared.TitleBar + (wide ? 16 : 52), wide ? 28 : 16, 28);
         var header = new Grid();
         UIElement heading = wide ? K.Column(4, K.Text(T("Server"), 26, K.Bold)) : new Border();
@@ -50,7 +49,7 @@ internal sealed class ServersView : Grid
         column.Children.Add(header);
         _sections.Rises(40);
         column.Children.Add(_sections);
-        var scroller = new ScrollViewer { Content = column, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        var scroller = K.Scrolling(column, 680);
         Children.Add(scroller);
         if (!wide) Children.Add(PageBar(T("Server"), back));
         // Presses on the page are the page's, not the lobby's under it.
