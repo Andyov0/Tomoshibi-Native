@@ -541,7 +541,7 @@ internal sealed class LobbyScreen : Screen
         tap.Click += (_, _) => Overlay.Current?.Toggle("account", tap, () => Menu.Card(
             Menu.Item(T("Settings"), () => { Overlay.Current?.ClosePopover(); OpenSettings(); }, "gearshape"),
             Menu.Rule(),
-            Menu.Item(T("Sign out"), () => { Overlay.Current?.ClosePopover(); _ = App.SignOut(); }, "rectangle.portrait.and.arrow.right", role: Menu.Role.Destructive)),
+            Menu.Item(T("Sign out"), () => { Overlay.Current?.ClosePopover(); SignOutPrompt.Ask(App); }, "rectangle.portrait.and.arrow.right", role: Menu.Role.Destructive)),
             width: 262, edge: Edge.Above, align: Align.Start);
         return tap;
     }

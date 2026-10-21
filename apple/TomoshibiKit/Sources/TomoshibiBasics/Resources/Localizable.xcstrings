@@ -17371,6 +17371,36 @@
         }
       }
     },
+    "Sign out of Tomoshibi?" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign out of Tomoshibi?"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "サインアウトしますか？"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要退出登录吗？"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要登出嗎？"
+          }
+        }
+      }
+    },
     "Signal only" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -22767,6 +22797,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "到"
+          }
+        }
+      }
+    },
+    "To come back, you will sign in again with your name and passphrase." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "To come back, you will sign in again with your name and passphrase."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もう一度使うときは、名前と合言葉でサインインし直します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "之后需要重新输入名称和口令才能登录。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "之後需要重新輸入名稱和密語才能登入。"
           }
         }
       }

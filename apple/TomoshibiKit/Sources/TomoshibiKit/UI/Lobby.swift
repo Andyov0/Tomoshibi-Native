@@ -134,6 +134,8 @@ struct LobbyView: View {
         .overlay(alignment: .top) {
             if app.account == nil, let updates = app.updates { UpdateBanner(updates: updates, top: 52) }
         }
+        // Over everything in the window, sidebar and stage alike.
+        .signOutPrompt(app, at: .lobby)
     }
 
     @ViewBuilder
@@ -931,7 +933,7 @@ struct AccountMenu: View {
                     MenuRule()
                     MenuItem(title: t("Sign out"), symbol: "rectangle.portrait.and.arrow.right", role: .destructive) {
                         popovers.close()
-                        Task { await app.signOut() }
+                        withAnimation(Theme.settle) { app.signOutAsked = .lobby }
                     }
                 }
             }

@@ -50,6 +50,10 @@ public final class AppModel {
     public private(set) var info: DeploymentInfo?
     public private(set) var account: Account?
     public private(set) var call: CallModel?
+    /// Where Sign out was pressed, while it is asked whether to (SignOutPrompt):
+    /// the lobby's window or the settings'.
+    public enum SignOutPlace: Equatable, Sendable { case lobby, settings }
+    public var signOutAsked: SignOutPlace?
     public private(set) var relays: RelayList? {
         didSet { dropRelayNotOffered() }
     }

@@ -167,9 +167,28 @@ internal sealed class Overlay : Grid
     /// <paramref name="cover"/> as well, the whole window, as the phone's
     /// start sheet takes the whole screen, its content laying itself out.
     /// </summary>
-    public Action ShowDialog(UIElement content, double width, double? maxHeight, Action dismiss, bool sheet = false, bool scrolls = true, bool cover = false)
+    /// <param name="frosted">
+    /// The ground behind as frosted glass, a little dimmed, rather than dimmed
+    /// alone: for a question that is to be the one thing in the window (Sign
+    /// out's). In-app acrylic, which blurs what the app draws under it.
+    /// </param>
+    public Action ShowDialog(UIElement content, double width, double? maxHeight, Action dismiss, bool sheet = false, bool scrolls = true, bool cover = false, bool frosted = false)
     {
-        var dim = new Border { Background = Ink.Black(0.45f) };
+        var dim = new Border
+        {
+            Background = frosted
+                ? new AcrylicBrush
+                {
+                    TintColor = Microsoft.UI.Colors.Black,
+                    // Luminosity near full: thin, the red of the microphone
+                    // and camera switches under it came through as a ring of
+                    // the acrylic's grain.
+                    TintOpacity = 0.12,
+                    TintLuminosityOpacity = 0.62,
+                    FallbackColor = Ink.Of(Shade.Black.WithAlpha(0.6f)),
+                }
+                : Ink.Black(0.45f),
+        };
         dim.PointerPressed += (_, e) =>
         {
             e.Handled = true;

@@ -563,7 +563,7 @@ internal static class AccountSettings
             buttons.Children.Add(remove);
         }
         var signOut = Tap.Words(T("Sign out"), "rectangle.portrait.and.arrow.right", height: 32, size: 12.5);
-        signOut.Click += async (_, _) => await app.SignOut();
+        signOut.Click += (_, _) => SignOutPrompt.Ask(app);
         buttons.Children.Add(signOut);
         choose.Click += async (_, _) =>
         {

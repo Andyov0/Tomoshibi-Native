@@ -726,6 +726,18 @@
       "zh-Hans": "停止共享并关闭",
       "zh-Hant": "停止分享並關閉",
       "ja": "共有をやめて閉じる"
+    },
+    "Sign out of Tomoshibi?": {
+      "en": "Sign out of Tomoshibi?",
+      "zh-Hans": "要退出登录吗？",
+      "zh-Hant": "要登出嗎？",
+      "ja": "サインアウトしますか？"
+    },
+    "To come back, you will sign in again with your name and passphrase.": {
+      "en": "To come back, you will sign in again with your name and passphrase.",
+      "zh-Hans": "之后需要重新输入名称和口令才能登录。",
+      "zh-Hant": "之後需要重新輸入名稱和密語才能登入。",
+      "ja": "もう一度使うときは、名前と合言葉でサインインし直します。"
     }
   }
 }

@@ -256,6 +256,7 @@ public struct SettingsView: View {
     public var body: some View {
         content
             .floatingPopoverLayer(popovers)
+            .signOutPrompt(app, at: .settings)
             .preferredColorScheme(.dark)
             .tint(Theme.tally)
             .environment(\.locale, localization.language.locale)
@@ -1672,7 +1673,7 @@ private struct AccountSettings: View {
                         .transition(Theme.arrive)
                     }
                     Button {
-                        Task { await app.signOut() }
+                        withAnimation(Theme.settle) { app.signOutAsked = .settings }
                     } label: {
                         ProfileButtonLabel(title: t("Sign out"), symbol: "rectangle.portrait.and.arrow.right")
                     }
