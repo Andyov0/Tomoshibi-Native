@@ -10,7 +10,10 @@
 //! ask for the rest of the same build splices two builds together. A part
 //! not kept after a broken connection downloads fifty megabytes again on a
 //! phone's data. A cancel that does not stop the transfer goes on spending
-//! it. Each test below fails if its guard is taken out; that was tried.
+//! it. An iOS build, which TestFlight installs, read as if it had a file
+//! offers a download nobody can install, and downloaded at all spends a
+//! request on a phone for a file the deployment does not have. Each test
+//! below fails if its guard is taken out; that was tried.
 
 use std::{
     collections::HashMap,
@@ -403,6 +406,7 @@ async fn the_check_asks_for_its_own_platform_as_the_app() {
         (UpdatePlatform::Mac, "/api/apps/latest/mac"),
         (UpdatePlatform::Android, "/api/apps/latest/android"),
         (UpdatePlatform::Windows, "/api/apps/latest/windows"),
+        (UpdatePlatform::Ios, "/api/apps/latest/ios"),
     ] {
         deployment
             .clone()
@@ -523,6 +527,98 @@ async fn a_build_described_wrongly_is_not_offered() {
             .await,
         Err(ProtocolError::Invalid { .. })
     ));
+}
+
+/// What updates.go answers for the iOS app: a version and notes, and no
+/// size or hash, because TestFlight delivers the build.
+fn latest_ios(version: &str) -> Value {
+    json!({
+        "platform": "ios",
+        "version": version,
+        "notes": { "zh-Hans": "  修好了  ", "en": "Fixed.", "ja": 7 },
+    })
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_ios_build_is_a_version_and_notes_with_nothing_to_download() {
+    let stub = Stub::start(|_| Reply::json(200, latest_ios("0.1.0.10"))).await;
+    let deployment = stub.deployment();
+
+    let notes = HashMap::from([(s("zh-Hans"), s("修好了")), (s("en"), s("Fixed."))]);
+    assert_eq!(
+        deployment
+            .clone()
+            .check_for_update(UpdatePlatform::Ios, s("0.1.0.9"))
+            .await,
+        Ok(UpdateCheck::Available {
+            build: AppBuild {
+                platform: UpdatePlatform::Ios,
+                version: s("0.1.0.10"),
+                size: 0,
+                sha256: s(""),
+                notes: notes.clone(),
+            }
+        }),
+        "0.1.0.10 is after 0.1.0.9 by number, on iOS as anywhere"
+    );
+
+    for running in ["0.1.0.10", "0.1.0.11", "0.2"] {
+        assert_eq!(
+            deployment
+                .clone()
+                .check_for_update(UpdatePlatform::Ios, s(running))
+                .await,
+            Ok(UpdateCheck::UpToDate),
+            "offered to {running}"
+        );
+    }
+
+    // Given a size and a hash all the same, as a line copied into the iOS
+    // list from the Mac's would carry, or as nought and nothing: neither is
+    // taken for a file.
+    let mut copied = latest("ios", "0.1.0.10");
+    copied["notes"] = latest_ios("0.1.0.10")["notes"].clone();
+    let mut nothing = latest_ios("0.1.0.10");
+    nothing["size"] = json!(0);
+    nothing["sha256"] = json!("");
+    for body in [copied, nothing] {
+        let stub = Stub::start(move |_| Reply::json(200, body.clone())).await;
+        let said = stub
+            .deployment()
+            .check_for_update(UpdatePlatform::Ios, s("0.1.0.9"))
+            .await;
+        let Ok(UpdateCheck::Available { build }) = said else {
+            panic!("an iOS build with a size and a hash beside it was not offered: {said:?}");
+        };
+        assert_eq!((build.size, build.sha256.as_str()), (0, ""), "{build:?}");
+    }
+
+    let none = Stub::start(|_| Reply::json(404, json!({ "error": "no_build" }))).await;
+    assert_eq!(
+        none.deployment()
+            .check_for_update(UpdatePlatform::Ios, s("0.1.0.9"))
+            .await,
+        Ok(UpdateCheck::UpToDate)
+    );
+
+    for (what, body) in [
+        ("another platform", latest("mac", "0.1.0.10")),
+        ("no version", json!({ "platform": "ios" })),
+        (
+            "a version that is not one",
+            json!({ "platform": "ios", "version": "0.1.0 (10)" }),
+        ),
+    ] {
+        let stub = Stub::start(move |_| Reply::json(200, body.clone())).await;
+        let said = stub
+            .deployment()
+            .check_for_update(UpdatePlatform::Ios, s("0.1.0.9"))
+            .await;
+        assert!(
+            matches!(said, Err(ProtocolError::Unexpected { .. })),
+            "{what}: {said:?}"
+        );
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -923,4 +1019,46 @@ async fn an_old_file_at_the_destination_is_never_taken_for_the_build() {
         !destination.exists(),
         "a file that was there before was left as though it were the build"
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_ios_build_is_never_downloaded_or_asked_for() {
+    // A deployment that would hand a file to anything that asked, so that
+    // the only thing between an iOS build and a download is the refusal.
+    let bytes = Arc::new(contents(14, 20_000));
+    let served = bytes.clone();
+    let stub = Stub::start(move |seen| serve_file(seen, &served)).await;
+    let dir = scratch("ios");
+    let destination = dir.join("Tomoshibi-0.1.0.8.ipa");
+
+    // As a check hands it over, and as an app could make one for itself,
+    // with a size and a hash that the file above would match.
+    let checked = AppBuild {
+        platform: UpdatePlatform::Ios,
+        version: s("0.1.0.8"),
+        size: 0,
+        sha256: s(""),
+        notes: HashMap::new(),
+    };
+    let mut made = build_of(&bytes, "0.1.0.8");
+    made.platform = UpdatePlatform::Ios;
+
+    for build in [checked, made] {
+        let said = stub
+            .deployment()
+            .download_update(build.clone(), destination.to_string_lossy().into())
+            .run(Arc::new(Watch::default()))
+            .await;
+        assert!(
+            matches!(&said, Err(UpdateError::Unexpected { detail }) if detail.contains("TestFlight")),
+            "{build:?} came to {said:?}"
+        );
+    }
+
+    assert!(
+        stub.seen().is_empty(),
+        "the deployment was asked for an iOS build: {:?}",
+        stub.seen()
+    );
+    assert!(!dir.exists(), "a download of an iOS build touched the disk");
 }

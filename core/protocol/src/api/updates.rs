@@ -16,6 +16,13 @@
 //! build that arrived (mounting a disk image and replacing itself, handing an
 //! APK to the package installer) is its own.
 //!
+//! The iOS app asks the first address too, by the same rule, and is told a
+//! version and its notes and nothing else: TestFlight installs it, so all an
+//! app can do with an iOS build is say that it is waiting there. Such a
+//! build has no size or hash, and a download of one is refused here before
+//! anything is asked of the deployment, whose `/file` for iOS is `no_build`
+//! whatever its manifest says.
+//!
 //! A download is resumable. It is written beside its destination as
 //! `<destination>.<first sixteen hex digits of the hash>.part`, named by the
 //! build so that what is left of one build is never continued as another, and
@@ -45,14 +52,20 @@ use tokio::{fs, io::AsyncWriteExt, sync::watch};
 use super::{network, Api, Deployment};
 use crate::{runtime::on_core, ProtocolError};
 
-/// The platforms the deployment keeps builds for, by the section of its
-/// manifest each is in. The iPhone is not one: it is updated through
-/// TestFlight and the App Store.
+/// The platforms the deployment says the newest build of, by the section of
+/// its manifest each is in. The Mac, Android and Windows builds are files it
+/// hands over; the iOS app is installed by TestFlight, and the deployment
+/// only says which version is newest there and what changed in it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum UpdatePlatform {
     Mac,
     Android,
     Windows,
+    /// Last, and to stay last. A variant crosses into the apps as its
+    /// position counted from one, so a binding generated before this one
+    /// was added still reads the other three rightly; put first, it would
+    /// have such a binding read the Mac as Android.
+    Ios,
 }
 
 impl UpdatePlatform {
@@ -62,7 +75,15 @@ impl UpdatePlatform {
             Self::Mac => "mac",
             Self::Android => "android",
             Self::Windows => "windows",
+            Self::Ios => "ios",
         }
+    }
+
+    /// Whether the app is installed from somewhere other than the
+    /// deployment, so that its build is a version and notes and there is no
+    /// file of it to download. updates.go's `elsewhere`, by the same name.
+    fn elsewhere(self) -> bool {
+        matches!(self, Self::Ios)
     }
 }
 
@@ -72,9 +93,9 @@ pub struct AppBuild {
     pub platform: UpdatePlatform,
     /// Dotted numbers, as the apps write their own: 0.1.0 build 8 is 0.1.0.8.
     pub version: String,
-    /// Bytes.
+    /// Bytes. Nought for an iOS build, which has no file here.
     pub size: u64,
-    /// Lower-case hexadecimal.
+    /// Lower-case hexadecimal. Empty for an iOS build.
     pub sha256: String,
     /// What changed, by language tag (zh-Hans, zh-Hant, ja, en); any of them
     /// may be missing, and so may all of them. See `update_notes`.
@@ -122,7 +143,14 @@ pub enum UpdateError {
     /// The file could not be written, read or moved where it was asked to go.
     #[error("storage: {detail}")]
     Storage { detail: String },
-    /// Something came back that does not have the shape it should.
+    /// Something came back that does not have the shape it should; or the
+    /// build was one with nothing to download, an iOS build among them, and
+    /// nothing was asked of the deployment.
+    ///
+    /// The second is not a case of its own because the apps match these
+    /// cases exhaustively (the Mac's CoreTransfer has no default), and a
+    /// new one would stop every app building until each had a sentence for
+    /// something it is never asked to do: no app downloads an iOS build.
     #[error("unexpected answer: {detail}")]
     Unexpected { detail: String },
 }
@@ -222,6 +250,10 @@ impl Deployment {
     /// Anything else that is not an answer is an error, which an app checking
     /// on its own keeps to itself and tries again later, and an app asked to
     /// check says.
+    ///
+    /// For `Ios` a build that is offered is one to announce, with its
+    /// version and notes, and not to download: its size is nought and its
+    /// hash empty, and `download_update` refuses it.
     pub async fn check_for_update(
         self: Arc<Self>,
         platform: UpdatePlatform,
@@ -232,6 +264,9 @@ impl Deployment {
 
     /// A download of `build` to `path`, which starts when it is run. The
     /// directory is made if it is not there.
+    ///
+    /// An iOS build is not downloaded: running it is `Unexpected` at once,
+    /// with nothing asked of the deployment and nothing written to disk.
     pub fn download_update(&self, build: AppBuild, path: String) -> Arc<UpdateDownload> {
         let (stop, _) = watch::channel(false);
 
@@ -283,6 +318,10 @@ impl Api {
 /// can be compared, a size, and a hash that can be checked. A build the
 /// deployment describes wrongly is not offered, since nothing that arrived
 /// could ever match it.
+///
+/// An iOS build is held to its version alone, and is given no size or hash
+/// whatever the answer says: updates.go leaves both out for it, and a pair
+/// that came anyway would describe a file nobody can install on a phone.
 fn read_build(platform: UpdatePlatform, body: &Value) -> Result<AppBuild, ProtocolError> {
     let wrong = |what: &str| super::unexpected(format!("the newest build {what}"));
 
@@ -298,18 +337,24 @@ fn read_build(platform: UpdatePlatform, body: &Value) -> Result<AppBuild, Protoc
         .trim()
         .to_owned();
 
-    let size = body
-        .get("size")
-        .and_then(Value::as_u64)
-        .filter(|size| *size > 0)
-        .ok_or_else(|| wrong("has no size"))?;
+    let (size, sha256) = if platform.elsewhere() {
+        (0, String::new())
+    } else {
+        let size = body
+            .get("size")
+            .and_then(Value::as_u64)
+            .filter(|size| *size > 0)
+            .ok_or_else(|| wrong("has no size"))?;
 
-    let sha256 = body
-        .get("sha256")
-        .and_then(Value::as_str)
-        .filter(|hash| hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
-        .ok_or_else(|| wrong("has no SHA-256"))?
-        .to_ascii_lowercase();
+        let sha256 = body
+            .get("sha256")
+            .and_then(Value::as_str)
+            .filter(|hash| hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()))
+            .ok_or_else(|| wrong("has no SHA-256"))?
+            .to_ascii_lowercase();
+
+        (size, sha256)
+    };
 
     // updates.go keeps only notes that are strings and trims them; the same
     // again here, because a note is shown as it comes and the server is not
@@ -394,6 +439,16 @@ impl UpdateDownload {
     async fn fetch(&self, progress: &dyn UpdateProgress) -> Result<(), UpdateError> {
         if *self.stop.borrow() {
             return Err(UpdateError::Cancelled);
+        }
+        // Asked of the platform, and not left to the missing size and hash
+        // below. A build is a record an app can make for itself, and an iOS
+        // one given a size and a hash would otherwise be asked for at
+        // `/api/apps/latest/ios/file`, a request spent to be told no_build.
+        if self.build.platform.elsewhere() {
+            return Err(UpdateError::Unexpected {
+                detail: "the iOS app is installed through TestFlight, and there is no file of it to download"
+                    .into(),
+            });
         }
         if self.build.sha256.len() != 64 || self.build.size == 0 {
             return Err(UpdateError::Unexpected {
