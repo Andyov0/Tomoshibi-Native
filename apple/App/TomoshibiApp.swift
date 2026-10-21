@@ -7,6 +7,11 @@ import AppKit
 @main
 struct TomoshibiApp: App {
     @State private var app = AppModel()
+    #if os(macOS)
+    /// What closing the window does: quits out of a call, keeps the call in
+    /// the background, and asks first while the screen is shared (MacWindows).
+    @NSApplicationDelegateAdaptor(MacWindows.self) private var windows
+    #endif
 
     var body: some Scene {
         WindowGroup {
@@ -23,6 +28,7 @@ struct TomoshibiApp: App {
                 // rather than to a new one: there is one call at a time, and
                 // a second window drew the same call twice.
                 .handlesExternalEvents(preferring: ["*"], allowing: ["*"])
+                .onAppear { windows.attach(app) }
                 #endif
         }
         #if os(macOS)
@@ -44,7 +50,12 @@ struct TomoshibiApp: App {
             CommandGroup(replacing: .saveItem) {}
             CommandGroup(replacing: .newItem) {
                 Button(t("Close")) {
-                    (NSApp.keyWindow ?? NSApp.orderedWindows.first { $0.isVisible && $0.canBecomeKey })?.performClose(nil)
+                    guard let window = NSApp.keyWindow ?? NSApp.orderedWindows.first(where: { $0.isVisible && $0.canBecomeKey }) else { return }
+                    // The call's window asks first while the screen is
+                    // shared, as its close button does (MacWindows); the
+                    // settings' closes at once.
+                    if window.identifier?.rawValue.localizedCaseInsensitiveContains("settings") == true { window.performClose(nil) }
+                    else { windows.guardClose(window) }
                 }
                 .keyboardShortcut("w", modifiers: .command)
             }

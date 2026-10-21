@@ -702,6 +702,30 @@
       "zh-Hans": "这台电脑播放的所有声音，通话除外",
       "zh-Hant": "這台電腦播放的所有聲音，通話除外",
       "ja": "このコンピュータで再生中のすべての音（通話を除く）"
+    },
+    "Tomoshibi is still accessing your screen": {
+      "en": "Tomoshibi is still accessing your screen",
+      "zh-Hans": "Tomoshibi 仍在访问你的屏幕",
+      "zh-Hant": "Tomoshibi 仍在存取你的螢幕",
+      "ja": "Tomoshibi はまだ画面にアクセスしています"
+    },
+    "You are sharing your screen in this call. If you close the window, the call and the share go on in the background.": {
+      "en": "You are sharing your screen in this call. If you close the window, the call and the share go on in the background.",
+      "zh-Hans": "你正在这场会议里共享屏幕。关掉窗口后，会议和共享都会在后台继续。",
+      "zh-Hant": "你正在這場會議中分享螢幕。關閉視窗後，會議和分享都會在背景繼續。",
+      "ja": "この通話で画面を共有しています。ウインドウを閉じても、通話と共有はバックグラウンドで続きます。"
+    },
+    "Keep sharing": {
+      "en": "Keep sharing",
+      "zh-Hans": "继续共享",
+      "zh-Hant": "繼續分享",
+      "ja": "共有を続ける"
+    },
+    "Stop sharing and close": {
+      "en": "Stop sharing and close",
+      "zh-Hans": "停止共享并关闭",
+      "zh-Hant": "停止分享並關閉",
+      "ja": "共有をやめて閉じる"
     }
   }
 }

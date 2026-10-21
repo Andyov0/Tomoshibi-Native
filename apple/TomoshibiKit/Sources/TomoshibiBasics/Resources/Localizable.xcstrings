@@ -721,6 +721,66 @@
         }
       }
     },
+    "A relay cannot signal through itself." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A relay cannot signal through itself."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中継は自分自身を経由できません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中转不能经由自己传信令。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中轉不能經由自己傳信令。"
+          }
+        }
+      }
+    },
+    "A relay name, for a machine no TLS reaches. Its media stays here" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A relay name, for a machine no TLS reaches. Its media stays here"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TLS が届かないマシン用の中継名。メディアはこのマシンのまま"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中转名称,给 TLS 到不了的机器用。音视频仍走这台"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "中轉名稱,給 TLS 到不了的機器用。音視訊仍走這台"
+          }
+        }
+      }
+    },
     "A relay needs a name." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -2127,6 +2187,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "需要邀請連結、帳號,或者開這個房間時用的口令。光猜到名字進不來。"
+          }
+        }
+      }
+    },
+    "An older app that did not say which" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An older app that did not say which"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旧バージョンのアプリ（種類不明）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旧版客户端（没说是哪个平台）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "舊版客戶端（沒說是哪個平台）"
+          }
+        }
+      }
+    },
+    "Android app" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Android app"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Android アプリ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安卓客户端"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Android 客戶端"
           }
         }
       }
@@ -4561,6 +4681,36 @@
         }
       }
     },
+    "Continue in the Tomoshibi app." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue in the Tomoshibi app."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tomoshibi アプリで続けてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在 Tomoshibi 应用里继续。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請在 Tomoshibi 應用程式裡繼續。"
+          }
+        }
+      }
+    },
     "Controls" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -5341,6 +5491,66 @@
         }
       }
     },
+    "Download again" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download again"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "もう一度ダウンロード"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新下载"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新下載"
+          }
+        }
+      }
+    },
+    "Download for Android" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download for Android"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Android 版をダウンロード"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载 Android 版"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下載 Android 版"
+          }
+        }
+      }
+    },
     "Download for Mac" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -5367,6 +5577,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下載 Mac 版"
+          }
+        }
+      }
+    },
+    "Download for Windows" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download for Windows"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows 版をダウンロード"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载 Windows 版"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下載 Windows 版"
           }
         }
       }
@@ -6271,6 +6511,66 @@
         }
       }
     },
+    "For Android 10 or later." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For Android 10 or later."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Android 10 以降に対応しています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适用于 Android 10 及以上版本。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "適用於 Android 10 或以上版本。"
+          }
+        }
+      }
+    },
+    "For Mac, Windows, iPhone, iPad and Android." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "For Mac, Windows, iPhone, iPad and Android."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac、Windows、iPhone、iPad、Android 用です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "适用于 Mac、Windows、iPhone、iPad 和 Android。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "適用於 Mac、Windows、iPhone、iPad 和 Android。"
+          }
+        }
+      }
+    },
     "For iPhone and iPad, through TestFlight." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -6297,36 +6597,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "iPhone 和 iPad 版，透過 TestFlight 安裝。"
-          }
-        }
-      }
-    },
-    "For your Mac, iPhone and iPad." : {
-      "extractionState" : "manual",
-      "generatesSymbol" : false,
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "For your Mac, iPhone and iPad."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mac、iPhone、iPad 用です。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "适用于 Mac、iPhone 和 iPad。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "適用於 Mac、iPhone 和 iPad。"
           }
         }
       }
@@ -6631,6 +6901,66 @@
         }
       }
     },
+    "Get it on TestFlight" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get it on TestFlight"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TestFlight で入手"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从 TestFlight 获取"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "從 TestFlight 取得"
+          }
+        }
+      }
+    },
+    "Get the Android app" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get the Android app"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Android 版を入手"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载 Android 版"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下載 Android 版"
+          }
+        }
+      }
+    },
     "Get the Mac app" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -6657,6 +6987,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "下載 Mac 版"
+          }
+        }
+      }
+    },
+    "Get the Windows app" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get the Windows app"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows 版を入手"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载 Windows 版"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下載 Windows 版"
+          }
+        }
+      }
+    },
+    "Get the app" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Get the app"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリを入手"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载应用"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下載應用程式"
           }
         }
       }
@@ -7711,6 +8101,186 @@
         }
       }
     },
+    "I don't have the app" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "I don't have the app"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリを持っていない"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我还没装应用"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "我還沒裝應用程式"
+          }
+        }
+      }
+    },
+    "If Google Play Protect says it hasn't seen an app from this developer before, tap Install anyway." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If Google Play Protect says it hasn't seen an app from this developer before, tap Install anyway."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google Play プロテクトに「このデベロッパーのアプリはまだ確認されていません」と表示された場合は、「このままインストール」（Install anyway）をタップしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果 Google Play 保护机制提示「以前没见过这位开发者的应用」，点「仍然安装」（Install anyway）就行。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果 Google Play 安全防護提示「從未見過這位開發人員的應用程式」，點「仍要安裝」（Install anyway）即可。"
+          }
+        }
+      }
+    },
+    "If it asks, install TestFlight from the App Store first." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If it asks, install TestFlight from the App Store first."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "求められたら、先に App Store から TestFlight をインストールしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果有提示，请先从 App Store 安装 TestFlight。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如有提示，請先從 App Store 安裝 TestFlight。"
+          }
+        }
+      }
+    },
+    "If it did not open, get the app, or join in the browser below." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If it did not open, get the app, or join in the browser below."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開かなかった場合は、アプリを入手するか、下のボタンからブラウザで参加してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果没有打开，可以下载应用，或在下方直接用浏览器加入。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果沒有開啟，可以下載應用程式，或在下方直接用瀏覽器加入。"
+          }
+        }
+      }
+    },
+    "If your browser asks whether to open Tomoshibi, allow it." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If your browser asks whether to open Tomoshibi, allow it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tomoshibi を開くかどうかブラウザに確認されたら、許可してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果浏览器询问是否打开 Tomoshibi，请允许。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果瀏覽器詢問是否開啟 Tomoshibi，請允許。"
+          }
+        }
+      }
+    },
+    "If your browser says the file isn't commonly downloaded, choose Keep. The first time you run it, if Windows says it protected your PC, choose More info, then Run anyway." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "If your browser says the file isn't commonly downloaded, choose Keep. The first time you run it, if Windows says it protected your PC, choose More info, then Run anyway."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ブラウザに「一般的にダウンロードされていません」と表示されたら、「保存」（Keep）を選んでください。初めて実行するときに「Windows によって PC が保護されました」と表示されたら、「詳細情報」をクリックしてから「実行」（Run anyway）をクリックしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果浏览器提示此文件不常被下载，选「保留」（Keep）。第一次运行时如果出现「Windows 已保护你的电脑」，点「更多信息」，再点「仍要运行」（Run anyway）。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "如果瀏覽器提示此檔案不常被下載，選「保留」（Keep）。第一次執行時如果出現「Windows 已保護您的電腦」，點「其他資訊」，再點「仍要執行」（Run anyway）。"
+          }
+        }
+      }
+    },
     "In progress" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -8221,6 +8791,36 @@
         }
       }
     },
+    "Join in the browser" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Join in the browser"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ブラウザで参加"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在浏览器中加入"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在瀏覽器中加入"
+          }
+        }
+      }
+    },
     "Joining a room" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -8307,6 +8907,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "僅作備援"
+          }
+        }
+      }
+    },
+    "Keep sharing" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keep sharing"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有を続ける"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "继续共享"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "繼續分享"
           }
         }
       }
@@ -9027,6 +9657,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "放下手"
+          }
+        }
+      }
+    },
+    "Mac app" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac app"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac アプリ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 客户端"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac 客戶端"
           }
         }
       }
@@ -11611,6 +12271,66 @@
         }
       }
     },
+    "Once it is installed, press Open Tomoshibi to join in the app." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Once it is installed, press Open Tomoshibi to join in the app."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "インストールが済んだら「Tomoshibi を開く」を押すと、アプリで参加できます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "装好后点「打开 Tomoshibi」，就能在应用里加入。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "裝好後點「開啟 Tomoshibi」，就能在應用程式裡加入。"
+          }
+        }
+      }
+    },
+    "One installer for both x64 and ARM PCs. Needs Windows 10 version 2004 or later, or Windows 11." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One installer for both x64 and ARM PCs. Needs Windows 10 version 2004 or later, or Windows 11."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "x64 と ARM のどちらの PC にも同じインストーラーを使えます。Windows 10 バージョン 2004 以降、または Windows 11 が必要です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同一个安装程序适用于 x64 和 ARM 电脑。需要 Windows 10 2004 及以上版本，或 Windows 11。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同一個安裝程式適用於 x64 和 ARM 電腦。需要 Windows 10 2004 或以上版本，或 Windows 11。"
+          }
+        }
+      }
+    },
     "One link stopped working." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -12061,6 +12781,36 @@
         }
       }
     },
+    "Open Tomoshibi" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open Tomoshibi"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tomoshibi を開く"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开 Tomoshibi"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開啟 Tomoshibi"
+          }
+        }
+      }
+    },
     "Open Tomoshibi and join a call first." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -12151,6 +12901,36 @@
         }
       }
     },
+    "Open the downloaded file, and when asked, allow installing apps from your browser. Needs Android 10 or later." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open the downloaded file, and when asked, allow installing apps from your browser. Needs Android 10 or later."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ダウンロードしたファイルを開き、確認が表示されたらブラウザからのアプリのインストールを許可してください。Android 10 以降が必要です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开下载好的安装包，系统提示时允许浏览器安装应用。需要 Android 10 及以上版本。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打開下載好的安裝檔，系統詢問時允許瀏覽器安裝應用程式。需要 Android 10 或以上版本。"
+          }
+        }
+      }
+    },
     "Open the link" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -12211,6 +12991,36 @@
         }
       }
     },
+    "Open this page in your browser" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Open this page in your browser"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このページをブラウザで開いてください"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在浏览器中打开本页"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請在瀏覽器中開啟本頁"
+          }
+        }
+      }
+    },
     "Open {room}" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -12237,6 +13047,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "打開 {room}"
+          }
+        }
+      }
+    },
+    "Opening Tomoshibi…" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Opening Tomoshibi…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tomoshibi を開いています…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在打开 Tomoshibi…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在開啟 Tomoshibi…"
           }
         }
       }
@@ -12357,6 +13197,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "其他平台"
+          }
+        }
+      }
+    },
+    "Other relays signal through this one. Point them at another first." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Other relays signal through this one. Point them at another first."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この中継を経由している中継があります。先にそれらの経由先を別の中継に変更してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还有中转的信令经由这台。先把它们改为经由别的中转。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "還有中轉的信令經由這台。先把它們改為經由別的中轉。"
           }
         }
       }
@@ -13497,6 +14367,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "紫色"
+          }
+        }
+      }
+    },
+    "QQ Browser" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "QQ Browser"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "QQ ブラウザ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "QQ 浏览器"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "QQ 瀏覽器"
           }
         }
       }
@@ -14817,6 +15717,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "跟隨系統"
+          }
+        }
+      }
+    },
+    "Samsung Internet" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Samsung Internet"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Samsung Internet"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "三星浏览器"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "三星瀏覽器"
           }
         }
       }
@@ -16351,32 +17281,32 @@
         }
       }
     },
-    "Sign in to download Tomoshibi for your Mac, iPhone and iPad." : {
+    "Sign in to download Tomoshibi for Mac, Windows, iPhone, iPad and Android." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sign in to download Tomoshibi for your Mac, iPhone and iPad."
+            "value" : "Sign in to download Tomoshibi for Mac, Windows, iPhone, iPad and Android."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "サインインすると、Mac、iPhone、iPad 用の Tomoshibi をダウンロードできます。"
+            "value" : "サインインすると、Mac、Windows、iPhone、iPad、Android 用の Tomoshibi をダウンロードできます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "登录后可以下载 Mac、iPhone 和 iPad 版 Tomoshibi。"
+            "value" : "登录后可以下载 Mac、Windows、iPhone、iPad 和 Android 版 Tomoshibi。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "登入後可以下載 Mac、iPhone 和 iPad 版 Tomoshibi。"
+            "value" : "登入後可以下載 Mac、Windows、iPhone、iPad 和 Android 版 Tomoshibi。"
           }
         }
       }
@@ -16467,6 +17397,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "只顯示訊號"
+          }
+        }
+      }
+    },
+    "Signals through" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Signals through"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "シグナリングの経由先"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "信令经由"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "信令經由"
           }
         }
       }
@@ -16887,6 +17847,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "這個名字已經被別人證明過"
+          }
+        }
+      }
+    },
+    "Something else" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Something else"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "その他"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "其他"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "其他"
           }
         }
       }
@@ -17431,6 +18421,36 @@
         }
       }
     },
+    "Stop sharing and close" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop sharing and close"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共有をやめて閉じる"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止共享并关闭"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止分享並關閉"
+          }
+        }
+      }
+    },
     "Stop sharing sound" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -17757,6 +18777,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "這個站點還沒有開通 TestFlight 邀請。"
+          }
+        }
+      }
+    },
+    "TestFlight is Apple's app for trying apps before they are released." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TestFlight is Apple's app for trying apps before they are released."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TestFlight は、正式リリース前のアプリを試すための Apple のアプリです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TestFlight 是苹果用来试用未正式发布应用的 App。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TestFlight 是 Apple 用來試用尚未正式推出之應用程式的 App。"
           }
         }
       }
@@ -18901,6 +19951,36 @@
         }
       }
     },
+    "That relay signals through another one itself." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That relay signals through another one itself."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "その中継自体が別の中継を経由しています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "那台中转自己的信令也经由别处。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "那台中轉自己的信令也經由別處。"
+          }
+        }
+      }
+    },
     "That room already has a meeting arranged." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -19291,6 +20371,36 @@
         }
       }
     },
+    "The Android app is not available yet." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The Android app is not available yet."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Android 版はまだ提供されていません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Android 版暂时还没有提供。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Android 版暫時還沒有提供。"
+          }
+        }
+      }
+    },
     "The Emby relay is switched off for the whole site, so this does nothing until it is turned on under Rooms." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -19351,6 +20461,36 @@
         }
       }
     },
+    "The Windows app is coming soon." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The Windows app is coming soon."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows 版は近日公開予定です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows 版即将推出。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows 版即將推出。"
+          }
+        }
+      }
+    },
     "The address a browser dials. It must begin ws:// or wss://, and the relay must be running with role: relay." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -19407,6 +20547,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "這個應用程式，以及在哪裡能讀到它的程式碼。"
+          }
+        }
+      }
+    },
+    "The browser inside this app cannot open Tomoshibi or download it. Tap ⋯ at the top right, then choose to open the page in your browser." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The browser inside this app cannot open Tomoshibi or download it. Tap ⋯ at the top right, then choose to open the page in your browser."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このアプリ内のブラウザでは、Tomoshibi を開くこともダウンロードすることもできません。右上の ⋯ をタップし、ブラウザで開くを選んでください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个 App 自带的浏览器打不开 Tomoshibi，也下载不了。请点右上角的 ⋯，选择在浏览器中打开。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個 App 內建的瀏覽器打不開 Tomoshibi，也無法下載。請點右上角的 ⋯，選擇在瀏覽器中開啟。"
           }
         }
       }
@@ -21721,6 +22891,36 @@
         }
       }
     },
+    "Tomoshibi is still accessing your screen" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tomoshibi is still accessing your screen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tomoshibi はまだ画面にアクセスしています"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tomoshibi 仍在访问你的屏幕"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tomoshibi 仍在存取你的螢幕"
+          }
+        }
+      }
+    },
     "Tomoshibi on your own devices, for the account you are signed in to here." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -22107,6 +23307,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "開啟聲音"
+          }
+        }
+      }
+    },
+    "UC Browser" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UC Browser"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UC ブラウザ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UC 浏览器"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "UC 瀏覽器"
           }
         }
       }
@@ -23131,6 +24361,36 @@
         }
       }
     },
+    "WeChat" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WeChat"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "WeChat"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "微信"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "微信"
+          }
+        }
+      }
+    },
     "Were you sent a link?" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -23881,6 +25141,36 @@
         }
       }
     },
+    "Windows app" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows app"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows アプリ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows 客户端"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Windows 客戶端"
+          }
+        }
+      }
+    },
     "Wired headphones" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -24117,6 +25407,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你正在分享螢幕"
+          }
+        }
+      }
+    },
+    "You are sharing your screen in this call. If you close the window, the call and the share go on in the background." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You are sharing your screen in this call. If you close the window, the call and the share go on in the background."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この通話で画面を共有しています。ウインドウを閉じても、通話と共有はバックグラウンドで続きます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你正在这场会议里共享屏幕。关掉窗口后，会议和共享都会在后台继续。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你正在這場會議中分享螢幕。關閉視窗後，會議和分享都會在背景繼續。"
           }
         }
       }
@@ -24511,6 +25831,36 @@
         }
       }
     },
+    "You were invited to {room}." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You were invited to {room}."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{room} に招待されています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你受邀加入 {room}。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你受邀加入 {room}。"
+          }
+        }
+      }
+    },
     "You were removed from this room." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -24867,6 +26217,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的網路目前大約能送出 {have} Mbps,這次共享需要約 {need} Mbps,所以畫面會卡頓。"
+          }
+        }
+      }
+    },
+    "Your download has started." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your download has started."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ダウンロードを開始しました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已开始下载。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已開始下載。"
           }
         }
       }
@@ -25501,6 +26881,36 @@
         }
       }
     },
+    "device" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "device"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "端末"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设备"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "裝置"
+          }
+        }
+      }
+    },
     "did not answer" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -25677,6 +27087,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "它回應 STUN 的 host:連接埠。留空則退回計時 WebSocket(數字約為真實值三倍)"
+          }
+        }
+      }
+    },
+    "iPad app" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPad app"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPad アプリ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPad 客户端"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPad 客戶端"
+          }
+        }
+      }
+    },
+    "iPhone app" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone app"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone アプリ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone 客户端"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iPhone 客戶端"
           }
         }
       }
