@@ -951,7 +951,9 @@ private struct BadgePreview: View {
 }
 
 /// The three places the controls can sit (controls.ts), each as a small
-/// drawing of a call with them there.
+/// drawing of a call with them there. The three are as tall as the
+/// tallest: a name that runs to two lines made its card taller than the
+/// others.
 private struct PlacementCards: View {
     let appearance: Appearance
 
@@ -973,6 +975,7 @@ private struct PlacementCards: View {
                             .frame(maxWidth: .infinity)
                     }
                     .padding(8)
+                    .frame(maxHeight: .infinity, alignment: .top)
                     .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(chosen ? Theme.tally.opacity(0.12) : Color.white.opacity(0.04)))
                     .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -984,6 +987,8 @@ private struct PlacementCards: View {
                 .animation(Theme.settle, value: chosen)
             }
         }
+        // The row as tall as its tallest card, which the others then fill.
+        .fixedSize(horizontal: false, vertical: true)
     }
 
     private struct Schematic: View {

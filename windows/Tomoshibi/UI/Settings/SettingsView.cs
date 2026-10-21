@@ -28,6 +28,8 @@ internal sealed class SettingsView : Grid
     private bool? _wide;
     private Grid? _page;
     private Border? _plate;
+    private ScrollViewer? _scroller;
+    private bool _redrawing;
     private readonly List<(Topic Topic, Tap Row)> _rows = new();
 
     /// <summary>
@@ -60,17 +62,35 @@ internal sealed class SettingsView : Grid
         };
         MinHeight = 520;
         SizeChanged += (_, e) => Build(e.NewSize.Width >= 600);
-        // A choice made here shows at once, here as everywhere else.
+        // A choice made here shows at once, here as everywhere else. The
+        // colour and the language are in everything drawn, so the settings
+        // are drawn again for them, where they were scrolled to and without
+        // bringing anything in again; the badge and where the controls sit
+        // are in their own cards, which show the change themselves (their
+        // picker sliding, the preview's badge coming and going). Drawn again
+        // for those too, the page flashed back in from the top and the
+        // picker's slide was lost.
+        var accent = Appearance.Shared.Accent;
         void Redraw()
         {
+            var offset = _scroller?.VerticalOffset ?? 0;
             _wide = null;
-            Build(ActualWidth >= 600);
+            _redrawing = true;
+            try { Build(ActualWidth >= 600); }
+            finally { _redrawing = false; }
+            if (_scroller is { } scroller && offset > 0) scroller.Loaded += (_, _) => scroller.ChangeView(null, offset, null, true);
         }
-        Appearance.Shared.Changed += Redraw;
+        void Appearing()
+        {
+            if (Appearance.Shared.Accent == accent) return;
+            accent = Appearance.Shared.Accent;
+            Redraw();
+        }
+        Appearance.Shared.Changed += Appearing;
         Localization.Shared.Changed += Redraw;
         Unloaded += (_, _) =>
         {
-            Appearance.Shared.Changed -= Redraw;
+            Appearance.Shared.Changed -= Appearing;
             Localization.Shared.Changed -= Redraw;
         };
     }
@@ -332,11 +352,17 @@ internal sealed class SettingsView : Grid
             };
             column.Children.Add(Shared.OnGlass(back).Pad(0, Shared.TitleBar + 22, 0, -6));
         }
-        column.Children.Add(Pieces.PageHeading(Title(topic), Detail(topic), Symbol(topic)).Rises());
-        body.Rises(50);
+        var heading = Pieces.PageHeading(Title(topic), Detail(topic), Symbol(topic));
+        if (!_redrawing)
+        {
+            heading.Rises();
+            body.Rises(50);
+        }
+        column.Children.Add(heading);
         column.Children.Add(body);
         column.Padding = wide ? new Thickness(28, 44, 28, 32) : new Thickness(16, 0, 16, 34);
         var scroller = K.Scrolling(column, 620);
+        _scroller = scroller;
         if (!animated) Swap(scroller, 0, 0);
         else if (wide) Swap(scroller, 0, 10);
         else Swap(scroller, 400, 0);

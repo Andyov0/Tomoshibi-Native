@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -428,14 +429,16 @@ private val PreviewReading = ConnectionReading(
 
 /**
  * The three places the controls can sit (controls.ts), each as a small
- * drawing of a call with them there (Settings.swift `PlacementCards`).
+ * drawing of a call with them there (Settings.swift `PlacementCards`). The
+ * three are as tall as the tallest: a name that runs to two lines made its
+ * card taller than the others.
  */
 @Composable
 private fun PlacementCards(appearance: Appearance, modifier: Modifier = Modifier) {
-    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
+    Row(modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.Top) {
         for (placement in ControlsPlacement.entries) {
             val chosen = appearance.controlsPlacement == placement
-            PlacementCard(placement, chosen, Modifier.weight(1f)) { appearance.choose(placement) }
+            PlacementCard(placement, chosen, Modifier.weight(1f).fillMaxHeight()) { appearance.choose(placement) }
         }
     }
 }

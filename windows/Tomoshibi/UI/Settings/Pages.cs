@@ -167,53 +167,109 @@ internal static class General
             tiles.Children.Add(block);
         }
         preview.Children.Add(tiles);
-        if (appearance.ConnectionBadge != ConnectionBadge.Hidden)
+        // The badge as chosen, changed where it stands when the choice
+        // changes: the one shown leaves and the new one comes in, while the
+        // picker slides to it, and the page around them stays.
+        var place = new Grid();
+        preview.Children.Add(place);
+        var shown = appearance.ConnectionBadge;
+        void Show()
         {
+            place.Children.Clear();
+            if (shown == ConnectionBadge.Hidden) return;
             var bars = K.Row(2);
             foreach (var height in new[] { 6.0, 10.0, 14.0 }) bars.Children.Add(new Rectangle { Width = 3.5, Height = height, RadiusX = 1, RadiusY = 1, Fill = Ink.Good, VerticalAlignment = VerticalAlignment.Bottom });
             var row = K.Row(7, bars);
-            if (appearance.ConnectionBadge == ConnectionBadge.Detailed) row.Children.Add(K.Text("32 ms", 11.5, K.Medium, Ink.Muted, tabular: true));
+            if (shown == ConnectionBadge.Detailed) row.Children.Add(K.Text("32 ms", 11.5, K.Medium, Ink.Muted, tabular: true));
             var badge = K.Glass(row, 14, new Thickness(10, 7, 10, 7), shadow: false);
             badge.HorizontalAlignment = HorizontalAlignment.Left;
             badge.VerticalAlignment = VerticalAlignment.Top;
             badge.Margin = new Thickness(10);
-            preview.Children.Add(badge.Arrives());
+            place.Children.Add(badge.Arrives());
         }
-        return K.Card(K.Column(14, preview.Quiet(), choice), 16, padding: new Thickness(14));
+        Show();
+        void Changed()
+        {
+            if (appearance.ConnectionBadge == shown) return;
+            shown = appearance.ConnectionBadge;
+            choice.Choose(Array.IndexOf(options, shown), tell: false);
+            Show();
+        }
+        var card = K.Card(K.Column(14, preview.Quiet(), choice), 16, padding: new Thickness(14));
+        card.Loaded += (_, _) => appearance.Changed += Changed;
+        card.Unloaded += (_, _) => appearance.Changed -= Changed;
+        return card;
     }
 
-    /// <summary>Where the controls sit in a call: always, out of the way while nothing happens, or down the side.</summary>
+    /// <summary>
+    /// Where the controls sit in a call: always, out of the way while nothing
+    /// happens, or down the side. The three are as tall as the tallest, a
+    /// name that runs to two lines included, and the choice moves between
+    /// them where they stand: the light fades from one to the other.
+    /// </summary>
     private static Border ControlsCard()
     {
         var appearance = Appearance.Shared;
         var row = new Grid { ColumnSpacing = 10 };
         var placements = Enum.GetValues<ControlsPlacement>();
+        var lights = new List<(ControlsPlacement Placement, Border Light, Border Drawing, TextBlock Name)>();
         for (var i = 0; i < placements.Length; i++)
         {
             row.ColumnDefinitions.Add(new ColumnDefinition());
             var placement = placements[i];
             var chosen = placement == appearance.ControlsPlacement;
-            var card = new Tap(K.Column(9, Schematic(placement, chosen), K.Text(placement.DisplayName(), 11.5, chosen ? K.Semibold : K.Regular, chosen ? Ink.Foreground : Ink.Muted, align: TextAlignment.Center)), Look.Plain, 120, padding: 8)
+            // The light: the tally's wash and edge over the whole card, faded
+            // in and out rather than painted on, so that a choice is seen to
+            // move.
+            var light = new Border
+            {
+                Background = Ink.TallyAt(0.12f),
+                BorderBrush = Ink.TallyAt(0.6f),
+                BorderThickness = new Thickness(1.5),
+                CornerRadius = new CornerRadius(14),
+                Opacity = chosen ? 1 : 0,
+                OpacityTransition = new ScalarTransition { Duration = Motion.Settle },
+                IsHitTestVisible = false,
+            };
+            var drawing = new Border { Child = Schematic(placement, chosen) };
+            var name = K.Text(placement.DisplayName(), 11.5, chosen ? K.Semibold : K.Regular, chosen ? Ink.Foreground : Ink.Muted, align: TextAlignment.Center);
+            var column = K.Column(9, drawing, name);
+            column.Margin = new Thickness(8);
+            column.VerticalAlignment = VerticalAlignment.Top;
+            var card = new Tap(new Grid { Children = { light, column } }, Look.Plain, 120, padding: 0)
             {
                 HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch,
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                VerticalContentAlignment = VerticalAlignment.Top,
+                VerticalContentAlignment = VerticalAlignment.Stretch,
                 CornerRadius = new CornerRadius(14),
             };
             card.Height = double.NaN;
-            card.Padding = new Thickness(8);
-            if (chosen)
-            {
-                card.Resting = Ink.TallyShade.WithAlpha(0.12f);
-                card.BorderBrush = Ink.TallyAt(0.6f);
-                card.BorderThickness = new Thickness(1.5);
-            }
+            card.Padding = new Thickness(0);
             card.Named(placement.DisplayName());
             card.Click += (_, _) => appearance.Choose(placement);
             Grid.SetColumn(card, i);
             row.Children.Add(card);
+            lights.Add((placement, light, drawing, name));
         }
-        return K.Card(row, 16, padding: new Thickness(12));
+        var shown = appearance.ControlsPlacement;
+        void Changed()
+        {
+            if (appearance.ControlsPlacement == shown) return;
+            shown = appearance.ControlsPlacement;
+            foreach (var (placement, light, drawing, name) in lights)
+            {
+                var chosen = placement == shown;
+                light.Opacity = chosen ? 1 : 0;
+                drawing.Child = Schematic(placement, chosen);
+                name.FontWeight = chosen ? K.Semibold : K.Regular;
+                name.Foreground = chosen ? Ink.Foreground : Ink.Muted;
+            }
+        }
+        var whole = K.Card(row, 16, padding: new Thickness(12));
+        whole.Loaded += (_, _) => appearance.Changed += Changed;
+        whole.Unloaded += (_, _) => appearance.Changed -= Changed;
+        return whole;
     }
 
     /// <summary>A call in miniature with its bar where the choice puts it (General.kt <c>PlacementCard</c>).</summary>
