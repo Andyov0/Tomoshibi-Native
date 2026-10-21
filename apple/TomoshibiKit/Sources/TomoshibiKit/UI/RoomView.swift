@@ -27,6 +27,12 @@ public struct RoomView: View {
     @State private var page = 0
     /// The stage given the whole screen (the web's "Fill the screen").
     @State private var filled = false
+    /// Where the room's name and the signal reach over the pictures, with the
+    /// signal's figures when they are open, and how wide the list of who is
+    /// watching is: the list moves down below the figures where they would
+    /// otherwise run under it (`watchersTop`).
+    @State private var furnitureFrame: CGRect = .zero
+    @State private var watchersWidth: CGFloat = 0
     @State private var problem: String?
     @State private var watch: WatchFeature
     @State private var music: MusicFeature
@@ -289,6 +295,7 @@ public struct RoomView: View {
                         WatchersCard(model: model, compact: true).transition(Theme.arrive)
                     }
                 }
+                .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(Self.room)) } action: { furnitureFrame = $0 }
                 .padding(.leading, 14 + inset.leading)
                 .padding(.top, 12 + inset.top)
                 .transition(.opacity.animation(Theme.settle))
@@ -327,6 +334,9 @@ public struct RoomView: View {
                     .transition(Theme.arrive)
             }
         }
+        // What the row at the top is measured in, the same as the corner the
+        // list of who is watching is placed in.
+        .coordinateSpace(.named(Self.room))
         // A click outside an open popover closes it; drawn under the
         // controls, which is where the popovers hang from.
         .overlay { PopoverCatcher(popovers: popovers) }
@@ -335,9 +345,13 @@ public struct RoomView: View {
             // the stage's corner (Room.tsx: top-16 right-3), beside a panel
             // when one is open.
             if mySharePicture && !watchersInRow && (!filled || shown) {
+                let trailing = panel == nil ? 14 : Self.panelWidth(size) + 24 + 8
+                let top = watchersTop(corner: panel == nil ? 58 : 12, trailing: trailing, width: size.width)
                 WatchersCard(model: model)
-                    .padding(.top, panel == nil ? 58 : 12)
-                    .padding(.trailing, panel == nil ? 14 : Self.panelWidth(size) + 24 + 8)
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { watchersWidth = $0 }
+                    .padding(.top, top)
+                    .padding(.trailing, trailing)
+                    .animation(Theme.settle, value: top)
                     .transition(Theme.arrive)
             }
         }
@@ -850,6 +864,18 @@ public struct RoomView: View {
             guard let other = model.surfaces.first(where: { $0.person.id == surface.person.id && $0.id != surface.id }) else { return nil }
             return (other.id, other.kind)
         }
+    }
+
+    private static let room = "room"
+
+    /// How far down the list of who is watching our share sits: in its corner,
+    /// or, where the row at the top reaches across to it, below that row. With
+    /// the signal's figures open on a phone the figures ran under the list,
+    /// both drawn at once and neither readable; the list now moves down below
+    /// them while they are open and back when they close.
+    private func watchersTop(corner: CGFloat, trailing: CGFloat, width: CGFloat) -> CGFloat {
+        let reaches = furnitureFrame.maxX + 8 > width - trailing - watchersWidth
+        return reaches ? max(corner, furnitureFrame.maxY + 8) : corner
     }
 
     /// Where the room's name and the signal sit over the pictures, with the
