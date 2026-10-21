@@ -42,12 +42,17 @@ final class MacInstaller: UpdateInstaller {
         stopping = true
     }
 
-    func install(_ file: URL, version: String) async -> Installation {
+    /// Says how far it has got as it goes (UpdateInstalling's bar): the image
+    /// opened, the app copied out of it by what has arrived of its size, the
+    /// copy checked, and put in place.
+    func install(_ file: URL, version: String, progress: @escaping @MainActor (Double) -> Void) async -> Installation {
         stopping = false
         let app = app
         let identifier = Bundle.main.bundleIdentifier ?? "app.tomoshibi.mac"
         let signing = UpdateTrust.signing()
-        let prepared = await Task.detached { Self.prepare(file, version: version, identifier: identifier, signing: signing, beside: app) }.value
+        progress(0.02)
+        let report: @Sendable (Double) -> Void = { fraction in Task { @MainActor in progress(fraction) } }
+        let prepared = await Task.detached { Self.prepare(file, version: version, identifier: identifier, signing: signing, beside: app, report: report) }.value
         let staged: URL
         switch prepared {
         case let .failure(refusal):
@@ -63,6 +68,7 @@ final class MacInstaller: UpdateInstaller {
             return .stopped
         }
 
+        progress(0.92)
         let placed = await Task.detached { () -> Bool in
             do {
                 _ = try FileManager.default.replaceItemAt(app, withItemAt: staged, backupItemName: nil, options: [])
@@ -79,7 +85,10 @@ final class MacInstaller: UpdateInstaller {
         // Dock and Finder show is the new one before it has been opened.
         LSRegisterURL(app as CFURL, true)
         log.info("update to \(version, privacy: .public) is in place; opening it")
+        progress(1)
         reopen(app)
+        // A moment for the bar to be seen full before the window goes.
+        try? await Task.sleep(for: .milliseconds(350))
         NSApp.terminate(nil)
         return .done
     }
@@ -174,7 +183,8 @@ final class MacInstaller: UpdateInstaller {
 
     /// The app out of the disk image, beside `beside` and checked, or why not.
     nonisolated static func prepare(_ image: URL, version: String, identifier: String,
-                                    signing: UpdateTrust.Signing, beside running: URL) -> Result<URL, Refusal> {
+                                    signing: UpdateTrust.Signing, beside running: URL,
+                                    report: @Sendable (Double) -> Void = { _ in }) -> Result<URL, Refusal> {
         let files = FileManager.default
         guard let place = try? files.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: running, create: true) else {
             return .failure(.unopened("no folder beside the app"))
@@ -195,6 +205,7 @@ final class MacInstaller: UpdateInstaller {
             return .failure(.unopened("hdiutil attach said \(attached.status)"))
         }
         defer { detach(mounted) }
+        report(0.1)
 
         let volume = URL(fileURLWithPath: mounted)
         let inside = (try? files.contentsOfDirectory(at: volume, includingPropertiesForKeys: nil)) ?? []
@@ -203,11 +214,12 @@ final class MacInstaller: UpdateInstaller {
             return .failure(.unopened("no app in the image"))
         }
         let staged = place.appendingPathComponent(running.lastPathComponent)
-        guard run("/usr/bin/ditto", [found.path, staged.path]).status == 0 else {
+        guard copy(found, to: staged, report: { report(0.1 + 0.55 * $0) }) else {
             try? files.removeItem(at: place)
             return .failure(.unopened("the app would not copy out"))
         }
 
+        report(0.68)
         let refusal = check(staged, version: version, identifier: identifier, signing: signing)
         if let refusal {
             try? files.removeItem(at: place)
@@ -217,7 +229,37 @@ final class MacInstaller: UpdateInstaller {
         // and Apple's, and macOS need not ask again whether to open
         // something downloaded from the internet.
         _ = run("/usr/bin/xattr", ["-dr", "com.apple.quarantine", staged.path])
+        report(0.9)
         return .success(staged)
+    }
+
+    /// ditto, saying how far it has got as the part of the app's size that
+    /// has arrived, every 150 ms until it ends.
+    nonisolated static func copy(_ from: URL, to: URL, report: @Sendable (Double) -> Void) -> Bool {
+        let total = max(1, size(of: from))
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
+        process.arguments = [from.path, to.path]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        do { try process.run() } catch { return false }
+        while process.isRunning {
+            Thread.sleep(forTimeInterval: 0.15)
+            report(min(1, Double(size(of: to)) / Double(total)))
+        }
+        return process.terminationStatus == 0
+    }
+
+    /// The bytes of the files in a folder, all the way down.
+    nonisolated static func size(of folder: URL) -> Int64 {
+        let keys: [URLResourceKey] = [.fileSizeKey, .isRegularFileKey]
+        guard let walk = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: keys) else { return 0 }
+        var bytes: Int64 = 0
+        for case let file as URL in walk {
+            guard let values = try? file.resourceValues(forKeys: Set(keys)), values.isRegularFile == true else { continue }
+            bytes += Int64(values.fileSize ?? 0)
+        }
+        return bytes
     }
 
     /// Whether the app at `staged` is the build offered, signed as it must be.

@@ -102,12 +102,22 @@ final class UpdatesTests: XCTestCase {
         /// Holds the install until `stop`, as checking a copy takes seconds.
         var holds = false
         private var held: CheckedContinuation<Installation, Never>?
+        /// How far each install says it has got, in turn.
+        var reports: [Double] = []
+        /// The progress of the install under way, for a test to report through.
+        var report: (@MainActor (Double) -> Void)?
+        var elsewhere = false
+        var openedElsewhere = 0
 
-        func install(_ file: URL, version: String) async -> Installation {
+        func install(_ file: URL, version: String, progress: @escaping @MainActor (Double) -> Void) async -> Installation {
             installs.append(file)
+            report = progress
+            for fraction in reports { progress(fraction) }
             guard holds else { return answer }
             return await withCheckedContinuation { held = $0 }
         }
+
+        func openElsewhere() { openedElsewhere += 1 }
 
         func reveal() { revealed += 1 }
 
@@ -278,6 +288,41 @@ final class UpdatesTests: XCTestCase {
         XCTAssertTrue(updates.shown)
         updates.reveal()
         XCTAssertEqual(installer.revealed, 1)
+        updates.putAway()
+        XCTAssertFalse(updates.shown)
+        updates.stop()
+    }
+
+    func testAnInstallSaysHowFarItHasGotAndNeverGoesBack() async {
+        let updates = await offered()
+        installer.holds = true
+        installer.reports = [0.1, 0.4, 0.3, 0.7]
+        updates.accept()
+        await settle()
+        source.transfers[0].finish()
+        await settle()
+        XCTAssertEqual(updates.step, .installing(offer("0.1.0.8")))
+        XCTAssertEqual(updates.installed, 0.7, accuracy: 0.0001, "a report behind the last moved the bar back")
+        installer.report?(1.4)
+        XCTAssertEqual(updates.installed, 1, accuracy: 0.0001, "the bar went past its end")
+        installer.stop()
+        await settle()
+        XCTAssertEqual(updates.step, .offered(offer("0.1.0.8")))
+        // A report from the install given up does not move a bar no longer shown.
+        installer.report?(0.9)
+        XCTAssertEqual(updates.installed, 1, accuracy: 0.0001)
+        updates.stop()
+    }
+
+    func testWhereAnotherAppInstallsUpdateOpensItAndDownloadsNothing() async {
+        installer.elsewhere = true
+        let updates = await offered()
+        XCTAssertTrue(updates.shown)
+        updates.accept()
+        await settle()
+        XCTAssertEqual(installer.openedElsewhere, 1)
+        XCTAssertTrue(source.transfers.isEmpty, "downloaded a build TestFlight installs")
+        XCTAssertEqual(updates.step, .offered(offer("0.1.0.8")))
         updates.putAway()
         XCTAssertFalse(updates.shown)
         updates.stop()

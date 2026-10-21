@@ -1,4 +1,4 @@
-#if os(macOS)
+#if os(macOS) || os(iOS)
 import Foundation
 import TomoshibiBasics
 import TomoshibiCore
@@ -35,8 +35,14 @@ final class CoreUpdateSource: UpdateSource {
         return deployment
     }
 
+    #if os(iOS)
+    private let platform: UpdatePlatform = .ios
+    #else
+    private let platform: UpdatePlatform = .mac
+    #endif
+
     func latest(running: String) async throws -> UpdateOffer? {
-        switch try await deployment().checkForUpdate(platform: .mac, running: running) {
+        switch try await deployment().checkForUpdate(platform: platform, running: running) {
         case .upToDate:
             return nil
         case let .available(build):

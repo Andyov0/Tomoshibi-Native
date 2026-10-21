@@ -72,6 +72,8 @@ public struct AppRoot: View {
             case .ended:
                 EndedScreen(app: app).transition(Theme.arrive)
             }
+            // Over everything while an update is put in place.
+            if let updates = app.updates { UpdateInstalling(updates: updates) }
         }
         .animation(Theme.settle, value: app.screen)
         .animation(Theme.settle, value: app.account?.name)

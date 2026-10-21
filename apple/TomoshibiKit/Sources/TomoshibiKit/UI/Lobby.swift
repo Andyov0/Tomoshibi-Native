@@ -129,8 +129,8 @@ struct LobbyView: View {
         .onChange(of: state.place) { state.popovers.close() }
         // Over the sign-in, since somebody not signed in gets their updates
         // too; signed in, it is in the stage beside the sidebar
-        // (SidebarLobby). Under the sheets, which cover it as they cover the
-        // rest. Only the Mac has one (AppModel `updates`).
+        // (SidebarLobby), and on the iPhone over its lobby (PhoneLobby). Under
+        // the sheets, which cover it as they cover the rest.
         .overlay(alignment: .top) {
             if app.account == nil, let updates = app.updates { UpdateBanner(updates: updates, top: 52) }
         }
@@ -1091,6 +1091,10 @@ struct PhoneLobby: View {
                 }
             }
             .safeAreaInset(edge: .bottom) { joinBar }
+            // Under the title, over the page, as the Mac's is over its stage.
+            .overlay(alignment: .top) {
+                if let updates = app.updates { UpdateBanner(updates: updates, top: 8) }
+            }
             .navigationDestination(isPresented: serversShown) {
                 ServersView(app: app)
             }

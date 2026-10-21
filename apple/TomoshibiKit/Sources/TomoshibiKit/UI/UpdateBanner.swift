@@ -5,7 +5,8 @@ import TomoshibiBasics
 /// (UpdateBanner.kt on Android): what it is and what changed, "Update" and
 /// "Later"; then how far the download has got, with a way to stop it; then,
 /// where this copy cannot replace itself, why and what to do; then a moment
-/// of "Installing" before the new copy opens.
+/// of "Installing" before the new copy opens, which the window over the whole
+/// app says rather than the banner (UpdateInstalling).
 ///
 /// Shown only while the lobby is the screen (Updates `shown`), so that no
 /// call is ever interrupted by it. Slid down from the top and faded, as the
@@ -21,16 +22,20 @@ struct UpdateBanner: View {
 
     var body: some View {
         ZStack {
-            if updates.shown {
+            if updates.shown && !installing {
                 card
                     .transition(.asymmetric(
                         insertion: .move(edge: .top).combined(with: .opacity).animation(Theme.settle),
                         removal: .move(edge: .top).combined(with: .opacity).animation(Theme.leave)))
             }
         }
-        .animation(Theme.settle, value: updates.shown)
+        .animation(Theme.settle, value: updates.shown && !installing)
         .onAppear { said = updates.step }
         .onChange(of: updates.step) { if updates.shown || updates.step != .none { said = updates.step } }
+    }
+
+    private var installing: Bool {
+        if case .installing = updates.step { true } else { false }
     }
 
     private var card: some View {
@@ -112,6 +117,59 @@ struct UpdateBanner: View {
         case .misplaced: 3
         case .installing: 4
         }
+    }
+}
+
+/// While a build is put in place (Updates `installing`): the app dimmed, and
+/// over it the app's mark, what is being installed, that it opens again by
+/// itself, and a bar that follows the install as it goes (MacInstaller), as the
+/// Windows setup shows its own (Tomoshibi.iss). Nothing in it can be pressed,
+/// and nothing under it: the install is not stopped by then, and the app ends
+/// when it is done. It comes in growing and fading as the dialogs do.
+struct UpdateInstalling: View {
+    let updates: Updates
+
+    var body: some View {
+        ZStack {
+            if case let .installing(offer) = updates.step {
+                Color.black.opacity(0.45)
+                    .ignoresSafeArea()
+                    .contentShape(Rectangle())
+                    .transition(.asymmetric(insertion: .opacity.animation(Theme.settle), removal: .opacity.animation(Theme.leave)))
+                card(offer)
+                    .transition(.asymmetric(
+                        insertion: .scale(scale: 0.96).combined(with: .opacity).animation(Theme.settle),
+                        removal: .opacity.animation(Theme.leave)))
+            }
+        }
+        .animation(Theme.settle, value: installing)
+    }
+
+    private var installing: Bool {
+        if case .installing = updates.step { true } else { false }
+    }
+
+    private func card(_ offer: UpdateOffer) -> some View {
+        HStack(alignment: .center, spacing: 16) {
+            Mark(size: 56)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(t("Installing Tomoshibi {version}", ["version": offer.version]))
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Theme.foreground)
+                Text(t("Tomoshibi will open again when it is done."))
+                    .font(.system(size: 12.5))
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                ProgressTrack(fraction: updates.installed).padding(.top, 6)
+            }
+            .frame(width: 280, alignment: .leading)
+        }
+        .padding(20)
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Theme.surface))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Theme.border, lineWidth: 1))
+        .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier("update.installing")
     }
 }
 

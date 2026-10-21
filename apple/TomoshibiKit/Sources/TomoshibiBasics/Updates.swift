@@ -4,6 +4,9 @@ import Observation
 /// The Mac app's own updates: looking for a newer build, saying so, and with
 /// the person's agreement downloading it, checking it and putting it in
 /// place of the running copy (Updates.kt on Android follows the same rules).
+/// The iPhone's are said the same way, in the lobby and never in a call, but
+/// installed by TestFlight: "Update" opens it on this app's page, and nothing
+/// is downloaded here (UpdateInstaller `elsewhere`).
 ///
 /// The asking and the fetching are the core's (core/protocol/src/api/updates.rs),
 /// which compares the versions and refuses a file that is not the build;
@@ -47,6 +50,9 @@ public final class Updates {
     public enum Said: Equatable, Sendable { case checking, current, failed }
 
     public private(set) var step: Step = .none
+    /// How far the install has got, from 0 to 1, while the step is
+    /// `installing`: the window over the lobby shows it (UpdateInstalling).
+    public private(set) var installed: Double = 0
     /// The answer to the last check asked for in the settings; nil where none
     /// was asked or it found a build.
     public private(set) var said: Said?
@@ -184,6 +190,10 @@ public final class Updates {
     /// "Update": downloads the build offered, where this copy can be replaced.
     public func accept() {
         guard free, case let .offered(offer, _) = step else { return }
+        if installer.elsewhere {
+            installer.openElsewhere()
+            return
+        }
         if let misplaced = installer.misplacement {
             step = .misplaced(offer, misplaced)
             return
@@ -324,9 +334,14 @@ public final class Updates {
             return
         }
         ready = nil
+        installed = 0
         step = .installing(offer)
         Task {
-            switch await installer.install(file, version: offer.version) {
+            let report: @MainActor (Double) -> Void = { [weak self] fraction in
+                guard let self, case .installing = self.step else { return }
+                self.installed = max(self.installed, min(1, fraction))
+            }
+            switch await installer.install(file, version: offer.version, progress: report) {
             case .done:
                 // The new copy is opening and this one is quitting.
                 step = .none
@@ -420,14 +435,26 @@ public protocol UpdateTransfer: AnyObject, Sendable {
 public protocol UpdateInstaller: AnyObject {
     /// Why this copy cannot be replaced, or nil where it can.
     var misplacement: Misplacement? { get }
+    /// Whether builds are installed by another app rather than by this one:
+    /// the iPhone's by TestFlight. "Update" then opens that app
+    /// (`openElsewhere`), and nothing is downloaded or installed here.
+    var elsewhere: Bool { get }
+    /// Opens the app that installs the builds, on this app's page.
+    func openElsewhere()
     /// Checks the build and puts it in place, then opens it and quits; returns
-    /// only where it did not.
-    func install(_ file: URL, version: String) async -> Installation
+    /// only where it did not. Says how far it has got as it goes, from 0 to 1.
+    func install(_ file: URL, version: String, progress: @escaping @MainActor (Double) -> Void) async -> Installation
     /// Shows this copy of the app in Finder.
     func reveal()
     /// Gives up the install under way before anything is replaced, which
     /// then returns `stopped`; too late to, it changes nothing.
     func stop()
+}
+
+extension UpdateInstaller {
+    /// The Mac's, which installs its own builds.
+    public var elsewhere: Bool { false }
+    public func openElsewhere() {}
 }
 
 public enum Installation: Equatable, Sendable {
