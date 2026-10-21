@@ -712,7 +712,7 @@ internal sealed class LobbyScreen : Screen
         var line = K.Line(12,
             K.Fixed(new Border { Width = 36, Height = 36, CornerRadius = new CornerRadius(11), Background = Ink.White(0.08f), Child = K.Symbol("server.rack", 16, Ink.Muted) }),
             K.Flex(subtitle),
-            K.Fixed(K.Text(App.RelayChoice != null ? App.Lobby.Label(App.RelayChoice) : T("Automatic"), 14, ink: Ink.Muted, lines: 1).At(HorizontalAlignment.Right, VerticalAlignment.Center)),
+            K.Fixed(K.Words(App.RelayChoice != null ? App.Lobby.Label(App.RelayChoice) : T("Automatic"), 14, ink: Ink.Muted, lines: 1).At(HorizontalAlignment.Right, VerticalAlignment.Center)),
             K.Fixed(K.Symbol("chevron.right", 13, Ink.MutedAt(0.6f))));
         var tap = new Tap(line, Look.Clear, 64, padding: 14)
         {

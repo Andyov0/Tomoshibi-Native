@@ -90,7 +90,7 @@ internal sealed class SignalBadge : StackPanel
         if (!open) return;
         _detail.Children.Clear();
         void Figure(string label, string value, bool warn = false) =>
-            _detail.Children.Add(K.Line(16, K.Flex(K.Text(label, 11.5, ink: Ink.Muted, lines: 1)), K.Fixed(K.Text(value, 11.5, ink: warn ? Ink.Tally : Ink.Foreground, tabular: true, lines: 1))));
+            _detail.Children.Add(K.Line(16, K.Flex(K.Text(label, 11.5, ink: Ink.Muted, lines: 1)), K.Fixed(K.Words(value, 11.5, ink: warn ? Ink.Tally : Ink.Foreground, lines: 1, tabular: true))));
         if (_call.Relay is { } relay && _call.Holding is { } holding && holding != relay)
         {
             Figure(T("Relay server"), Say(relay));

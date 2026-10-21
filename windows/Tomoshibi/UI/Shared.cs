@@ -453,7 +453,7 @@ internal static class Shared
             row.Children.Clear();
             if (!compact) row.Children.Add(K.Symbol("server.rack", 12));
             var choice = app.RelayChoice;
-            row.Children.Add(K.Text(choice != null ? lobby.Label(choice) : T("Automatic"), 12.5, K.Medium, lines: 1));
+            row.Children.Add(K.Words(choice != null ? lobby.Label(choice) : T("Automatic"), 12.5, K.Medium, lines: 1));
             var ms = choice != null ? (lobby.Measured is { } m && m.TryGetValue(choice, out var c) ? c : null) : lobby.FastestRelay?.Millis;
             if (ms is { } millis) row.Children.Add(K.Text($"{(int)millis} ms", 12.5, K.Medium, Ink.Latency(millis), tabular: true));
             row.Children.Add(K.Symbol("chevron.up.chevron.down", 9, Ink.Muted));

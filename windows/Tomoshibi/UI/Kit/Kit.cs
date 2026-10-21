@@ -64,6 +64,16 @@ internal static class K
         return block;
     }
 
+    /// <summary>
+    /// Text that may have a flag in it, as a relay's label has: as Text where
+    /// it has none, and on one line with its flags drawn where it has
+    /// (Flags), since Windows has no glyphs for them.
+    /// </summary>
+    public static FrameworkElement Words(string text, double size = 13.5, FontWeight? weight = null, Brush? ink = null, int lines = 0, bool tabular = false) =>
+        Flags.In(text)
+            ? Flags.Line(text, size, run => Text(run, size, weight, ink, lines: 1, tabular: tabular))
+            : Text(text, size, weight, ink, lines: lines, tabular: tabular);
+
     /// <summary>One of the apps' symbols (Symbols.cs maps their names to the Windows ones).</summary>
     public static FrameworkElement Symbol(string name, double size = 14, Brush? ink = null) => Symbols.Make(name, size, ink ?? Ink.Foreground);
 

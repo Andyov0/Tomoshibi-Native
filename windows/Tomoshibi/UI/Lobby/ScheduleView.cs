@@ -363,7 +363,7 @@ internal sealed class ScheduleView : Grid
         };
         var when = Refusals.Instant(one.At) is { } at ? MeetingSaid(at) : one.At;
         if (!string.IsNullOrEmpty(one.Relay)) when += " · " + app.Lobby.Label(one.Relay);
-        var words = K.Column(2, K.Text(one.Room, 14, K.Semibold, lines: 1), K.Text(when, 12, ink: Ink.Muted, lines: 2));
+        var words = K.Column(2, K.Text(one.Room, 14, K.Semibold, lines: 1), K.Words(when, 12, ink: Ink.Muted, lines: 2));
         var parts = new List<(UIElement, double)> { K.Fixed(badge), K.Flex(words) };
         if (started)
         {

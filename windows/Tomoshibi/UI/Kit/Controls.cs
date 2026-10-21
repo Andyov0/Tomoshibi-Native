@@ -33,8 +33,8 @@ internal static class Menu
             Role.Prominent => Ink.Tally,
             _ => Ink.ForegroundAt(0.85f),
         };
-        var words = K.Column(1, K.Text(title, 13.5, role == Role.Normal ? K.Regular : K.Semibold, role == Role.Destructive ? Ink.Danger : Ink.Foreground, lines: 2));
-        if (detail != null) words.Children.Add(K.Text(detail, 11.5, ink: Ink.Muted, lines: 2));
+        var words = K.Column(1, K.Words(title, 13.5, role == Role.Normal ? K.Regular : K.Semibold, role == Role.Destructive ? Ink.Danger : Ink.Foreground, lines: 2));
+        if (detail != null) words.Children.Add(K.Words(detail, 11.5, ink: Ink.Muted, lines: 2));
         var parts = new List<(UIElement, double)>();
         if (symbol != null) parts.Add(K.Fixed(new Border { Width = 18, Child = K.Symbol(symbol, 13, tint) }));
         parts.Add(K.Flex(words));
@@ -283,8 +283,8 @@ internal static class Rows
     /// <summary>One row: an optional symbol tile, a title and a line under it, and a control at the end; a hairline under it unless last.</summary>
     public static StackPanel Row(string title, UIElement? control = null, string? detail = null, string? symbol = null, bool last = false)
     {
-        var words = K.Column(2, K.Text(title, 13.5));
-        if (detail != null) words.Children.Add(K.Text(detail, 11.5, ink: Ink.Muted));
+        var words = K.Column(2, K.Words(title, 13.5));
+        if (detail != null) words.Children.Add(K.Words(detail, 11.5, ink: Ink.Muted));
         words.VerticalAlignment = VerticalAlignment.Center;
         var parts = new List<(UIElement, double)>();
         if (symbol != null) parts.Add(K.Fixed(Tile(symbol)));

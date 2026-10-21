@@ -53,6 +53,13 @@
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.9169" />
   </ItemGroup>
 
+  <!-- The flags drawn in for flag emoji, which Windows has no glyphs for (UI/Kit/Flags.cs). -->
+  <ItemGroup>
+    <Content Include="Assets\Flags\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
   <!-- The package's pictures, only in a packaged build. -->
   <ItemGroup Condition="'$(WindowsPackageType)' == 'MSIX'">
     <Content Include="Assets\*.png" />

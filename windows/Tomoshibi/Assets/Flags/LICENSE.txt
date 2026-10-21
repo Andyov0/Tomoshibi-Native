@@ -1,0 +1,7 @@
+The flag pictures in this folder are Twemoji's artwork, the same files the
+Tomoshibi web client serves (web/public/flags).
+
+Twemoji graphics: Copyright 2019 Twitter, Inc and other contributors, and the
+jdecked/twemoji contributors since. Licensed under CC-BY 4.0:
+https://creativecommons.org/licenses/by/4.0/
+https://github.com/jdecked/twemoji
