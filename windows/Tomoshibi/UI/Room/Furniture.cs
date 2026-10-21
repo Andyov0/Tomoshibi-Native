@@ -24,6 +24,7 @@ internal sealed class SignalBadge : StackPanel
     private readonly TextBlock _rtt = K.Text("", 11.5, K.Medium, Ink.Muted, tabular: true);
     private readonly StackPanel _detail = K.Column(5);
     private readonly Border _detailCard;
+    private readonly Border _detailHolder;
 
     public SignalBadge(CallModel call)
     {
@@ -41,8 +42,8 @@ internal sealed class SignalBadge : StackPanel
         _detailCard = K.Glass(_detail, 14);
         _detailCard.Width = 236;
         _detailCard.HorizontalAlignment = HorizontalAlignment.Left;
-        _detailCard.Arrives(0.94f, new Vector2(0, 0));
-        Children.Add(_detailCard);
+        _detailHolder = K.Holding(_detailCard).Arrives(0.94f, new Vector2(0, 0));
+        Children.Add(_detailHolder);
         Update();
     }
 
@@ -85,7 +86,7 @@ internal sealed class SignalBadge : StackPanel
             _ => T("Good connection"),
         });
         var open = detailed && _call.ConnectionOpen;
-        _detailCard.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
+        _detailHolder.Visibility = open ? Visibility.Visible : Visibility.Collapsed;
         if (!open) return;
         _detail.Children.Clear();
         void Figure(string label, string value, bool warn = false) =>

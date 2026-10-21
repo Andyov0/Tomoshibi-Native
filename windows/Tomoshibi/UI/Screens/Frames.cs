@@ -184,10 +184,9 @@ internal static class Frames
             var pane = K.Glass(content, 34, new Thickness(18));
             pane.Margin = new Thickness(10);
             pane.VerticalAlignment = VerticalAlignment.Bottom;
-            pane.Rises();
             var scroller = new ScrollViewer
             {
-                Content = new Grid { Children = { pane }, Padding = new Thickness(0, Shared.TitleBar, 0, 0), VerticalAlignment = VerticalAlignment.Bottom },
+                Content = new Grid { Children = { K.Holding(pane).Rises() }, Padding = new Thickness(0, Shared.TitleBar, 0, 0), VerticalAlignment = VerticalAlignment.Bottom },
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             };
             var grid = K.Stack(stage, scroller, Shared.LanguageMenu());

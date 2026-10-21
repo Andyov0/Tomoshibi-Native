@@ -43,6 +43,9 @@ internal sealed class LobbyScreen : Screen
     private StackPanel? _sidebarLists;
     private StackPanel? _homeLists;
     private string? _listsSaid;
+    private string? _sidebarSaid;
+    private string? _footSaid;
+    private bool _serverRowShown;
     private Shared.CameraStage? _stage;
     private Grid? _sidebarFoot;
     private Grid? _servers;
@@ -91,6 +94,9 @@ internal sealed class LobbyScreen : Screen
         _sidebarLists = null;
         _homeLists = null;
         _listsSaid = null;
+        _sidebarSaid = null;
+        _footSaid = null;
+        _serverRowShown = false;
         _servers = null;
         if (wide) BuildWide();
         else BuildNarrow();
@@ -136,15 +142,55 @@ internal sealed class LobbyScreen : Screen
         if (said != _listsSaid)
         {
             _listsSaid = said;
-            if (_sidebarLists != null) FillSidebar(_sidebarLists);
             if (_homeLists != null) FillHome(_homeLists);
+        }
+        // The sidebar on its own key, and its foot on another: built again
+        // whenever anything the home lists show changed, the sidebar was
+        // emptied and filled again for every relay measured, many times in a
+        // window's first seconds against a fleet of twenty. A row pressed
+        // then was gone before the press was let go, so the press did nothing
+        // or landed on what had taken its place, while the rows drawn lagged
+        // behind where they were by the transitions of the panel; a person
+        // with the pointer on Servers had Scheduled meetings open.
+        var sidebar = SidebarSaid();
+        if (sidebar != _sidebarSaid)
+        {
+            _sidebarSaid = sidebar;
+            if (_sidebarLists != null) FillSidebar(_sidebarLists);
+        }
+        var foot = FootSaid();
+        if (foot != _footSaid)
+        {
+            _footSaid = foot;
+            FillFoot();
         }
         if (_section != null && _sectionShown != _place) ShowSection();
         if (_joinTyped != null) _joinTyped.IsEnabled = RoomNames.ValidTyped(_typed) || SignInScreen.PastedLink(_typed) != null;
         _meeting?.Update();
     }
 
-    /// <summary>What the lists show, so that they are drawn again only when it changes.</summary>
+    /// <summary>What the sidebar's rows show: which is chosen, whether there is a server to choose, and the meetings listed.</summary>
+    private string SidebarSaid()
+    {
+        var lobby = App.Lobby;
+        return string.Join("|",
+            _place,
+            App.OffersRelayChoice,
+            string.Join(",", lobby.Upcoming.Take(5).Select(a => a.Id + a.Started)),
+            lobby.Upcoming.Count,
+            string.Join(",", lobby.RecentHere.Take(6).Select(r => r.Id + r.At.ToUnixTimeSeconds() / 60)),
+            Localization.Shared.Language);
+    }
+
+    /// <summary>What the sidebar's foot shows: the fleet's light and the account.</summary>
+    private string FootSaid() => string.Join("|", App.Relays?.Online, App.Relays?.Total, App.Account?.Name, Localization.Shared.Language);
+
+    /// <summary>
+    /// What the home lists show, so that they are drawn again only when it
+    /// changes. Not the fastest relay, which nothing here shows and which
+    /// changed with every reading of a measurement, each time drawing every
+    /// section again with its arrival.
+    /// </summary>
     private string Said()
     {
         var lobby = App.Lobby;
@@ -152,8 +198,8 @@ internal sealed class LobbyScreen : Screen
             _place,
             App.OffersRelayChoice,
             App.RelayChoice,
-            lobby.FastestRelay?.Name,
             App.Relays?.Online,
+            App.Relays?.Total,
             string.Join(",", lobby.Upcoming.Select(a => a.Id + a.Started)),
             string.Join(",", lobby.RecentHere.Select(r => r.Id + r.At.ToUnixTimeSeconds() / 60)),
             Localization.Shared.Language);
@@ -265,8 +311,7 @@ internal sealed class LobbyScreen : Screen
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         var sidebar = Sidebar();
         sidebar.Margin = new Thickness(10, Shared.TitleBar + 4, 10, 10);
-        sidebar.Rises();
-        row.Children.Add(sidebar);
+        row.Children.Add(K.Holding(sidebar).Rises());
         _section = new Grid();
         Grid.SetColumn(_section, 1);
         row.Children.Add(_section);
@@ -321,8 +366,7 @@ internal sealed class LobbyScreen : Screen
         switches.HorizontalAlignment = HorizontalAlignment.Center;
         switches.VerticalAlignment = VerticalAlignment.Bottom;
         switches.Margin = new Thickness(0, 0, 0, 28);
-        switches.Rises(80);
-        grid.Children.Add(switches);
+        grid.Children.Add(K.Holding(switches).Rises(80));
         if (App.OffersRelayChoice)
         {
             var server = Shared.OnGlass(Shared.ServerMenu(App, compact: false, id: "server"));
@@ -374,7 +418,18 @@ internal sealed class LobbyScreen : Screen
         lists.Children.Clear();
         lists.Children.Add(SidebarItem(T("Home"), "house", Place.Home));
         lists.Children.Add(SidebarItem(T("Scheduled meetings"), "calendar", Place.Scheduled, App.Lobby.Upcoming.Count));
-        if (App.OffersRelayChoice) lists.Children.Add(SidebarItem(T("Server"), "server.rack", Place.Servers).Arrives());
+        // Arriving once, when there first is a server to choose, and drawn
+        // still every time the rows are made again after that.
+        if (App.OffersRelayChoice)
+        {
+            var server = SidebarItem(T("Server"), "server.rack", Place.Servers);
+            lists.Children.Add(_serverRowShown ? server : server.Arrives());
+            _serverRowShown = true;
+        }
+        else
+        {
+            _serverRowShown = false;
+        }
         var upcoming = App.Lobby.Upcoming.Take(5).ToList();
         if (upcoming.Count > 0)
         {
@@ -387,7 +442,11 @@ internal sealed class LobbyScreen : Screen
             lists.Children.Add(SidebarHeading(T("Recent")));
             foreach (var item in recent) lists.Children.Add(RecentSidebarRow(item));
         }
-        // The foot: the fleet's light, and the account.
+    }
+
+    /// <summary>The sidebar's foot: the fleet's light, and the account.</summary>
+    private void FillFoot()
+    {
         if (_sidebarFoot != null)
         {
             _sidebarFoot.Children.Clear();

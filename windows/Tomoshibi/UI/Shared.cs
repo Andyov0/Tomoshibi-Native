@@ -192,6 +192,7 @@ internal static class Shared
     {
         private readonly AppModel _app;
         private readonly Border _capsule;
+        private readonly Border _holder;
         private readonly TextBlock _words = K.Text("", 13);
         private readonly FrameworkElement _mark;
         private readonly Tap _close;
@@ -209,13 +210,13 @@ internal static class Shared
             _capsule = K.Glass(null, 22, new Thickness(14, 9, 7, 9));
             _capsule.MaxWidth = 520;
             _capsule.Margin = new Thickness(20, 0, 20, clearance);
-            _capsule.Arrives(1f, fromY: 60);
-            _capsule.Visibility = Visibility.Collapsed;
+            _holder = K.Holding(_capsule).Arrives(1f, fromY: 60);
+            _holder.Visibility = Visibility.Collapsed;
             _capsule.Tapped += (_, _) =>
             {
                 if (!app.ProblemStays) app.Problem = null;
             };
-            Children.Add(_capsule);
+            Children.Add(_holder);
             Update();
         }
 
@@ -226,7 +227,7 @@ internal static class Shared
             _said = problem;
             if (problem == null)
             {
-                _capsule.Visibility = Visibility.Collapsed;
+                _holder.Visibility = Visibility.Collapsed;
                 return;
             }
             _words.Text = problem;
@@ -236,7 +237,7 @@ internal static class Shared
             var parts = new List<(UIElement, double)> { K.Fixed(symbol), K.Flex(_words) };
             if (stays) parts.Add(K.Fixed(_close));
             _capsule.Child = K.Line(10, parts.ToArray());
-            _capsule.Visibility = Visibility.Visible;
+            _holder.Visibility = Visibility.Visible;
             if (!stays)
             {
                 var mine = ++_generation;

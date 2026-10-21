@@ -275,7 +275,7 @@ internal sealed class RoomScreen : Screen
         if (said == _noticeSaid) return;
         _noticeSaid = said;
         _noticeHost!.Children.Clear();
-        if (said != null) _noticeHost.Children.Add(RoomTitle.Notice(said).Arrives());
+        if (said != null) _noticeHost.Children.Add(K.Holding(RoomTitle.Notice(said)).Arrives());
     }
 
     /// <summary>Whether a plain address is a way into this room (Stage.kt <c>linkWorks</c>): a door anybody may come through, and no scope.</summary>
@@ -297,8 +297,7 @@ internal sealed class RoomScreen : Screen
                 _aloneDismissed = true;
                 UpdateAlone();
             });
-            card.Arrives();
-            _aloneHost.Children.Add(card);
+            _aloneHost.Children.Add(K.Holding(card).Arrives());
         }
     }
 

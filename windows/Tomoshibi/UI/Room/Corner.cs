@@ -220,7 +220,7 @@ internal sealed class SaidColumn : StackPanel
             var words = K.Column(2);
             if (!run) words.Children.Add(K.Text(Refusals.Named(line.Name, line.Identity), 11, K.Semibold, Ink.Muted, lines: 1));
             words.Children.Add(Panels.Linked(line.Text, 13, lines: 5));
-            var card = K.Glass(K.Line(9, K.Fixed(monogram.At(HorizontalAlignment.Left, VerticalAlignment.Top)), K.Flex(words)), 16, new Thickness(8, run ? 7 : 8, 12, run ? 7 : 8));
+            var card = K.Holding(K.Glass(K.Line(9, K.Fixed(monogram.At(HorizontalAlignment.Left, VerticalAlignment.Top)), K.Flex(words)), 16, new Thickness(8, run ? 7 : 8, 12, run ? 7 : 8)));
             card.Arrives(0.94f, new Vector2(0, 1), fromY: 8);
             _cards[line.Id] = card;
             Children.Add(card);

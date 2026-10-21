@@ -92,9 +92,10 @@ internal sealed class Overlay : Grid
             HorizontalScrollMode = ScrollMode.Disabled,
             MaxHeight = Math.Max(120, ActualHeight - 20),
         };
-        var panel = K.Glass(scroller, 18);
-        panel.Width = limit;
-        panel.TabFocusNavigation = KeyboardNavigationMode.Cycle;
+        var glass = K.Glass(scroller, 18);
+        glass.Width = limit;
+        glass.TabFocusNavigation = KeyboardNavigationMode.Cycle;
+        var panel = K.Holding(glass);
         panel.Measure(new Windows.Foundation.Size(limit, ActualHeight - 20));
         var size = panel.DesiredSize;
 
@@ -144,7 +145,7 @@ internal sealed class Overlay : Grid
             _ => new Vector2(1, align == Align.End ? 1 : 0.5f),
         };
         Animate(panel, 0.94f, 1f, 0f, 1f, Motion.Settle, true, anchorPoint, new Vector2((float)size.Width, (float)size.Height));
-        panel.Loaded += (_, _) => FocusInside(panel);
+        glass.Loaded += (_, _) => FocusInside(glass);
     }
 
     public void ClosePopover()
@@ -235,6 +236,10 @@ internal sealed class Overlay : Grid
         panel.TabFocusNavigation = KeyboardNavigationMode.Cycle;
         // Presses inside are the dialog's own.
         panel.PointerPressed += (_, e) => e.Handled = true;
+        // It comes and goes in a holder: the panel is raised for its shadow
+        // (K.Holding).
+        var inside = panel;
+        panel = K.Holding(inside);
         _dialogLayer.Children.Add(dim);
         _dialogLayer.Children.Add(panel);
         var held = new Held(dim, panel, dismiss, sheet);
@@ -252,7 +257,7 @@ internal sealed class Overlay : Grid
             }
             Motion.Hide(panel);
         }
-        panel.Loaded += (_, _) => FocusInside(panel);
+        inside.Loaded += (_, _) => FocusInside(inside);
         return () => CloseDialog(held);
     }
 

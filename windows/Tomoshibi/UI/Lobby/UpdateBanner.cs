@@ -34,6 +34,7 @@ internal sealed class UpdateBanner : Grid
     private readonly double _top;
     private readonly double _below;
     private Border? _card;
+    private Border? _holder;
     private Unfolding? _body;
     private Unfolding? _space;
     private string? _said;
@@ -131,16 +132,17 @@ internal sealed class UpdateBanner : Grid
         _card.Shadow = new ThemeShadow();
         _card.Translation = new Vector3(0, 0, 24);
         // From above the window's edge: its own height and what it clears.
-        _card.Arrives(1f, fromY: -(float)(_top + 160));
-        Children.Add(_card);
+        _holder = K.Holding(_card).Arrives(1f, fromY: -(float)(_top + 160));
+        Children.Add(_holder);
     }
 
     private void Leave()
     {
         if (_card == null) return;
         if (_inline) _space!.Show(null);
-        else Children.Remove(_card);
+        else Children.Remove(_holder);
         _card = null;
+        _holder = null;
         _body = null;
         _said = null;
         _progressLine = null;

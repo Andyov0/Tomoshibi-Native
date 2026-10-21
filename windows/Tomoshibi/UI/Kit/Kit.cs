@@ -168,6 +168,32 @@ internal static class K
         return border;
     }
 
+    /// <summary>
+    /// What a glass comes and goes in when it moves as it does (Rises,
+    /// Arrives, the overlay's panels): the glass is raised for its shadow
+    /// through UIElement.Translation, which is the only raising a ThemeShadow
+    /// is cast from, and an element so raised whose own visual is animated as
+    /// well is drawn in one place and pressed in another. The lobby's sidebar
+    /// took its rows' presses thirty-six points below where it drew them (its
+    /// top margin, counted twice), so a person with the pointer on Servers
+    /// opened Scheduled meetings. So a raised element's visual is never
+    /// animated: what moves it moves this, which has no ground of its own and
+    /// so takes no presses. It takes the glass's margin and alignment, to be
+    /// as large as the glass and laid out where it was; call it once they are set.
+    /// </summary>
+    public static Border Holding(FrameworkElement glass)
+    {
+        var holder = new Border
+        {
+            Child = glass,
+            Margin = glass.Margin,
+            HorizontalAlignment = glass.HorizontalAlignment,
+            VerticalAlignment = glass.VerticalAlignment,
+        };
+        glass.Margin = new Thickness(0);
+        return holder;
+    }
+
     /// <summary>The acrylic itself, for a surface that is shaped some other way.</summary>
     public static AcrylicBrush Acrylic() => new()
     {
