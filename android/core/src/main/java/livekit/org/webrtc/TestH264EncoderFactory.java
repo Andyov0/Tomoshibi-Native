@@ -17,7 +17,16 @@ import java.util.Map;
  * sending pictures could be checked without the owner's phone. This makes the
  * same HardwareVideoEncoder the factory would have made, with the same
  * parameters, around that codec, so what an emulator sends goes the way a
- * phone's does but for the silicon.
+ * phone's does, but for the silicon and one step.
+ *
+ * That step is the input surface: these encoders take every frame as bytes, a
+ * texture frame converted by WebRTC's YuvConverter in the capture's context.
+ * The emulator's codec does not read back what GL draws into its input
+ * surface: a shared screen arrived black when the encoder sampled the
+ * capture's external texture, and as a stripe of misread rows when it drew a
+ * copy of it in a plain texture, though screenrecord's own composition into
+ * the same codec encodes correctly. So the surface path is checked on a phone,
+ * and an emulator checks everything before it with pictures that are right.
  */
 final class TestH264EncoderFactory implements VideoEncoderFactory {
     private static final String MIME = "video/avc";

@@ -657,7 +657,7 @@ class Sharing(context: Context? = null) {
     }
 
     /** The last picture the screen sent, for a debug build to look at. */
-    internal fun picture(): PlaneReader.Picture? = screen?.picture()
+    internal fun picture(): ScreenFrames.Picture? = screen?.picture()
 
     /** What the share is doing, for a debug log. */
     val state: String

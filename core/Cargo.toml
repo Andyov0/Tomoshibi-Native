@@ -44,6 +44,14 @@ thiserror = "2"
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
 
+# The core's C++ for Android alone (build.rs, src/android_frame.cc), compiled
+# against the prebuilt WebRTC that webrtc-sys fetches, which webrtc-sys-build
+# locates; the build script does nothing for any other target. Pinned to the
+# version webrtc-sys itself uses, so that both find the same download.
+[build-dependencies]
+cc = "1"
+webrtc-sys-build = "=0.3.19"
+
 # Direct3D 11 and DXGI, for the swap chains remote pictures are drawn into on
 # Windows (src/call/panel.rs).
 [target.'cfg(target_os = "windows")'.dependencies]

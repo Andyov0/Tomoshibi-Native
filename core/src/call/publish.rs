@@ -262,9 +262,9 @@ impl VideoInput {
     /// each chroma sample `chroma_step` bytes from the next. A step of one is
     /// planar I420; a step of two is the interleaved layout most phones use
     /// underneath, where `u` and `v` are two views of one buffer. Copied into
-    /// an I420 picture for the encoder, which on Android takes memory rather
-    /// than a texture (webrtc-sys android.cpp makes its factory without an
-    /// EGL context).
+    /// an I420 picture for the encoder. Android's camera comes this way; its
+    /// shared screen comes as a texture instead (android.rs `pushFrame`),
+    /// which the hardware encoders draw without a copy.
     #[allow(clippy::too_many_arguments)]
     pub fn push_planes(
         &self,
@@ -375,6 +375,32 @@ impl VideoInput {
             livekit::webrtc::video_frame::native::NativeBuffer::from_cv_pixel_buffer(pixel_buffer as *mut c_void)
         };
         self.source.capture_frame(&VideoFrame { rotation: turned(rotation), timestamp_us, frame_metadata: None, buffer });
+    }
+}
+
+#[cfg(target_os = "android")]
+#[uniffi::export]
+impl VideoInput {
+    /// This input as a number, for `CoreNative.pushFrame`: the JNI call that
+    /// carries a frame as a Java object, which the bindings cannot (a shared
+    /// screen's frames are GPU textures, see android.rs). The handle holds the
+    /// input until it is given back with `CoreNative.releaseFrameInput`.
+    pub fn frame_handle(self: Arc<Self>) -> u64 {
+        Arc::into_raw(self) as u64
+    }
+}
+
+#[cfg(target_os = "android")]
+impl VideoInput {
+    /// A frame WebRTC holds natively, a texture, sent as it is: the encoders
+    /// draw it into their input surfaces, and nothing of it is copied here.
+    pub(crate) fn push_native(&self, buffer: livekit::webrtc::video_frame::native::NativeBuffer, timestamp_us: i64) {
+        self.source.capture_frame(&VideoFrame {
+            rotation: VideoRotation::VideoRotation0,
+            timestamp_us,
+            frame_metadata: None,
+            buffer,
+        });
     }
 }
 

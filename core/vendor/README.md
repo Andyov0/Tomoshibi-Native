@@ -1,8 +1,8 @@
 # Patched LiveKit crates
 
-Copies of two crates from crates.io, at exactly the versions `Cargo.toml` pins,
-each changed in one place marked `Tomoshibi:`. Upgrading means copying the new
-release over the old one and carrying both changes forward.
+Copies of three crates from crates.io, at exactly the versions `Cargo.toml`
+pins, each change marked `Tomoshibi:`. Upgrading means copying the new release
+over the old one and carrying every change forward.
 
 - `livekit-signaling` 0.1.6 — `validate()` never sends its request. After a
   failed WebSocket the SDK would make an HTTPS GET with the token as a bearer,
@@ -21,5 +21,15 @@ release over the old one and carrying both changes forward.
   sink for the rest of the call, about one launch in four. `rtc_engine::
   munge_start_bitrate` exposes the rewrite to `core/tests/start_bitrate.rs`,
   since the vendored crate's own tests cannot run outside the workspace.
+- `libwebrtc` 0.3.52 — a receiver's minimum playout delay is reachable
+  (`RtpReceiver::set_jitter_buffer_minimum_delay`): the web holds every shared
+  screen and its sound for 200 ms (`web/src/live/delay.ts`), and the binding
+  beneath had it with nothing above it calling it.
+- `libwebrtc` 0.3.52 — on Android, `NativeBuffer::from_android_buffer` takes
+  over a frame buffer made in C++ from a Java one (`core/src/android_frame.cc`),
+  which is how a shared screen reaches the hardware encoders as a texture.
+  webrtc-sys can make a native buffer from a CVPixelBuffer or a DMA-BUF and
+  from nothing an Android app holds; without this every frame was copied
+  through memory four times on its way in.
 
-Both are Apache-2.0, as each `Cargo.toml` declares; the published crates carry no separate licence file.
+All three are Apache-2.0, as each `Cargo.toml` declares; the published crates carry no separate licence file.

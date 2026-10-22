@@ -634,6 +634,17 @@ pub mod native {
         pub fn get_dmabuf_fd(&self) -> Option<DmaBufFileDescriptor> {
             self.handle.get_dmabuf_fd()
         }
+
+        /// Tomoshibi: takes over a `livekit_ffi::VideoFrameBuffer*` made in
+        /// C++ from an Android frame buffer (see the private side's
+        /// `from_android_buffer`); None for null.
+        ///
+        /// Safety: `raw` is null or an owned pointer from `new` of that type,
+        /// handed over once.
+        #[cfg(target_os = "android")]
+        pub unsafe fn from_android_buffer(raw: *mut std::ffi::c_void) -> Option<Self> {
+            vf_imp::NativeBuffer::from_android_buffer(raw)
+        }
     }
 
     pub trait VideoFrameBufferExt: VideoBuffer {

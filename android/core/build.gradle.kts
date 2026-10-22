@@ -26,5 +26,7 @@ dependencies {
     // libjnidispatch for every ABI.
     api("net.java.dev.jna:jna:5.19.1@aar")
     api("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
-    implementation(files("libs/libwebrtc.jar"))
+    // WebRTC's Java classes, which the app uses too: the screen's frames are
+    // its TextureBuffers, made in a context shared with its encoders.
+    api(files("libs/libwebrtc.jar"))
 }
