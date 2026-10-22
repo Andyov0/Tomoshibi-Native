@@ -41,6 +41,7 @@ import app.tomoshibi.ui.kit.Hairline
 import app.tomoshibi.ui.kit.PillButton
 import app.tomoshibi.ui.kit.PillRole
 import app.tomoshibi.ui.lobby.megabytes
+import app.tomoshibi.ui.lobby.pacedReceived
 import app.tomoshibi.ui.kit.Font
 import app.tomoshibi.ui.kit.KitText
 import app.tomoshibi.ui.kit.Motion
@@ -104,22 +105,30 @@ internal fun AboutSettings(app: AppModel) {
  * (Settings.swift `UpdateRow`): the version on offer with "Update", a
  * download's progress with "Cancel", and the answer to a check, which says
  * so even when there is nothing newer. What it says changes with a fade.
+ *
+ * A download's figures count up with the model's bar (Updates
+ * `downloadBar`), the one the lobby's banner under this page draws, so that
+ * the two never say different things.
  */
 @Composable
 private fun UpdateRow(updates: Updates) {
     val step = updates.step
     val said = updates.said
     val line: String? = when {
-        step is Step.Downloading -> t("{received} of {total}", mapOf("received" to megabytes(step.received), "total" to megabytes(step.total)))
-        step is Step.Held -> t("{received} of {total}", mapOf("received" to megabytes(step.received), "total" to megabytes(step.total)))
-        step is Step.Installing -> t("Installing Tomoshibi {version}", mapOf("version" to step.offer.version))
+        step is Step.Downloading -> t("{received} of {total}", mapOf("received" to megabytes(pacedReceived(step.received, step.total, updates.downloadBar)), "total" to megabytes(step.total)))
+        step is Step.Held -> t("{received} of {total}", mapOf("received" to megabytes(pacedReceived(step.received, step.total, updates.downloadBar)), "total" to megabytes(step.total)))
+        step is Step.Installing -> t("Installing Tomoshibi {version}", mapOf("version" to step.offer.label))
         step is Step.Permission -> t("Allow Tomoshibi to install its update")
-        step is Step.Offered -> step.problem ?: t("Version {version} is available.", mapOf("version" to step.offer.version))
+        step is Step.Offered -> step.problem ?: t("Version {version} is available.", mapOf("version" to step.offer.label))
         said == Said.Checking -> t("Checking for updates…")
         said == Said.Current -> t("You have the latest version.")
         said == Said.Failed -> t("Could not check for updates. Try again later.")
         else -> null
     }
+    // A download's figures are one line whose numbers change, faded in once.
+    // Keyed by its words, each report, and each frame of the pace, would be a
+    // new line faded in over the one before, ten to a hundred times a second.
+    val about: Any? = if (step is Step.Downloading || step is Step.Held) Step.Downloading::class else line
     Column(Modifier.fillMaxWidth().testTag("settings.updates")) {
         Row(
             Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(horizontal = 14.dp, vertical = 9.dp),
@@ -132,10 +141,11 @@ private fun UpdateRow(updates: Updates) {
             Column(Modifier.weight(1f).animateContentSize(Theme.settle()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 KitText(t("Updates"), font = Font(13.5f))
                 AnimatedContent(
-                    line,
+                    line to about,
+                    contentKey = { it.second },
                     transitionSpec = { fadeIn(Theme.settle()) togetherWith fadeOut(Theme.leave()) },
                     label = "said",
-                ) { now ->
+                ) { (now, _) ->
                     if (now != null) {
                         KitText(now, font = Font(11.5f), color = if (step is Step.Offered && step.problem != null) Theme.danger else Theme.muted)
                     }

@@ -6,6 +6,22 @@ plugins {
     id("io.github.takahirom.roborazzi")
 }
 
+// The version people are told, and which build of it this is. A small fix
+// keeps the version and takes the next build; a new version is for new
+// features or a large update (owner, 2026-10-22).
+val release = "0.1.4"
+val build = 1
+
+// The version name joins them as the core's version_with_build does
+// (core/protocol/src/api/updates.rs), written out here because the build
+// cannot call the core: the version alone for the first build, the build as a
+// fourth part after it (0.1.4.2) for every later one. The name is what an
+// installed app reports and compares in its update check, never the version
+// code, so a second build named 0.1.4 like the first would be offered to
+// nobody; and the first has no fourth part because a 0.1.4.1 is newer than
+// 0.1.4 by the core's rule, and would be offered to the 0.1.4 already there.
+val joined = if (build > 1) "$release.$build" else release
+
 android {
     namespace = "app.tomoshibi"
     compileSdk = 37
@@ -14,8 +30,10 @@ android {
         applicationId = "app.tomoshibi.android"
         minSdk = 29
         targetSdk = 36
-        versionCode = 5
-        versionName = "0.1.3"
+        // One more for every build of every version: Android installs over
+        // the app only a version code above its own.
+        versionCode = 6
+        versionName = joined
         ndk { abiFilters += "arm64-v8a" }
     }
 

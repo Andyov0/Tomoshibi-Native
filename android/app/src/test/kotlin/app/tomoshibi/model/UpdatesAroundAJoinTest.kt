@@ -1,5 +1,6 @@
 package app.tomoshibi.model
 
+import app.tomoshibi.basics.Pace
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import app.tomoshibi.media.CallMedia
 import app.tomoshibi.ui.lobby.BASE
@@ -93,7 +94,7 @@ class UpdatesAroundAJoinTest {
         app.stage("deployment", SlowDeployment(door))
         app.stage("account", ada)
         app.stage("screenState", AppModel.Screen.Lobby)
-        val updates = Updates(source, installer, "0.1.0.7", backgroundScope)
+        val updates = Updates(source, installer, "0.1.0.7", backgroundScope, Pace(null, whole = 0))
         app.updates = updates
         updates.start()
         runCurrent()

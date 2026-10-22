@@ -12,6 +12,7 @@ import uniffi.tomoshibi_protocol.UpdateException
 import uniffi.tomoshibi_protocol.UpdatePlatform
 import uniffi.tomoshibi_protocol.UpdateProgress
 import uniffi.tomoshibi_protocol.updateNotes
+import uniffi.tomoshibi_protocol.versionLabel
 
 /**
  * Builds from the deployment, through the core (api/updates.rs), which asks
@@ -35,7 +36,7 @@ class CoreUpdateSource(private val base: String, private val folder: File) : Upd
             UpdateCheck.UpToDate -> null
             is UpdateCheck.Available -> {
                 val build = found.build
-                Offer(build.version, build.size.toLong(), { language -> updateNotes(build, language) }, build)
+                Offer(build.version, build.size.toLong(), { language -> updateNotes(build, language) }, build, label = versionLabel(build.version))
             }
         }
 

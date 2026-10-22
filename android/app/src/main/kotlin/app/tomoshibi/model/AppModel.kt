@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.tomoshibi.BuildConfig
 import app.tomoshibi.basics.NoticeTimes
+import app.tomoshibi.basics.Pace
 import app.tomoshibi.basics.t
 import app.tomoshibi.media.CallMedia
 import app.tomoshibi.media.SystemInstaller
@@ -1264,6 +1265,7 @@ class AppModel(
                         SystemInstaller(context),
                         ClientDescription.version,
                         CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+                        Pace.onTheDisplay(),
                     )
                 }
             }

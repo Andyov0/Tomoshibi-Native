@@ -16,12 +16,12 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
-import app.tomoshibi.BuildConfig
 import app.tomoshibi.basics.t
 import app.tomoshibi.media.AudioDevice
 import app.tomoshibi.media.CameraCapture
 import app.tomoshibi.media.CameraChoice
 import app.tomoshibi.media.SystemAudioRouting
+import app.tomoshibi.model.ClientDescription
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -37,7 +37,7 @@ data class DeviceOption(val id: String, val name: String)
  * picture somebody picked.
  */
 internal interface SettingsPlatform {
-    /** "0.1.0 (1)": the version and the build, as the Apple apps write them. */
+    /** This build's version as people are told it: "0.1.4", and "0.1.4 (2)" for a later build of it (the core's version_label). */
     val appVersion: String
     fun coreVersion(): String
     fun normaliseRoomName(typed: String): String
@@ -79,7 +79,10 @@ internal class SystemSettingsPlatform(private val context: Context) : SettingsPl
     }
     private val routing by lazy { SystemAudioRouting(context) }
 
-    override val appVersion: String get() = BuildConfig.VERSION_NAME
+    // Written by the core rather than here, so that this page, the Apple
+    // apps' and Windows' all write a later build the same way; the version
+    // name itself (0.1.4.2) is what the deployment is told and compares.
+    override val appVersion: String get() = uniffi.tomoshibi_protocol.versionLabel(ClientDescription.version)
     override fun coreVersion(): String = uniffi.tomoshibi_core.coreVersion()
     override fun normaliseRoomName(typed: String): String = uniffi.tomoshibi_protocol.normaliseRoomName(typed)
     override fun validRoomName(name: String): Boolean = uniffi.tomoshibi_protocol.validRoomName(name)

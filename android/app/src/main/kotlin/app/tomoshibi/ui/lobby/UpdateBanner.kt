@@ -5,7 +5,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -44,6 +43,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.tomoshibi.basics.Localization
+import app.tomoshibi.basics.Pace
 import app.tomoshibi.basics.Theme
 import app.tomoshibi.basics.readingLocale
 import app.tomoshibi.basics.t
@@ -124,23 +124,24 @@ private fun Card(updates: Updates, said: Step, modifier: Modifier, floating: Boo
             .padding(14.dp)
             .testTag("update.banner"),
     ) {
+        val pace = updates.downloadBar
         AnimatedContent(
             said,
             contentKey = { it::class },
             transitionSpec = { (fadeIn(Theme.settle()) togetherWith fadeOut(Theme.leave())).using(SizeTransform(clip = false)) },
             label = "update",
-        ) { step -> Body(updates, step) }
+        ) { step -> Body(updates, step, pace) }
     }
 }
 
 @Composable
-private fun Body(updates: Updates, step: Step) {
+private fun Body(updates: Updates, step: Step, pace: Pace) {
     when (step) {
         Step.None -> {}
         is Step.Offered -> Said(
             badge = if (step.problem != null) "exclamationmark.circle.fill" else "sparkles",
             warning = step.problem != null,
-            title = t("Tomoshibi {version} is available", mapOf("version" to step.offer.version)),
+            title = t("Tomoshibi {version} is available", mapOf("version" to step.offer.label)),
             lines = listOfNotNull(step.offer.notes(Localization.shared.language.code)),
             problem = step.problem,
         ) {
@@ -153,8 +154,8 @@ private fun Body(updates: Updates, step: Step) {
                 height = 30.dp,
             )
         }
-        is Step.Downloading -> Downloading(updates, step.offer.version, step.received, step.total)
-        is Step.Held -> Downloading(updates, step.offer.version, step.received, step.total)
+        is Step.Downloading -> Downloading(updates, step.offer.label, step.received, step.total, pace)
+        is Step.Held -> Downloading(updates, step.offer.label, step.received, step.total, pace)
         is Step.Permission -> if (step.refused) {
             Said(
                 badge = "exclamationmark.circle.fill",
@@ -177,7 +178,7 @@ private fun Body(updates: Updates, step: Step) {
         }
         is Step.Installing -> Said(
             badge = null,
-            title = t("Installing Tomoshibi {version}", mapOf("version" to step.offer.version)),
+            title = t("Installing Tomoshibi {version}", mapOf("version" to step.offer.label)),
             lines = listOf(t("Confirm the update in the window Android shows.")),
         ) {
             PillButton(t("Cancel"), updates::stopInstalling, Modifier.testTag("update.cancel"), height = 30.dp)
@@ -186,13 +187,12 @@ private fun Body(updates: Updates, step: Step) {
 }
 
 @Composable
-private fun Downloading(updates: Updates, version: String, received: Long, total: Long) {
-    val fraction = if (total > 0) (received.toFloat() / total).coerceIn(0f, 1f) else 0f
+private fun Downloading(updates: Updates, label: String, received: Long, total: Long, pace: Pace) {
     Said(
         badge = "arrow.clockwise",
-        title = t("Downloading Tomoshibi {version}", mapOf("version" to version)),
-        lines = listOf(t("{received} of {total}", mapOf("received" to megabytes(received), "total" to megabytes(total)))),
-        above = { ProgressTrack(fraction) },
+        title = t("Downloading Tomoshibi {version}", mapOf("version" to label)),
+        lines = listOf(t("{received} of {total}", mapOf("received" to megabytes(pacedReceived(received, total, pace)), "total" to megabytes(total)))),
+        above = { ProgressTrack(pace, fraction(received, total)) },
     ) {
         PillButton(t("Cancel"), updates::cancel, Modifier.testTag("update.cancel"), height = 30.dp)
     }
@@ -231,10 +231,15 @@ private fun Said(
     }
 }
 
-/** How much has arrived, as a filling capsule that moves smoothly between reports. */
+/**
+ * How much has arrived, as a filling capsule drawn where the model's bar is
+ * (Updates `downloadBar`), which already moves at one speed: an animation to
+ * each value as well would ease every frame's step. TalkBack is told
+ * [fraction], what was reported, which it reads out now and then rather than
+ * watching fill.
+ */
 @Composable
-private fun ProgressTrack(fraction: Float) {
-    val shown by animateFloatAsState(fraction, Theme.settle(), label = "progress")
+private fun ProgressTrack(pace: Pace, fraction: Float) {
     Box(
         Modifier
             .padding(top = 4.dp)
@@ -242,11 +247,23 @@ private fun ProgressTrack(fraction: Float) {
             .height(5.dp)
             .clip(CircleShape)
             .background(Theme.surfaceHigh)
-            .semantics { progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f) },
+            .semantics { progressBarRangeInfo = ProgressBarRangeInfo(fraction, 0f..1f) }
+            .testTag("update.progress"),
     ) {
-        Box(Modifier.fillMaxWidth(shown).height(5.dp).background(Theme.tally, CircleShape))
+        Box(Modifier.fillMaxWidth(pace.value).height(5.dp).background(Theme.tally, CircleShape).testTag("update.progress.fill"))
     }
 }
+
+/** How much of [total] has arrived, from nought to one. */
+private fun fraction(received: Long, total: Long): Float = if (total > 0) (received.toFloat() / total).coerceIn(0f, 1f) else 0f
+
+/**
+ * The bytes that have arrived as the bar has them, so that the figures beside
+ * it count up with it rather than run ahead; what was reported, exactly,
+ * once the bar has caught up.
+ */
+internal fun pacedReceived(received: Long, total: Long, pace: Pace): Long =
+    if (pace.caughtUp || total <= 0) received else (pace.value.toDouble() * total).toLong().coerceIn(0L, received)
 
 /** Bytes as megabytes to a tenth, in the reader's own way of writing a number. */
 internal fun megabytes(bytes: Long): String = String.format(readingLocale(), "%.1f MB", bytes / 1_000_000.0)

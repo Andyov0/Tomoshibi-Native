@@ -8,6 +8,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.test.core.app.ApplicationProvider
 import app.tomoshibi.basics.Appearance
+import app.tomoshibi.basics.Pace
 import app.tomoshibi.basics.Language
 import app.tomoshibi.basics.Localization
 import app.tomoshibi.model.AppModel
@@ -82,7 +83,9 @@ class UpdateScreenshotTest(private val language: Language) {
     @get:Rule
     val compose = createComposeRule()
 
-    private val offer = Offer("0.1.0.8", 56_093_610, { NOTES[it] })
+    // A later build of a version, as small fixes are numbered, so that the
+    // pictures show the name people are told: "0.1.4 (2)".
+    private val offer = Offer("0.1.4.2", 56_093_610, { NOTES[it] }, label = "0.1.4 (2)")
 
     @Before
     fun setUp() {
@@ -104,9 +107,11 @@ class UpdateScreenshotTest(private val language: Language) {
     }
 
     private fun updating(app: AppModel, step: Step, said: Said? = null): Updates {
-        val updates = Updates(Nowhere, Nowhere, "0.1.0.7", CoroutineScope(Dispatchers.Unconfined))
+        val updates = Updates(Nowhere, Nowhere, "0.1.4", CoroutineScope(Dispatchers.Unconfined), Pace(null, whole = 0))
         app.updates = updates
         updates.stage("step", step)
+        // The bar where the download is, as the model's reports would put it.
+        if (step is Step.Downloading) updates.downloadBar.follow(step.received.toFloat() / step.total)
         updates.stage("said", said)
         return updates
     }

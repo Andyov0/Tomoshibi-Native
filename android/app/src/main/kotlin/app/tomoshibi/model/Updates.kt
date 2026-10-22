@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.tomoshibi.basics.Pace
 import app.tomoshibi.basics.t
 import java.io.File
 import kotlinx.coroutines.CancellationException
@@ -33,6 +34,15 @@ import kotlinx.coroutines.launch
  * settings always answers, "You have the latest version." included, and
  * brings back a version put away.
  *
+ * A download's bar moves at one speed ([downloadBar]), and what follows a
+ * download that arrived (asking to be allowed to install, the system's
+ * confirmation) waits until it has been drawn full, a second or so at the
+ * most: on a fast connection the build arrived while the bar stood partway,
+ * and the system's window was put up over it as though the download had been
+ * cut short. A Cancel in that second keeps the build that arrived, for
+ * "Update" to install without downloading it again, rather than installing
+ * it; so does leaving the lobby in it.
+ *
  * Kept apart from the core and the platform (UpdateSource, UpdateInstaller)
  * so that the rules can be tested on the JVM, where neither can be loaded.
  * Every method is for the main thread.
@@ -43,6 +53,12 @@ class Updates(
     /** This build's version, dotted as the core and the download page write it. */
     val running: String,
     private val scope: CoroutineScope,
+    /**
+     * The download's bar, which the banner and the About page draw as it is:
+     * moved by the display's frames in the app (Pace.onTheDisplay), by hand or
+     * not at all in the tests.
+     */
+    val downloadBar: Pace,
     private val every: Long = EVERY,
     private val retry: Long = RETRY,
 ) {
@@ -117,6 +133,8 @@ class Updates(
     private var walkedAway = false
     /** A build that arrived and was not installed (the confirmation declined), kept for a second try. */
     private var ready: Pair<String, File>? = null
+    /** A build that has arrived while its bar is still being drawn full, kept by Cancel in that second as [ready]. */
+    private var filling: Pair<String, File>? = null
     /** Until a check has answered: whether a build kept by the run before ([UpdateSource.keep]) is still to be looked at. */
     private var carrying = false
 
@@ -143,7 +161,10 @@ class Updates(
         if (inLobby == free) return
         free = inLobby
         val now = step
-        if (!inLobby && now is Step.Downloading) {
+        if (!inLobby && now is Step.Downloading && keepWhatArrived(now.offer)) {
+            // Arrived as the person left, while its bar was filling: kept for
+            // Update back in the lobby, as one arriving a moment later is.
+        } else if (!inLobby && now is Step.Downloading) {
             holding = true
             step = Step.Held(now.offer, now.received, now.total)
             transfer?.cancel()
@@ -195,11 +216,33 @@ class Updates(
         step = Step.Offered(offer)
     }
 
-    /** "Cancel", on a download. What arrived is kept, so "Update" again carries on from there. */
+    /**
+     * "Cancel", on a download. What arrived is kept, so "Update" again
+     * carries on from there; all of it, where it had all arrived and only its
+     * bar was still filling, which "Update" then installs (keepWhatArrived).
+     */
     fun cancel() {
-        if (step !is Step.Downloading) return
+        val now = step as? Step.Downloading ?: return
+        if (keepWhatArrived(now.offer)) return
         holding = false
         transfer?.cancel()
+    }
+
+    /**
+     * Where all of [offer] has arrived and its bar is still filling: the
+     * build kept for "Update" and the offer made again, and nothing
+     * installed. The person said to stop, and a download they stopped is not
+     * to go on to the system's confirmation a moment later.
+     */
+    private fun keepWhatArrived(offer: Offer): Boolean {
+        val arrived = filling?.takeIf { it.first == offer.version } ?: return false
+        ready = arrived
+        filling = null
+        transfer = null
+        holding = false
+        downloadBar.reset()
+        step = Step.Offered(offer)
+        return true
     }
 
     /** "Cancel" while the system asks for confirmation. */
@@ -323,7 +366,11 @@ class Updates(
         val transfer = source.download(offer)
         this.transfer = transfer
         holding = false
-        step = Step.Downloading(offer, 0, offer.size)
+        // A download carried on from where it was held keeps its bar, and
+        // what it had (the core goes on from there); any other starts empty.
+        val held = (step as? Step.Held)?.takeIf { it.offer.version == offer.version }
+        if (held == null) downloadBar.reset()
+        step = if (held != null) Step.Downloading(offer, held.received, held.total) else Step.Downloading(offer, 0, offer.size)
         transferJob = scope.launch {
             previous?.join()
             val outcome = try {
@@ -332,6 +379,7 @@ class Updates(
                         val now = step
                         if (now is Step.Downloading && now.offer.version == offer.version && this@Updates.transfer === transfer) {
                             step = now.copy(received = received, total = total)
+                            downloadBar.follow(if (total > 0) received.toFloat() / total else 0f)
                         }
                     }
                 }
@@ -342,6 +390,17 @@ class Updates(
                 fault
             }
             if (this@Updates.transfer !== transfer) return@launch
+            if (outcome == null) {
+                // All of it, checked: drawn whole, and what follows waits for
+                // the bar to get there.
+                (step as? Step.Downloading)?.takeIf { it.offer.version == offer.version }?.let { step = it.copy(received = it.total) }
+                downloadBar.follow(1f)
+                filling = offer.version to transfer.file
+                downloadBar.filled()
+                // Cancelled, or the lobby left, while it filled (keepWhatArrived).
+                if (this@Updates.transfer !== transfer) return@launch
+                filling = null
+            }
             this@Updates.transfer = null
             when (outcome) {
                 null -> if (free) arrived(offer, transfer.file) else {
@@ -434,12 +493,21 @@ class Updates(
 
 /** A newer build, as the app speaks of it. */
 class Offer(
+    /** Dotted, as the deployment and the update check write it: 0.1.4.2 for 0.1.4's second build. */
     val version: String,
     /** Bytes. */
     val size: Long,
     private val notesIn: (String) -> String? = { null },
     /** What the source needs to download it again; nobody else reads it. */
     internal val handle: Any? = null,
+    /**
+     * The version as people are told it, "0.1.4 (2)" for 0.1.4.2: what every
+     * banner and line that names the build says. Written by the core's
+     * version_label where the offer is made (CoreUpdateSource), since the
+     * views are drawn in tests where the core cannot be loaded; [version]
+     * itself, a fourth part and all, is for comparing and naming files.
+     */
+    val label: String = version,
 ) {
     /** What changed, for somebody reading [language] ("zh-Hans"); null where there is nothing to say in a language they read. */
     fun notes(language: String): String? = notesIn(language)

@@ -1,5 +1,6 @@
 package app.tomoshibi.model
 
+import app.tomoshibi.basics.Pace
 import app.tomoshibi.model.Updates.Said
 import app.tomoshibi.model.Updates.Step
 import java.io.File
@@ -107,7 +108,12 @@ class UpdatesTest {
 
     private fun offer(version: String) = Offer(version, 56_093_610, { language -> if (language == "en") "Fixed." else null })
 
-    private fun TestScope.updates(): Updates = Updates(source, installer, "0.1.0.7", backgroundScope)
+    /**
+     * The model, with a bar that is drawn wherever each report puts it, and
+     * full the moment the last arrives, unless a test gives its own: what
+     * each step waits for is then not a second and more of frames.
+     */
+    private fun TestScope.updates(bar: Pace = Pace(null, whole = 0)): Updates = Updates(source, installer, "0.1.0.7", backgroundScope, bar)
 
     /** Started in the lobby with [version] on offer. */
     private fun TestScope.offered(version: String = "0.1.0.8"): Updates {
@@ -256,6 +262,130 @@ class UpdatesTest {
         assertEquals(Step.Offered(offer("0.1.0.8")), updates.step)
         assertTrue(updates.shown)
         assertTrue(installer.installs.isEmpty())
+    }
+
+    /**
+     * In the lobby, a bar moved by hand a frame (16 ms) at a time, and a
+     * download of 0.1.0.8 that has reported a tenth and then arrived whole:
+     * the bar has all of it still to draw.
+     */
+    private fun TestScope.arrivedWithItsBarToFill(): Triple<Updates, FakeTransfer, Pace> {
+        val bar = Pace(null)
+        source.answer = { offer("0.1.0.8") }
+        val updates = updates(bar)
+        updates.lobby(true)
+        updates.start()
+        runCurrent()
+        updates.accept()
+        runCurrent()
+        val transfer = source.transfers.single()
+        transfer.progress!!(5_609_361, 56_093_610)
+        runCurrent()
+        transfer.outcome.complete(null)
+        runCurrent()
+        assertEquals(1f, bar.target)
+        return Triple(updates, transfer, bar)
+    }
+
+    /** Frames of the bar, a test's 16 ms each, until [until] or a second and a half. */
+    private fun TestScope.frames(bar: Pace, until: () -> Boolean): Int {
+        var count = 0
+        while (!until() && count < 95) {
+            bar.advance(16_000_000)
+            runCurrent()
+            count++
+        }
+        return count
+    }
+
+    @Test
+    fun theInstallWaitsForTheBarToBeDrawnFull() = runTest {
+        val (updates, transfer, bar) = arrivedWithItsBarToFill()
+        assertEquals("not drawn as arrived whole", Step.Downloading(offer("0.1.0.8"), 56_093_610, 56_093_610), updates.step)
+        assertTrue("the system's confirmation was put up over a bar at ${bar.value}", installer.installs.isEmpty())
+        val count = frames(bar) { installer.installs.isNotEmpty() }
+        assertEquals(listOf(transfer.file), installer.installs)
+        assertEquals("installed with the bar at ${bar.value}", 1f, bar.value)
+        // The whole bar is 1.2 s, 75 frames.
+        assertTrue("installed ${count} frames after the build arrived", count >= 75)
+        assertEquals(Step.Installing(offer("0.1.0.8")), updates.step)
+    }
+
+    @Test
+    fun askingToBeAllowedWaitsForTheBarToo() = runTest {
+        installer.allowed = false
+        val (updates, transfer, bar) = arrivedWithItsBarToFill()
+        val count = frames(bar) { updates.step !is Step.Downloading }
+        assertEquals(Step.Permission(offer("0.1.0.8"), transfer.file), updates.step)
+        assertTrue("asked ${count} frames after the build arrived", count >= 75)
+        assertEquals(1f, bar.value)
+    }
+
+    @Test
+    fun cancelWhileTheBarFillsKeepsTheBuildAndUpdateInstallsItWithoutDownloadingIt() = runTest {
+        val (updates, transfer, bar) = arrivedWithItsBarToFill()
+        frames(bar) { bar.value >= 0.5f }
+        updates.cancel()
+        runCurrent()
+        assertEquals(Step.Offered(offer("0.1.0.8")), updates.step)
+        frames(bar) { false }
+        assertTrue("installed after Cancel", installer.installs.isEmpty())
+
+        updates.accept()
+        runCurrent()
+        assertEquals("Update did not install what had arrived", listOf(transfer.file), installer.installs)
+        assertEquals("downloaded again", 1, source.transfers.size)
+    }
+
+    @Test
+    fun leavingTheLobbyWhileTheBarFillsKeepsTheBuildForWhenTheyAreBack() = runTest {
+        val (updates, transfer, bar) = arrivedWithItsBarToFill()
+        frames(bar) { bar.value >= 0.5f }
+        updates.lobby(false)
+        runCurrent()
+        // Kept at once, not held as a download to carry on: back before the
+        // bar would have filled, that would be all of it downloaded again.
+        assertEquals(Step.Offered(offer("0.1.0.8")), updates.step)
+        frames(bar) { false }
+        assertTrue("installed outside the lobby", installer.installs.isEmpty())
+
+        updates.lobby(true)
+        runCurrent()
+        assertTrue(updates.shown)
+        assertEquals("downloaded again on the way back", 1, source.transfers.size)
+        updates.accept()
+        runCurrent()
+        assertEquals(listOf(transfer.file), installer.installs)
+        assertEquals("downloaded again", 1, source.transfers.size)
+    }
+
+    @Test
+    fun aDownloadCarriedOnKeepsItsBarAndANewOneStartsEmpty() = runTest {
+        val bar = Pace(null)
+        source.answer = { offer("0.1.0.8") }
+        val updates = updates(bar)
+        updates.lobby(true)
+        updates.start()
+        runCurrent()
+        updates.accept()
+        runCurrent()
+        source.transfers.single().progress!!(16_828_083, 56_093_610)
+        runCurrent()
+        frames(bar) { bar.caughtUp }
+        assertEquals(0.3f, bar.value, 1e-6f)
+
+        updates.lobby(false)
+        runCurrent()
+        updates.lobby(true)
+        runCurrent()
+        assertEquals("the bar emptied for a download carried on", 0.3f, bar.value, 1e-6f)
+        assertEquals("the figures went back to nought", Step.Downloading(offer("0.1.0.8"), 16_828_083, 56_093_610), updates.step)
+
+        updates.cancel()
+        runCurrent()
+        updates.accept()
+        runCurrent()
+        assertEquals("a new download began with the last one's bar", 0f, bar.value)
     }
 
     @Test
