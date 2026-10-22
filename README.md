@@ -1,7 +1,7 @@
 # Tomoshibi Native
 
 Native clients for the Tomoshibi deployment at meet.example.com, which runs
-[a fork of Tomoshibi](https://github.com/Andyov0/Tomoshibi), the video meeting
+[a fork of Tomoshibi](https://github.com/Andyov0/Tomoshibi/tree/relay-mode), the video meeting
 server in one binary (upstream:
 [5t-RawBeRry/Tomoshibi](https://github.com/5t-RawBeRry/Tomoshibi)).
 
