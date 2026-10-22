@@ -481,6 +481,36 @@
         }
       }
     },
+    "A later rule overrides an earlier one for the same feature, so a narrower rule further down can turn a feature back on. With no platform ticked, a rule is for every platform." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A later rule overrides an earlier one for the same feature, so a narrower rule further down can turn a feature back on. With no platform ticked, a rule is for every platform."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同じ機能に複数のルールがあるときは後のものが優先されるので、下に範囲の狭いルールを置けば機能をもう一度オンにできます。プラットフォームを一つも選ばなければ、すべてのプラットフォームが対象です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同一个功能有多条规则时，后面的覆盖前面的，所以可以在下面加一条范围更窄的规则把功能重新打开。一个平台都不勾，就是对所有平台生效。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "同一個功能有多條規則時，後面的覆蓋前面的，所以可以在下面加一條範圍更窄的規則把功能重新打開。一個平台都不勾，就是對所有平台生效。"
+          }
+        }
+      }
+    },
     "A link lets somebody outside your scope into one of its rooms as a guest. Leave the end empty for a link that works until it is stopped." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -597,6 +627,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "有新版本了"
+          }
+        }
+      }
+    },
+    "A notice is at most 500 characters in each language." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A notice is at most 500 characters in each language."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "お知らせは各言語 500 文字までです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "公告每种语言最多 500 个字符。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "公告每種語言最多 500 個字元。"
+          }
+        }
+      }
+    },
+    "A notice is either normal or a warning." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A notice is either normal or a warning."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "お知らせは「通常」か「注意」のどちらかです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "公告只能是普通或提醒。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "公告只能是普通或提醒。"
           }
         }
       }
@@ -957,6 +1047,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "歌名,或歌單連結"
+          }
+        }
+      }
+    },
+    "A switch needs a feature." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A switch needs a feature."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スイッチには機能を選んでください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开关需要选一个功能。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開關需要選一個功能。"
           }
         }
       }
@@ -1347,6 +1467,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "加個密語：別人用不了你的名字，你開的房間也歸你管。"
+          }
+        }
+      }
+    },
+    "Add a rule" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add a rule"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ルールを追加"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加规则"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新增規則"
           }
         }
       }
@@ -2341,6 +2491,36 @@
         }
       }
     },
+    "Any version" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Any version"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "指定なし"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不限版本"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不限版本"
+          }
+        }
+      }
+    },
     "Anybody with a passphrase" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -2637,6 +2817,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "只有新房間設為「僅限有帳號的人」時才完全生效。"
+          }
+        }
+      }
+    },
+    "Apps" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apps"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户端"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用戶端"
           }
         }
       }
@@ -3181,6 +3391,36 @@
         }
       }
     },
+    "Background blur" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Background blur"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "背景ぼかし"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "背景虚化"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "背景模糊"
+          }
+        }
+      }
+    },
     "Bangumi episodes cannot be played: a whole episode, and anything above 720p, comes only through the relay." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -3237,6 +3477,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "北京"
+          }
+        }
+      }
+    },
+    "Below version" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Below version"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このバージョン未満"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "低于此版本"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "低於此版本"
           }
         }
       }
@@ -5371,6 +5641,36 @@
         }
       }
     },
+    "Discard changes" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discard changes"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "変更を破棄"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "放弃修改"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "放棄修改"
+          }
+        }
+      }
+    },
     "Dismiss" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -6391,6 +6691,156 @@
         }
       }
     },
+    "Feature" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Feature"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "機能"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "功能"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "功能"
+          }
+        }
+      }
+    },
+    "Feature switches" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Feature switches"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "機能スイッチ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "功能开关"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "功能開關"
+          }
+        }
+      }
+    },
+    "Features turned off in the apps, by platform and version" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Features turned off in the apps, by platform and version"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プラットフォームとバージョンごとにアプリで止める機能"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按平台和版本在客户端里关闭的功能"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按平台和版本在用戶端裡關閉的功能"
+          }
+        }
+      }
+    },
+    "Fill in at least one language." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fill in at least one language."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "少なくとも一つの言語で入力してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "至少填写一种语言。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "至少填寫一種語言。"
+          }
+        }
+      }
+    },
+    "Fill in at least one language. Each publish is a new notice, so somebody who closed the last one is shown this one." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fill in at least one language. Each publish is a new notice, so somebody who closed the last one is shown this one."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "少なくとも一つの言語で入力してください。公開するたびに新しいお知らせになるので、前のお知らせを閉じた人にもこれが表示されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "至少填写一种语言。每次发布都是一条新公告，关掉过上一条的人也会看到这一条。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "至少填寫一種語言。每次發布都是一則新公告，關掉過上一則的人也會看到這一則。"
+          }
+        }
+      }
+    },
     "Fill the screen" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -6837,6 +7287,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "從"
+          }
+        }
+      }
+    },
+    "From version" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "From version"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このバージョンから"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "起始版本（含）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "起始版本（含）"
           }
         }
       }
@@ -8341,6 +8821,36 @@
         }
       }
     },
+    "In-app updates" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In-app updates"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリ内の更新案内"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用内更新提示"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "應用程式內更新提示"
+          }
+        }
+      }
+    },
     "Indigo" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -9271,6 +9781,36 @@
         }
       }
     },
+    "Left empty, it shows until it is taken down." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Left empty, it shows until it is taken down."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空欄のままなら、取り下げるまで表示されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "留空则一直显示，直到撤下。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "留空則一直顯示，直到撤下。"
+          }
+        }
+      }
+    },
     "Left empty, the name is used" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -9357,6 +9897,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "放行"
+          }
+        }
+      }
+    },
+    "Level" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Level"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "レベル"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "级别"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "級別"
           }
         }
       }
@@ -9507,6 +10077,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在載入 {title}"
+          }
+        }
+      }
+    },
+    "Lobby notice" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lobby notice"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ロビーのお知らせ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大厅公告"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "大廳公告"
           }
         }
       }
@@ -11401,6 +12001,36 @@
         }
       }
     },
+    "No notice is being shown." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No notice is being shown."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "表示中のお知らせはありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前没有公告。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目前沒有公告。"
+          }
+        }
+      }
+    },
     "No relays are configured, so this node has nowhere to send a call." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -11457,6 +12087,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "還沒有中轉伺服器。新增一台之後才能進行通話。"
+          }
+        }
+      }
+    },
+    "No rules, so every feature is on." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No rules, so every feature is on."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ルールがないので、すべての機能がオンです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有规则，所有功能都开着。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沒有規則，所有功能都開著。"
           }
         }
       }
@@ -11547,6 +12207,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "沒有指定軌道。"
+          }
+        }
+      }
+    },
+    "No version is from {from} and below {below}, so this rule holds for no app." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No version is from {from} and below {below}, so this rule holds for no app."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{from} 以上かつ {below} 未満のバージョンはないため、このルールはどのアプリにも当てはまりません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有任何版本既不低于 {from} 又低于 {below}，这条规则对任何客户端都不起作用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沒有任何版本既不低於 {from} 又低於 {below}，這條規則對任何用戶端都不起作用。"
           }
         }
       }
@@ -11817,6 +12507,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "還沒有。"
+          }
+        }
+      }
+    },
+    "Normal" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Normal"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通常"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "普通"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "普通"
           }
         }
       }
@@ -12267,6 +12987,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "即時"
+          }
+        }
+      }
+    },
+    "Off" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Off"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オフ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "關閉"
+          }
+        }
+      }
+    },
+    "On" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "オン"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開啟"
           }
         }
       }
@@ -13921,6 +14701,36 @@
         }
       }
     },
+    "Platforms" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Platforms"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プラットフォーム"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "平台"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "平台"
+          }
+        }
+      }
+    },
     "Play" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -14337,6 +15147,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "頭像"
+          }
+        }
+      }
+    },
+    "Publish" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Publish"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "公開"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发布"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "發布"
           }
         }
       }
@@ -15211,6 +16051,36 @@
         }
       }
     },
+    "Remove rule" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove rule"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ルールを削除"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删除规则"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刪除規則"
+          }
+        }
+      }
+    },
     "Remove {room} from recent" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -15927,6 +16797,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "所屬群組"
+          }
+        }
+      }
+    },
+    "Screen sharing" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen sharing"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面共有"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共享屏幕"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分享螢幕"
           }
         }
       }
@@ -17221,6 +18121,36 @@
         }
       }
     },
+    "Shown in the apps' lobby, signed in or not, until its end or until it is taken down" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shown in the apps' lobby, signed in or not, until its end or until it is taken down"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ログインの有無にかかわらずアプリのロビーに表示され、終了時刻か取り下げまで続きます"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示在客户端的大厅里，不论是否登录，直到截止时间或被撤下"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示在用戶端的大廳裡，不論是否登入，直到截止時間或被撤下"
+          }
+        }
+      }
+    },
     "Shown to people as" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -17697,6 +18627,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已跳過「{title}」:音樂帳號播放不了。"
+          }
+        }
+      }
+    },
+    "Some switches in the file could not be read and are not shown here. Saving replaces them with this list." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Some switches in the file could not be read and are not shown here. Saving replaces them with this list."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ファイル内の一部のスイッチが読み取れず、ここには表示されていません。保存すると、それらはこの一覧で置き換えられます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文件里有些开关读不出来，这里没有显示。保存会用这张列表把它们替换掉。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "檔案裡有些開關讀不出來，這裡沒有顯示。儲存會用這份清單把它們取代掉。"
           }
         }
       }
@@ -18721,6 +19681,36 @@
         }
       }
     },
+    "Take down" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Take down"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り下げる"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撤下"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "撤下"
+          }
+        }
+      }
+    },
     "Take {title} off" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -19051,6 +20041,36 @@
         }
       }
     },
+    "That is more switches than can be saved at once." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That is more switches than can be saved at once."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一度に保存できるスイッチの数を超えています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开关太多，一次存不下。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "開關太多，一次存不下。"
+          }
+        }
+      }
+    },
     "That is more than sixty days away." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -19081,6 +20101,36 @@
         }
       }
     },
+    "That is not a language the apps are written in." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That is not a language the apps are written in."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリが対応していない言語です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户端没有这种语言。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用戶端沒有這種語言。"
+          }
+        }
+      }
+    },
     "That is not a permission this server knows. It may be running an older version." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -19107,6 +20157,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "這台伺服器不認識這個權限,它可能在跑舊版本。"
+          }
+        }
+      }
+    },
+    "That is not a platform the apps run on." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That is not a platform the apps run on."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリが動くプラットフォームではありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户端没有这个平台。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用戶端沒有這個平台。"
           }
         }
       }
@@ -19197,6 +20277,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "這不是這台伺服器能回答的時間範圍。"
+          }
+        }
+      }
+    },
+    "That is not a time." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That is not a time."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "時刻として読めません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这不是一个时间。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這不是一個時間。"
+          }
+        }
+      }
+    },
+    "That is not a version." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That is not a version."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "バージョン番号ではありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这不是版本号。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這不是版本號。"
           }
         }
       }
@@ -19767,6 +20907,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "這個名字太長了。"
+          }
+        }
+      }
+    },
+    "That note is too long." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "That note is too long."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メモが長すぎます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "备注太长了。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "備註太長了。"
           }
         }
       }
@@ -20611,6 +21781,36 @@
         }
       }
     },
+    "The apps are showing this now." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The apps are showing this now."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリに表示中です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "客户端正在显示这条公告。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用戶端正在顯示這則公告。"
+          }
+        }
+      }
+    },
     "The browser inside this app cannot open Tomoshibi or download it. Tap ⋯ at the top right, then choose to open the page in your browser." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -21207,6 +22407,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "別人給你的房間名。"
+          }
+        }
+      }
+    },
+    "The notice was sent without an id. Reload the page and publish it again." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The notice was sent without an id. Reload the page and publish it again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "お知らせが ID なしで送られました。ページを再読み込みして、もう一度公開してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "公告发出时没有编号。请刷新页面后重新发布。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "公告送出時沒有編號。請重新整理頁面後再發布一次。"
           }
         }
       }
@@ -21901,6 +23131,36 @@
         }
       }
     },
+    "These were changed elsewhere since you began. Saving replaces that change with this list; discarding shows it." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "These were changed elsewhere since you began. Saving replaces that change with this list; discarding shows it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "編集を始めた後に、別の場所でも変更されています。保存するとその変更をこの一覧で上書きし、変更を破棄するとその内容が表示されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你开始修改之后，别处也改过这些开关。保存会用这张列表覆盖那次修改；放弃修改则会显示那次的结果。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你開始修改之後，別處也改過這些開關。儲存會用這份清單覆蓋那次修改；放棄修改則會顯示那次的結果。"
+          }
+        }
+      }
+    },
     "They are an administrator already." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -22231,6 +23491,36 @@
         }
       }
     },
+    "This deployment has no apps directory (meet.apps.mac_dir), so there is nowhere to keep this." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This deployment has no apps directory (meet.apps.mac_dir), so there is nowhere to keep this."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このデプロイにはアプリのディレクトリ（meet.apps.mac_dir）が設定されていないため、保存する場所がありません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这个部署没有配置应用目录（meet.apps.mac_dir），没有地方保存这些设置。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這個部署沒有設定應用程式目錄（meet.apps.mac_dir），沒有地方儲存這些設定。"
+          }
+        }
+      }
+    },
     "This deployment has no watch-together gateway, so this does nothing." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -22317,6 +23607,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "這台裝置阻止了更新。"
+          }
+        }
+      }
+    },
+    "This has ended, and the apps no longer show it." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This has ended, and the apps no longer show it."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了時刻を過ぎたため、アプリにはもう表示されません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已经过了截止时间，客户端不再显示。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已經過了截止時間，用戶端不再顯示。"
           }
         }
       }
@@ -23641,6 +24961,66 @@
         }
       }
     },
+    "Until" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Until"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "終了時刻"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "截止时间"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "截止時間"
+          }
+        }
+      }
+    },
+    "Until it is taken down" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Until it is taken down"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "取り下げるまで"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一直显示到撤下"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一直顯示到撤下"
+          }
+        }
+      }
+    },
     "Until then, meetings work in this browser." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -23667,6 +25047,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在那之前，直接在瀏覽器裡就能開會。"
+          }
+        }
+      }
+    },
+    "Until {time}" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Until {time}"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{time} まで"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "截止到 {time}"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "截止到 {time}"
           }
         }
       }
@@ -24267,6 +25677,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "有人在等著進來"
+          }
+        }
+      }
+    },
+    "Warning" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Warning"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "注意"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提醒"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提醒"
           }
         }
       }
@@ -25227,6 +26667,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "用它進來的人會顯示為 {name}。"
+          }
+        }
+      }
+    },
+    "Why, for whoever reads this next" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Why, for whoever reads this next"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "理由（次に読む人のために）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "写下原因，给之后看到的人"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "寫下原因，給之後看到的人"
           }
         }
       }
@@ -27747,6 +29217,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "人數"
+          }
+        }
+      }
+    },
+    "remote.json could not be written, so nothing was changed." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "remote.json could not be written, so nothing was changed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "remote.json に書き込めなかったため、何も変更されていません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "remote.json 写不进去，所以什么都没改。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "remote.json 寫不進去，所以什麼都沒改。"
+          }
+        }
+      }
+    },
+    "remote.json in the apps directory is not valid JSON. Mend the file first; nothing was changed." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "remote.json in the apps directory is not valid JSON. Mend the file first; nothing was changed."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリのディレクトリにある remote.json が正しい JSON ではありません。先にファイルを直してください。何も変更されていません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用目录里的 remote.json 不是有效的 JSON。请先修好这个文件；这次什么都没改。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "應用程式目錄裡的 remote.json 不是有效的 JSON。請先修好這個檔案；這次什麼都沒改。"
           }
         }
       }
