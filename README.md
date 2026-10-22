@@ -1,6 +1,6 @@
 # Tomoshibi Native
 
-Native clients for the Tomoshibi deployment at meet.example.com, which runs
+Native clients for a Tomoshibi deployment that runs
 [Tomoshibi Server](https://github.com/Andyov0/Tomoshibi-Server), a modified
 version of [Tomoshibi](https://github.com/5t-RawBeRry/Tomoshibi), the video
 meeting server in one binary.
