@@ -37,8 +37,19 @@ public final class AppModel {
     }
 
     public private(set) var screen: Screen = .starting {
-        didSet { updates?.lobby(screen == .lobby) }
+        didSet {
+            updates?.lobby(screen == .lobby)
+            remote.lobby(screen == .lobby)
+        }
     }
+    /// What the deployment says to the apps between their releases
+    /// (Remote): the answer kept from before, applied before the first
+    /// screen is drawn, then the deployment asked at start, every half hour,
+    /// and on coming back to the front or to the lobby. Told of every change
+    /// of screen, since its notice is the lobby's and nowhere else's. Asks
+    /// nothing in a debug build started by hand, for the reason `updates`
+    /// gives.
+    public let remote: Remote
     /// The app's own updates (Updates), told of every change of screen,
     /// since the lobby is the only place one is shown or worked on, and of
     /// every join from the moment it is pressed (`settingOff`). The iPhone's
@@ -223,8 +234,51 @@ public final class AppModel {
             #else
             let installer: UpdateInstaller = TestFlightInstaller()
             #endif
-            updates = Updates(source: CoreUpdateSource(base: base), installer: installer, running: ClientDescription.version)
+            #if DEBUG
+            let offered = rehearsal ? ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_UPDATE_OFFER"] : nil
+            let source: UpdateSource = offered.map { OfferedUpdateSource(version: $0) } ?? CoreUpdateSource(base: base)
+            #else
+            let source: UpdateSource = CoreUpdateSource(base: base)
+            #endif
+            updates = Updates(source: source, installer: installer, running: ClientDescription.version)
         }
+        // TOMOSHIBI_DEBUG_REMOTE=<file or JSON> in a rehearsal: that stands
+        // in for the deployment's answer (FileRemoteSource), for a test to
+        // see a notice or a feature switched off against a local deployment
+        // that has nothing to say. A rehearsal keeps nothing, and reads
+        // nothing the owner's app kept.
+        #if DEBUG
+        let said: RemoteSource?
+        if rehearsal, let answer = ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_REMOTE"] {
+            said = FileRemoteSource(said: answer)
+        } else {
+            said = base.map { CoreRemoteSource(base: $0) }
+        }
+        #else
+        let said: RemoteSource? = base.map { CoreRemoteSource(base: $0) }
+        #endif
+        remote = Remote(source: said, store: rehearsal ? nil : .standard)
+        remote.onApply = { [weak self] answer in self?.follow(answer) }
+        remote.restore()
+        // Once whatever was kept, so that what the iPhone's broadcast reads
+        // is this start's even where nothing was (a ceiling a rehearsal left
+        // there, or one since taken away).
+        follow(remote.answer)
+    }
+
+    /// What follows from the deployment's word outside the screens, which
+    /// read `remote` themselves: whether and how often the app looks for an
+    /// update, and on the iPhone whether a broadcast may start and the
+    /// ceiling over it, left in the app group for the broadcast extension,
+    /// which is a process of its own (BroadcastWire, ShareCeiling `keep`).
+    private func follow(_ answer: RemoteAnswer) {
+        updates?.allow(answer.allows(.appUpdates))
+        updates?.checkEvery(answer.updateInterval ?? Updates.every)
+        #if os(iOS)
+        let group = UserDefaults(suiteName: BroadcastWire.group)
+        BroadcastWire.keep(screenShareOff: !answer.allows(.screenShare), in: group)
+        answer.ceiling.keep(in: group)
+        #endif
     }
 
     private var passphraseKey: String { "passphrase:" + (deployment?.baseUrl() ?? serverAddress) }
@@ -272,6 +326,7 @@ public final class AppModel {
         guard !started else { return }
         started = true
         updates?.start()
+        remote.start()
         let environment = ProcessInfo.processInfo.environment
         #if DEBUG
         if rehearsal { AppDebug.start(self) }
@@ -799,6 +854,11 @@ public final class AppModel {
             }
             model.relay = grant.relay
             model.holding = grant.holding
+            // Before the camera comes up, whose blur is decided by what the
+            // deployment allowed as the call began (CallModel `remote`), or
+            // as the call a move brought the meeting from began.
+            model.remote = remote
+            if let movedFrom { model.carryBlur(from: movedFrom) }
             // Where the choices are kept, before anything is chosen: the
             // original sound below remembers itself, and remembered it into
             // the owner's settings from a rehearsal that keeps nothing,
@@ -887,6 +947,8 @@ public final class AppModel {
         defer { movingTo = nil }
         call = nil
         await moved.leave()
+        movedFrom = moved
+        defer { movedFrom = nil }
         await join(relay: "")
         // A join that failed left the screen on the call with no call in it,
         // which drew nothing at all: a black window. Back to the join screen,
@@ -918,6 +980,10 @@ public final class AppModel {
         // A refusal says so itself, in the call (CallModel `deviceFailed`).
         try? await call.setMicrophone(on)
     }
+
+    /// The call a move is taking the meeting from, while the meeting is
+    /// joined again (`rejoin`).
+    @ObservationIgnored private var movedFrom: CallModel?
 
     /// Where a move is taking the meeting while there is no call to show it
     /// over: between leaving the old room and entering the new one the room

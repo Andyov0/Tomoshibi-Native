@@ -18,6 +18,15 @@ struct UpdateBanner: View {
     /// What it clears below the top of where it is put: the server menu in
     /// the corner of the lobby's stage, the sign-in's language menu.
     var top: CGFloat = 12
+    /// What it keeps clear of below, only while it is there: in the
+    /// iPhone's page, where it stands in the page's flow under the notice
+    /// rather than over it (PhoneLobby).
+    var bottom: CGFloat = 0
+    /// As wide as this at most, outside the sidebar.
+    var maxWidth: CGFloat = 520
+    /// What it keeps clear of to either side, outside the sidebar: nothing
+    /// in a column that has its own margins (PhoneLobby on its side).
+    var sides: CGFloat = 16
     /// In the sidebar's foot, above the account, where it covers nothing:
     /// over the stage it lay across the greeting. As wide as the sidebar, its
     /// notes to three lines, and coming up from below rather than down.
@@ -65,7 +74,7 @@ struct UpdateBanner: View {
             .transition(.asymmetric(insertion: .opacity.animation(Theme.settle), removal: .opacity.animation(Theme.leave)))
             .animation(Theme.settle, value: kind(said))
             .padding(inSidebar ? 12 : 14)
-            .frame(maxWidth: inSidebar ? .infinity : 520)
+            .frame(maxWidth: inSidebar ? .infinity : maxWidth)
             // Flat, as the screens are drawn: the surface colour with the
             // theme's edge, and a shadow because it floats over the stage.
             // Not glass: it is something to read, not a control.
@@ -74,10 +83,11 @@ struct UpdateBanner: View {
             .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Theme.tally.opacity(lit ? 0.85 : 0), lineWidth: 1.5))
             .shadow(color: Theme.tally.opacity(lit ? 0.35 : 0), radius: 14)
             .shadow(color: .black.opacity(inSidebar ? 0 : 0.35), radius: 18, y: 8)
-            .padding(.horizontal, inSidebar ? 0 : 16)
+            .padding(.horizontal, inSidebar ? 0 : sides)
             .padding(.top, inSidebar ? 0 : top)
             .accessibilityElement(children: .contain)
             .accessibilityIdentifier("update.banner")
+            .padding(.bottom, inSidebar ? 0 : bottom)
     }
 
     @ViewBuilder

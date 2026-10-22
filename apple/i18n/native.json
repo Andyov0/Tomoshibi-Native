@@ -25,6 +25,12 @@
       "zh-Hant": "請先打開 Tomoshibi 並加入通話。",
       "ja": "先に Tomoshibi を開いて通話に参加してください。"
     },
+    "Screen sharing is switched off for now.": {
+      "en": "Screen sharing is switched off for now.",
+      "zh-Hans": "屏幕共享暂时关闭了。",
+      "zh-Hant": "螢幕分享暫時關閉了。",
+      "ja": "画面共有はいまオフになっています。"
+    },
     "Call": {
       "en": "Call",
       "zh-Hans": "通话",

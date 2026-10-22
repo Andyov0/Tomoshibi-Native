@@ -14,6 +14,10 @@ import AppKit
 /// What the features layered over the call say about their buttons, read in
 /// the room view so the bar does not hold the features themselves.
 struct Offers: Equatable {
+    /// The screen share's control: unless the deployment has switched screen
+    /// sharing off (Remote), and then still while a share is running, which
+    /// is not stopped by it and needs its Stop.
+    var screenShare = true
     /// Room.tsx ~295: to whoever can start a show, to everybody once there is
     /// one.
     var watch = false
@@ -141,15 +145,21 @@ struct ControlBar: View {
                 device { try await model.setCamera(!model.cameraOn) }
             }
             #if os(macOS)
-            ScreenShareControl(sharing: sharing, model: model, popovers: popovers, axis: axis, size: size)
+            if offered.screenShare {
+                ScreenShareControl(sharing: sharing, model: model, popovers: popovers, axis: axis, size: size)
+                    .transition(Theme.arrive)
+            }
             SoundShareControl(sharing: sharing, model: model, popovers: popovers, axis: axis, size: size)
             #else
             // The system's own broadcast sheet: starting and stopping a share of
             // the whole phone is the system's to do, through the extension.
-            ZStack {
-                BarButton(symbol: "rectangle.on.rectangle", label: model.phoneSharing ? t("Stop sharing") : t("Share your screen"),
-                          lit: model.phoneSharing, size: size) { BroadcastPicker.press() }
-                BroadcastPicker().frame(width: 1, height: 1).opacity(0.02).allowsHitTesting(false)
+            if offered.screenShare {
+                ZStack {
+                    BarButton(symbol: "rectangle.on.rectangle", label: model.phoneSharing ? t("Stop sharing") : t("Share your screen"),
+                              lit: model.phoneSharing, size: size) { BroadcastPicker.press() }
+                    BroadcastPicker().frame(width: 1, height: 1).opacity(0.02).allowsHitTesting(false)
+                }
+                .transition(Theme.arrive)
             }
             #endif
             // The hand and, behind the narrow half beside it, the reactions

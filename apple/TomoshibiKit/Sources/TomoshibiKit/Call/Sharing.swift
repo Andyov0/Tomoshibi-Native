@@ -75,6 +75,20 @@ public final class Sharing {
     /// line could carry is not a thing to keep.
     public private(set) var running: Setting?
 
+    /// The deployment's ceiling over a share (ShareCeiling), read as each
+    /// share starts and each change of one is made; the call points it at
+    /// what the deployment says (CallModel `remote`). A ceiling changed
+    /// mid-share applies from the next start or change, rather than
+    /// republishing a share that somebody is watching.
+    @ObservationIgnored var ceiling: () -> ShareCeiling = { .none }
+    /// What the running capture was asked for: its size and the frames a
+    /// second it gives, which is the published rate or less (`ceiling`'s
+    /// `captured`).
+    @ObservationIgnored private var capturing: (width: Int, height: Int, fps: Int)?
+    /// Whether the Mac is hot (ShareCeiling `hot`), as last told.
+    @ObservationIgnored private var hot = ShareCeiling.hot(ProcessInfo.processInfo.thermalState)
+    @ObservationIgnored private var thermalWatch: NSObjectProtocol?
+
     /// Where the choices below are kept (CallModel.memory): under the web's
     /// names (room.ts `QUALITY_KEY`, `RATE_KEY`, sound.ts `LOSSLESS_KEY`) for
     /// a real call, nowhere for a rehearsal, whose share settings are no
@@ -126,6 +140,14 @@ public final class Sharing {
             Self.log.notice("the system ended the sound share: \(error.localizedDescription, privacy: .public)")
             Task { await self?.stopSound() }
         }
+        thermalWatch = NotificationCenter.default.addObserver(forName: ProcessInfo.thermalStateDidChangeNotification,
+                                                              object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.thermalChanged() }
+        }
+    }
+
+    deinit {
+        if let thermalWatch { NotificationCenter.default.removeObserver(thermalWatch) }
     }
 
     /// Reads the menu's choices from where this call keeps them, and keeps
@@ -183,8 +205,11 @@ public final class Sharing {
         }
         screenWork += 1
         defer { screenWork -= 1 }
-        let setting = Setting(quality: quality, fps: rate(for: quality))
-        let size = ScreenCapture.size(for: picked, quality: setting.quality)
+        let limits = ceiling()
+        let setting = Setting(quality: quality, fps: limits.published(fps, shorterSide: quality.rawValue))
+        let whole = ScreenCapture.size(for: picked, quality: setting.quality)
+        let size = limits.size(width: whole.width, height: whole.height)
+        let frames = limits.captured(setting.fps, hot: hot)
         let video = try await call.publishVideo(kind: .screen(fps: UInt32(setting.fps), quality: setting.quality.share),
                                                 width: UInt32(size.width), height: UInt32(size.height))
         guard epoch == screenEpoch else {
@@ -208,7 +233,7 @@ public final class Sharing {
             return
         }
         do {
-            try await capture(picked, size: size, fps: setting.fps, video: video, sound: sound)
+            try await capture(picked, size: size, fps: frames, video: video, sound: sound)
         } catch {
             Self.log.error("the share would not start: \(String(describing: error), privacy: .public)")
             try? await video.unpublish()
@@ -230,8 +255,9 @@ public final class Sharing {
         self.screenSound = sound
         shared = picked
         running = setting
+        capturing = (size.width, size.height, frames)
         active = true
-        Self.log.notice("sharing the screen at \(setting.quality.rawValue, privacy: .public) and \(setting.fps, privacy: .public) fps, with its sound \(sound != nil, privacy: .public)")
+        Self.log.notice("sharing the screen at \(setting.quality.rawValue, privacy: .public) and \(setting.fps, privacy: .public) fps (\(size.width, privacy: .public)x\(size.height, privacy: .public) captured at \(frames, privacy: .public)), with its sound \(sound != nil, privacy: .public)")
         // Sound shared on its own may have started, or stopped, while this
         // was being published.
         await soundStandsDown()
@@ -281,14 +307,18 @@ public final class Sharing {
     /// share set the new track as the running one on a share that was gone,
     /// and one that overlapped another left a track published that nothing
     /// fed, for everybody, until the call ended.
-    private func retune(_ setting: Setting) async throws {
+    private func retune(_ asked: Setting) async throws {
         try await changes.take {
             let epoch = screenEpoch
             guard active, let call, let shared, let old = video else { throw Gone() }
+            let limits = ceiling()
+            let setting = Setting(quality: asked.quality, fps: limits.published(asked.fps, shorterSide: asked.quality.rawValue))
             guard setting != running else { return }
             screenWork += 1
             defer { screenWork -= 1 }
-            let size = ScreenCapture.size(for: shared, quality: setting.quality)
+            let whole = ScreenCapture.size(for: shared, quality: setting.quality)
+            let size = limits.size(width: whole.width, height: whole.height)
+            let frames = limits.captured(setting.fps, hot: hot)
             let fresh = try await call.publishVideo(kind: .screen(fps: UInt32(setting.fps), quality: setting.quality.share),
                                                     width: UInt32(size.width), height: UInt32(size.height))
             guard epoch == screenEpoch else {
@@ -297,7 +327,7 @@ public final class Sharing {
                 throw Gone()
             }
             do {
-                try await recapture(shared, size: size, fps: setting.fps, video: fresh)
+                try await recapture(shared, size: size, fps: frames, video: fresh)
             } catch {
                 Self.log.error("the share would not change: \(String(describing: error), privacy: .public)")
                 try? await fresh.unpublish()
@@ -309,6 +339,7 @@ public final class Sharing {
             }
             video = fresh
             running = setting
+            capturing = (size.width, size.height, frames)
             try? await old.unpublish()
             Self.log.notice("share now at \(setting.quality.rawValue, privacy: .public) and \(setting.fps, privacy: .public) fps")
         }
@@ -325,12 +356,42 @@ public final class Sharing {
         self.screenSound = nil
         shared = nil
         running = nil
+        capturing = nil
         active = false
         screenWork += 1
         defer { screenWork -= 1 }
         await screen.stop()
         if let video { try? await video.unpublish() }
         if let screenSound { try? await screenSound.unpublish() }
+    }
+
+    /// The Mac got hot, or cooled down again: the running capture is asked
+    /// for the rate that applies now (the deployment's screen_share_hot_fps),
+    /// in place and into the same picture track, so that nobody watching
+    /// sees the share go and come back. What is published stays as it was;
+    /// only its frames come slower, and then as before.
+    private func thermalChanged() {
+        let now = ShareCeiling.hot(ProcessInfo.processInfo.thermalState)
+        guard now != hot else { return }
+        hot = now
+        Task {
+            do { try await recaptureAtTheRateThatApplies() } catch {
+                Self.log.error("the share's rate would not follow the heat: \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
+    private func recaptureAtTheRateThatApplies() async throws {
+        try await changes.take {
+            let epoch = screenEpoch
+            guard active, let running, let capturing, let video, case .content? = shared else { return }
+            let frames = ceiling().captured(running.fps, hot: hot)
+            guard frames != capturing.fps else { return }
+            try await screen.retune(width: capturing.width, height: capturing.height, fps: frames, video: video)
+            guard epoch == screenEpoch else { return }
+            self.capturing = (capturing.width, capturing.height, frames)
+            Self.log.notice("the share is captured at \(frames, privacy: .public) fps, hot \(self.hot, privacy: .public)")
+        }
     }
 
     private func capture(_ picked: ScreenCapture.Picked, size: (width: Int, height: Int), fps: Int,

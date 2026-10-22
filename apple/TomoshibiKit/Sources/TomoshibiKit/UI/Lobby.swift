@@ -127,13 +127,10 @@ struct LobbyView: View {
         // choose it has nothing to offer, and it goes.
         .onChange(of: app.offersRelayChoice) { if !app.offersRelayChoice, state.place == .servers { state.place = .home } }
         .onChange(of: state.place) { state.popovers.close() }
-        // Over the sign-in, since somebody not signed in gets their updates
-        // too; signed in, it is in the sidebar's foot (SidebarLobby), and on
-        // the iPhone over its lobby under the title (PhoneLobby). Under
-        // the sheets, which cover it as they cover the rest.
-        .overlay(alignment: .top) {
-            if app.account == nil, let updates = app.updates { UpdateBanner(updates: updates, top: 52) }
-        }
+        // A newer build is said to somebody not signed in as well, at the
+        // head of the sign-in under the deployment's notice (SignInView);
+        // signed in, it is in the sidebar's foot (SidebarLobby), and on the
+        // iPhone at the head of its page under the notice (PhoneLobby).
         // Over everything in the window, sidebar and stage alike.
         .signOutPrompt(app, at: .lobby)
     }
@@ -348,6 +345,11 @@ struct CameraStage: View {
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .animation(Theme.settle, value: app.startWithCamera)
         .onChange(of: app.startWithCamera) { show(app.startWithCamera) }
+        // Blur switched off or back on by the deployment while the preview
+        // runs: the preview follows, as the next call will.
+        .onChange(of: app.remote.allows(.backgroundBlur)) {
+            preview.blurring = app.deviceMemory.blur && app.remote.allows(.backgroundBlur)
+        }
         .onAppear { show(app.startWithCamera) }
         .onDisappear { preview.session.stopRunning() }
     }
@@ -365,8 +367,9 @@ struct CameraStage: View {
             // settings meanwhile is the one shown.
             // Blurred as the call will send it, when blur is chosen: the
             // preview takes its frames through the same blur (CameraCapture
-            // `preview`).
-            preview.blurring = app.deviceMemory.blur
+            // `preview`). Not while the deployment has blur switched off,
+            // when the call will not blur it either (CallModel `blurKept`).
+            preview.blurring = app.deviceMemory.blur && app.remote.allows(.backgroundBlur)
             if let device = Self.joiningCamera(app.deviceMemory) {
                 preview.preview(device: device)
             } else {
@@ -518,71 +521,92 @@ struct SignInView: View {
     private let short = false
     #endif
 
+    /// Whether the deployment's notice or a newer build is said above the
+    /// mark, which then comes up closer under them.
+    private var headSays: Bool {
+        app.remote.notice != nil || app.updates?.shown == true
+    }
+
     var body: some View {
         ZStack {
             Backdrop()
             ScrollView {
                 let layout = short ? AnyLayout(HStackLayout(alignment: .center, spacing: 32))
                                    : AnyLayout(VStackLayout(spacing: 22))
-                layout {
-                    VStack(spacing: 12) {
-                        Mark(size: 76)
-                            .shadow(color: .black.opacity(0.45), radius: 18, y: 8)
-                        Text(t("Sign in")).font(.system(size: 28, weight: .bold))
-                        Text(t("Meetings here are started by the people who belong here. If somebody sent you a link, open that instead."))
-                            .font(.system(size: 14)).foregroundStyle(Theme.muted)
-                            .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
-                        #if os(iOS)
-                        if short { pasteLink.padding(.top, 6).transition(.opacity) }
-                        #endif
+                VStack(spacing: 0) {
+                    // The deployment's notice, which is for whoever has the
+                    // app, signed in or not (as the deployment's own
+                    // management page says), and under it a newer build: in
+                    // the page's flow, clear of the language menu in the
+                    // corner, and never one over the other, as wide as each
+                    // other. The build was laid over the top of the sign-in,
+                    // and a notice there would have lain under it.
+                    LobbyNoticeCard(remote: app.remote, top: 56, sides: 16, bottom: 0, maxWidth: 520)
+                    if let updates = app.updates {
+                        UpdateBanner(updates: updates, top: app.remote.notice == nil ? 56 : 10)
                     }
-                    .frame(maxWidth: short ? 280 : nil)
-                    .rise()
+                    layout {
+                        VStack(spacing: 12) {
+                            Mark(size: 76)
+                                .shadow(color: .black.opacity(0.45), radius: 18, y: 8)
+                            Text(t("Sign in")).font(.system(size: 28, weight: .bold))
+                            Text(t("Meetings here are started by the people who belong here. If somebody sent you a link, open that instead."))
+                                .font(.system(size: 14)).foregroundStyle(Theme.muted)
+                                .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                            #if os(iOS)
+                            if short { pasteLink.padding(.top, 6).transition(.opacity) }
+                            #endif
+                        }
+                        .frame(maxWidth: short ? 280 : nil)
+                        .rise()
 
-                    VStack(spacing: 14) {
-                        credentials
-                        Button(action: signIn) {
-                            Group {
-                                if app.busy { ProgressView().controlSize(.small).tint(Theme.tallyForeground) } else { Text(t("Sign in")) }
+                        VStack(spacing: 14) {
+                            credentials
+                            Button(action: signIn) {
+                                Group {
+                                    if app.busy { ProgressView().controlSize(.small).tint(Theme.tallyForeground) } else { Text(t("Sign in")) }
+                                }
+                                .frame(maxWidth: .infinity)
                             }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.glassCapsule(48, prominent: true))
-                        .disabled(app.busy || name.isEmpty || passphrase.isEmpty)
-                        #if os(macOS)
-                        HStack(spacing: 10) {
-                            Rectangle().fill(Theme.border).frame(height: 1)
-                            Text(t("Were you sent a link?")).font(.system(size: 11)).foregroundStyle(Theme.muted).fixedSize()
-                            Rectangle().fill(Theme.border).frame(height: 1)
-                        }
-                        HStack(spacing: 8) {
+                            .buttonStyle(.glassCapsule(48, prominent: true))
+                            .disabled(app.busy || name.isEmpty || passphrase.isEmpty)
+                            #if os(macOS)
+                            HStack(spacing: 10) {
+                                Rectangle().fill(Theme.border).frame(height: 1)
+                                Text(t("Were you sent a link?")).font(.system(size: 11)).foregroundStyle(Theme.muted).fixedSize()
+                                Rectangle().fill(Theme.border).frame(height: 1)
+                            }
                             HStack(spacing: 8) {
-                                Image(systemName: "link").font(.system(size: 13)).foregroundStyle(Theme.muted)
-                                TextField("", text: $link, prompt: Text(t("Paste the link you were sent.")).foregroundStyle(Theme.muted))
-                                    .textFieldStyle(.plain)
-                                    .onSubmit(openLink)
+                                HStack(spacing: 8) {
+                                    Image(systemName: "link").font(.system(size: 13)).foregroundStyle(Theme.muted)
+                                    TextField("", text: $link, prompt: Text(t("Paste the link you were sent.")).foregroundStyle(Theme.muted))
+                                        .textFieldStyle(.plain)
+                                        .onSubmit(openLink)
+                                }
+                                .padding(.horizontal, 14).frame(height: 38)
+                                .background(Capsule().fill(Color.black.opacity(0.22)))
+                                .overlay(Capsule().stroke(Color.white.opacity(0.12)))
+                                Button(t("Join"), action: openLink)
+                                    .buttonStyle(.glassCapsule(38))
+                                    .fixedSize()
+                                    .disabled(URL(string: link.trimmingCharacters(in: .whitespaces))?.host() == nil)
                             }
-                            .padding(.horizontal, 14).frame(height: 38)
-                            .background(Capsule().fill(Color.black.opacity(0.22)))
-                            .overlay(Capsule().stroke(Color.white.opacity(0.12)))
-                            Button(t("Join"), action: openLink)
-                                .buttonStyle(.glassCapsule(38))
-                                .fixedSize()
-                                .disabled(URL(string: link.trimmingCharacters(in: .whitespaces))?.host() == nil)
+                            #endif
                         }
-                        #endif
+                        .padding(18)
+                        .glassPane(cornerRadius: 30)
+                        .frame(maxWidth: short ? 400 : nil)
+                        .rise(0.06)
                     }
-                    .padding(18)
-                    .glassPane(cornerRadius: 30)
-                    .frame(maxWidth: short ? 400 : nil)
-                    .rise(0.06)
+                    .frame(maxWidth: short ? 720 : 420)
+                    .padding(.horizontal, 16)
+                    .padding(.top, headSays ? 32 : 72)
+                    .padding(.bottom, short ? 24 : 140)
+                    .frame(maxWidth: .infinity)
+                    .animation(Theme.settle, value: short)
                 }
-                .frame(maxWidth: short ? 720 : 420)
-                .padding(.horizontal, 16)
-                .padding(.top, 72)
-                .padding(.bottom, short ? 24 : 140)
-                .frame(maxWidth: .infinity)
-                .animation(Theme.settle, value: short)
+                .animation(Theme.settle, value: app.remote.notice?.id)
+                .animation(Theme.settle, value: app.updates?.shown)
                 .putsKeyboardAway()
             }
             .scrollIndicators(.never)
@@ -784,6 +808,14 @@ struct SidebarLobby: View {
                                     removal: .opacity.animation(Theme.leave)))
             .animation(Theme.settle, value: state.place)
             .floatingPopoverLayer(state.popovers)
+            // The deployment's notice at the top of the main area, whichever
+            // section it is on, with what is under it moved down: the
+            // picture of yourself still fills the stage behind it, and the
+            // greeting and the server menu start below it.
+            .safeAreaInset(edge: .top, spacing: 0) {
+                LobbyNoticeCard(remote: app.remote).keptToOnePage(.reading)
+            }
+            .animation(Theme.settle, value: app.remote.notice?.id)
         }
         #if os(iOS)
         .navigationSplitViewStyle(.balanced)
@@ -1039,18 +1071,32 @@ struct PhoneLobby: View {
     private var listed: Bool {
         !app.lobby.upcoming.isEmpty || !app.lobby.recentHere.isEmpty || app.offersRelayChoice
     }
+    /// The deployment's notice or a newer build is being said (`head`).
+    private var saying: Bool {
+        app.remote.notice != nil || app.updates?.shown == true
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
                 if short {
+                    // At the head of the column beside the preview, above the
+                    // lists and scrolling with them: above the preview and
+                    // the column both, the two cards took the height the
+                    // preview stands in, and its Start was drawn over the
+                    // update.
                     HStack(alignment: .top, spacing: 16) {
                         hero(height: nil).rise()
-                        if listed {
+                        if listed || saying {
                             ScrollView {
-                                VStack(alignment: .leading, spacing: 22) { lists }
-                                    .padding(.bottom, 24)
-                                    .animation(Theme.settle, value: app.offersRelayChoice)
+                                VStack(spacing: 0) {
+                                    head(gap: 16, sides: 0)
+                                    VStack(alignment: .leading, spacing: 22) { lists }
+                                        .padding(.bottom, 24)
+                                        .animation(Theme.settle, value: app.offersRelayChoice)
+                                }
+                                .animation(Theme.settle, value: app.remote.notice?.id)
+                                .animation(Theme.settle, value: app.updates?.shown)
                             }
                             .scrollIndicators(.never)
                             .frame(maxWidth: .infinity)
@@ -1059,17 +1105,27 @@ struct PhoneLobby: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.bottom, 10)
-                    .animation(Theme.settle, value: listed)
+                    .animation(Theme.settle, value: listed || saying)
                     .transition(.opacity)
                 } else {
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 22) {
-                            hero(height: 292).rise()
-                            lists
+                        VStack(spacing: 0) {
+                            // Under the title, at the head of the page, so
+                            // that it scrolls with the page rather than lying
+                            // over the preview.
+                            head(gap: 22, sides: 16)
+                            VStack(alignment: .leading, spacing: 22) {
+                                hero(height: 292).rise()
+                                lists
+                            }
+                            .padding(.horizontal, 16)
+                            .padding(.bottom, 24)
+                            .animation(Theme.settle, value: app.offersRelayChoice)
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.bottom, 24)
-                        .animation(Theme.settle, value: app.offersRelayChoice)
+                        // The page moving down for the notice or an update
+                        // and back up, with them rather than ahead of them.
+                        .animation(Theme.settle, value: app.remote.notice?.id)
+                        .animation(Theme.settle, value: app.updates?.shown)
                         .putsKeyboardAway()
                     }
                     .scrollIndicators(.never)
@@ -1090,10 +1146,6 @@ struct PhoneLobby: View {
                 }
             }
             .safeAreaInset(edge: .bottom) { joinBar }
-            // Under the title, over the page, as the Mac's is over its stage.
-            .overlay(alignment: .top) {
-                if let updates = app.updates { UpdateBanner(updates: updates, top: 8) }
-            }
             .navigationDestination(isPresented: serversShown) {
                 ServersView(app: app)
             }
@@ -1101,6 +1153,22 @@ struct PhoneLobby: View {
         .toast(app)
         .floatingPopoverLayer(state.popovers)
         .onAppear { state.popovers.openFromDebug() }
+    }
+
+    /// What the lobby has to say at the head of its page, under the title:
+    /// the deployment's notice, then a newer build. Both in the page's flow,
+    /// one under the other and everything else under them, so that neither
+    /// lies over the other or over the preview; whichever comes or goes, the
+    /// other and the page move with it. The update was laid over the page
+    /// under the title, and with a notice there it covered the notice.
+    /// `gap` is what each leaves below itself, only while it is there, and
+    /// `sides` its margins, none in a column that has its own.
+    @ViewBuilder
+    private func head(gap: CGFloat, sides: CGFloat) -> some View {
+        LobbyNoticeCard(remote: app.remote, top: 0, sides: sides, bottom: gap, maxWidth: .infinity)
+        if let updates = app.updates {
+            UpdateBanner(updates: updates, top: 0, bottom: gap, maxWidth: .infinity, sides: sides)
+        }
     }
 
     /// The meetings to come, the rooms been in and the server: under the

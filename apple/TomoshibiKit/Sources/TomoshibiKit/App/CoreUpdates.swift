@@ -110,6 +110,33 @@ private final class Unreachable: UpdateTransfer, @unchecked Sendable {
 }
 #endif
 
+#if DEBUG
+/// TOMOSHIBI_DEBUG_UPDATE_OFFER=<version>, in a rehearsal: that version
+/// offered, whatever the deployment has, so that a test can see the update
+/// banner beside what else the lobby says, against a local deployment that
+/// has no build to offer. Nothing comes of accepting it: on the iPhone
+/// "Update" opens TestFlight as ever, and a download fails at once.
+@MainActor
+final class OfferedUpdateSource: UpdateSource {
+    private let version: String
+
+    init(version: String) {
+        self.version = version
+    }
+
+    func latest(running: String) async throws -> UpdateOffer? {
+        UpdateOffer(version: version, size: 48_000_000,
+                    notes: { $0.hasPrefix("zh") ? "这是一条测试用的更新说明。" : "Notes standing in for a real build's." })
+    }
+
+    func download(_ offer: UpdateOffer) -> UpdateTransfer {
+        Unreachable(file: FileManager.default.temporaryDirectory.appendingPathComponent("Tomoshibi-\(offer.version).dmg"))
+    }
+
+    func clear() {}
+}
+#endif
+
 extension UpdateOffer {
     /// The version as people are told it: 0.1.4, or 0.1.4 (2) for a later
     /// build (the core's version_label).

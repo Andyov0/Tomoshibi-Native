@@ -172,7 +172,8 @@ struct DevicesPanel: View {
             }
             ForEach(lists.cameras, id: \.uniqueID) { one in
                 ChoiceRow(title: one.localizedName, symbol: "video",
-                          checked: lists.camera == one.uniqueID) {
+                          checked: lists.camera == one.uniqueID,
+                          last: !model.blurOffered && one.uniqueID == lists.cameras.last?.uniqueID) {
                     chooseCamera(one)
                 }
                 .transition(Theme.arrive)
@@ -181,15 +182,21 @@ struct DevicesPanel: View {
             // what is sent and in the picture of yourself. It opened the
             // system's video effects, a sheet of the system's that did not
             // look like the app and on an iPhone did not reach the call.
-            SettingsRow(title: t("Blur my background"), symbol: "person.and.background.dotted", last: true) {
-                Toggle("", isOn: Binding(get: { blurring }, set: { on in
-                    blurring = on
-                    model.setBlur(on)
-                }))
-                .labelsHidden()
-                .toggleStyle(.glassSwitch)
+            // Gone where the deployment has switched blur off (Remote); a
+            // blur already on stays on for this call (CallModel `blurKept`).
+            if model.blurOffered {
+                SettingsRow(title: t("Blur my background"), symbol: "person.and.background.dotted", last: true) {
+                    Toggle("", isOn: Binding(get: { blurring }, set: { on in
+                        blurring = on
+                        model.setBlur(on)
+                    }))
+                    .labelsHidden()
+                    .toggleStyle(.glassSwitch)
+                }
+                .transition(Theme.arrive)
             }
         }
+        .animation(Theme.settle, value: model.blurOffered)
     }
 
     /// A camera picked with the camera off is the one it comes on with: the

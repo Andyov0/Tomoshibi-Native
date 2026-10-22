@@ -41,6 +41,36 @@ public enum BroadcastWire {
         }
     }
 
+    // MARK: Whether a broadcast may start at all
+
+    /// Where the app leaves whether the deployment has switched screen
+    /// sharing off for it (Remote's screen-share), for the extension to read
+    /// as a broadcast starts. The app's own button goes with the switch, but
+    /// a broadcast can be started without it, from Control Center's screen
+    /// recording, and the extension is a process of its own that cannot read
+    /// the app's. Written whenever what the deployment says is applied, and
+    /// on every start; cleared, not set to false, when sharing is allowed, so
+    /// that nothing left behind can keep it off.
+    static let screenShareOffKey = "tomoshibi.screen-share-off"
+
+    public static func keep(screenShareOff off: Bool, in defaults: UserDefaults?) {
+        if off {
+            defaults?.set(true, forKey: screenShareOffKey)
+        } else {
+            defaults?.removeObject(forKey: screenShareOffKey)
+        }
+    }
+
+    public static func screenShareOff(in defaults: UserDefaults?) -> Bool {
+        defaults?.bool(forKey: screenShareOffKey) ?? false
+    }
+
+    /// What the system says under its broadcast sheet when the extension
+    /// will not start for that reason.
+    public static var switchedOff: String {
+        t("Screen sharing is switched off for now.")
+    }
+
     public static var socketURL: URL? {
         FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: group)?.appendingPathComponent(socketName)
     }

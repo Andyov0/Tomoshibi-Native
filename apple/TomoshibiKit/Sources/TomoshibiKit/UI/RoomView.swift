@@ -666,10 +666,18 @@ public struct RoomView: View {
                                  share: nil, ownAddress: nil, holding: nil, measured: false)
     }
 
+    /// What the bar offers. A feature the deployment has switched off
+    /// (Remote) loses its button, unless it is under way: a share running,
+    /// a show on the stage, music playing, each of which goes on, and keeps
+    /// its button for whoever has to stop it or turn it down.
     private var offers: Offers {
-        Offers(watch: watch.offered, watchPlaying: watch.playing,
-               music: music.available, musicPlaying: music.playing,
-               host: host.standing.yours, knocking: host.waiting.count)
+        let remote = model.remote
+        return Offers(screenShare: (remote?.allows(.screenShare) ?? true) || mySharePicture,
+                      watch: watch.offered && ((remote?.allows(.watchTogether) ?? true) || watch.onStage),
+                      watchPlaying: watch.playing,
+                      music: music.available && ((remote?.allows(.music) ?? true) || music.playing),
+                      musicPlaying: music.playing,
+                      host: host.standing.yours, knocking: host.waiting.count)
     }
 
     // MARK: Pressing

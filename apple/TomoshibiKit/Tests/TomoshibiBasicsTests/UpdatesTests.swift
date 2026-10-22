@@ -550,4 +550,92 @@ final class UpdatesTests: XCTestCase {
         XCTAssertFalse(updates.shown)
         updates.stop()
     }
+    // MARK: What the deployment says (Remote's app-updates, update_check_hours)
+
+    func testSwitchedOffNothingIsLookedForOrOfferedOrSaid() async {
+        source.answer = { self.offer("0.1.0.8") }
+        let updates = model()
+        updates.lobby(true)
+        updates.allow(false)
+        updates.start()
+        await settle()
+        XCTAssertEqual(source.asked, 0, "looked for an update the deployment had switched off")
+        XCTAssertTrue(clock.waits.isEmpty, "a schedule was kept for looks that will not happen")
+        XCTAssertFalse(updates.speaks, "the settings went on talking about updates")
+        updates.checkNow()
+        await settle()
+        XCTAssertEqual(source.asked, 0, "Check for updates still asked")
+        XCTAssertNil(updates.said)
+        updates.stop()
+    }
+
+    func testSwitchedOffAnOfferGoesAndSwitchedOnTheAppLooksAtOnce() async {
+        let updates = await offered()
+        XCTAssertTrue(updates.shown)
+        updates.allow(false)
+        XCTAssertFalse(updates.shown, "an offer stayed up after updates were switched off")
+        updates.accept()
+        await settle()
+        XCTAssertTrue(source.transfers.isEmpty, "Update downloaded while updates were off")
+
+        let asked = source.asked
+        clock.pass()
+        await settle()
+        XCTAssertEqual(source.asked, asked, "the six-hourly look went on")
+
+        source.answer = { self.offer("0.1.0.9") }
+        updates.allow(true)
+        await settle()
+        XCTAssertEqual(source.asked, asked + 1, "switched back on, the app did not look at once")
+        XCTAssertEqual(updates.step, .offered(offer("0.1.0.9")))
+        XCTAssertTrue(updates.shown)
+        updates.stop()
+    }
+
+    func testADownloadUnderWayGoesOnWhenUpdatesAreSwitchedOff() async {
+        let updates = await offered()
+        updates.accept()
+        await settle()
+        let transfer = source.transfers[0]
+        transfer.progress?(1_000, 30_000_000)
+        await settle()
+
+        updates.allow(false)
+        await settle()
+        XCTAssertFalse(transfer.cancelled, "a download somebody agreed to was stopped")
+        XCTAssertTrue(updates.shown, "its progress went from the lobby")
+        XCTAssertTrue(updates.speaks, "and from the settings")
+
+        transfer.finish()
+        await settle()
+        XCTAssertEqual(installer.installs, [transfer.file], "the download was not seen through to its install")
+        updates.stop()
+    }
+
+    func testTheDeploymentsIntervalIsTheWaitBetweenLooks() async {
+        source.answer = { nil }
+        let updates = model()
+        updates.lobby(true)
+        updates.checkEvery(.seconds(2 * 60 * 60))
+        updates.start()
+        await settle()
+        XCTAssertEqual(source.asked, 1)
+        XCTAssertEqual(clock.waits, [.seconds(2 * 60 * 60)])
+
+        // Changed while it waits: the next look is one new wait away, and
+        // not at once, since the interval is said moments after every start.
+        updates.checkEvery(.seconds(60 * 60))
+        await settle()
+        XCTAssertEqual(source.asked, 1, "a change of interval looked at once")
+        XCTAssertEqual(clock.waits, [.seconds(2 * 60 * 60), .seconds(60 * 60)])
+        clock.pass()
+        await settle()
+        XCTAssertEqual(source.asked, 2, "the wait given up still looked when it ended, or the new one did not")
+        XCTAssertEqual(clock.waits.last, .seconds(60 * 60))
+
+        updates.checkEvery(.seconds(60 * 60))
+        await settle()
+        XCTAssertEqual(clock.waits.count, 3, "the same interval said again started another wait")
+        updates.stop()
+    }
 }

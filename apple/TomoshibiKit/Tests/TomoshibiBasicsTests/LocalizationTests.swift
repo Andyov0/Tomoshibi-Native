@@ -99,6 +99,41 @@ final class LocalizationTests: XCTestCase {
         XCTAssertEqual(en.t("Device {number}", ["number": Float(3)]), "Device 3")
     }
 
+    // MARK: What the deployment lays over (Remote)
+
+    func testALaidOverPhraseIsSaidBeforeTheAppsOwnAndOnlyInItsLanguage() {
+        let localization = speaking(.zhHans)
+        localization.laidOver = [.zhHans: ["Show {name} larger": "放大 {name} 看看", "Leave": "走了"]]
+        XCTAssertEqual(localization.t("Leave"), "走了")
+        XCTAssertEqual(localization.t("Show {name} larger", ["name": "Ada"]), "放大 Ada 看看", "its placeholders were not filled")
+        XCTAssertEqual(localization.phraseSegments("Show {name} larger").map(\.text), ["放大 ", "{name}", " 看看"])
+        XCTAssertEqual(localization.say("Leave"), "走了", "text the deployment supplies that matches the phrase")
+        XCTAssertEqual(localization.t("Cancel"), Phrasebook.tables[.zhHans]?["Cancel"], "a phrase not laid over")
+        XCTAssertNotNil(Phrasebook.tables[.zhHans]?["Cancel"])
+
+        localization.language = .ja
+        XCTAssertEqual(localization.t("Leave"), Phrasebook.tables[.ja]?["Leave"], "said in a language it was not laid over in")
+        localization.laidOver = [:]
+        localization.language = .zhHans
+        XCTAssertEqual(localization.t("Leave"), Phrasebook.tables[.zhHans]?["Leave"], "taken away, it stayed")
+    }
+
+    func testLayingOverTheSameAgainRedrawsNothing() {
+        let localization = speaking(.en)
+        localization.laidOver = [.en: ["Leave": "Go"]]
+        let changed = OSAllocatedUnfairLock(initialState: 0)
+        withObservationTracking {
+            _ = localization.t("Leave")
+        } onChange: {
+            changed.withLock { $0 += 1 }
+        }
+        localization.laidOver = [.en: ["Leave": "Go"]]
+        XCTAssertEqual(changed.withLock { $0 }, 0, "every answer the same as the last redrew every view")
+        localization.laidOver = [.en: ["Leave": "Off you go"]]
+        XCTAssertEqual(changed.withLock { $0 }, 1)
+        XCTAssertEqual(localization.t("Leave"), "Off you go")
+    }
+
     func testTheFreeFunctionsSpeakFromTheSharedOne() {
         XCTAssertEqual(t("Leave"), Localization.shared.t("Leave"))
         XCTAssertEqual(t("Show {name} larger", ["name": "Ada"]), Localization.shared.t("Show {name} larger", ["name": "Ada"]))

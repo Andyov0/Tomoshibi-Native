@@ -34,4 +34,50 @@ final class BroadcastWireTests: XCTestCase {
         XCTAssertEqual(data.count, buffer.count)
         buffer = Data()
     }
+    /*
+     * Whether a broadcast may start, as the app leaves it for the extension.
+     * What this guards: a "switched off" written once and never taken back,
+     * which would refuse every broadcast after the deployment allowed them
+     * again; and the one sentence the extension says, which the system shows
+     * in whatever language the phone reads.
+     */
+    func testTheExtensionReadsWhetherSharingIsSwitchedOffAndItIsClearedWhenAllowed() throws {
+        let suite = "TomoshibiBasicsTests.BroadcastWire"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        XCTAssertFalse(BroadcastWire.screenShareOff(in: defaults), "nothing left is not switched off")
+        XCTAssertFalse(BroadcastWire.screenShareOff(in: nil), "no app group is not switched off")
+        BroadcastWire.keep(screenShareOff: true, in: defaults)
+        XCTAssertTrue(BroadcastWire.screenShareOff(in: defaults))
+        ShareCeiling(fps: 15).keep(in: defaults)
+        XCTAssertTrue(BroadcastWire.screenShareOff(in: defaults), "writing the ceiling took the switch with it")
+
+        BroadcastWire.keep(screenShareOff: false, in: defaults)
+        XCTAssertFalse(BroadcastWire.screenShareOff(in: defaults), "allowed again, a broadcast was still refused")
+        XCTAssertNil(defaults.object(forKey: BroadcastWire.screenShareOffKey), "cleared rather than left as false")
+        XCTAssertEqual(ShareCeiling(kept: defaults), ShareCeiling(fps: 15), "clearing the switch took the ceiling with it")
+    }
+
+    func testTheRefusalIsSaidInEveryLanguage() {
+        let phrase = "Screen sharing is switched off for now."
+        // Said by the extension through the shared Localization, in the
+        // language it speaks; written nowhere, so the machine running this
+        // keeps its own.
+        let shared = Localization.shared
+        let (was, kept) = (shared.language, shared.keeps)
+        shared.keeps = false
+        defer {
+            shared.language = was
+            shared.keeps = kept
+        }
+        for language in Language.allCases {
+            let said = Phrasebook.tables[language]?[phrase]
+            XCTAssertNotNil(said, language.rawValue)
+            if language != .en { XCTAssertNotEqual(said, phrase, language.rawValue) }
+            shared.language = language
+            XCTAssertEqual(BroadcastWire.switchedOff, said, "the extension says it in \(language.rawValue)")
+        }
+    }
 }

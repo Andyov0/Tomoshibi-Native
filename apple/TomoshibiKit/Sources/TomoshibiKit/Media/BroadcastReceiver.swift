@@ -11,7 +11,10 @@ import TomoshibiCore
 ///
 /// The picture is published on its first frame, at that frame's size, so the
 /// share's ladder is the one the web would choose for it; the sound as the
-/// share's own track, resampled to the call's 48 kHz stereo.
+/// share's own track, resampled to the call's 48 kHz stereo. The extension
+/// has already held the frames to the deployment's ceiling (ShareCeiling,
+/// SampleHandler); the rate published at is held to it here, so that what
+/// the encoder is told to expect is what arrives.
 @MainActor
 final class BroadcastReceiver {
     private let call: Call
@@ -75,7 +78,9 @@ final class BroadcastReceiver {
                 publishing = true
                 let turned = header.rotation == 90 || header.rotation == 270
                 let (width, height) = turned ? (header.height, header.width) : (header.width, header.height)
-                video = try? await call.publishVideo(kind: .screen(fps: 30, quality: .auto), width: UInt32(width), height: UInt32(height))
+                let ceiling = ShareCeiling(kept: UserDefaults(suiteName: BroadcastWire.group))
+                let fps = min(30, ceiling.fps ?? 30)
+                video = try? await call.publishVideo(kind: .screen(fps: UInt32(fps), quality: .auto), width: UInt32(width), height: UInt32(height))
                 sound = try? await call.publishAudio(kind: .screenSound)
                 publishing = false
                 onChange?(true)

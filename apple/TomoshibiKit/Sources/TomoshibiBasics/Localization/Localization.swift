@@ -43,6 +43,7 @@ public final class Localization: Observable, @unchecked Sendable {
         var language: Language
         var chosen: Bool
         var keeps = true
+        var laidOver: [Language: [String: String]] = [:]
     }
 
     /// Settle on a language before anything is drawn in the wrong one.
@@ -124,9 +125,40 @@ public final class Localization: Observable, @unchecked Sendable {
         }
     }
 
+    /// Phrases the deployment lays over the app's own, by language and then
+    /// by the English they are keyed by (Remote, the core's api/remote.rs).
+    /// Each language holds only what the deployment wrote in it, or in it
+    /// without its region or script, and never its English: where a phrase
+    /// was reworded in English alone, a reader of Japanese is better served
+    /// by the app's own Japanese than by the deployment's English.
+    ///
+    /// Read by every phrase, so that a view saying anything redraws when
+    /// what is laid over changes, as it does when the language does; the
+    /// owner, 2026-10-22, asked for wording to change between releases
+    /// without anybody starting the app again.
+    public var laidOver: [Language: [String: String]] {
+        get {
+            registrar.access(self, keyPath: \.laidOver)
+            return current.withLock { $0.laidOver }
+        }
+        set {
+            guard current.withLock({ $0.laidOver }) != newValue else { return }
+            registrar.withMutation(of: self, keyPath: \.laidOver) {
+                current.withLock { $0.laidOver = newValue }
+            }
+        }
+    }
+
+    /// The template for a phrase in the language showing: the deployment's
+    /// where it has laid one over, the app's own otherwise.
+    private func template(_ phrase: String) -> String {
+        let language = language
+        return laidOver[language]?[phrase] ?? Phrasebook.template(phrase, in: language)
+    }
+
     /// Say something: the phrase in the current language, values in place.
     public func t(_ phrase: String, _ values: PhraseValues? = nil) -> String {
-        substitute(Phrasebook.template(phrase, in: language), values)
+        substitute(template(phrase), values)
     }
 
     /// Translate text that only exists at runtime: the web's `say()`.
@@ -140,6 +172,7 @@ public final class Localization: Observable, @unchecked Sendable {
     /// source.
     public func say(_ text: String) -> String {
         let language = language
+        if let laid = laidOver[language]?[text] { return laid }
         if let exact = Phrasebook.tables[language]?[text] { return exact }
         if let folded = Phrasebook.folded[language]?[text.lowercased()] { return folded }
         return text
@@ -148,7 +181,7 @@ public final class Localization: Observable, @unchecked Sendable {
     /// The finished translation of a phrase, cut at its placeholders, for a
     /// phrase that carries something other than text.
     public func phraseSegments(_ phrase: String) -> [PhraseSegment] {
-        PhraseSegment.split(Phrasebook.template(phrase, in: language))
+        PhraseSegment.split(template(phrase))
     }
 }
 

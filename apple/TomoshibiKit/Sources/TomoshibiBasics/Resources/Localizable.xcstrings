@@ -15931,6 +15931,36 @@
         }
       }
     },
+    "Screen sharing is switched off for now." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Screen sharing is switched off for now."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "画面共有はいまオフになっています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "屏幕共享暂时关闭了。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "螢幕分享暫時關閉了。"
+          }
+        }
+      }
+    },
     "Screen sharing settings" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,

@@ -13,16 +13,39 @@ import VideoToolbox
 /// the GPU, at most one in flight at a time: a frame that cannot be sent yet
 /// is dropped rather than queued, because the extension has fifty megabytes
 /// and a queue of full-size frames is how it gets killed.
+///
+/// Under the deployment's ceiling as well, where it has one (ShareCeiling,
+/// left in the app group by the app, which hears it): no taller than its
+/// height and no more frames a second than its rate, and while the phone is
+/// hot its lower rate. Held to here rather than in the app, which publishes,
+/// because a frame dropped here is a frame never scaled, compressed or sent
+/// over the socket, and that work is what heats the phone.
 final class SampleHandler: RPBroadcastSampleHandler, @unchecked Sendable {
     private let queue = DispatchQueue(label: "tomoshibi.broadcast")
     private var connection: NWConnection?
     private var sending = false
+    /// Read as the broadcast starts: a ceiling changed during it applies to
+    /// the next one, as a Mac's share takes it at its next start.
+    private var ceiling = ShareCeiling.none
+    /// When the last frame sent was captured, for the ceiling's rate.
+    private var lastSent: CMTime?
     private let context = CIContext(options: [.cacheIntermediates: false])
     private var scaler: VTPixelTransferSession?
     private var pool: CVPixelBufferPool?
     private var poolSize = (0, 0)
 
     override func broadcastStarted(withSetupInfo setupInfo: [String: NSObject]?) {
+        let group = UserDefaults(suiteName: BroadcastWire.group)
+        // Not at all while the deployment has screen sharing switched off,
+        // which the app's button already says by being gone; a broadcast
+        // started from Control Center would go round it. Asked only here:
+        // one already running when sharing is switched off goes on, as a
+        // share on the Mac does.
+        if BroadcastWire.screenShareOff(in: group) {
+            finishBroadcastWithError(NSError(domain: "Tomoshibi", code: 3, userInfo: [NSLocalizedDescriptionKey: BroadcastWire.switchedOff]))
+            return
+        }
+        ceiling = ShareCeiling(kept: group)
         guard let url = BroadcastWire.socketURL else {
             finishBroadcastWithError(NSError(domain: "Tomoshibi", code: 1, userInfo: [NSLocalizedDescriptionKey: t("Open Tomoshibi and join a call first.")]))
             return
@@ -54,6 +77,16 @@ final class SampleHandler: RPBroadcastSampleHandler, @unchecked Sendable {
 
     private func video(_ sample: CMSampleBuffer) {
         guard !sending, let pixels = CMSampleBufferGetImageBuffer(sample) else { return }
+        // No more frames a second than the ceiling, by the frames' own clock.
+        // A tenth of the gap is given back, since ReplayKit's frames do not
+        // arrive on the dot: held to the exact gap, every frame a hair early
+        // would be dropped, and a ceiling of thirty over a sixty-hertz screen
+        // would come out at twenty.
+        let at = CMSampleBufferGetPresentationTimeStamp(sample)
+        if let rate = ceiling.limit(hot: ShareCeiling.hot(ProcessInfo.processInfo.thermalState)), let lastSent,
+           CMTimeGetSeconds(CMTimeSubtract(at, lastSent)) < 0.9 / Double(rate) {
+            return
+        }
         var rotation = 0
         if let raw = CMGetAttachment(sample, key: RPVideoSampleOrientationKey as CFString, attachmentModeOut: nil) as? NSNumber,
            let orientation = CGImagePropertyOrientation(rawValue: raw.uint32Value) {
@@ -64,10 +97,11 @@ final class SampleHandler: RPBroadcastSampleHandler, @unchecked Sendable {
             default: rotation = 0
             }
         }
-        let scaled = scale(pixels) ?? pixels
+        let scaled = scale(pixels, turned: rotation == 90 || rotation == 270) ?? pixels
         let image = CIImage(cvPixelBuffer: scaled)
         guard let jpeg = context.jpegRepresentation(of: image, colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!,
                                                     options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: 0.85]) else { return }
+        lastSent = at
         var header = BroadcastWire.Header(kind: .video)
         header.width = CVPixelBufferGetWidth(scaled)
         header.height = CVPixelBufferGetHeight(scaled)
@@ -76,13 +110,19 @@ final class SampleHandler: RPBroadcastSampleHandler, @unchecked Sendable {
         send(header, payload: jpeg)
     }
 
-    /// The frame with its longer side brought down to `BroadcastWire.longest`.
-    private func scale(_ pixels: CVPixelBuffer) -> CVPixelBuffer? {
+    /// The frame with its longer side brought down to `BroadcastWire.longest`,
+    /// and its height, once it is turned upright (`turned`, a phone on its
+    /// side), to the ceiling's: the height of the picture people see, which
+    /// is the frame's width when the phone lies on its side.
+    private func scale(_ pixels: CVPixelBuffer, turned: Bool) -> CVPixelBuffer? {
         let width = CVPixelBufferGetWidth(pixels), height = CVPixelBufferGetHeight(pixels)
         let longer = max(width, height)
-        guard longer > BroadcastWire.longest else { return nil }
-        let factor = Double(BroadcastWire.longest) / Double(longer)
-        let size = (Int(Double(width) * factor) & ~1, Int(Double(height) * factor) & ~1)
+        var factor = longer > BroadcastWire.longest ? Double(BroadcastWire.longest) / Double(longer) : 1
+        if let ceiling = ceiling.height {
+            factor = min(factor, Double(ceiling) / Double(turned ? width : height))
+        }
+        guard factor < 1 else { return nil }
+        let size = (max(2, Int(Double(width) * factor) & ~1), max(2, Int(Double(height) * factor) & ~1))
         if scaler == nil { VTPixelTransferSessionCreate(allocator: nil, pixelTransferSessionOut: &scaler) }
         if pool == nil || poolSize != size {
             pool = nil

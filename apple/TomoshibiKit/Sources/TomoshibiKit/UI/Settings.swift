@@ -1130,15 +1130,20 @@ private struct MediaSettings: View {
                 // the next call, and at once in a call that is on. It opened
                 // the system's video effects, which the owner found did not
                 // look like the app and which on an iPhone did not reach the
-                // call (BackgroundBlur).
-                SettingsRow(title: t("Blur my background"), symbol: "person.and.background.dotted") {
-                    Toggle("", isOn: Binding(get: { blurWanted }, set: { on in
-                        blurWanted = on
-                        app.deviceMemory.remember(blur: on)
-                        app.call?.setBlur(on)
-                    }))
-                    .labelsHidden()
-                    .toggleStyle(.glassSwitch)
+                // call (BackgroundBlur). Gone while the deployment has blur
+                // switched off (Remote), when the next call starts unblurred
+                // whatever is remembered here (CallModel `blurKept`).
+                if app.remote.allows(.backgroundBlur) {
+                    SettingsRow(title: t("Blur my background"), symbol: "person.and.background.dotted") {
+                        Toggle("", isOn: Binding(get: { blurWanted }, set: { on in
+                            blurWanted = on
+                            app.deviceMemory.remember(blur: on)
+                            app.call?.setBlur(on)
+                        }))
+                        .labelsHidden()
+                        .toggleStyle(.glassSwitch)
+                    }
+                    .transition(Theme.arrive)
                 }
                 AdaptiveRow(title: t("Microphone"), symbol: "mic", last: speakers.isEmpty && preferences.devices.isEmpty) {
                     GlassChoice(id: "settings.microphone", options: choices(microphones.map { ($0.id, $0.name) }),
@@ -1163,6 +1168,7 @@ private struct MediaSettings: View {
                 }
             }
             .animation(Theme.settle, value: preferences.devices.isEmpty)
+            .animation(Theme.settle, value: app.remote.allows(.backgroundBlur))
         }
         .onAppear {
             blurWanted = app.deviceMemory.blur
@@ -2102,10 +2108,13 @@ private struct AboutSettings: View {
                 SettingsRow(title: t("Version"), symbol: "app.badge") {
                     Text(version).font(.system(size: 12.5, design: .monospaced)).foregroundStyle(Theme.muted)
                 }
-                // Only where the app looks for updates at all: the Mac, and
-                // not a debug build started by hand, which would ask the
-                // real deployment.
-                if let updates = app.updates { UpdateRow(updates: updates) }
+                // Only where the app looks for updates at all: not a debug
+                // build started by hand, which would ask the real
+                // deployment, and not while the deployment has them switched
+                // off, unless one is already on its way (Updates `speaks`).
+                if let updates = app.updates, updates.speaks {
+                    UpdateRow(updates: updates).transition(Theme.arrive)
+                }
                 SettingsRow(title: t("Media core"), symbol: "cpu", last: app.info == nil) {
                     Text(coreVersion()).font(.system(size: 12.5, design: .monospaced)).foregroundStyle(Theme.muted)
                 }
@@ -2143,6 +2152,7 @@ private struct AboutSettings: View {
                     }
                 }
             }
+            .animation(Theme.settle, value: app.updates?.speaks)
         }
     }
 

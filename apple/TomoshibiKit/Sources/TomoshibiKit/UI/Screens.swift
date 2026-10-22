@@ -108,7 +108,12 @@ public struct AppRoot: View {
         }
         // Readings taken while the app is in the background say nothing about
         // a freeze (the web skips a hidden tab); inactive is still on screen.
-        .onChange(of: scenePhase) { app.call?.call.setBackground(background: scenePhase == .background) }
+        // Back in front, the deployment is asked again what it says to the
+        // apps (Remote), which may have changed while the app was away.
+        .onChange(of: scenePhase) {
+            app.call?.call.setBackground(background: scenePhase == .background)
+            if scenePhase == .active { app.remote.refresh() }
+        }
         // A `tomoshibi:` link, and a universal link to the deployment
         // (`https://meet.example.com/?invite=T#/room`, `?meeting=`), which the
         // system hands over once the domain's association file names the app

@@ -493,6 +493,38 @@ public final class CallModel {
     /// remembers it for the next call as the web does.
     public var blurring: Bool { camera.blurring }
 
+    /// What the deployment says to the apps (AppModel's Remote), given as
+    /// the call is joined, before the camera comes up: which of the call's
+    /// controls are offered, and the ceiling over a shared screen. Nil, as
+    /// for a call nobody gave one to, offers everything the app was built
+    /// with.
+    @ObservationIgnored public var remote: Remote? {
+        didSet {
+            blurKept = remote?.allows(.backgroundBlur) ?? true
+            #if os(macOS)
+            let remote = remote
+            sharing.ceiling = { remote?.ceiling ?? .none }
+            #endif
+        }
+    }
+
+    /// Whether the blur switch is offered (the deployment's background-blur).
+    public var blurOffered: Bool { remote?.allows(.backgroundBlur) ?? true }
+
+    /// Whether blur was offered as this call began. A blur switched off by
+    /// the deployment mid-call is not taken off a camera that has it, which
+    /// would show everybody the room behind somebody who had chosen not to
+    /// show it, and it is not lost when the camera goes off and on again
+    /// in the same call; from the next call it counts as off, whatever was
+    /// remembered.
+    @ObservationIgnored private var blurKept = true
+
+    /// The meeting moved here from `old` (AppModel `rejoin`): to the person
+    /// the same call, so what was kept for that one is kept for this.
+    func carryBlur(from old: CallModel) {
+        blurKept = blurKept || old.blurKept
+    }
+
     public func setBlur(_ on: Bool) {
         camera.blurring = on
         memory.remember(blur: on)
@@ -593,7 +625,7 @@ public final class CallModel {
                     // Blurred from the first frame where blur is chosen: a
                     // frame or two of the room before the switch took was the
                     // room shown to everybody.
-                    camera.blurring = memory.blur
+                    camera.blurring = memory.blur && (blurKept || blurOffered)
                     try camera.start(into: input)
                 } catch {
                     // A camera published and never fed is a black tile for

@@ -24,6 +24,12 @@ import Observation
 /// somebody asks for in the settings always answers, "You have the latest
 /// version." included, and brings back a version put away.
 ///
+/// The deployment can say how often to look (`checkEvery`), and switch the
+/// whole of it off (`allow`, Remote's `app-updates`): then nothing is looked
+/// for or offered, and the settings say nothing about updates, but a
+/// download or an install already under way is seen through, since one
+/// stopped half way is a download somebody agreed to and lost.
+///
 /// Here, apart from the core and AppKit (UpdateSource, UpdateInstaller), so
 /// that the rules are tested by `swift test`, where a bundle linking the core
 /// timed out before its first test.
@@ -72,11 +78,14 @@ public final class Updates {
     /// A join pressed in the lobby is out (`joining`).
     private var settingOff = false
 
+    /// Whether updates are looked for and offered at all (`allow`).
+    public private(set) var allowed = true
+
     public let running: String
     @ObservationIgnored private let source: UpdateSource
     @ObservationIgnored private let installer: UpdateInstaller
     @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
-    @ObservationIgnored private let every: Duration
+    @ObservationIgnored private var every: Duration
     @ObservationIgnored private let retry: Duration
 
     public static let every: Duration = .seconds(6 * 60 * 60)
@@ -110,13 +119,30 @@ public final class Updates {
         self.sleep = sleep
     }
 
-    /// Whether the banner is up: something to say, in the lobby, and not put away.
+    /// Whether the banner is up: something to say, in the lobby, and not put
+    /// away; with updates switched off, only a download or an install that
+    /// was already under way.
     public var shown: Bool {
         guard free else { return false }
         switch step {
         case .none, .held: return false
-        case let .offered(offer, _): return !later.contains(offer.version)
+        case let .offered(offer, _): return allowed && !later.contains(offer.version)
+        case .misplaced: return allowed
         default: return true
+        }
+    }
+
+    /// Whether the settings say anything about updates: unless they are
+    /// switched off, and then still while one is under way, for its
+    /// progress and its Cancel.
+    public var speaks: Bool {
+        allowed || underWay
+    }
+
+    private var underWay: Bool {
+        switch step {
+        case .downloading, .held, .installing: true
+        default: false
         }
     }
 
@@ -137,7 +163,24 @@ public final class Updates {
         // Whatever an earlier run downloaded was installed, failed, or was
         // left behind; none of it is trusted to be the build offered now.
         source.clear()
+        if allowed { arrange(lookingFirst: true) }
+    }
+
+    /// Stops asking, for a test that is done with the model.
+    public func stop() {
+        schedule?.cancel()
+        schedule = nil
+    }
+
+    /// The looking, every `every`, from now (`lookingFirst`) or from one wait
+    /// from now. Any schedule before is given up, a wait in it included.
+    private func arrange(lookingFirst: Bool) {
+        schedule?.cancel()
         schedule = Task { [weak self] in
+            if !lookingFirst {
+                guard let wait = self?.every, let sleep = self?.sleep else { return }
+                do { try await sleep(wait) } catch { return }
+            }
             while !Task.isCancelled {
                 guard let self else { return }
                 let answered = await self.check(asked: false)
@@ -146,10 +189,30 @@ public final class Updates {
         }
     }
 
-    /// Stops asking, for a test that is done with the model.
-    public func stop() {
-        schedule?.cancel()
-        schedule = nil
+    /// Whether to look for and offer updates (the deployment's `app-updates`).
+    /// Switched off, the looking stops and an offer is taken off the screen;
+    /// a download or an install under way goes on to its end. Switched on
+    /// again, the app looks at once, since the offer it missed may be days
+    /// old.
+    public func allow(_ on: Bool) {
+        guard on != allowed else { return }
+        allowed = on
+        guard started else { return }
+        if on {
+            arrange(lookingFirst: true)
+        } else {
+            stop()
+        }
+    }
+
+    /// How long between looks (the deployment's update_check_hours, the
+    /// app's six hours where it says none). A change counts from now: the
+    /// next look is one new wait away, not at once, since it is said on
+    /// every start, moments after the first look.
+    public func checkEvery(_ interval: Duration) {
+        guard interval != every else { return }
+        every = interval
+        if started, allowed { arrange(lookingFirst: false) }
     }
 
     /// Told whenever the screen changes: the lobby is the only place an
@@ -194,14 +257,14 @@ public final class Updates {
 
     /// The settings' "Check for updates".
     public func checkNow() {
-        guard said != .checking else { return }
+        guard allowed, said != .checking else { return }
         said = .checking
         Task { await check(asked: true) }
     }
 
     /// "Update": downloads the build offered, where this copy can be replaced.
     public func accept() {
-        guard free, case let .offered(offer, _) = step else { return }
+        guard free, allowed, case let .offered(offer, _) = step else { return }
         if installer.elsewhere {
             installer.openElsewhere()
             return
