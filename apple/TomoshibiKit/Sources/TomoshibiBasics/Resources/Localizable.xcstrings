@@ -17731,6 +17731,36 @@
         }
       }
     },
+    "Share link" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Share link"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "リンクを共有"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分享链接"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分享連結"
+          }
+        }
+      }
+    },
     "Share only sound" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,

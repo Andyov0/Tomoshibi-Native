@@ -94,6 +94,26 @@ struct EmptyRoomCard: View {
                 .disabled(minting)
                 .transition(Theme.arrive)
             }
+            #if os(iOS)
+            // Sent from here to Messages, the link arrives as an invitation
+            // with the card's picture rather than as a bare address
+            // (LinkShare); copying is still the button beside it.
+            if !notHost {
+                Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1, height: 16)
+                    .transition(.opacity)
+                LinkShareButton(room: model.room, link: shareable) {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.foreground)
+                        .frame(width: 34, height: 34)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(minting)
+                .accessibilityLabel(t("Share link"))
+                .transition(Theme.arrive)
+            }
+            #endif
             Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1, height: 16)
             Button(action: dismiss) {
                 Image(systemName: "xmark")
@@ -126,24 +146,40 @@ struct EmptyRoomCard: View {
 
     private func invite() {
         guard !minting else { return }
+        // Before the task, so that a second press in the meantime is refused
+        // rather than making a second invitation.
         minting = true
         Task {
-            defer { minting = false }
-            do {
-                let made = try await model.deployment.createInvite(room: model.room, bearer: model.call.token())
-                let link = model.deployment.inviteLink(token: made.token, room: model.room)
-                Pasteboard.copy(link)
-                minting = false
-                copied = true
-                try? await Task.sleep(for: .seconds(1.6))
-                copied = false
-            } catch {
-                minting = false
-                model.actionFailed(HostFeature.explain(error))
-                if case let .Refused(_, code)? = error as? ProtocolError, code == "not_yours" {
-                    await recheck()
-                }
+            guard let link = await mint() else { return }
+            Pasteboard.copy(link)
+            copied = true
+            try? await Task.sleep(for: .seconds(1.6))
+            copied = false
+        }
+    }
+
+    /// The link to share: the room's own where that lets people in, and a
+    /// fresh invitation otherwise, as the copy button makes one.
+    private func shareable() async -> URL? {
+        if linkWorks { return URL(string: link) }
+        guard !minting else { return nil }
+        minting = true
+        return await mint().flatMap(URL.init(string:))
+    }
+
+    /// An invitation into the room, or nil with the reason said; `minting`
+    /// is set by whoever asks, and cleared here.
+    private func mint() async -> String? {
+        defer { minting = false }
+        do {
+            let made = try await model.deployment.createInvite(room: model.room, bearer: model.call.token())
+            return model.deployment.inviteLink(token: made.token, room: model.room)
+        } catch {
+            model.actionFailed(HostFeature.explain(error))
+            if case let .Refused(_, code)? = error as? ProtocolError, code == "not_yours" {
+                await recheck()
             }
+            return nil
         }
     }
 }

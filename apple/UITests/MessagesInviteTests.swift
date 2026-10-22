@@ -138,4 +138,25 @@ final class MessagesInviteTests: XCTestCase {
             sleep(15)
         }
     }
+
+    /// A meeting's link shared from the app's schedule: the share sheet
+    /// draws it as the invitation, with the mark, from the metadata handed
+    /// over with the link (LinkShare), which is what Messages sends as the
+    /// link's preview. Without it the sheet, and Messages, say only the
+    /// address's host. (The simulator's share sheet offers no Messages, so the
+    /// sheet's own preview is what can be seen here.)
+    func testASharedLinkIsDrawnAsTheInvitation() throws {
+        continueAfterFailure = false
+        let app = tomoshibi()
+        app.launchEnvironment["TOMOSHIBI_DEBUG_LOBBY"] = "scheduled"
+        app.launch()
+        let meeting = app.cells.containing(.staticText, identifier: "design-review").firstMatch
+        XCTAssertTrue(meeting.waitForExistence(timeout: 30), "the arranged meeting in the schedule")
+        meeting.buttons["Share link"].tap()
+        XCTAssertTrue(app.otherElements["LP.CaptionBar.TopCaption"].waitForExistence(timeout: 10), "the share sheet, with a preview")
+        XCTAssertEqual(app.otherElements["LP.CaptionBar.TopCaption"].label, "You were invited to design-review.",
+                       "the preview says the invitation, not the address")
+        sleep(1)
+        shot("11-share-sheet")
+    }
 }

@@ -2193,6 +2193,15 @@ struct ScheduleView: View {
             .disabled(one.ended)
             .opacity(one.ended ? 0.5 : 1)
             small(copied == one.id ? "checkmark" : "doc.on.doc", copied == one.id ? t("Link copied") : t("Copy link")) { copy(one) }
+            #if os(iOS)
+            // The share sheet, for the link to go to Messages as an
+            // invitation rather than as a bare address (LinkShare).
+            LinkShareButton(room: one.room, link: { app.lobby.link(one) }) {
+                Self.rowCircle("square.and.arrow.up")
+            }
+            .buttonStyle(.borderless)
+            .accessibilityLabel(t("Share link"))
+            #endif
             #if os(macOS)
             small("calendar.badge.plus", t("Add to calendar")) {
                 if let file = app.lobby.calendarFile(one) { NSWorkspace.shared.open(file) }
