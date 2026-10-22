@@ -59,7 +59,11 @@ public final class AppModel {
     public private(set) var updates: Updates?
     public private(set) var deployment: Deployment?
     public private(set) var info: DeploymentInfo?
-    public private(set) var account: Account?
+    public private(set) var account: Account? {
+        // Whoever is signed in is what the Messages extension invites as,
+        // and a sign-out has to take the session out of its reach at once.
+        didSet { handOver() }
+    }
     public private(set) var call: CallModel?
     /// Where Sign out was pressed, while it is asked whether to (SignOutPrompt):
     /// the lobby's window or the settings'.
@@ -505,11 +509,17 @@ public final class AppModel {
         components.query = nil
         components.fragment = nil
         components.path = ""
-        if components.scheme == "tomoshibi" { components.scheme = "https" }
         // A link opened at launch can arrive before the deployment has
         // answered; it is this deployment's or nobody's.
         if deployment == nil { await connect() }
         guard let deployment else { return }
+        // A `tomoshibi:` link names the deployment's host and stands for its
+        // own address, which is https in every release build, the core's
+        // HOME being https. Read as https always, a test deployment on
+        // loopback over http could never be handed a link under the scheme,
+        // which is how the Messages extension hands the app its cards
+        // (MeetingLink `inApp`).
+        if components.scheme == "tomoshibi" { components.scheme = URL(string: deployment.baseUrl())?.scheme ?? "https" }
         // A link to another server is refused rather than followed: following
         // one took the app there, and the app is for this deployment alone.
         // Compared without the trailing slash the deployment's address always
@@ -584,6 +594,47 @@ public final class AppModel {
     /// invitation's, or what they typed, in that order.
     public var joiningName: String {
         account?.name ?? invitedName ?? name.trimmingCharacters(in: .whitespaces)
+    }
+
+    // MARK: What the Messages extension is left
+
+    /// Leaves the Messages extension what it needs to invite people as this
+    /// account (Handover): who is signed in and the session, the meetings as
+    /// last seen, and the language and colour chosen here. The extension is a
+    /// process of its own and links no core, so this is all it knows of the
+    /// app; it asks the deployment itself for anything fresher.
+    ///
+    /// Called whenever any of that changes: the account (sign-in, sign-out,
+    /// a session restored at start), the meetings, and the app going to the
+    /// background, the moment before somebody switches to Messages, which is
+    /// when a language or colour changed in the settings is passed on.
+    ///
+    /// Nothing in a rehearsal, which keeps nothing, unless it is asked to
+    /// with TOMOSHIBI_DEBUG_HANDOVER: then under the test deployment's own
+    /// address, with that address left for a debug build of the extension
+    /// to talk to (Handover `testBase`); the release extension reads home's
+    /// record alone. The Messages tests need it; without it, a test that
+    /// signed in would have nothing to hand over.
+    func handOver() {
+        #if os(iOS)
+        guard let deployment else { return }
+        #if DEBUG
+        let handsOver = ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_HANDOVER"] != nil
+        guard !rehearsal || handsOver else { return }
+        Handover.shared.testBase = rehearsal ? deployment.baseUrl() : nil
+        #else
+        guard !rehearsal else { return }
+        #endif
+        let signedIn = account != nil
+        let record = Handover.Record(
+            base: deployment.baseUrl(),
+            account: account?.name,
+            arranges: holds("arrange"),
+            meetings: signedIn ? lobby.arrangements.map(Meeting.init) : [],
+            language: Localization.shared.followsSystem ? nil : Localization.shared.language.rawValue,
+            accent: Appearance.shared.accent.rawValue)
+        Handover.shared.keep(record, cookie: signedIn ? deployment.accountCookie() : nil)
+        #endif
     }
 
     // MARK: Account

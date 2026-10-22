@@ -113,6 +113,10 @@ public struct AppRoot: View {
         .onChange(of: scenePhase) {
             app.call?.call.setBackground(background: scenePhase == .background)
             if scenePhase == .active { app.remote.refresh() }
+            // On the way out, which is how Messages is reached: a language or
+            // a colour chosen in the settings since is what its extension
+            // speaks and wears (AppModel `handOver`).
+            if scenePhase == .background { app.handOver() }
         }
         // A `tomoshibi:` link, and a universal link to the deployment
         // (`https://<the deployment>/?invite=T#/room`, `?meeting=`), which the

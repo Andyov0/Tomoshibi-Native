@@ -23,7 +23,10 @@ public final class LobbyModel {
 
     public enum Status: Equatable { case loading, ready, failed, signedOut }
 
-    public private(set) var arrangements: [Arrangement] = []
+    public private(set) var arrangements: [Arrangement] = [] {
+        // What the Messages extension shows first, before it has asked.
+        didSet { if arrangements != oldValue { app?.handOver() } }
+    }
     public private(set) var status: Status = .loading
     @ObservationIgnored private var reads = 0
 
@@ -249,4 +252,12 @@ public final class LobbyModel {
 public struct ArrangeError: Error {
     public let sentence: String
     init(_ sentence: String) { self.sentence = sentence }
+}
+
+extension Meeting {
+    /// The core's arrangement, as the Messages extension is left it.
+    init(_ one: Arrangement) {
+        self.init(id: one.id, room: one.room, at: one.at, relay: one.relay, started: one.started, ended: one.ended,
+                  from: one.from, token: one.token, mine: one.mine)
+    }
 }
