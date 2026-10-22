@@ -88,8 +88,16 @@ Type: filesandordirs; Name: "{app}\*"
 [Files]
 ; The picture in the window an update shows while it installs ([Code]).
 Source: "UpdateLogo.bmp"; Flags: dontcopy
-Source: "{#ArmDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsArm64
-Source: "{#X64Dir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: not IsArm64
+; The program itself last, once everything it loads is in place. Opened in
+; between (somebody who thought the update had gone and opened the app
+; again), a program put in place before its runtime would start without it
+; and stop on .NET's own error; with the program not there yet nothing
+; starts, and once it is there it finds the setup still at work and hands the
+; person to the setup's window (Program.Main, SetupSignals).
+Source: "{#ArmDir}\*"; Excludes: "\Tomoshibi.exe"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsArm64
+Source: "{#X64Dir}\*"; Excludes: "\Tomoshibi.exe"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: not IsArm64
+Source: "{#ArmDir}\Tomoshibi.exe"; DestDir: "{app}"; Flags: ignoreversion; Check: IsArm64
+Source: "{#X64Dir}\Tomoshibi.exe"; DestDir: "{app}"; Flags: ignoreversion; Check: not IsArm64
 
 [Icons]
 Name: "{autoprograms}\Tomoshibi"; Filename: "{app}\Tomoshibi.exe"
@@ -119,12 +127,24 @@ ja.UpdatingDetail=終わると自動でもう一度開きます。
 Filename: "{app}\Tomoshibi.exe"; Description: "{cm:LaunchProgram,Tomoshibi}"; Flags: nowait postinstall
 
 [Code]
-// An update runs this setup with /VERYSILENT once the app has closed, and for
-// the ten seconds or so it takes nothing was on the screen at all: the app
-// was gone and came back. So a silent run shows a small window of its own, the
-// app's picture with what is happening and a bar that follows the files as
-// they are put in place, until the app has been opened again. A setup run by
-// hand shows its own wizard, progress and all, and none of this.
+// An update runs this setup with /VERYSILENT, and for the ten seconds or so
+// it takes nothing was on the screen at all: the app was gone and came back.
+// So a silent run shows a small window of its own, the app's picture with
+// what is happening and a bar that follows the files as they are put in
+// place, until the app has been opened again. A setup run by hand shows its
+// own wizard, progress and all, and none of this.
+//
+// The window is handed on rather than left empty at either end (10-23: the
+// screen stood empty for about half a second before this window came, and
+// for a second and a half after it went, and somebody looking at nothing
+// opened the app again while its files were being replaced). It comes as the
+// setup starts, before the app is closed, and says so (SignalShown), which is
+// what an app that knows of it waits for before it quits; the apps given out
+// before it (0.1.4 and earlier) quit the moment they have started this, and
+// this window comes as soon as it can for them all the same. At the other
+// end it stays, above the app it opened, until that app's first frame is on
+// the screen (AppShownSignal), at most AppShownAtMost. The names are the
+// app's (Model/SetupSignals.cs).
 //
 // The bar is drawn at the apps' pace (Tomoshibi.Basics/Pace.cs), not where
 // the install says it is: set from each report, it went across in leaps as
@@ -138,6 +158,35 @@ const
   PaceLongestTick = 50;
   // A tick about every frame.
   PaceEvery = 16;
+  // Said by the window once it is on the screen; the app that started the
+  // update waits for it before it quits.
+  SignalShown = 'Local\Tomoshibi.Setup.Shown';
+  // There, unset, while the files are being put in place: an app opened
+  // then does not open a window (Program.Main) ...
+  SignalInstalling = 'Local\Tomoshibi.Setup.Installing';
+  // ... but sets this, and this window comes to the front.
+  SignalForward = 'Local\Tomoshibi.Setup.Forward';
+  // Set by the app once its window's first frame is on the screen.
+  SignalAppShown = 'Local\Tomoshibi.App.Shown';
+  // The longest the window waits for the app's: in the VM the app opened
+  // here had its first frame on the screen 2.8 to 4.6 seconds after it was
+  // started, the system reading over each file it loaded for the first time;
+  // a slower computer takes longer, and a window left up for nothing (an app
+  // that did not start) goes in the end.
+  AppShownAtMost = 30000;
+
+type
+  // user32's MSG, for taking this thread's messages while it waits (the
+  // window is drawn and the ticks come through them); 32-bit, as Setup is.
+  TMessage32 = record
+    Window: HWND;
+    Kind: Longword;
+    WordParam: Longint;
+    LongParam: Longint;
+    Time: Longword;
+    X, Y: Longint;
+    Extra: Longword;
+  end;
 
 var
   Shown: TSetupForm;
@@ -149,6 +198,9 @@ var
   LastMove: Int64;
   Ticker: Longword;
   Ticks: Integer;
+  InstallingSignal, ForwardSignal, ShownSignal, AppShownSignal: THandle;
+  // While the app opened at the end starts (WaitForApp).
+  KeepingOnTop: Boolean;
 
 function DwmSetWindowAttribute(Window: HWND; Attribute: Integer; var Value: Integer; Size: Integer): Integer;
   external 'DwmSetWindowAttribute@dwmapi.dll stdcall delayload';
@@ -166,6 +218,26 @@ function KillTimer(Window, Id: Longword): BOOL;
   external 'KillTimer@user32.dll stdcall';
 function GetTickCount64: Int64;
   external 'GetTickCount64@kernel32.dll stdcall';
+function CreateEvent(Attributes: Longword; ManualReset, Initially: BOOL; Name: String): THandle;
+  external 'CreateEventW@kernel32.dll stdcall';
+function SetEvent(Event: THandle): BOOL;
+  external 'SetEvent@kernel32.dll stdcall';
+function ResetEvent(Event: THandle): BOOL;
+  external 'ResetEvent@kernel32.dll stdcall';
+function WaitForSingleObject(Handle: THandle; Milliseconds: Longword): Longword;
+  external 'WaitForSingleObject@kernel32.dll stdcall';
+function CloseHandle(Handle: THandle): BOOL;
+  external 'CloseHandle@kernel32.dll stdcall';
+function SetForegroundWindow(Window: HWND): BOOL;
+  external 'SetForegroundWindow@user32.dll stdcall';
+function SetWindowPos(Window: HWND; InsertAfter: Longint; X, Y, Width, Height: Integer; Flags: Longword): BOOL;
+  external 'SetWindowPos@user32.dll stdcall';
+function PeekMessage(var Message: TMessage32; Window: HWND; First, Last, Remove: Longword): BOOL;
+  external 'PeekMessageW@user32.dll stdcall';
+function TranslateMessage(var Message: TMessage32): BOOL;
+  external 'TranslateMessage@user32.dll stdcall';
+function DispatchMessage(var Message: TMessage32): Longint;
+  external 'DispatchMessageW@user32.dll stdcall';
 
 // The title bar dark, as the apps' are (DWMWA_USE_IMMERSIVE_DARK_MODE: 20,
 // and 19 on Windows 10 before 20H1, where 20 is refused).
@@ -236,12 +308,49 @@ begin
   Bar.Update;
 end;
 
+// An app opened while the files are being put in place has asked for this
+// window (SignalForward): it comes to the front, the wizard's on a setup run
+// by hand. The app gave it the right to (AllowSetForegroundWindow), being
+// the one the person opened.
+procedure ComeForward;
+var
+  Window: HWND;
+begin
+  if Shown <> nil then
+    Window := Shown.Handle
+  else
+    Window := WizardForm.Handle;
+  if SetForegroundWindow(Window) then
+    Log('Update window: brought to the front for the app opened meanwhile.')
+  else
+    Log('Update window: the app opened meanwhile asked for it, and Windows kept another window in front.');
+end;
+
 // The timer's tick, about every frame, whenever the setup takes its messages.
 procedure Tick(Window, Message, Id, Time: Longword);
 begin
   Ticks := Ticks + 1;
   if Bar <> nil then
     Pace;
+  if (ForwardSignal <> 0) and (WaitForSingleObject(ForwardSignal, 0) = 0) then
+    ComeForward;
+  // The app opened at the end was put above this window although this one
+  // is topmost and it is not (its window first, this one below it, in the
+  // order Windows lists them; an ordinary window brought to the front stayed
+  // below): its window, black until its first frame reached the screen,
+  // covered this one, which waits for that frame. Put back on top at every
+  // tick while the app starts, without taking the keyboard from it.
+  if KeepingOnTop and (Shown <> nil) then
+    SetWindowPos(Shown.Handle, -1, 0, 0, 0, 0, $0013);
+end;
+
+procedure StartTicking;
+begin
+  if Ticker = 0 then
+  begin
+    LastMove := GetTickCount64;
+    Ticker := SetTimer(0, 0, PaceEvery, CreateCallback(@Tick));
+  end;
 end;
 
 procedure StopTicking;
@@ -249,6 +358,23 @@ begin
   if Ticker <> 0 then
     KillTimer(0, Ticker);
   Ticker := 0;
+end;
+
+// From here until the files are in place, an app opened does not open a
+// window but brings this setup's forward (Program.Main).
+procedure BeginInstalling;
+begin
+  if InstallingSignal = 0 then
+    InstallingSignal := CreateEvent(0, True, False, SignalInstalling);
+  if ForwardSignal = 0 then
+    ForwardSignal := CreateEvent(0, False, False, SignalForward);
+end;
+
+procedure EndInstalling;
+begin
+  if InstallingSignal <> 0 then
+    CloseHandle(InstallingSignal);
+  InstallingSignal := 0;
 end;
 
 procedure ShowUpdating;
@@ -309,9 +435,38 @@ begin
   AnimateWindow(Shown.Handle, 200, $00080000);
   Shown.Show;
   Shown.Refresh;
+  // Above every other window, the app it opens included (HWND_TOPMOST,
+  // leaving where it is and what has the keyboard). The form's own
+  // fsStayOnTop did not hold: the app opened at the end came in front of it,
+  // its window black for the three seconds its first frame took on the run
+  // after its files had been replaced, and this window, which waits for that
+  // frame, waited behind it.
+  SetWindowPos(Shown.Handle, -1, 0, 0, 0, 0, $0013);
 
-  LastMove := GetTickCount64;
-  Ticker := SetTimer(0, 0, PaceEvery, CreateCallback(@Tick));
+  // On the screen, faded in whole: the app that is waiting for it may go.
+  // Opened if the app made it first, as one that waits for it does; made
+  // here for an older one, which waits for nothing.
+  ShownSignal := CreateEvent(0, True, False, SignalShown);
+  if ShownSignal <> 0 then
+    SetEvent(ShownSignal);
+  Log('Update window: on the screen.');
+
+  StartTicking;
+end;
+
+// Shown at the setup's very start, before the app is closed (the Restart
+// Manager's look for programs holding the files comes later), rather than
+// as the files began to be put in place: the app that started the update
+// waits for this window, and an older one, already gone, left the screen
+// empty until it came.
+function InitializeSetup: Boolean;
+begin
+  if VerySilent then
+  begin
+    BeginInstalling;
+    ShowUpdating;
+  end;
+  Result := True;
 end;
 
 // The files in place: the bar is let finish at its pace before the app is
@@ -331,16 +486,67 @@ begin
     Sleep(PaceEvery);
     Pace;
   end;
-  StopTicking;
   Log(Format('Update window: the bar was %d ms behind and drawn full in %d ms, after %d ticks.', [Behind, Integer(GetTickCount64 - From), Ticks]));
+end;
+
+// Takes this thread's messages, so that the window is drawn and the ticks
+// come (a launch of the app meanwhile still brings it forward), until the
+// app opened by [Run] has drawn its window, or AppShownAtMost has gone by.
+procedure WaitForApp;
+var
+  From: Int64;
+  Message: TMessage32;
+begin
+  if AppShownSignal = 0 then
+    Exit;
+  KeepingOnTop := True;
+  From := GetTickCount64;
+  while WaitForSingleObject(AppShownSignal, 0) <> 0 do
+  begin
+    if GetTickCount64 - From >= AppShownAtMost then
+    begin
+      KeepingOnTop := False;
+      Log(Format('Update window: no word of the app''s window in %d ms; going all the same.', [AppShownAtMost]));
+      Exit;
+    end;
+    while PeekMessage(Message, 0, 0, 0, 1) do
+    begin
+      TranslateMessage(Message);
+      DispatchMessage(Message);
+    end;
+    Sleep(10);
+  end;
+  KeepingOnTop := False;
+  Log(Format('Update window: the app''s window is up after %d ms.', [Integer(GetTickCount64 - From)]));
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
 begin
-  if (CurStep = ssInstall) and VerySilent then
-    ShowUpdating;
-  if (CurStep = ssPostInstall) and (Shown <> nil) then
-    FillBar;
+  // By hand, the files are being replaced from here as well, under the
+  // wizard's own progress; an app opened meanwhile brings the wizard forward.
+  if (CurStep = ssInstall) and not VerySilent then
+  begin
+    BeginInstalling;
+    StartTicking;
+  end;
+  if CurStep = ssPostInstall then
+  begin
+    // In place: an app opened from now on is the new one and opens as it
+    // always does. What it says once it has drawn its window is listened
+    // for from here, before [Run] opens it, so that one opened by the person
+    // in the meantime is heard as well.
+    EndInstalling;
+    if Shown <> nil then
+    begin
+      AppShownSignal := CreateEvent(0, True, False, SignalAppShown);
+      if AppShownSignal <> 0 then
+        ResetEvent(AppShownSignal);
+      FillBar;
+    end;
+  end;
+  // After [Run] has opened the app, before the window goes.
+  if (CurStep = ssDone) and (Shown <> nil) then
+    WaitForApp;
 end;
 
 // Where the install has got; the bar is moved towards it here as well as by
@@ -362,10 +568,18 @@ end;
 procedure DeinitializeSetup;
 begin
   StopTicking;
-  // The app has been opened again by [Run] by now; the window goes with the setup.
+  EndInstalling;
+  // The app has been opened again by [Run] and has drawn its window by now
+  // (WaitForApp); the window goes with the setup, from in front of it.
   if Shown <> nil then
   begin
     AnimateWindow(Shown.Handle, 200, $00090000);
     Shown.Free;
   end;
+  if ForwardSignal <> 0 then
+    CloseHandle(ForwardSignal);
+  if ShownSignal <> 0 then
+    CloseHandle(ShownSignal);
+  if AppShownSignal <> 0 then
+    CloseHandle(AppShownSignal);
 end;

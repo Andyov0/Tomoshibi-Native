@@ -282,7 +282,8 @@ internal sealed partial class PackageInstaller : IUpdateInstaller
 /// Downloaded by the app rather than a browser, it carries no mark of the
 /// web, so SmartScreen does not ask again. The setup runs silently, shows a
 /// small window of its own, closes this app if it is still open, and opens
-/// the new one when it is done; this app quits once it is started.
+/// the new one when it is done; this app quits once the setup's window is on
+/// the screen (SetupSignals).
 ///
 /// Reading the stamp and starting the setup are done off the window's
 /// thread. Starting it holds the thread it runs on for as long as the system
@@ -295,8 +296,16 @@ internal sealed partial class PackageInstaller : IUpdateInstaller
 /// call joined in those seconds would be ended by the install; the lobby now
 /// refuses to begin one while a build is being installed (Updates.HoldsCalls).
 /// </summary>
-internal sealed class SetupInstaller : IUpdateInstaller
+internal sealed partial class SetupInstaller : IUpdateInstaller
 {
+    /// <summary>
+    /// The longest this app waits for the setup's window before it quits all
+    /// the same: the window came 0.8 to 2 seconds after the setup was started
+    /// in the VM, and a setup that never says so (one from before it did)
+    /// closes the app itself when it replaces its files.
+    /// </summary>
+    public static readonly TimeSpan ShownAtMost = TimeSpan.FromSeconds(20);
+
     private readonly Action _quit;
     private readonly object _gate = new();
     private Attempt? _attempt;
@@ -313,7 +322,17 @@ internal sealed class SetupInstaller : IUpdateInstaller
         public readonly TaskCompletionSource Stop = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    /// <param name="quit">Ends the app, on its own thread, once the setup is running.</param>
+    /// <summary>What a process's handle is to a wait: signalled when it has ended.</summary>
+    private sealed class Exited : WaitHandle
+    {
+        public Exited(System.Diagnostics.Process process) => SafeWaitHandle = new Microsoft.Win32.SafeHandles.SafeWaitHandle(process.Handle, ownsHandle: false);
+    }
+
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool AllowSetForegroundWindow(int process);
+
+    /// <param name="quit">Ends the app, on its own thread, once the setup's window is up.</param>
     public SetupInstaller(Action quit)
     {
         _quit = quit;
@@ -356,7 +375,7 @@ internal sealed class SetupInstaller : IUpdateInstaller
         return true;
     }
 
-    /// <summary>Off the window's thread: reads the setup and starts it.</summary>
+    /// <summary>Off the window's thread: reads the setup, starts it, and waits for its window.</summary>
     private Installed Run(Attempt attempt, string file, string version)
     {
         var clock = System.Diagnostics.Stopwatch.StartNew();
@@ -380,12 +399,18 @@ internal sealed class SetupInstaller : IUpdateInstaller
             return new Installed.Failed(T("The update could not be opened."));
         }
         Log.Line($"update: read the setup's stamp in {clock.ElapsedMilliseconds} ms");
+        // Made before the setup starts, so that its window cannot be said to
+        // be up before this app is listening; cleared, in case a setup that
+        // went wrong earlier left it said.
+        using var shown = new EventWaitHandle(false, EventResetMode.ManualReset, SetupSignals.SetupShown);
+        shown.Reset();
         lock (_gate)
         {
             // Given up between the press and here: nothing has been started.
             if (attempt.Stopped) return new Installed.Stopped();
             attempt.Committed = true;
         }
+        System.Diagnostics.Process setup;
         clock.Restart();
         try
         {
@@ -395,15 +420,37 @@ internal sealed class SetupInstaller : IUpdateInstaller
                 UseShellExecute = false,
             };
             Log.Line($"update: running the setup for {version}");
-            System.Diagnostics.Process.Start(start)?.Dispose();
+            setup = System.Diagnostics.Process.Start(start) ?? throw new InvalidOperationException("no process");
         }
         catch (Exception fault)
         {
             Log.Line($"update: the setup did not start: {fault.HResult:X8} {fault.Message}");
             return new Installed.Failed(T("The update could not be installed."));
         }
-        Log.Line($"update: the setup started in {clock.ElapsedMilliseconds} ms");
-        return new Installed.Done();
+        using (setup)
+        {
+            Log.Line($"update: the setup started in {clock.ElapsedMilliseconds} ms");
+            // This app was pressed; the setup it started may then put its
+            // window in front of whatever else is open.
+            AllowSetForegroundWindow(setup.Id);
+            clock.Restart();
+            using var ended = new Exited(setup);
+            switch (WaitHandle.WaitAny([shown, ended], ShownAtMost))
+            {
+                case 0:
+                    Log.Line($"update: the setup's window is up after {clock.ElapsedMilliseconds} ms; quitting");
+                    return new Installed.Done();
+                case 1:
+                    // Ended before it showed anything (a file that is not a
+                    // whole setup, one that would not run here): this app
+                    // stays, and says the update did not go in.
+                    Log.Line($"update: the setup ended with {setup.ExitCode} before its window showed");
+                    return new Installed.Failed(T("The update could not be installed."));
+                default:
+                    Log.Line($"update: no word of the setup's window in {ShownAtMost.TotalSeconds} s; quitting all the same");
+                    return new Installed.Done();
+            }
+        }
     }
 }
 

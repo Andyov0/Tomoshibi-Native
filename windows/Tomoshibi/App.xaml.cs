@@ -128,6 +128,18 @@ public partial class App : Application
         }
         _window = new MainWindow(app);
         _window.Activate();
+        // The setup that opened this app keeps its own window up until this
+        // one's first frame is on the screen, so that nothing is left on it in
+        // between (SetupSignals). Told only where a setup is waiting.
+        if (SetupSignals.AppShownAwaited())
+        {
+            void Drawn(object? sender, object e)
+            {
+                Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= Drawn;
+                _ = SayShownOnceOnScreen(_window?.Content);
+            }
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += Drawn;
+        }
         // A link handed over by a later launch: the window comes forward and
         // the link is opened here, on the UI thread.
         var ui = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
@@ -139,6 +151,33 @@ public partial class App : Application
             _ = app.Open(link);
         }));
         _ = app.Start();
+    }
+
+    /// <summary>
+    /// Tells the setup that opened this app that its window is on the screen,
+    /// once the frame its first turn of rendering drew has reached it. Told
+    /// at the second turn of rendering, the setup's window went while this
+    /// one stood black for another second, on the first run after its files
+    /// had been replaced, when the system reads over every file the app
+    /// loads: a frame the window's thread has rendered is not yet one the
+    /// desktop shows. So the compositor's commit of it is waited for
+    /// (RequestCommitAsync), then the desktop compositor's presenting of what
+    /// was committed (SetupSignals.WaitForThePresent). Told all the same if
+    /// any of it fails, rather than leave the setup waiting its thirty seconds.
+    /// </summary>
+    private static async Task SayShownOnceOnScreen(UIElement? root)
+    {
+        try
+        {
+            if (root != null) await Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(root).Compositor.RequestCommitAsync();
+            await Task.Run(SetupSignals.WaitForThePresent);
+            Log.Line("the window's first frame is on the screen; told the setup");
+        }
+        catch (Exception fault)
+        {
+            Log.Line($"the window's first frame could not be waited for: {fault.Message}");
+        }
+        SetupSignals.SayAppShown();
     }
 
     /// <summary>

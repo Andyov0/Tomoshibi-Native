@@ -420,6 +420,36 @@ install's card offers no Cancel here: the stamp is read in milliseconds and
 the setup started at once, and a setup once started runs to its end whatever
 the app does (a package's install keeps its Cancel, which Windows honours).
 
+The screen is never left empty in between, where it was for about half a
+second as the app went and a second and a half as the setup's window went.
+Each window waits for the next before it goes, told through named events in
+the person's session (`Model\SetupSignals.cs`, spelt again in the setup's
+`[Code]`): the setup shows its window as it starts, before it closes the app,
+and says so, and the app quits then (or after twenty seconds without word);
+once the files are in place the setup listens for the app it opens, which
+says so once its window has drawn, and only then does the setup's window,
+kept above every other, fade (or after thirty seconds). An app from 0.1.4 or
+before quits the moment it has started the setup, and the setup's window
+comes as early as it can for it all the same. The app opened while the files
+are being replaced does not open a window over half its files: it brings the
+setup's window to the front and ends, and the program file is put in place
+last, so that nothing starts before the rest is there. Opened from its
+shortcut in the seconds the program file is not there, it is Windows that
+answers, with its own "Problem with Shortcut".
+
+Tested in the VM against the kit's deployment, a debug 0.1.4.90 updating
+itself to 0.1.4.91 from the shelf, every tenth of a second noting the app's
+and the setup's windows and whether the old app's window thread answered:
+nothing on the screen at any moment in twelve updates, one of them with
+every processor kept busy; the old app's thread answered throughout the
+seven to eleven seconds the setup took to start; the setup's window up 0.8
+to 2 seconds after it was started, and the old app gone 0.4 seconds after
+that; the new app's window opening beneath the setup's, and the setup's
+fading once the new one's first frame was on the screen, 2.8 to 4.6 seconds
+after the setup had opened it (the VM's own screen, captured from the host,
+says the same). Started as 0.1.4 starts it, quitting at once, the setup's
+window came 0.5 seconds after 0.1.4's went.
+
 Tested end to end with the packages above against a local deployment of
 the newer server (which has `/api/apps/latest/windows`) whose shelf held
 0.1.0.2: the installed 0.1.0.1 offered it in the lobby, downloaded the 220 MB
