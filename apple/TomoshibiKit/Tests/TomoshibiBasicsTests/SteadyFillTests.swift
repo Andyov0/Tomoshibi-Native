@@ -2,8 +2,8 @@
 import XCTest
 
 /*
- * The update bars move at one speed (SteadyFill; the owner, 2026-10-22: "尽量
- * 做匀速"): a whole bar in 1.2 s however fast the bytes come, never ahead of
+ * The update bars move at one speed (SteadyFill; the owner, 2026-10-22: "make
+ * it move evenly"): a whole bar in 1.2 s however fast the bytes come, never ahead of
  * them, straight back where a download begins again, and the step after it
  * waiting until it is drawn full. Moved here by hand (`drives` false), a
  * hundredth of a second at a time.

@@ -17,7 +17,7 @@
 //! ## What this must never be
 //!
 //! It never applies anything. The owner banned automatic downgrade on
-//! 2026-09-07 ("不允许自动降低码率") after an automatic follower halved a
+//! 2026-09-07 ("the bitrate is never to be lowered automatically") after an automatic follower halved a
 //! share's ceiling whenever it judged the share to be struggling, took a still
 //! screen for a struggling one, and remembered one bad afternoon as the ceiling
 //! for every later share. Nothing here holds a sender, a track or a room, and

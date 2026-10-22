@@ -30,7 +30,7 @@ class CallWindowTest {
     /*
      * The window's size follows its shape and nothing else an app can say, so
      * a call with no picture asks for the square one, the smallest: it was
-     * sixteen by nine around a single initial ("画中画大小太大了", 2026-10-19).
+     * sixteen by nine around a single initial ("the picture in picture is too big", 2026-10-19).
      * What has a picture keeps the picture's shape, the video watched together
      * and a shared screen their wide one.
      */

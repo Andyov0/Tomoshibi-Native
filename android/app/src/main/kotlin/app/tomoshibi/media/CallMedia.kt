@@ -122,7 +122,7 @@ class CallMedia(context: Context, val muted: Boolean = false) {
      * no picture at all, a call of voices or a song playing, the window is
      * square, the least long Android makes it (CallWindow `windowShape` says
      * how it is sized): it was drawn sixteen by nine around a single initial,
-     * the owner's "画中画大小太大了" (2026-10-19).
+     * the owner's "the picture in picture is too big" (2026-10-19).
      */
     private suspend fun window(app: AppModel, call: CallModel) {
         snapshotFlow {

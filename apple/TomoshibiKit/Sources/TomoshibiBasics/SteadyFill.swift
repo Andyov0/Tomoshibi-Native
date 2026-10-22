@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 /// A bar's fill that moves at one speed. The owner, 2026-10-22: the update
-/// bars "做得不够丝滑 虽然下的很快 但是尽量做匀速" — a build arrives in a few
+/// bars were not smooth: "it downloads fast, but make it move evenly" — a build arrives in a few
 /// reports, and a bar animated to each report jumped from one to the next.
 /// What is shown here follows what is reported at `perSecond` at most, so a
 /// bar takes at least 1.2 s from empty to full however fast the bytes came,

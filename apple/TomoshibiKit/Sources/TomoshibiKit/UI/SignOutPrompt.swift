@@ -28,8 +28,8 @@ struct SignOutPrompt: ViewModifier {
                         // Fixed order while both leave: without it SwiftUI drew
                         // the departing glass over the departing card, so on
                         // Cancel the card went dark in the first frame and came
-                        // back as the glass faded (owner, 2026-10-22: "点取消之后
-                        // 动画会卡一下"; a recording read frame by frame showed the
+                        // back as the glass faded (owner, 2026-10-22: "the animation hitches
+                        // after Cancel"; a recording read frame by frame showed the
                         // red button fall from 245 to 68 at once, then rise).
                         .zIndex(0)
                     card
