@@ -495,6 +495,10 @@ Only a debug build given a deployment, or a release build, asks.
 - The notice is at the top of the lobby, signed in or not: at the head of the
   section beside the sidebar on a wide window, under the large title on a
   narrow one, at the head of the sign-in screen's column; never in a call.
+  On a wide window it takes over the band each section keeps clear for the
+  title bar, so that the section's own spacing is what lies between them (the
+  greeting 40 below the card, the server menu 12), not the title bar's height
+  again on top of it.
   Its close puts that id away for good. Wherever the update's card is shown in
   the same column it is below the notice, each opening its own space, so the
   two never lie across each other.

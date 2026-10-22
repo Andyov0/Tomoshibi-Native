@@ -324,9 +324,26 @@ internal sealed class LobbyScreen : Screen
         var main = new Grid();
         main.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         main.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        main.Children.Add(new LobbyNoticeCard(App.Remote, new Thickness(36, Shared.TitleBar + 12, 24, 0)));
+        // Every section keeps the title bar's height clear at its top. Under
+        // the notice that band is below the notice, not the title bar, and
+        // the greeting stood 72 below the card where the narrow lobby and the
+        // Apple apps put what follows the notice at the section's own
+        // spacing: 40 here, 12 for the server menu. So the notice takes the
+        // band over: drawn the title bar's height lower than the room it
+        // opens (the margins), its last points lie across the section's top
+        // band, which holds nothing, and what is under it starts at its own
+        // spacing below the card. The room still opens and closes with the
+        // notice, so the section still moves down and up with it as it comes
+        // and goes. With no notice nothing of this takes any room.
+        var notice = new LobbyNoticeCard(App.Remote, new Thickness(36, 12, 24, 0))
+        {
+            Margin = new Thickness(0, Shared.TitleBar, 0, -Shared.TitleBar),
+        };
         Grid.SetRow(_section, 1);
         main.Children.Add(_section);
+        // Over the section, which lies under the card's foot: its close and
+        // its words take the presses there.
+        main.Children.Add(notice);
         Grid.SetColumn(main, 1);
         row.Children.Add(main);
         Children.Add(row);
