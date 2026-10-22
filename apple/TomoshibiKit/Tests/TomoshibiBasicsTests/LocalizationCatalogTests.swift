@@ -121,7 +121,10 @@ final class LocalizationCatalogTests: XCTestCase {
      */
     func testEveryPhraseTheSourceSaysIsInTheCatalog() throws {
         let vocabulary = Set(try catalog().keys)
-        let roots = ["TomoshibiKit/Sources", "App"].map { Self.apple.appendingPathComponent($0) }
+        // The extensions too: the Messages extension's words are as much the
+        // interface as the app's, and a phrase missing from the catalog there
+        // would be English on every card.
+        let roots = ["TomoshibiKit/Sources", "App", "Messages", "Broadcast"].map { Self.apple.appendingPathComponent($0) }
         let call = try NSRegularExpression(pattern: #"(?<![A-Za-z0-9_])t\(\s*"((?:[^"\\\n]|\\.)*)""#)
 
         var read = 0

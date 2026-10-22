@@ -98,6 +98,7 @@ targets:
     dependencies:
       - package: TomoshibiKit
       - target: Tomoshibi-Broadcast
+      - target: Tomoshibi-Messages
     info:
       path: build/Info-iOS.plist
       properties:
@@ -201,6 +202,52 @@ targets:
         PRODUCT_NAME: TomoshibiBroadcast
         TARGETED_DEVICE_FAMILY: "1,2"
         SKIP_INSTALL: YES
+  # Invitations from Messages (Messages/MessagesViewController.swift): a
+  # meeting started for now or one already arranged, sent as a card whose link
+  # is the web's own, and a card pressed open into the meeting. TomoshibiBasics
+  # alone, as the broadcast extension has it, and the app's glass compiled in
+  # from its file rather than linked with TomoshibiKit, which carries the core.
+  # It reads the account the app leaves in the app group (Handover), and the
+  # deployment's host from the build, as TomoshibiHost in its Info.plist.
+  Tomoshibi-Messages:
+    type: app-extension.messages
+    platform: iOS
+    sources:
+      - Messages
+      - TomoshibiKit/Sources/TomoshibiKit/UI/Glass.swift
+    dependencies:
+      - package: TomoshibiKit
+        product: TomoshibiBasics
+      - sdk: Messages.framework
+    info:
+      path: build/Info-Messages.plist
+      properties:
+        CFBundleDisplayName: Tomoshibi
+        # From the build settings, so the version is said in one place: an
+        # extension whose version differs from its app's is refused upload.
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDevelopmentRegion: en
+        CFBundleLocalizations: [en, zh-Hans, zh-Hant, ja]
+        TomoshibiHost: $(TOMOSHIBI_HOST)
+        # A debug build is pointed at a deployment on loopback, over http, as
+        # the app is.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.message-payload-provider
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).MessagesViewController
+    entitlements:
+      path: build/Tomoshibi-Messages.entitlements
+      properties:
+        com.apple.security.application-groups: [group.app.tomoshibi]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.tomoshibi.ios.messages
+        PRODUCT_NAME: TomoshibiMessages
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: iMessage App Icon
   TomoshibiUITests:
     type: bundle.ui-testing
     platform: iOS

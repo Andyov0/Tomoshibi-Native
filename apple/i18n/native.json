@@ -744,6 +744,24 @@
       "zh-Hans": "之后需要重新输入名称和口令才能登录。",
       "zh-Hant": "之後需要重新輸入名稱和密語才能登入。",
       "ja": "もう一度使うときは、名前と合言葉でサインインし直します。"
+    },
+    "Invite to a meeting": {
+      "en": "Invite to a meeting",
+      "zh-Hans": "邀请加入会议",
+      "zh-Hant": "邀請加入會議",
+      "ja": "会議に招待"
+    },
+    "Sign in to Tomoshibi to invite people from here.": {
+      "en": "Sign in to Tomoshibi to invite people from here.",
+      "zh-Hans": "在 Tomoshibi 里登录后，就能在这里邀请别人。",
+      "zh-Hant": "在 Tomoshibi 裡登入後，就能在這裡邀請別人。",
+      "ja": "Tomoshibi にサインインすると、ここから招待できます。"
+    },
+    "Sends a link for right now. It starts when you join.": {
+      "en": "Sends a link for right now. It starts when you join.",
+      "zh-Hans": "发送一个现在就能用的链接，你加入时会议开始。",
+      "zh-Hant": "傳送一個現在就能用的連結，你加入時會議開始。",
+      "ja": "今すぐ使えるリンクを送ります。あなたが参加すると会議が始まります。"
     }
   }
 }

@@ -8971,6 +8971,36 @@
         }
       }
     },
+    "Invite to a meeting" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Invite to a meeting"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会議に招待"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "邀请加入会议"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "邀請加入會議"
+          }
+        }
+      }
+    },
     "Invited or signed in" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -17251,6 +17281,36 @@
         }
       }
     },
+    "Sends a link for right now. It starts when you join." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sends a link for right now. It starts when you join."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今すぐ使えるリンクを送ります。あなたが参加すると会議が始まります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发送一个现在就能用的链接，你加入时会议开始。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "傳送一個現在就能用的連結，你加入時會議開始。"
+          }
+        }
+      }
+    },
     "Sent to {email}. Install TestFlight first, then look in that inbox for the invitation." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -18207,6 +18267,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "登入"
+          }
+        }
+      }
+    },
+    "Sign in to Tomoshibi to invite people from here." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sign in to Tomoshibi to invite people from here."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tomoshibi にサインインすると、ここから招待できます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Tomoshibi 里登录后，就能在这里邀请别人。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Tomoshibi 裡登入後，就能在這裡邀請別人。"
           }
         }
       }

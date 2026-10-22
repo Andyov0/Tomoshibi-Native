@@ -77,7 +77,7 @@ Xcode's String Catalog editor save it; change the web's dictionaries or
 
 `Tests/TomoshibiKitTests/LocalizationCatalogTests.swift` holds the catalog and
 the tables the build makes of it to the same rules, and reads the Swift sources
-under `TomoshibiKit/Sources` and `App` for calls to `t()` whose phrase is not in
-the catalog. On the web the compiler does that last part; in Swift `t()` takes a
+under `TomoshibiKit/Sources`, `App` and the extensions' `Messages` and
+`Broadcast` for calls to `t()` whose phrase is not in the catalog. On the web the compiler does that last part; in Swift `t()` takes a
 `String`, so a phrase that is misspelt or missing from `native.json` fails that
 test instead of showing English to everybody.
