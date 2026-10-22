@@ -1,8 +1,11 @@
 # Working on Tomoshibi Native
 
 This repository holds native clients for a Tomoshibi deployment. The server and
-its web client live elsewhere (upstream: https://github.com/5t-RawBeRry/Tomoshibi);
-the web client is the reference for every rule here.
+its web client live elsewhere: the deployment runs a fork of Tomoshibi
+(https://github.com/Andyov0/Tomoshibi; upstream
+https://github.com/5t-RawBeRry/Tomoshibi), with server features the apps rely
+on that upstream does not have and the public fork does not all carry. The
+deployment's web client is the reference for every rule here.
 
 ## The rule everything follows from
 

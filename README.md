@@ -1,10 +1,20 @@
 # Tomoshibi Native
 
-Native clients for [Tomoshibi](https://github.com/5t-RawBeRry/Tomoshibi), the
-video meeting server in one binary. The web client that server ships is the
-reference: a native participant has to be indistinguishable from a browser to
-everybody else in the room, and every rule about what is published, what it is
-named and what goes over the data channel comes from there.
+Native clients for the Tomoshibi deployment at meet.example.com, which runs
+[a fork of Tomoshibi](https://github.com/Andyov0/Tomoshibi), the video meeting
+server in one binary (upstream:
+[5t-RawBeRry/Tomoshibi](https://github.com/5t-RawBeRry/Tomoshibi)).
+
+They are not clients for upstream Tomoshibi, nor for a server built from the
+public fork alone. They rely on what the deployment's server adds — relays and
+picking one, invitations and scheduled meetings, accounts' pictures, the apps'
+own updates, and more — not all of which is published, and the address of the
+deployment is written into them.
+
+The web client that server ships is the reference: a native participant has
+to be indistinguishable from a browser to everybody else in the room, and every
+rule about what is published, what it is named and what goes over the data
+channel comes from there.
 
 What a native client is for is everything a browser cannot do: share the whole
 screen of an iPhone, stay in a call with the screen locked, share any window of
@@ -16,7 +26,10 @@ straight from an invitation.
 - `core/` — the media and protocol core, in Rust, on LiveKit's Rust SDK. One
   core for every platform, so the protocol is written once. The apps reach it
   through generated bindings.
-- `apple/` — macOS and iOS, in Swift (to come).
+- `apple/` — macOS, iOS and iPadOS, in SwiftUI.
+- `android/` — Android, in Kotlin with Jetpack Compose, phones and foldables.
+- `windows/` — Windows 10 and 11, in WinUI 3 and C#; `windows/README.md` says
+  how it is built and tested.
 - `interop/` — scripts that put a browser in a room with the core and report
   what it actually received. The unit tests cannot hear a mono track that was
   supposed to be stereo; these can.
