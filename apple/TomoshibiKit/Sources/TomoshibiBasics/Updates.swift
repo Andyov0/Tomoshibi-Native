@@ -53,6 +53,12 @@ public final class Updates {
     /// How far the install has got, from 0 to 1, while the step is
     /// `installing`: the window over the lobby shows it (UpdateInstalling).
     public private(set) var installed: Double = 0
+    /// The download's bar and the install's, each moving at one speed toward
+    /// what has been reported (SteadyFill): what the banner, the settings and
+    /// the window over the lobby draw. The step after each waits for its bar
+    /// to be drawn full.
+    public let downloadBar: SteadyFill
+    public let installBar: SteadyFill
     /// The answer to the last check asked for in the settings; nil where none
     /// was asked or it found a build.
     public private(set) var said: Said?
@@ -86,10 +92,16 @@ public final class Updates {
     /// A build that arrived as the person left the lobby, kept so that
     /// "Update" back there installs it rather than downloading it again.
     @ObservationIgnored private var ready: (version: String, file: URL)?
+    /// A build that has arrived while its bar is still being drawn full, so
+    /// that Cancel in that second keeps it as `ready` rather than installing.
+    @ObservationIgnored private var filling: (version: String, file: URL)?
 
     public init(source: UpdateSource, installer: UpdateInstaller, running: String,
                 every: Duration = Updates.every, retry: Duration = Updates.retry,
+                bars: (download: SteadyFill, install: SteadyFill)? = nil,
                 sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }) {
+        self.downloadBar = bars?.download ?? SteadyFill()
+        self.installBar = bars?.install ?? SteadyFill()
         self.source = source
         self.installer = installer
         self.running = running
@@ -223,8 +235,17 @@ public final class Updates {
     /// "Cancel", on a download. What arrived is kept, so "Update" again
     /// carries on from there.
     public func cancel() {
-        guard case .downloading = step else { return }
+        guard case let .downloading(offer, _, _) = step else { return }
         holding = false
+        if let filling, filling.version == offer.version {
+            // All of it had arrived: kept for Update, and not installed.
+            ready = filling
+            self.filling = nil
+            transfer = nil
+            downloadBar.reset()
+            step = .offered(offer)
+            return
+        }
         transfer?.cancel()
     }
 
@@ -278,6 +299,8 @@ public final class Updates {
         let transfer = source.download(offer)
         self.transfer = transfer
         holding = false
+        // A download carried on from where it was held keeps its bar.
+        if case let .held(kept, _, _) = step, kept.version == offer.version {} else { downloadBar.reset() }
         step = .downloading(offer, received: 0, total: offer.size)
         transferTask = Task { [weak self] in
             await previous?.value
@@ -288,6 +311,7 @@ public final class Updates {
                         guard let self, self.transfer === transfer,
                               case let .downloading(now, _, _) = self.step, now.version == offer.version else { return }
                         self.step = .downloading(offer, received: received, total: total)
+                        self.downloadBar.follow(total > 0 ? Double(received) / Double(total) : 0)
                     }
                 }
             } catch let fault as UpdateFailure {
@@ -296,6 +320,15 @@ public final class Updates {
                 failure = .other
             }
             guard let self, self.transfer === transfer else { return }
+            if failure == nil {
+                // Installing waits for the bar to be drawn full, a second at
+                // most, rather than cutting it off where it had got to.
+                self.downloadBar.follow(1)
+                self.filling = (offer.version, transfer.file)
+                await self.downloadBar.filled()
+                self.filling = nil
+                guard self.transfer === transfer else { return }
+            }
             self.transfer = nil
             self.finished(offer, transfer.file, failure)
         }
@@ -335,13 +368,16 @@ public final class Updates {
         }
         ready = nil
         installed = 0
+        installBar.reset()
         step = .installing(offer)
         Task {
             let report: @MainActor (Double) -> Void = { [weak self] fraction in
                 guard let self, case .installing = self.step else { return }
                 self.installed = max(self.installed, min(1, fraction))
+                self.installBar.follow(self.installed)
             }
-            switch await installer.install(file, version: offer.version, progress: report) {
+            let shown: @MainActor () async -> Void = { [weak self] in await self?.installBar.filled() }
+            switch await installer.install(file, version: offer.version, progress: report, shown: shown) {
             case .done:
                 // The new copy is opening and this one is quitting.
                 step = .none
@@ -443,7 +479,10 @@ public protocol UpdateInstaller: AnyObject {
     func openElsewhere()
     /// Checks the build and puts it in place, then opens it and quits; returns
     /// only where it did not. Says how far it has got as it goes, from 0 to 1.
-    func install(_ file: URL, version: String, progress: @escaping @MainActor (Double) -> Void) async -> Installation
+    /// `shown` returns once the bar following that has been drawn full, which
+    /// the installer waits for before the window goes.
+    func install(_ file: URL, version: String, progress: @escaping @MainActor (Double) -> Void,
+                 shown: @escaping @MainActor () async -> Void) async -> Installation
     /// Shows this copy of the app in Finder.
     func reveal()
     /// Gives up the install under way before anything is replaced, which

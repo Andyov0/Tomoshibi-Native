@@ -109,10 +109,17 @@ final class UpdatesTests: XCTestCase {
         var elsewhere = false
         var openedElsewhere = 0
 
-        func install(_ file: URL, version: String, progress: @escaping @MainActor (Double) -> Void) async -> Installation {
+        func install(_ file: URL, version: String, progress: @escaping @MainActor (Double) -> Void,
+                     shown: @escaping @MainActor () async -> Void) async -> Installation {
             installs.append(file)
             report = progress
             for fraction in reports { progress(fraction) }
+            // As MacInstaller: the bar full, and waited for, only on the way
+            // to opening the new copy.
+            if case .done = answer, !holds {
+                progress(1)
+                await shown()
+            }
             guard holds else { return answer }
             return await withCheckedContinuation { held = $0 }
         }
@@ -138,9 +145,12 @@ final class UpdatesTests: XCTestCase {
         UpdateOffer(version: version, size: 30_000_000, notes: { $0 == "en" ? "Fixed." : nil })
     }
 
-    func model() -> Updates {
+    func model(bars: (download: SteadyFill, install: SteadyFill)? = nil) -> Updates {
         let clock = clock
-        return Updates(source: source, installer: installer, running: "0.1.0.7", sleep: { try await clock.sleep($0) })
+        // The bars showing each report as it comes unless a test gives its
+        // own, so that what each step waits for is not a second of real time.
+        let bars = bars ?? (SteadyFill(perSecond: .infinity), SteadyFill(perSecond: .infinity))
+        return Updates(source: source, installer: installer, running: "0.1.0.7", bars: bars, sleep: { try await clock.sleep($0) })
     }
 
     /// Lets whatever the model started run as far as it can.
@@ -276,6 +286,56 @@ final class UpdatesTests: XCTestCase {
         XCTAssertEqual(updates.step, .offered(offer("0.1.0.8")))
         XCTAssertTrue(installer.installs.isEmpty)
         updates.stop()
+    }
+
+    /// The install waits for the download's bar to be drawn full, and a
+    /// Cancel in that second keeps the build for Update instead of
+    /// installing it (SteadyFill).
+    func testTheInstallWaitsForTheBarAndCancelInThatSecondKeepsTheBuild() async {
+        source.answer = { self.offer("0.1.0.8") }
+        let download = SteadyFill(drives: false)
+        let updates = model(bars: (download, SteadyFill(perSecond: .infinity)))
+        updates.lobby(true)
+        updates.start()
+        await settle()
+        updates.accept()
+        await settle()
+        source.transfers[0].progress?(3_000_000, 30_000_000)
+        await settle()
+        source.transfers[0].finish()
+        await settle()
+        XCTAssertEqual(download.target, 1)
+        XCTAssertTrue(installer.installs.isEmpty, "installing with the bar at \(download.shown)")
+        guard case .downloading = updates.step else { return XCTFail("\(updates.step)") }
+
+        for _ in 0..<130 { download.advance(by: .milliseconds(10)) }
+        await settle()
+        XCTAssertEqual(installer.installs, [source.transfers[0].file], "installed once the bar was full")
+
+        // Again, and Cancel while the bar is still going.
+        updates.stop()
+        installer.installs = []
+        let again = SteadyFill(drives: false)
+        let second = model(bars: (again, SteadyFill(perSecond: .infinity)))
+        second.lobby(true)
+        second.start()
+        await settle()
+        second.accept()
+        await settle()
+        let transfer = source.transfers.last!
+        transfer.finish()
+        await settle()
+        second.cancel()
+        await settle()
+        XCTAssertEqual(second.step, .offered(offer("0.1.0.8")))
+        for _ in 0..<130 { again.advance(by: .milliseconds(10)) }
+        await settle()
+        XCTAssertTrue(installer.installs.isEmpty, "installed after Cancel")
+        second.accept()
+        await settle()
+        XCTAssertEqual(installer.installs, [transfer.file], "Update after Cancel installs what had arrived, downloading nothing")
+        XCTAssertEqual(source.transfers.count, 2)
+        second.stop()
     }
 
     func testACopyThatCannotBeReplacedSaysSoBeforeDownloadingAnything() async {

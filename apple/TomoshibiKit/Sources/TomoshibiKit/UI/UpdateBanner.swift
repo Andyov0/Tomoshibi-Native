@@ -87,7 +87,7 @@ struct UpdateBanner: View {
             EmptyView()
         case let .offered(offer, problem):
             Said(badge: problem == nil ? "sparkles" : "exclamationmark.circle.fill", warning: problem != nil,
-                 title: t("Tomoshibi {version} is available", ["version": offer.version]),
+                 title: t("Tomoshibi {version} is available", ["version": offer.label]),
                  lines: [offer.notes(Localization.shared.language.rawValue)].compactMap { $0 },
                  problem: problem, narrow: inSidebar) {
                 PillButton(title: t("Later"), height: 30) { updates.putAway() }
@@ -97,9 +97,9 @@ struct UpdateBanner: View {
             }
         case let .downloading(offer, received, total), let .held(offer, received, total):
             Said(badge: "arrow.clockwise",
-                 title: t("Downloading Tomoshibi {version}", ["version": offer.version]),
+                 title: t("Downloading Tomoshibi {version}", ["version": offer.label]),
                  lines: [t("{received} of {total}", ["received": megabytes(received), "total": megabytes(total)])],
-                 progress: total > 0 ? min(1, Double(received) / Double(total)) : 0, narrow: inSidebar) {
+                 progress: updates.downloadBar.shown, narrow: inSidebar) {
                 PillButton(title: t("Cancel"), height: 30) { updates.cancel() }
                     .accessibilityIdentifier("update.cancel")
             }
@@ -114,7 +114,7 @@ struct UpdateBanner: View {
             }
         case let .installing(offer):
             Said(badge: nil,
-                 title: t("Installing Tomoshibi {version}", ["version": offer.version]),
+                 title: t("Installing Tomoshibi {version}", ["version": offer.label]),
                  lines: [t("Tomoshibi will open again when it is done.")]) {
                 EmptyView()
             }
@@ -176,14 +176,14 @@ struct UpdateInstalling: View {
         HStack(alignment: .center, spacing: 16) {
             Mark(size: 56)
             VStack(alignment: .leading, spacing: 6) {
-                Text(t("Installing Tomoshibi {version}", ["version": offer.version]))
+                Text(t("Installing Tomoshibi {version}", ["version": offer.label]))
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(Theme.foreground)
                 Text(t("Tomoshibi will open again when it is done."))
                     .font(.system(size: 12.5))
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                ProgressTrack(fraction: updates.installed).padding(.top, 6)
+                ProgressTrack(fraction: updates.installBar.shown).padding(.top, 6)
             }
             .frame(width: 280, alignment: .leading)
         }
@@ -242,8 +242,9 @@ private struct Said<Buttons: View>: View {
     }
 }
 
-/// How much has arrived, as a filling capsule that moves smoothly between
-/// reports.
+/// How much has arrived, as a filling capsule. The fraction given moves at one
+/// speed already (Updates' bars, SteadyFill) and is drawn as it is: an
+/// animation to each value as well would ease every few milliseconds' step.
 private struct ProgressTrack: View {
     let fraction: Double
 
@@ -255,7 +256,6 @@ private struct ProgressTrack: View {
             }
         }
         .frame(height: 5)
-        .animation(Theme.settle, value: fraction)
         .accessibilityElement()
         .accessibilityValue(Text("\(Int(fraction * 100))%"))
     }

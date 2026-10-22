@@ -2146,9 +2146,10 @@ private struct AboutSettings: View {
         }
     }
 
-    /// The version alone, with no build number after it (ClientDescription).
+    /// The version as people are told it, a later build in brackets: 0.1.4,
+    /// 0.1.4 (2) (ClientDescription, versionLabel).
     private var version: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+        versionLabel(version: ClientDescription.version)
     }
 
 }
@@ -2200,11 +2201,11 @@ private struct UpdateRow: View {
         case let .downloading(_, received, total), let .held(_, received, total):
             return t("{received} of {total}", ["received": megabytes(received), "total": megabytes(total)])
         case let .installing(offer):
-            return t("Installing Tomoshibi {version}", ["version": offer.version])
+            return t("Installing Tomoshibi {version}", ["version": offer.label])
         case let .misplaced(_, place):
             return UpdateBanner.explain(place)
         case let .offered(offer, problem):
-            return problem ?? t("Version {version} is available.", ["version": offer.version])
+            return problem ?? t("Version {version} is available.", ["version": offer.label])
         case .none:
             switch updates.said {
             case .checking: return t("Checking for updates…")

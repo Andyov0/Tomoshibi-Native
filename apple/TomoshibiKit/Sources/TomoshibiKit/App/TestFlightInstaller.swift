@@ -24,7 +24,8 @@ final class TestFlightInstaller: UpdateInstaller {
     }
 
     /// Never asked: Updates opens TestFlight instead of downloading.
-    func install(_ file: URL, version: String, progress: @escaping @MainActor (Double) -> Void) async -> Installation {
+    func install(_ file: URL, version: String, progress: @escaping @MainActor (Double) -> Void,
+                 shown: @escaping @MainActor () async -> Void) async -> Installation {
         .stopped
     }
 

@@ -109,3 +109,9 @@ private final class Unreachable: UpdateTransfer, @unchecked Sendable {
     func cancel() {}
 }
 #endif
+
+extension UpdateOffer {
+    /// The version as people are told it: 0.1.4, or 0.1.4 (2) for a later
+    /// build (the core's version_label).
+    var label: String { versionLabel(version: version) }
+}

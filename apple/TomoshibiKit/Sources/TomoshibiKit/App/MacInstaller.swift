@@ -3,6 +3,7 @@ import AppKit
 import Foundation
 import os
 import TomoshibiBasics
+import TomoshibiCore
 
 private let log = Logger(subsystem: "app.tomoshibi", category: "update")
 
@@ -45,7 +46,8 @@ final class MacInstaller: UpdateInstaller {
     /// Says how far it has got as it goes (UpdateInstalling's bar): the image
     /// opened, the app copied out of it by what has arrived of its size, the
     /// copy checked, and put in place.
-    func install(_ file: URL, version: String, progress: @escaping @MainActor (Double) -> Void) async -> Installation {
+    func install(_ file: URL, version: String, progress: @escaping @MainActor (Double) -> Void,
+                 shown: @escaping @MainActor () async -> Void) async -> Installation {
         stopping = false
         let app = app
         let identifier = Bundle.main.bundleIdentifier ?? "app.tomoshibi.mac"
@@ -87,8 +89,11 @@ final class MacInstaller: UpdateInstaller {
         log.info("update to \(version, privacy: .public) is in place; opening it")
         progress(1)
         reopen(app)
-        // A moment for the bar to be seen full before the window goes.
-        try? await Task.sleep(for: .milliseconds(350))
+        // The bar moves at one speed (SteadyFill), so a fast copy leaves it
+        // behind; the window goes once it is drawn full, and a moment after.
+        // The new copy opens only when this one has ended (reopen).
+        await shown()
+        try? await Task.sleep(for: .milliseconds(200))
         NSApp.terminate(nil)
         return .done
     }
@@ -267,12 +272,24 @@ final class MacInstaller: UpdateInstaller {
         guard let info = NSDictionary(contentsOf: staged.appendingPathComponent("Contents/Info.plist")) as? [String: Any] else {
             return .notTheBuild("no Info.plist")
         }
-        // The version alone, as ClientDescription writes it and apps.json names it.
-        let said = info["CFBundleShortVersionString"] as? String ?? ""
+        // The version and the build, joined as ClientDescription says them
+        // (the core's version_with_build: 0.1.4, then 0.1.4.2), against the
+        // version offered read the same way, where 0.1.4.1, as the deployment
+        // writes a first build for the Macs from before 0.1.2, is 0.1.4.
+        let said = versionWithBuild(version: info["CFBundleShortVersionString"] as? String ?? "",
+                                    build: info["CFBundleVersion"] as? String ?? "")
         guard info["CFBundleIdentifier"] as? String == identifier else { return .notTheBuild("another app") }
-        guard said == version else { return .notTheBuild("version \(said), not \(version)") }
+        guard said == Self.firstBuildAlone(version) else { return .notTheBuild("version \(said), not \(version)") }
         if let refusal = UpdateTrust.refusal(of: staged, identifier: identifier, signing: signing) { return .untrusted(refusal) }
         return nil
+    }
+
+    /// A version offered as the apps from 0.1.4 call themselves: four parts
+    /// with a first build as the fourth (0.1.4.1) are the three alone.
+    nonisolated static func firstBuildAlone(_ version: String) -> String {
+        let parts = version.split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 4 else { return version }
+        return versionWithBuild(version: parts.prefix(3).joined(separator: "."), build: String(parts[3]))
     }
 
     private nonisolated static func detach(_ mounted: String) {

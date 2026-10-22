@@ -12,13 +12,15 @@ import UIKit
 /// from an iPhone.
 @MainActor
 enum ClientDescription {
-    /// The version as the download page and the update check write it: the
-    /// version alone, 0.1.3, as people are told it (owner, 2026-10-22: no
-    /// build number after it, in brackets or as a fourth part). The build
-    /// number still rises with every build, for TestFlight, and is said
-    /// nowhere.
+    /// The version as the update check and the deployment write it: the
+    /// version alone for its first build and the build as a fourth part for
+    /// a later one, 0.1.4 then 0.1.4.2 (the core's version_with_build; the
+    /// owner, 2026-10-22: a small fix keeps the version and takes the next
+    /// build). People are told it as "0.1.4 (2)" (versionLabel).
     static var version: String {
-        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? ""
+        let info = Bundle.main.infoDictionary
+        return versionWithBuild(version: info?["CFBundleShortVersionString"] as? String ?? "",
+                                build: info?["CFBundleVersion"] as? String ?? "")
     }
 
     static func tell() {
