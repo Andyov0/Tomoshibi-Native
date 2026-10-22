@@ -675,10 +675,10 @@ internal static class About
 {
     public static StackPanel Page(AppModel app)
     {
-        // The package's version where the app is installed from one, which is
-        // what an update is compared with: 0.1.0.7 written 0.1.0 (7), as the
-        // other apps write theirs.
-        var appVersion = ClientDescription.Version;
+        // As people are told it: 0.1.4 for a version's first build and
+        // 0.1.4 (2) for a later one (the core's version_label), as the other
+        // apps write theirs; the update check is told 0.1.4.2.
+        var appVersion = uniffi.tomoshibi_protocol.TomoshibiProtocolMethods.VersionLabel(ClientDescription.Version);
         var mark = new Mark(76);
         var header = K.Row(18, mark, K.Column(4, K.Text("Tomoshibi", 26, K.Bold), K.Text(appVersion, 13, mono: true, ink: Ink.Muted)));
         foreach (var child in header.Children) ((FrameworkElement)child).VerticalAlignment = VerticalAlignment.Center;
@@ -721,10 +721,15 @@ internal static class About
     /// (About.kt <c>UpdateRow</c>, Settings.swift): the version on offer with
     /// "Update", a download's progress with "Cancel", and the answer to a
     /// check, which says so even when there is nothing newer. What it says
-    /// changes with a fade.
+    /// changes with a fade. A download's megabytes are the lobby's bar's
+    /// (Updates.Bar), counted up at its pace and never past what has arrived,
+    /// so that the two never disagree; it moves that bar too while it is
+    /// shown, the lobby's banner being under the settings.
     /// </summary>
     private static UIElement UpdateRow(Updates updates)
     {
+        static string Label(Offer offer) => uniffi.tomoshibi_protocol.TomoshibiProtocolMethods.VersionLabel(offer.Version);
+        string Progress(long total) => T("{received} of {total}", ("received", UpdateBanner.Megabytes((long)(updates.Bar.Shown * total))), ("total", UpdateBanner.Megabytes(total)));
         var line = K.Text("", 11.5, ink: Ink.Muted);
         var lineHolder = new Unfolding();
         var words = K.Column(2, K.Text(T("Updates"), 13.5), lineHolder);
@@ -744,10 +749,10 @@ internal static class About
             var said = updates.Answer;
             var text = step switch
             {
-                Updates.Step.Downloading d => T("{received} of {total}", ("received", UpdateBanner.Megabytes(d.Received)), ("total", UpdateBanner.Megabytes(d.Total))),
-                Updates.Step.Held h => T("{received} of {total}", ("received", UpdateBanner.Megabytes(h.Received)), ("total", UpdateBanner.Megabytes(h.Total))),
-                Updates.Step.Installing i => T("Installing Tomoshibi {version}", ("version", i.Offer.Version)),
-                Updates.Step.Offered o => o.Problem ?? T("Version {version} is available.", ("version", o.Offer.Version)),
+                Updates.Step.Downloading d => Progress(d.Total),
+                Updates.Step.Held h => Progress(h.Total),
+                Updates.Step.Installing i => T("Installing Tomoshibi {version}", ("version", Label(i.Offer))),
+                Updates.Step.Offered o => o.Problem ?? T("Version {version} is available.", ("version", Label(o.Offer))),
                 _ => said switch
                 {
                     Updates.Said.Checking => T("Checking for updates…"),
@@ -803,13 +808,19 @@ internal static class About
         }
 
         Refresh();
+        var paced = new Paced(column, updates.Bar, _ => Refresh());
+        void Changed()
+        {
+            Refresh();
+            paced.Wake();
+        }
         column.Loaded += (_, _) =>
         {
-            updates.Changed -= Refresh;
-            updates.Changed += Refresh;
-            Refresh();
+            updates.Changed -= Changed;
+            updates.Changed += Changed;
+            Changed();
         };
-        column.Unloaded += (_, _) => updates.Changed -= Refresh;
+        column.Unloaded += (_, _) => updates.Changed -= Changed;
         return column;
     }
 }

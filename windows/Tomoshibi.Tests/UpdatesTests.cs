@@ -17,6 +17,8 @@ namespace Tomoshibi.Tests;
 /// Everything is driven by hand: the fakes' answers and the clock complete
 /// their tasks on this thread, and the model's continuations run inline, so
 /// six hours pass in an instant and every step is where the test left it.
+/// The download's bar is moved by frames the test gives it (Draw), as the
+/// banner's CompositionTarget.Rendering does.
 /// </summary>
 public class UpdatesTests
 {
@@ -128,6 +130,18 @@ public class UpdatesTests
     private readonly FakeSource _source = new();
     private readonly FakeInstaller _installer = new();
     private readonly FakeClock _clock = new();
+    private static readonly TimeSpan Frame = TimeSpan.FromTicks(TimeSpan.TicksPerSecond / 60);
+    private TimeSpan _frame;
+
+    /// <summary>Frames of the bar a sixtieth of a second apart, until it is drawn full or <paramref name="most"/> have been drawn.</summary>
+    private void Draw(Updates updates, int most = 1000)
+    {
+        for (var i = 0; i < most && !updates.Bar.Full; i++)
+        {
+            _frame += Frame;
+            updates.Bar.Advance(_frame);
+        }
+    }
 
     private static Offer MakeOffer(string version) => new(version, 56_093_610, language => language == "en" ? "Fixed." : null);
 
@@ -144,13 +158,14 @@ public class UpdatesTests
         return updates;
     }
 
-    /// <summary>Offered, accepted, and the download finished.</summary>
+    /// <summary>Offered, accepted, the download finished and its bar drawn full.</summary>
     private (Updates Updates, FakeTransfer Transfer) Downloaded()
     {
         var updates = Offered();
         updates.Accept();
         var transfer = _source.Transfers[^1];
         transfer.Outcome.SetResult(null);
+        Draw(updates);
         return (updates, transfer);
     }
 
@@ -259,6 +274,114 @@ public class UpdatesTests
         Assert.Equal(2, _source.Transfers.Count);
         Assert.IsType<Step.Downloading>(updates.Now);
         Assert.True(updates.Shown);
+    }
+
+    /// <summary>
+    /// A build that arrived faster than its bar went across was installed
+    /// with the bar a third of the way, and the setup ends the app, so the
+    /// last anybody saw of the download was a leap. The bar follows what has
+    /// arrived, and the install waits for it to be drawn full.
+    /// </summary>
+    [Fact]
+    public void TheInstallWaitsForTheBarToBeDrawnFull()
+    {
+        var updates = Offered();
+        updates.Accept();
+        var transfer = Assert.Single(_source.Transfers);
+        transfer.Progress!(20_000_000, 56_093_610);
+        Assert.Equal(20_000_000 / 56_093_610.0, updates.Bar.Real, 9);
+        Assert.Equal(0, updates.Bar.Shown);
+        transfer.Progress!(56_093_610, 56_093_610);
+        transfer.Outcome.SetResult(null);
+        var frames = 0;
+        while (!updates.Bar.Full)
+        {
+            // Every byte is here, and nothing is installed while the bar goes across.
+            Assert.IsType<Step.Downloading>(updates.Now);
+            Assert.Empty(_installer.Installs);
+            Assert.True(updates.Bar.Shown <= updates.Bar.Real);
+            Draw(updates, most: 1);
+            frames++;
+        }
+        Assert.True(frames * Frame >= Pace.Whole, $"full after {frames} frames");
+        Assert.IsType<Step.Installing>(updates.Now);
+        Assert.Equal(new[] { transfer.File }, _installer.Installs);
+    }
+
+    /// <summary>A window with no frames (one minimised) draws no bar, and an install is not held for a bar nobody sees.</summary>
+    [Fact]
+    public void ABarNobodyDrawsHoldsTheInstallOnlySoLong()
+    {
+        var updates = Offered();
+        updates.Accept();
+        _source.Transfers[^1].Outcome.SetResult(null);
+        _clock.Advance(Updates.FillAtMost - TimeSpan.FromMilliseconds(1));
+        Assert.Empty(_installer.Installs);
+        Assert.IsType<Step.Downloading>(updates.Now);
+        _clock.Advance(TimeSpan.FromMilliseconds(2));
+        Assert.Single(_installer.Installs);
+        Assert.IsType<Step.Installing>(updates.Now);
+    }
+
+    /// <summary>"Cancel" in the second the bar takes to finish: nothing is left to stop, and the build that arrived is kept for "Update".</summary>
+    [Fact]
+    public void CancelWhileTheBarFinishesKeepsTheBuild()
+    {
+        var updates = Offered();
+        updates.Accept();
+        var transfer = Assert.Single(_source.Transfers);
+        transfer.Outcome.SetResult(null);
+        updates.Cancel();
+        Assert.Equal(new Step.Offered(MakeOffer("0.1.0.8")), updates.Now);
+        // Neither the bar drawn full nor the time it is given installs it after all.
+        Draw(updates);
+        _clock.Advance(Updates.FillAtMost);
+        Assert.Empty(_installer.Installs);
+        updates.Accept();
+        Assert.Single(_source.Transfers);
+        Assert.Equal(new[] { transfer.File }, _installer.Installs);
+    }
+
+    /// <summary>
+    /// The lobby left while the bar finishes: kept, and installed only once
+    /// the person is back and says so. Held as a download is, the build that
+    /// had arrived whole was downloaded again on coming back.
+    /// </summary>
+    [Fact]
+    public void LeavingTheLobbyWhileTheBarFinishesKeepsTheBuildUntilAskedThere()
+    {
+        var updates = Offered();
+        updates.Accept();
+        var transfer = Assert.Single(_source.Transfers);
+        transfer.Outcome.SetResult(null);
+        updates.Lobby(false);
+        Assert.False(updates.Shown);
+        // Back before the bar or its time is up.
+        updates.Lobby(true);
+        Assert.Single(_source.Transfers);
+        Assert.Equal(new Step.Offered(MakeOffer("0.1.0.8")), updates.Now);
+        Assert.True(updates.Shown);
+        Draw(updates);
+        _clock.Advance(Updates.FillAtMost);
+        Assert.Empty(_installer.Installs);
+        updates.Accept();
+        Assert.Single(_source.Transfers);
+        Assert.Equal(new[] { transfer.File }, _installer.Installs);
+    }
+
+    /// <summary>A download held outside the lobby carries on with what it had and its bar where it was, rather than drawn from nought again.</summary>
+    [Fact]
+    public void ADownloadCarriedOnAfterBeingHeldKeepsItsBar()
+    {
+        var updates = Offered();
+        updates.Accept();
+        _source.Transfers[^1].Progress!(28_046_805, 56_093_610);
+        Draw(updates);
+        Assert.Equal(0.5, updates.Bar.Shown, 9);
+        updates.Lobby(false);
+        updates.Lobby(true);
+        Assert.Equal(new Step.Downloading(MakeOffer("0.1.0.8"), 28_046_805, 56_093_610), updates.Now);
+        Assert.Equal(0.5, updates.Bar.Shown, 9);
     }
 
     [Fact]

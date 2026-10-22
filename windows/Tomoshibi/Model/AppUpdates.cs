@@ -108,8 +108,10 @@ internal sealed class CoreUpdateSource : IUpdateSource
 /// (ForceTargetAppShutdown), and opens again afterwards because the app
 /// registered to be restarted. Nothing is handed over that is not this app:
 /// the bundle's own manifest must name this app and this publisher, and the
-/// version offered; Windows then refuses a bundle whose signature is not the
-/// publisher its manifest names, or that the machine does not trust.
+/// version offered (its four numbers said as the update check says them,
+/// ClientDescription.Joined); Windows then refuses a bundle whose signature
+/// is not the publisher its manifest names, or that the machine does not
+/// trust.
 /// </summary>
 internal sealed partial class PackageInstaller : IUpdateInstaller
 {
@@ -152,7 +154,7 @@ internal sealed partial class PackageInstaller : IUpdateInstaller
                 Log.Line($"update: the bundle is signed by {string.Join("; ", signers)}, not {running.Id.Publisher}");
                 return new Installed.Failed(T("The update is not signed by Tomoshibi's developer, so it was not installed."));
             }
-            if (said != version)
+            if (!System.Version.TryParse(said, out var numbers) || ClientDescription.Joined(numbers) != version)
             {
                 Log.Line($"update: the bundle is version {said}, not {version}");
                 return new Installed.Failed(T("The update is not the version that was offered, so it was not installed."));
@@ -268,22 +270,41 @@ internal sealed partial class PackageInstaller : IUpdateInstaller
 /// What is run is what the core checked: the size and SHA-256 the deployment
 /// gave over TLS, beside the build. With no signature to read, that is the
 /// whole of the trust, and the setup's own version stamp is read only to
-/// refuse a file that is not the setup offered. Downloaded by the app rather
-/// than a browser, it carries no mark of the web, so SmartScreen does not ask
-/// again. The setup runs silently, closes this app if it is still open, and
-/// opens the new one when it is done; this app quits once it is started.
+/// refuse a file that is not the setup offered: its product version is the
+/// version as the deployment offers it, 0.1.4 for a first build and 0.1.4.2
+/// for a later one (setup.ps1), which is what every app out there compares
+/// it with, this one and those from before builds were said alike.
+/// Downloaded by the app rather than a browser, it carries no mark of the
+/// web, so SmartScreen does not ask again. The setup runs silently, closes
+/// this app if it is still open, and opens the new one when it is done; this
+/// app quits once it is started.
 /// </summary>
 internal sealed class SetupInstaller : IUpdateInstaller
 {
     private readonly Action _quit;
+    private readonly TimeSpan _arrive;
     private volatile bool _stopped;
 
     /// <param name="quit">Ends the app, on its own thread, once the setup is running.</param>
-    public SetupInstaller(Action quit) => _quit = quit;
+    /// <param name="arrive">How long the install's card takes to arrive in the lobby (Motion.Settle), which the setup is started after.</param>
+    public SetupInstaller(Action quit, TimeSpan arrive)
+    {
+        _quit = quit;
+        _arrive = arrive;
+    }
 
-    public Task<Installed> Install(string file, string version)
+    public async Task<Installed> Install(string file, string version)
     {
         _stopped = false;
+        // The install's card is let arrive first. Reading the setup and
+        // starting it hold this thread for as long as the system takes to
+        // look a new program over before it runs: eight seconds for the
+        // 145 MB setup in the VM, Defender reading all of it. The card put up
+        // the moment before was never drawn, and the window stood frozen on
+        // the finished download until the app went. Given up in this moment
+        // (Cancel, the lobby left), nothing has been started.
+        await Task.Delay(_arrive);
+        if (_stopped) return new Installed.Stopped();
         try
         {
             // Inno Setup pads the strings of its version stamp with spaces,
@@ -295,16 +316,16 @@ internal sealed class SetupInstaller : IUpdateInstaller
             if (name != "Tomoshibi" || said != version)
             {
                 Log.Line($"update: the setup is {name} {said}, not Tomoshibi {version}");
-                return Task.FromResult<Installed>(new Installed.Failed(T("The update is not the version that was offered, so it was not installed.")));
+                return new Installed.Failed(T("The update is not the version that was offered, so it was not installed."));
             }
         }
         catch (Exception fault)
         {
             Log.Line($"update: the setup could not be read: {fault.Message}");
-            return Task.FromResult<Installed>(new Installed.Failed(T("The update could not be opened.")));
+            return new Installed.Failed(T("The update could not be opened."));
         }
         // Given up between the press and here: nothing has been started.
-        if (_stopped) return Task.FromResult<Installed>(new Installed.Stopped());
+        if (_stopped) return new Installed.Stopped();
         try
         {
             var setup = new System.Diagnostics.ProcessStartInfo(file)
@@ -318,10 +339,10 @@ internal sealed class SetupInstaller : IUpdateInstaller
         catch (Exception fault)
         {
             Log.Line($"update: the setup did not start: {fault.HResult:X8} {fault.Message}");
-            return Task.FromResult<Installed>(new Installed.Failed(T("The update could not be installed.")));
+            return new Installed.Failed(T("The update could not be installed."));
         }
         _quit();
-        return Task.FromResult<Installed>(new Installed.Done());
+        return new Installed.Done();
     }
 
     public void Stop() => _stopped = true;

@@ -35,15 +35,20 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <!-- The generated bindings move memory across the FFI by pointer. -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <!--
-      The version the download page and the user agent say (ClientDescription):
-      0.1.0, build 1, the other apps' first.
-    -->
     <!-- The program's own picture, which the setup's shortcuts and the taskbar show. -->
     <ApplicationIcon>Assets\Tomoshibi.ico</ApplicationIcon>
-    <Version>0.1.0</Version>
-    <AssemblyVersion>0.1.0.1</AssemblyVersion>
-    <FileVersion>0.1.0.1</FileVersion>
+    <!--
+      The version, 0.1.4, and the build, 1, as the fourth part of the
+      assembly's and the file's version (owner, 2026-10-22: a small fix keeps
+      the version and takes the next build; a new version is for new features
+      or a large update). ClientDescription joins them as the core's
+      version_with_build does, 0.1.4 for build 1 and 0.1.4.2 for build 2, for
+      the user agent and the update check. What a build made by hand says;
+      setup.ps1 gives a release its own (-Version, -Build).
+    -->
+    <Version>0.1.4</Version>
+    <AssemblyVersion>0.1.4.1</AssemblyVersion>
+    <FileVersion>0.1.4.1</FileVersion>
     <!-- Generated code is not ours to keep tidy. -->
     <NoWarn>$(NoWarn);CS1591;CS8618;CS8625;CS8600;CS8602;CS8603;CS8604;CS0108</NoWarn>
   </PropertyGroup>

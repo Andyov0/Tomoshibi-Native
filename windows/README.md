@@ -388,6 +388,24 @@ deployment, or a release build, asks at all; an unpackaged build is offered
 updates like any other and says it cannot update itself here when asked to
 install one.
 
+The version the app says, in its user agent and to the update check, is the
+core's `version_with_build` of the first three parts of its assembly's
+version and the fourth, the build (owner, 2026-10-22: a small fix keeps the
+version and takes the next build; a new version is for new features or a
+large update): 0.1.4 for build 1, 0.1.4.2 for build 2. People are told it as
+`version_label` writes it, 0.1.4 (2), in the settings and on the banner alike.
+`setup.ps1 -Version 0.1.4 -Build 2` puts the four numbers in the app and the
+joined form in the setup's name and its stamp's product version, which every
+app holds a downloaded setup to, those from before builds were said included.
+
+The download's bar is drawn at an even pace behind what has arrived
+(`Tomoshibi.Basics\Pace.cs`, moved frame by frame from
+`CompositionTarget.Rendering` by `UI\Kit\Paced.cs`): nought to full in no less
+than 1.2 seconds, never ahead of what has arrived, and back at once where a
+download begins again. The install waits for it to be drawn full, three
+seconds at most, for a window with no frames. The setup's own window paces
+its bar the same way off a timer and draws it full before it goes.
+
 Tested end to end with the packages above against a local deployment of
 the newer server (which has `/api/apps/latest/windows`) whose shelf held
 0.1.0.2: the installed 0.1.0.1 offered it in the lobby, downloaded the 220 MB

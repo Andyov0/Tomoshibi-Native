@@ -115,11 +115,26 @@ public interface IUpdateClock
 ///
 /// Windows asks nobody to confirm an install and has no permission to ask
 /// for first, where Android has both. One thread, the caller's.
+///
+/// The download's bar is kept here (<see cref="Bar"/>), drawn at an even
+/// pace behind what has arrived, and the install waits for it to be drawn
+/// full: a build that came in faster than the bar went across was installed
+/// with the bar a third of the way, and the setup ends the app, so the last
+/// thing somebody saw of the download was a leap to an install. Not for
+/// longer than <see cref="FillAtMost"/>, since a window with no frames (one
+/// minimised) draws nothing, and an install is not held for a bar nobody sees.
 /// </summary>
 public sealed class Updates
 {
     public static readonly TimeSpan Every = TimeSpan.FromHours(6);
     public static readonly TimeSpan Retry = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// The longest an install waits after the last byte for the bar to be
+    /// drawn full: the whole bar takes <see cref="Pace.Whole"/> at twenty
+    /// frames a second or more, and this is more than twice that.
+    /// </summary>
+    public static readonly TimeSpan FillAtMost = TimeSpan.FromSeconds(3);
 
     /// <summary>Where an update has got to.</summary>
     public abstract record Step
@@ -149,6 +164,14 @@ public sealed class Updates
 
     public Step Now { get; private set; } = new Step.None();
 
+    /// <summary>
+    /// The download's bar as it is drawn, aimed at how much has arrived and
+    /// moved on by the frames of whatever draws it (the lobby's banner, the
+    /// settings' row); one for the model, so that a banner drawn again partway
+    /// (the window made narrow) carries on from where the last one was.
+    /// </summary>
+    public Pace Bar { get; } = new();
+
     /// <summary>The answer to the last check asked for in the settings; null where none was asked or it found a build.</summary>
     public Said? Answer { get; private set; }
 
@@ -162,6 +185,8 @@ public sealed class Updates
     private bool _holding;
     private bool _walkedAway;
     private (string Version, string File)? _ready;
+    /// <summary>A download that has arrived whole and waits for its bar to be drawn full before it is installed.</summary>
+    private IUpdateTransfer? _filling;
 
     public Updates(IUpdateSource source, IUpdateInstaller installer, string running, IUpdateClock clock)
     {
@@ -174,6 +199,7 @@ public sealed class Updates
     private void Set(Step step)
     {
         Now = step;
+        if (step is Step.Downloading downloading) Bar.Aim(downloading.Total > 0 ? (double)downloading.Received / downloading.Total : 0);
         Changed?.Invoke();
     }
 
@@ -259,6 +285,12 @@ public sealed class Updates
         _free = inLobby;
         switch (Now)
         {
+            case Step.Downloading downloading when !inLobby && _filling != null:
+                // Whole, its bar not yet drawn full: kept, and installed only
+                // once the person is back and says so, as a build that
+                // arrives in the moment they leave is.
+                Keep(downloading.Offer);
+                return;
             case Step.Downloading downloading when !inLobby:
                 _holding = true;
                 Set(new Step.Held(downloading.Offer, downloading.Received, downloading.Total));
@@ -308,9 +340,24 @@ public sealed class Updates
     /// <summary>"Cancel", on a download. What arrived is kept, so "Update" again carries on from there.</summary>
     public void Cancel()
     {
-        if (Now is not Step.Downloading) return;
+        if (Now is not Step.Downloading downloading) return;
+        // Pressed in the second the bar takes to finish, with every byte
+        // already here: nothing is left to stop, and the build is kept.
+        if (_filling != null)
+        {
+            Keep(downloading.Offer);
+            return;
+        }
         _holding = false;
         _transfer?.Cancel();
+    }
+
+    /// <summary>Lets the install of a build whose bar is still finishing go, the build kept for "Update" again.</summary>
+    private void Keep(Offer offer)
+    {
+        _ready = (offer.Version, _filling!.File);
+        _filling = null;
+        Set(new Step.Offered(offer));
     }
 
     /// <summary>
@@ -388,7 +435,11 @@ public sealed class Updates
         var transfer = _source.Download(offer);
         _transfer = transfer;
         _holding = false;
-        Set(new Step.Downloading(offer, 0, offer.Size));
+        // Carried on from where it was held, it keeps what it had and its
+        // bar, since the core goes on from there; any other starts empty.
+        Set(Now is Step.Held held && held.Offer.Version == offer.Version
+            ? new Step.Downloading(offer, held.Received, held.Total)
+            : new Step.Downloading(offer, 0, offer.Size));
         _transferRun = Run();
 
         async Task Run()
@@ -417,6 +468,18 @@ public sealed class Updates
             switch (outcome)
             {
                 case null when _free:
+                    // The bar drawn full first, then the install, which
+                    // ends the app (the class's summary). Cancel or leaving
+                    // the lobby meanwhile lets go of the wait and keeps the
+                    // build (Keep).
+                    _filling = transfer;
+                    // All of it, checked: said whole, which wakes whatever
+                    // draws the bar should it have stood still at the last report.
+                    if (Now is Step.Downloading arrived) Set(arrived with { Received = arrived.Total });
+                    Bar.Aim(1);
+                    if (!Bar.Full) await Task.WhenAny(Bar.WhenFull(), _clock.Wait(FillAtMost));
+                    if (!ReferenceEquals(_filling, transfer)) return;
+                    _filling = null;
                     Install(offer, transfer.File);
                     break;
                 case null:

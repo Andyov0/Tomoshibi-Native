@@ -5,6 +5,7 @@ using Microsoft.UI.Xaml.Hosting;
 using Microsoft.UI.Xaml.Media;
 using Tomoshibi.Basics;
 using Tomoshibi.UI.Kit;
+using uniffi.tomoshibi_protocol;
 using static Tomoshibi.Basics.Updates;
 using static Tomoshibi.Basics.Words;
 
@@ -40,10 +41,8 @@ internal sealed class UpdateBanner : Grid
     private Unfolding? _body;
     private Unfolding? _space;
     private string? _said;
-    private TextBlock? _progressLine;
-    private Border? _progressFill;
-    private Border? _progressTrack;
-    private float _fraction;
+    private Paced? _paced;
+    private long _total;
 
     /// <param name="inline">In a column, opening a space, rather than floating over the content.</param>
     /// <param name="top">What it clears below the top of where it is put.</param>
@@ -89,6 +88,12 @@ internal sealed class UpdateBanner : Grid
             return;
         }
         var step = _updates.Now;
+        _total = step switch
+        {
+            Step.Downloading downloading => downloading.Total,
+            Step.Held held => held.Total,
+            _ => _total,
+        };
         if (_card == null) Arrive();
         // What is said, apart from how far a download has got, which moves
         // in place rather than drawing the card again.
@@ -105,15 +110,7 @@ internal sealed class UpdateBanner : Grid
             _said = said;
             _body!.Show(Body(step));
         }
-        switch (step)
-        {
-            case Step.Downloading downloading:
-                Progress(downloading.Received, downloading.Total);
-                break;
-            case Step.Held held:
-                Progress(held.Received, held.Total);
-                break;
-        }
+        if (step is Step.Downloading or Step.Held) _paced?.Wake();
     }
 
     /// <summary>The card, flat as the screens are drawn: the surface colour with the theme's edge, and a shadow only where it floats.</summary>
@@ -167,17 +164,14 @@ internal sealed class UpdateBanner : Grid
         _lit = null;
         _body = null;
         _said = null;
-        _progressLine = null;
-        _progressFill = null;
-        _progressTrack = null;
-        _fraction = 0;
+        _paced = null;
     }
 
     private UIElement Body(Step step) => step switch
     {
         Step.Offered offered => Said(
             offered.Problem != null ? "exclamationmark.circle.fill" : "sparkles",
-            T("Tomoshibi {version} is available", ("version", offered.Offer.Version)),
+            T("Tomoshibi {version} is available", ("version", TomoshibiProtocolMethods.VersionLabel(offered.Offer.Version))),
             Notes(offered.Offer),
             warning: offered.Problem != null,
             problem: offered.Problem,
@@ -186,10 +180,10 @@ internal sealed class UpdateBanner : Grid
                 Button(T("Later"), _updates.Later, "update.later"),
                 Button(offered.Problem != null ? T("Try again") : T("Update"), _updates.Accept, "update.accept", prominent: true),
             ]),
-        Step.Downloading or Step.Held => Downloading(_updates.Offer!.Version),
+        Step.Downloading or Step.Held => Downloading(TomoshibiProtocolMethods.VersionLabel(_updates.Offer!.Version)),
         Step.Installing installing => Said(
             null,
-            T("Installing Tomoshibi {version}", ("version", installing.Offer.Version)),
+            T("Installing Tomoshibi {version}", ("version", TomoshibiProtocolMethods.VersionLabel(installing.Offer.Version))),
             [T("Tomoshibi will open again when it is done.")],
             buttons: [Button(T("Cancel"), _updates.StopInstalling, "update.cancel")]),
         _ => new Grid(),
@@ -202,41 +196,37 @@ internal sealed class UpdateBanner : Grid
         return notes == null ? [] : [notes];
     }
 
+    /// <param name="version">As people are told it (version_label).</param>
     private UIElement Downloading(string version)
     {
-        _progressLine = K.Text("", 12.5, ink: Ink.Muted);
-        _progressTrack = new Border { Height = 5, CornerRadius = new CornerRadius(2.5), Background = Ink.SurfaceHigh, Margin = new Thickness(0, 4, 0, 0) };
-        _progressFill = new Border { Height = 5, CornerRadius = new CornerRadius(2.5), Background = Ink.Tally, HorizontalAlignment = HorizontalAlignment.Stretch };
-        ElementCompositionPreview.SetIsTranslationEnabled(_progressFill, true);
-        var visual = ElementCompositionPreview.GetElementVisual(_progressFill);
-        visual.Scale = new Vector3(Math.Max(0.0001f, _fraction), 1, 1);
-        _progressTrack.Child = _progressFill;
-        _progressTrack.AutomationName(T("Downloading Tomoshibi {version}", ("version", version)));
+        var line = K.Text("", 12.5, ink: Ink.Muted);
+        var track = new Border { Height = 5, CornerRadius = new CornerRadius(2.5), Background = Ink.SurfaceHigh, Margin = new Thickness(0, 4, 0, 0) };
+        var fill = new Border { Height = 5, CornerRadius = new CornerRadius(2.5), Background = Ink.Tally, HorizontalAlignment = HorizontalAlignment.Stretch };
+        track.Child = fill;
+        track.AutomationName(T("Downloading Tomoshibi {version}", ("version", version)));
+        // Filled from its leading edge by its visual's scale, set at each
+        // frame (Paced); the fill takes no presses and is not raised, so
+        // its visual is its own to set (K.Holding).
+        var visual = ElementCompositionPreview.GetElementVisual(fill);
+        visual.CenterPoint = Vector3.Zero;
+        var percent = -1;
+        _paced = new Paced(track, _updates.Bar, shown =>
+        {
+            visual.Scale = new Vector3(Math.Max(0.0001f, (float)shown), 1, 1);
+            // What the bar says it has, which is never more than has arrived.
+            line.Text = T("{received} of {total}", ("received", Megabytes((long)(shown * _total))), ("total", Megabytes(_total)));
+            var now = (int)(shown * 100);
+            if (now == percent) return;
+            percent = now;
+            track.SetValue(Microsoft.UI.Xaml.Automation.AutomationProperties.ItemStatusProperty, $"{now}%");
+        });
         var said = Said(
             "arrow.clockwise",
             T("Downloading Tomoshibi {version}", ("version", version)),
             [],
-            extra: [_progressLine, _progressTrack],
+            extra: [line, track],
             buttons: [Button(T("Cancel"), _updates.Cancel, "update.cancel")]);
         return said;
-    }
-
-    /// <summary>How much has arrived, as a filling capsule that moves smoothly between reports, and the megabytes under the title.</summary>
-    private void Progress(long received, long total)
-    {
-        if (_progressLine == null || _progressFill == null) return;
-        _progressLine.Text = T("{received} of {total}", ("received", Megabytes(received)), ("total", Megabytes(total)));
-        var fraction = total > 0 ? Math.Clamp((float)received / total, 0f, 1f) : 0f;
-        if (Math.Abs(fraction - _fraction) < 0.001f) return;
-        _fraction = fraction;
-        var visual = ElementCompositionPreview.GetElementVisual(_progressFill);
-        var compositor = visual.Compositor;
-        visual.CenterPoint = Vector3.Zero;
-        var grow = compositor.CreateVector3KeyFrameAnimation();
-        grow.InsertKeyFrame(1f, new Vector3(Math.Max(0.0001f, fraction), 1, 1), Motion.SettleCurve(compositor));
-        grow.Duration = Motion.Settle;
-        visual.StartAnimation("Scale", grow);
-        _progressTrack?.SetValue(Microsoft.UI.Xaml.Automation.AutomationProperties.ItemStatusProperty, $"{(int)(fraction * 100)}%");
     }
 
     /// <summary>Bytes as megabytes to a tenth, in the reader's own way of writing a number.</summary>

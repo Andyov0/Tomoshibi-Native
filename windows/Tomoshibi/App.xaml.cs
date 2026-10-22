@@ -86,7 +86,7 @@ public partial class App : Application
             var quitOn = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             IUpdateInstaller installer = ClientDescription.Packaged
                 ? new PackageInstaller()
-                : new SetupInstaller(() => quitOn.TryEnqueue(() => Current.Exit()));
+                : new SetupInstaller(() => quitOn.TryEnqueue(() => Current.Exit()), Motion.Settle);
             app.Updates = new Updates(source, installer, ClientDescription.Version, new RealUpdateClock());
             // Each step said once in the log, which a test reads.
             var said = "";
