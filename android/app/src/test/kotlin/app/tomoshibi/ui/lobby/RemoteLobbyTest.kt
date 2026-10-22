@@ -166,6 +166,44 @@ class RemoteLobbyTest {
         compose.onNodeWithText("Moved to a new server").assertExists()
     }
 
+    /**
+     * The sign-in, whose reader is not signed in, has the notice too, closed
+     * for good as in the lobby; and the update under it moves up into its
+     * place over frames as it goes, rather than jumping there.
+     */
+    @Test
+    fun theSignInHasTheNoticeAndTheUpdateMovesUpAsItGoes() {
+        val app = fakeApp(signedIn = false)
+        val updates = Updates(Nowhere, Nowhere, "0.1.4", CoroutineScope(Dispatchers.Unconfined), Pace(null, whole = 0))
+        app.updates = updates
+        updates.stage("step", Step.Offered(Offer("0.1.4.2", 56_093_610, label = "0.1.4 (2)")))
+        val store = MemoryDefaults()
+        hearing(app, Says(RemoteAnswer(notice = LobbyNotice("n1", text = mapOf(Language.En to "Down tonight from nine")))), store)
+        compose.mainClock.autoAdvance = false
+        compose.setContent { TestApp(app) }
+        settle()
+        compose.onNodeWithText("Down tonight from nine").assertExists()
+        val notice = compose.onNodeWithTag("lobby.notice").fetchSemanticsNode().boundsInRoot
+        val before = compose.onNodeWithTag("update.banner").fetchSemanticsNode().boundsInRoot.top
+        assertTrue("the update is not under the notice", before >= notice.bottom)
+
+        compose.onNodeWithTag("lobby.notice.close").performClick()
+        compose.waitForIdle()
+        val tops = (1..30).map {
+            compose.mainClock.advanceTimeByFrame()
+            compose.waitForIdle()
+            compose.onNodeWithTag("update.banner").fetchSemanticsNode().boundsInRoot.top
+        }
+        val after = tops.last()
+        assertTrue("the update did not move up into the notice's place: $before to $after", after < before - 40)
+        // Over frames, and no one frame taking a large part of the way.
+        val steps = (listOf(before) + tops).zipWithNext { a, b -> a - b }
+        assertTrue("the update jumped rather than moved: $tops", steps.max() <= 0.4f * (before - after))
+        assertTrue("the update moved in too few frames: $tops", steps.count { it > 0.5f } >= 6)
+        assertTrue(gone("lobby.notice"))
+        assertEquals(listOf("n1"), JSONArray(store.string(Remote.CLOSED_KEY)).let { a -> (0 until a.length()).map { a.getString(it) } })
+    }
+
     @Test
     fun theNoticeIsTheLobbysAndNotTheWayIntoACall() {
         val app = fakeApp(screen = AppModel.Screen.Prejoin)

@@ -1,6 +1,7 @@
 package app.tomoshibi.ui.screens
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -18,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -42,6 +44,7 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.tomoshibi.basics.Language
 import app.tomoshibi.basics.Localization
@@ -76,6 +79,8 @@ import app.tomoshibi.ui.lobby.UpdateBanner
 import app.tomoshibi.ui.lobby.pastedLink
 import app.tomoshibi.ui.lobby.plainPress
 import app.tomoshibi.ui.lobby.rise
+import app.tomoshibi.ui.lobby.LobbyNoticeCard
+import app.tomoshibi.ui.lobby.noticeShown
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.Clipboard
@@ -167,15 +172,32 @@ fun SignInView(app: AppModel) {
                     }
                 }
             }
+            // The deployment's notice, which is for whoever has the app,
+            // signed in or not (as the deployment's own management page
+            // says), and under it a newer build: at the head of the page,
+            // clear of the language menu in the corner, one under the other
+            // and never one over the other. The build lay over the top of
+            // the sign-in, and a notice there would have lain under it.
+            val says = noticeShown(app) || app.updates?.shown == true
+            val head: @Composable () -> Unit = { SignInHead(app, clear = 56.dp) }
             Folded(
-                flat = { FlatSignIn(wide, heading, form) { PasteLink(scope, clipboard, ::openLink) } },
+                flat = { FlatSignIn(wide, says, head, heading, form) { PasteLink(scope, clipboard, ::openLink) } },
                 // Folded, the greeting on one side of the hinge and the
                 // fields on the other: on a table both above it, where the
                 // keyboard coming up over the lower half leaves them; in a
                 // book, a page each.
+                // The head over the greeting, whose side has the room: over
+                // the fields, on a table, it pushed the sign-in itself down
+                // across the hinge.
                 lead = {
-                    Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(24.dp), contentAlignment = Alignment.Center) {
-                        Box(Modifier.widthIn(max = 420.dp)) { heading() }
+                    Column(
+                        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        SignInHead(app, clear = 0.dp)
+                        Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                            Box(Modifier.widthIn(max = 420.dp)) { heading() }
+                        }
                     }
                 },
                 form = {
@@ -191,9 +213,6 @@ fun SignInView(app: AppModel) {
                 },
             )
             LanguageMenu(Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp))
-            // Somebody not signed in gets their updates too; below the
-            // language menu, which it would otherwise cover on a phone.
-            UpdateBanner(app, Modifier.windowInsetsPadding(WindowInsets.safeDrawing), top = 64.dp)
             ProblemToast(
                 app,
                 Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)),
@@ -203,9 +222,22 @@ fun SignInView(app: AppModel) {
     }
 }
 
-/** The sign-in as a flat screen draws it: the greeting and the fields in one column, and on a phone the paste at the foot. */
+/**
+ * The sign-in as a flat screen draws it: what the deployment and the
+ * updates say at the head ([says]), the greeting and the fields in one
+ * column, and on a phone the paste at the foot. The greeting comes up closer
+ * under the head while it says something, as the head opens and closes.
+ */
 @Composable
-private fun FlatSignIn(wide: Boolean, heading: @Composable () -> Unit, form: @Composable () -> Unit, paste: @Composable () -> Unit) {
+private fun FlatSignIn(
+    wide: Boolean,
+    says: Boolean,
+    head: @Composable () -> Unit,
+    heading: @Composable () -> Unit,
+    form: @Composable () -> Unit,
+    paste: @Composable () -> Unit,
+) {
+    val top by animateDpAsState(if (says) 32.dp else 72.dp, Theme.settle(), label = "top")
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
         Column(
             Modifier
@@ -213,9 +245,11 @@ private fun FlatSignIn(wide: Boolean, heading: @Composable () -> Unit, form: @Co
                 .fillMaxWidth()
                 .putsKeyboardAway()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, end = 16.dp, top = 72.dp, bottom = if (wide) 140.dp else 40.dp),
+                .padding(start = 16.dp, end = 16.dp, bottom = if (wide) 140.dp else 40.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
+            head()
+            Spacer(Modifier.height(top))
             Column(
                 Modifier.widthIn(max = 420.dp).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(22.dp),
@@ -226,6 +260,27 @@ private fun FlatSignIn(wide: Boolean, heading: @Composable () -> Unit, form: @Co
             }
         }
         if (!wide) paste()
+    }
+}
+
+/**
+ * The deployment's notice and, under it, a newer build, at the head of the
+ * sign-in (SignInView.swift's): [clear] of what is above while either is up
+ * (the language menu in the corner, on a flat screen), ten points between
+ * them while both are, each opening and closing its own room so that the
+ * other moves up or down to make way rather than jump. With neither,
+ * nothing at all.
+ */
+@Composable
+private fun SignInHead(app: AppModel, clear: Dp) {
+    val notice = noticeShown(app)
+    val update = app.updates?.shown == true
+    val clear by animateDpAsState(if (notice || update) clear else 0.dp, Theme.settle(), label = "clear")
+    val between by animateDpAsState(if (notice && update) 10.dp else 0.dp, Theme.settle(), label = "between")
+    Column(Modifier.widthIn(max = 520.dp).fillMaxWidth().padding(top = clear)) {
+        LobbyNoticeCard(app, Modifier.fillMaxWidth())
+        Spacer(Modifier.height(between))
+        UpdateBanner(app, Modifier.fillMaxWidth(), inline = true)
     }
 }
 

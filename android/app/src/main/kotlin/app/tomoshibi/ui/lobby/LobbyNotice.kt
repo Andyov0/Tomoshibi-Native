@@ -97,6 +97,10 @@ fun LobbyNoticeCard(
     }
 }
 
+/** Whether the notice is up for this reader: there is one, and it says something in their language ([LobbyNoticeCard]). */
+@Composable
+internal fun noticeShown(app: AppModel): Boolean = app.remote.notice?.text?.get(Localization.shared.language) != null
+
 @Composable
 private fun Card(remote: Remote, notice: LobbyNotice, text: String, floating: Boolean) {
     val shape = ContinuousShape(20.dp)
