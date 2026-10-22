@@ -218,7 +218,7 @@ pub fn update_notes(build: AppBuild, language: String) -> Option<String> {
     notes_in(&build.notes, &language)
 }
 
-fn notes_in(notes: &HashMap<String, String>, language: &str) -> Option<String> {
+pub(super) fn notes_in(notes: &HashMap<String, String>, language: &str) -> Option<String> {
     let find = |tag: &str| {
         notes
             .iter()
@@ -860,16 +860,36 @@ mod tests {
     #[test]
     fn a_later_build_is_the_version_with_its_build_as_a_fourth_part() {
         let joined = |v: &str, b: &str| version_with_build(v.into(), b.into());
-        assert_eq!(joined("0.1.4", "1"), "0.1.4", "the first build is the version alone");
+        assert_eq!(
+            joined("0.1.4", "1"),
+            "0.1.4",
+            "the first build is the version alone"
+        );
         assert_eq!(joined("0.1.4", "2"), "0.1.4.2");
         assert_eq!(joined("0.1.4", "12"), "0.1.4.12");
         assert_eq!(joined("0.1.4", ""), "0.1.4", "no build is the first");
-        assert_eq!(joined("0.1.4", "2a"), "0.1.4", "nor is one that is not a number");
-        assert!(newer(&joined("0.1.4", "2"), &joined("0.1.4", "1")), "a later build is newer");
+        assert_eq!(
+            joined("0.1.4", "2a"),
+            "0.1.4",
+            "nor is one that is not a number"
+        );
+        assert!(
+            newer(&joined("0.1.4", "2"), &joined("0.1.4", "1")),
+            "a later build is newer"
+        );
         assert!(newer(&joined("0.1.4", "3"), &joined("0.1.4", "2")));
-        assert!(!newer(&joined("0.1.4", "1"), "0.1.4"), "the first build is not offered to itself");
-        assert!(newer(&joined("0.1.5", "1"), &joined("0.1.4", "9")), "a new version is after every build of the last");
-        assert!(newer(&joined("0.1.4", "2"), "0.1.3"), "and an app from before builds were said takes them");
+        assert!(
+            !newer(&joined("0.1.4", "1"), "0.1.4"),
+            "the first build is not offered to itself"
+        );
+        assert!(
+            newer(&joined("0.1.5", "1"), &joined("0.1.4", "9")),
+            "a new version is after every build of the last"
+        );
+        assert!(
+            newer(&joined("0.1.4", "2"), "0.1.3"),
+            "and an app from before builds were said takes them"
+        );
     }
 
     #[test]
@@ -878,7 +898,11 @@ mod tests {
         assert_eq!(label("0.1.4.2"), "0.1.4 (2)");
         assert_eq!(label("0.1.4.12"), "0.1.4 (12)");
         assert_eq!(label("0.1.4"), "0.1.4");
-        assert_eq!(label("0.1.4.1"), "0.1.4", "the old Macs' joined first build");
+        assert_eq!(
+            label("0.1.4.1"),
+            "0.1.4",
+            "the old Macs' joined first build"
+        );
         assert_eq!(label(" 0.1.4.2 "), "0.1.4 (2)");
         assert_eq!(label("0.1"), "0.1");
         assert_eq!(label("beta"), "beta");

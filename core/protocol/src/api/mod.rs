@@ -40,6 +40,7 @@ mod account;
 mod agent;
 mod meetings;
 mod music;
+mod remote;
 mod rooms;
 pub(crate) mod text;
 mod updates;
@@ -62,6 +63,9 @@ pub use meetings::{host_not_coming_after_ms, meeting_ask_every_ms, Arrangement};
 pub use music::{
     describe_music_audio, music_clock, MusicAudio, MusicLibrary, MusicLink, MusicLinkKind,
     MusicQuality, MusicTrack,
+};
+pub use remote::{
+    parse_remote_config, remote_notice_text, remote_phrases, RemoteConfig, RemoteNotice,
 };
 pub use rooms::{
     knock_ask_every_ms, knock_give_up_after_ms, DeploymentInfo, DoorAnswer, DoorState,
@@ -574,7 +578,10 @@ mod tests {
         assert!(!admitted(&origin("https://meet.example.org"), true));
         assert!(!admitted(&origin("http://meet.example.com"), true));
         assert!(!admitted(&origin("https://meet.example.com:8443"), true));
-        assert!(!admitted(&origin("https://meet.example.com.example.org"), true));
+        assert!(!admitted(
+            &origin("https://meet.example.com.example.org"),
+            true
+        ));
     }
 
     #[test]
