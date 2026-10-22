@@ -1,0 +1,8 @@
+// The deployment these apps are built for: the host their release builds
+// talk to and whose links open in them. Copy this file to deployment.local
+// (which is not committed) and put your deployment's host there; a build
+// with neither file, or with this one alone, is for meet.example.com and
+// reaches nothing. Read by the core's build (core/protocol/build.rs), the
+// Apple targets (apple/Deployment.xcconfig) and Android's Gradle build; the
+// environment's TOMOSHIBI_HOST, where set, is taken before either file.
+TOMOSHIBI_HOST = meet.example.com

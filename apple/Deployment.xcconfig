@@ -1,0 +1,6 @@
+// The deployment the Apple targets are built for, for the universal links'
+// associated domain (project.yml): the example's host unless deployment.local
+// at the repository's root says another (see deployment.example). The core
+// reads the same file for the address it talks to (core/protocol/build.rs).
+TOMOSHIBI_HOST = meet.example.com
+#include? "../deployment.local"

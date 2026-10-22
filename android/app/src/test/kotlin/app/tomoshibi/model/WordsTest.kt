@@ -141,7 +141,7 @@ class WordsTest {
         assertFalse(OpenedLink.parse("http://meet.example.com/?invite=x")!!.isFor("https://meet.example.com/"))
         assertFalse(OpenedLink.parse("https://meet.example.com:8443/?invite=x")!!.isFor("https://meet.example.com/"))
         // The default port and the host's case are the same server.
-        assertTrue(OpenedLink.parse("https://LIVE.example.com:443/?invite=x")!!.isFor("https://meet.example.com/"))
+        assertTrue(OpenedLink.parse("https://MEET.example.com:443/?invite=x")!!.isFor("https://meet.example.com/"))
         assertTrue(OpenedLink.parse("http://127.0.0.1:8080/?invite=x#/r")!!.isFor("http://127.0.0.1:8080/"))
         assertNull(OpenedLink.parse("not a link"))
     }

@@ -17,6 +17,10 @@ packages:
     path: TomoshibiCore
   TomoshibiKit:
     path: TomoshibiKit
+# TOMOSHIBI_HOST, the deployment the apps are built for (Deployment.xcconfig).
+configFiles:
+  Debug: Deployment.xcconfig
+  Release: Deployment.xcconfig
 settings:
   base:
     DEVELOPMENT_TEAM: SM86NB3CPZ
@@ -61,7 +65,7 @@ targets:
     # signed by anybody else.
     #
     # And the deployment's universal links: an invitation or a meeting's link
-    # (https://meet.example.com/?invite=T#/room) opens in the app, once the
+    # (https://<the deployment>/?invite=T#/room) opens in the app, once the
     # deployment's apple-app-site-association names SM86NB3CPZ.app.tomoshibi.mac.
     # Release only. On the Mac this entitlement needs a provisioning profile
     # that grants it, and a Debug build is signed with the development
@@ -75,7 +79,7 @@ targets:
       properties:
         com.apple.security.device.camera: true
         com.apple.security.device.audio-input: true
-        com.apple.developer.associated-domains: ["applinks:meet.example.com"]
+        com.apple.developer.associated-domains: ["applinks:$(TOMOSHIBI_HOST)"]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.tomoshibi.mac
@@ -157,7 +161,7 @@ targets:
       path: build/Tomoshibi-iOS.entitlements
       properties:
         com.apple.security.application-groups: [group.app.tomoshibi]
-        com.apple.developer.associated-domains: ["applinks:meet.example.com"]
+        com.apple.developer.associated-domains: ["applinks:$(TOMOSHIBI_HOST)"]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.tomoshibi.ios

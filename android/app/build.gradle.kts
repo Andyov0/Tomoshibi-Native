@@ -22,6 +22,22 @@ val build = 1
 // 0.1.4 by the core's rule, and would be offered to the 0.1.4 already there.
 val joined = if (build > 1) "$release.$build" else release
 
+// The deployment the app is built for, whose links open in it: TOMOSHIBI_HOST
+// from the environment, else deployment.local at the repository's root (not
+// committed), else deployment.example's meet.example.com, as the core reads it
+// (core/protocol/build.rs). Kept out of the source so that the published
+// source names no deployment (owner, 2026-10-22).
+val deploymentHost: String = System.getenv("TOMOSHIBI_HOST")?.trim()?.takeIf { it.isNotEmpty() }
+    ?: listOf("deployment.local", "deployment.example")
+        .map { rootDir.parentFile.resolve(it) }
+        .firstNotNullOfOrNull { file ->
+            file.takeIf { it.isFile }?.readLines()?.firstNotNullOfOrNull { line ->
+                val said = line.substringBefore("//").split("=", limit = 2)
+                said.takeIf { it.size == 2 && it[0].trim() == "TOMOSHIBI_HOST" }?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
+            }
+        }
+    ?: "meet.example.com"
+
 android {
     namespace = "app.tomoshibi"
     compileSdk = 37
@@ -34,6 +50,7 @@ android {
         // the app only a version code above its own.
         versionCode = 6
         versionName = joined
+        manifestPlaceholders["tomoshibiHost"] = deploymentHost.lowercase()
         ndk { abiFilters += "arm64-v8a" }
     }
 

@@ -115,7 +115,7 @@ public struct AppRoot: View {
             if scenePhase == .active { app.remote.refresh() }
         }
         // A `tomoshibi:` link, and a universal link to the deployment
-        // (`https://meet.example.com/?invite=T#/room`, `?meeting=`), which the
+        // (`https://<the deployment>/?invite=T#/room`, `?meeting=`), which the
         // system hands over once the domain's association file names the app
         // (the Associated Domains entitlement, project.yml). Both are opened
         // the one way, `open`, which follows an https link and the scheme

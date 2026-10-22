@@ -95,7 +95,15 @@ const ACCOUNT_COOKIE: &str = "meet-live.account";
 /// of somebody else's own is exactly what is not wanted. Until now the address
 /// was a field anybody could type into, and a link to another server took the
 /// app there.
-pub const HOME: &str = "https://meet.example.com/";
+///
+/// Its host comes from the build (build.rs: deployment.local at the
+/// repository's root, or the environment's TOMOSHIBI_HOST), so that the
+/// published source names no deployment; a build given neither is for
+/// meet.example.com and reaches nothing.
+pub const HOME: &str = concat!("https://", env!("TOMOSHIBI_HOST"), "/");
+
+/// [`HOME`]'s host name alone.
+pub const HOST: &str = env!("TOMOSHIBI_HOST");
 
 /// [`HOME`], for an app to open on.
 #[uniffi::export]
@@ -573,15 +581,13 @@ mod tests {
 
     #[test]
     fn a_release_build_talks_to_home_alone() {
-        assert!(admitted(&origin("https://meet.example.com"), true));
-        assert!(admitted(&origin("https://LIVE.example.com:443/#/room"), true));
-        assert!(!admitted(&origin("https://meet.example.org"), true));
-        assert!(!admitted(&origin("http://meet.example.com"), true));
-        assert!(!admitted(&origin("https://meet.example.com:8443"), true));
-        assert!(!admitted(
-            &origin("https://meet.example.com.example.org"),
-            true
-        ));
+        let at = |url: String| admitted(&origin(&url), true);
+        assert!(at(format!("https://{HOST}")));
+        assert!(at(format!("https://{}:443/#/room", HOST.to_ascii_uppercase())));
+        assert!(!at("https://another.example.net".to_owned()));
+        assert!(!at(format!("http://{HOST}")));
+        assert!(!at(format!("https://{HOST}:8443")));
+        assert!(!at(format!("https://{HOST}.example.org")));
     }
 
     #[test]
