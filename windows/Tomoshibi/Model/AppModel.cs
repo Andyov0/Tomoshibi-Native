@@ -104,6 +104,9 @@ internal sealed class AppModel : Observable
         // said, rather than the whole picture staying blurred with nobody in
         // it (Android's CallMedia).
         media.Blurring = launch.Blur || DeviceMemory.Blur;
+        // The deployment's ceiling over a share, read as each share starts
+        // and each change of one is made (Sharing.Ceiling).
+        media.Sharing.Ceiling = () => _remote.Ceiling;
         var ui = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
         media.BlurFailed += () => ui?.TryEnqueue(() =>
         {
@@ -132,8 +135,62 @@ internal sealed class AppModel : Observable
             if (value != _screen) Log.Line($"screen {value.ToString().ToLowerInvariant()}");
             Set(ref _screen, value);
             Updates?.Lobby(value == Screen.Lobby);
+            _remote.Lobby(value == Screen.Lobby);
         }
     }
+
+    private Remote _remote = new(null, null, new RealUpdateClock());
+
+    /// <summary>
+    /// What the deployment says to the apps between their releases
+    /// (Basics.Remote): phrases laid over, features switched off, ceilings,
+    /// and the lobby's notice. Told of every change of screen, the lobby being
+    /// where the notice shows and coming back to it a time to ask again.
+    /// Without one given, it asks nothing and offers everything the app was
+    /// built with: a debug build started by hand.
+    /// </summary>
+    public Remote Remote
+    {
+        get => _remote;
+        set
+        {
+            _remote.Changed -= FollowRemote;
+            _remote = value;
+            value.Changed += FollowRemote;
+            value.Lobby(_screen == Screen.Lobby);
+            FollowRemote();
+        }
+    }
+
+    /// <summary>What follows what the deployment says, outside the screens, which read it themselves: the updates and the blur.</summary>
+    private void FollowRemote()
+    {
+        FollowUpdates();
+        FollowBlur();
+        Notify();
+    }
+
+    private void FollowUpdates()
+    {
+        if (_updates is not { } updates) return;
+        updates.Allow(_remote.Allows(RemoteFeature.AppUpdates));
+        updates.CheckEvery(_remote.Answer.UpdateInterval ?? Basics.Updates.Every);
+    }
+
+    /// <summary>
+    /// The blur from here on, by the deployment's background-blur
+    /// (RemoteFeatures.Blur): left as it is in a call, and out of one what
+    /// was chosen where blur is allowed. Not on a move, which leaves the
+    /// meeting and joins it again by itself, and is the same meeting.
+    /// </summary>
+    private void FollowBlur()
+    {
+        if (MovingTo != null) return;
+        _media.Blurring = RemoteFeatures.Blur(_launch.Blur || DeviceMemory.Blur, _remote.Allows(RemoteFeature.BackgroundBlur), inCall: _call != null, _media.Blurring);
+    }
+
+    /// <summary>Whether the blur's switch is offered (the deployment's background-blur).</summary>
+    public bool BlurOffered => _remote.Allows(RemoteFeature.BackgroundBlur);
 
     private Updates? _updates;
 
@@ -151,6 +208,7 @@ internal sealed class AppModel : Observable
             _updates = value;
             value?.Lobby(_screen == Screen.Lobby);
             value?.Joining(Joining);
+            FollowUpdates();
         }
     }
 
@@ -168,7 +226,13 @@ internal sealed class AppModel : Observable
     public CallModel? Call
     {
         get => _call;
-        private set => Set(ref _call, value);
+        private set
+        {
+            Set(ref _call, value);
+            // Out of the call: a blur the deployment switched off during it
+            // counts as off from here, for the next meeting.
+            if (value == null) FollowBlur();
+        }
     }
 
     private RelayList? _relays;
@@ -398,6 +462,9 @@ internal sealed class AppModel : Observable
     {
         if (_started) return;
         _started = true;
+        // Asked first, so that an answer already says whether to look for
+        // updates; the kept one (Restore) said so before the window opened.
+        _remote.Start();
         Updates?.Start();
         _relayTimer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
         _relayTimer.Interval = TimeSpan.FromSeconds(60);

@@ -471,19 +471,31 @@ internal sealed class RoomScreen : Screen
         return other == null ? null : (other.Id, other.Kind);
     }
 
-    /// <summary>What the features offer the bar (RoomView.kt <c>offers</c>), read here so the bar does not hold the features.</summary>
+    /// <summary>
+    /// What the features offer the bar (RoomView.kt <c>offers</c>), read here
+    /// so the bar does not hold the features. A feature the deployment has
+    /// switched off (Remote) loses its button, unless it is under way: a show
+    /// playing, music going out, a share running, each of which goes on and
+    /// keeps what stops it. Read again whenever what the deployment says
+    /// changes (AppModel's Notify draws the room again), the button leaving
+    /// and arriving along the bar as an offered one does.
+    /// </summary>
     private Offers MakeOffers()
     {
         var watch = Call.Parts.TryGetValue(IBarOffer.Watch, out var w) ? w as IBarOffer : null;
         var music = Call.Parts.TryGetValue(IBarOffer.Music, out var m) ? m as IBarOffer : null;
         var sendingMusic = Call.People.Any(p => p.MusicTrack != null);
+        var remote = App.Remote;
+        var watchPlaying = watch?.Playing ?? false;
+        var musicPlaying = music?.Playing ?? sendingMusic;
         return new Offers(
-            Watch: watch?.Offered ?? false,
-            WatchPlaying: watch?.Playing ?? false,
-            Music: music?.Offered ?? sendingMusic,
-            MusicPlaying: music?.Playing ?? sendingMusic,
+            Watch: RemoteFeatures.Entry(watch?.Offered ?? false, remote.Allows(RemoteFeature.WatchTogether), watchPlaying || _watch.OnStage),
+            WatchPlaying: watchPlaying,
+            Music: RemoteFeatures.Entry(music?.Offered ?? sendingMusic, remote.Allows(RemoteFeature.Music), musicPlaying),
+            MusicPlaying: musicPlaying,
             Host: _host.Standing.Yours,
-            Knocking: _host.Waiting.Count);
+            Knocking: _host.Waiting.Count,
+            ScreenShare: remote.Allows(RemoteFeature.ScreenShare) || Call.Sharing.Active);
     }
 
     /// <summary>

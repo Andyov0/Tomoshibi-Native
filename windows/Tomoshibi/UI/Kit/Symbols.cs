@@ -69,6 +69,7 @@ internal static class Symbols
         ["info.circle"] = "",
         ["info.circle.fill"] = "",
         ["exclamationmark.circle.fill"] = "",
+        ["megaphone.fill"] = "",
         ["exclamationmark.circle"] = "",
         ["exclamationmark.triangle"] = "",
         ["rectangle.portrait.and.arrow.right"] = "",

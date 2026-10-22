@@ -312,9 +312,19 @@ internal sealed class LobbyScreen : Screen
         var sidebar = Sidebar();
         sidebar.Margin = new Thickness(10, Shared.TitleBar + 4, 10, 10);
         row.Children.Add(K.Holding(sidebar).Rises());
+        // The deployment's notice at the top of the content beside the
+        // sidebar, whichever section it is, with the section moved down under
+        // it (Android's Lobby.kt): the picture of yourself still fills the
+        // stage behind it, and the greeting and the server menu start below.
         _section = new Grid();
-        Grid.SetColumn(_section, 1);
-        row.Children.Add(_section);
+        var main = new Grid();
+        main.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        main.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        main.Children.Add(new LobbyNoticeCard(App.Remote, new Thickness(36, Shared.TitleBar + 12, 24, 0)));
+        Grid.SetRow(_section, 1);
+        main.Children.Add(_section);
+        Grid.SetColumn(main, 1);
+        row.Children.Add(main);
         Children.Add(row);
         ShowSection();
     }
@@ -558,9 +568,11 @@ internal sealed class LobbyScreen : Screen
         hero.Rises();
         _homeLists = K.Flowing(22);
         _homeLists.Rises(60);
-        // A newer build, under the large title, opening a space for itself.
-        if (App.Updates is { } updates) content.Children.Add(K.Column(0, title, new UpdateBanner(updates, inline: true, top: 22)));
-        else content.Children.Add(title);
+        // The deployment's notice first, then a newer build, under the large
+        // title, each opening a space for itself (Android's Lobby.kt).
+        var head = K.Column(0, title, new LobbyNoticeCard(App.Remote, new Thickness(0, 22, 0, 0)));
+        if (App.Updates is { } updates) head.Children.Add(new UpdateBanner(updates, inline: true, top: 22));
+        content.Children.Add(head);
         content.Children.Add(hero);
         content.Children.Add(_homeLists);
         var column = K.Column(0, K.Spacer(height: Shared.TitleBar + 52), content, K.Spacer(height: 96));

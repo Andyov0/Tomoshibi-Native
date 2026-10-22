@@ -134,6 +134,14 @@ public sealed record Launch
     public bool Blur { get; init; }
 
     /// <summary>
+    /// A file read as what the deployment says to the apps (TOMOSHIBI_REMOTE,
+    /// JSON as /api/apps/remote answers), in place of asking it: for pictures
+    /// of the lobby's notice and of features switched off, which the kit's
+    /// deployment cannot say (FileRemoteSource).
+    /// </summary>
+    public string? RemoteFile { get; init; }
+
+    /// <summary>
     /// Runs the person segmenter on MediaPipe's test portrait at start and
     /// logs how near its mask is to MediaPipe's (TOMOSHIBI_DEBUG_SEGMENT, a
     /// folder from windows/Blur/convert.py).
@@ -235,6 +243,7 @@ public sealed record Launch
             Watch = Get("TOMOSHIBI_WATCH"),
             CameraPicture = Get("TOMOSHIBI_CAMERA_PICTURE"),
             Blur = Get("TOMOSHIBI_BLUR") != null,
+            RemoteFile = Get("TOMOSHIBI_REMOTE"),
             SegmentCheck = Get("TOMOSHIBI_DEBUG_SEGMENT"),
             KeepIn = Get("TOMOSHIBI_KEEP") is { } keep && keep.All(c => char.IsLetterOrDigit(c) || c == '-') ? keep : null,
             LogFile = logFile,

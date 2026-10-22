@@ -16,9 +16,12 @@ namespace Tomoshibi.UI.Room;
 /// the features themselves: watching together to whoever can start a show
 /// and to everybody once there is one, the music to whoever has a library
 /// or while somebody sends music, the host panel only to whoever runs the
-/// room, with the people at its door counted on it.
+/// room, with the people at its door counted on it. The screen in the share's
+/// menu unless the deployment has switched screen sharing off (Remote), and
+/// then still while a share is running, which is not stopped by it and needs
+/// its Stop.
 /// </summary>
-internal sealed record Offers(bool Watch = false, bool WatchPlaying = false, bool Music = false, bool MusicPlaying = false, bool Host = false, int Knocking = 0);
+internal sealed record Offers(bool Watch = false, bool WatchPlaying = false, bool Music = false, bool MusicPlaying = false, bool Host = false, int Knocking = 0, bool ScreenShare = true);
 
 /// <summary>What a feature says about its button, kept in the call's parts under its name (ControlBar.kt <c>BarOffer</c>).</summary>
 internal interface IBarOffer
@@ -98,13 +101,19 @@ internal sealed class ControlBar : Grid
     /// <summary>Lays the bar out for a window this wide: compact once the full bar would come within 20 of its edges.</summary>
     public void Fit(double width, Offers offers)
     {
+        var screenChanged = offers.ScreenShare != _offers.ScreenShare;
         _offers = offers;
         var compact = Length(false, offers, _room.Showing, _call.Sealed) > width - 20;
         // Built again only when a button comes or goes: opening a panel whose
         // button is there already must not take the button from under the
         // keyboard's focus, which then fell to the first thing on the screen.
         var built = compact ? "compact" : $"{WatchShown}|{MusicShown}|{HostShown}";
-        if (compact == _compact && built == _built) return;
+        if (compact == _compact && built == _built)
+        {
+            // The share's button says what its menu has.
+            if (screenChanged) Update();
+            return;
+        }
         _compact = compact;
         _built = built;
         Build();
@@ -131,7 +140,7 @@ internal sealed class ControlBar : Grid
         _camera = Bar("video.fill", "");
         _camera.Click += async (_, _) => await Device(() => _call.SetCamera(!_call.CameraOn));
         _share = Bar("rectangle.on.rectangle", T("Share your screen"));
-        _share.Click += (_, _) => Overlay.Current?.Toggle("share", _share, () => new SharePanel(_call), width: 376, edge: Edge.Above, align: Align.Centre);
+        _share.Click += (_, _) => Overlay.Current?.Toggle("share", _share, () => new SharePanel(_call, _room.App.Remote), width: 376, edge: Edge.Above, align: Align.Centre);
         _row.Children.Add(_microphone);
         _row.Children.Add(_camera);
         _row.Children.Add(_share);
@@ -267,8 +276,12 @@ internal sealed class ControlBar : Grid
         Paint(_camera!, cam ? "video.fill" : "video.slash.fill", cam ? T("Turn camera off") : T("Turn camera on"), lit: false, quiet: !cam);
         _camera!.Named(cam ? T("Turn camera off") : T("Turn camera on"), "bar.camera");
         var sharing = _call.Sharing;
-        var shareLabel = sharing.Active ? T("Screen sharing settings") : sharing.Listening ? T("Sharing sound") : T("Share your screen");
-        Paint(_share!, sharing.Active ? "rectangle.inset.filled.on.rectangle" : sharing.Listening ? "waveform.circle.fill" : "rectangle.on.rectangle",
+        // With the screen switched off by the deployment the button is the
+        // sound's alone, and says so, rather than offering a screen its menu
+        // no longer has (Android's ControlBar.kt the same).
+        var screen = _offers.ScreenShare;
+        var shareLabel = sharing.Active ? T("Screen sharing settings") : sharing.Listening ? T("Sharing sound") : screen ? T("Share your screen") : T("Share only sound");
+        Paint(_share!, sharing.Active ? "rectangle.inset.filled.on.rectangle" : sharing.Listening ? "waveform.circle.fill" : screen ? "rectangle.on.rectangle" : "waveform",
             shareLabel, lit: sharing.Active || sharing.Listening, quiet: false);
         _share!.Named(shareLabel, "bar.share");
         var chat = _room.Showing == RoomScreen.Panel.Messages;
@@ -418,7 +431,7 @@ internal sealed class ControlBar : Grid
     /// <summary>The share's popover, as a launch that asks for it opens it (TOMOSHIBI_SHOW=share).</summary>
     public void OpenShare()
     {
-        if (_share != null) Overlay.Current?.Show("share", _share, new SharePanel(_call), width: 376, edge: Edge.Above, align: Align.Centre);
+        if (_share != null) Overlay.Current?.Show("share", _share, new SharePanel(_call, _room.App.Remote), width: 376, edge: Edge.Above, align: Align.Centre);
     }
 
     /// <summary>
@@ -477,16 +490,34 @@ internal sealed class ControlBar : Grid
 internal sealed class SharePanel : Grid
 {
     private readonly CallModel _call;
+    private readonly Remote _remote;
     private readonly StackPanel _column = K.Flowing(2);
-    private string _said = "";
+    /// <summary>
+    /// The screen's half, in a space of its own that opens and closes: gone
+    /// while the deployment has screen sharing switched off (Remote), and
+    /// back when it is on again, never while a share runs.
+    /// </summary>
+    private readonly Unfolding _screenSpace = new();
+    private readonly StackPanel _screen = K.Flowing(2);
+    private readonly StackPanel _sound = K.Flowing(2);
+    private string _screenSaid = "";
+    private string _soundSaid = "";
 
-    public SharePanel(CallModel call)
+    public SharePanel(CallModel call, Remote remote)
     {
         _call = call;
+        _remote = remote;
         _column.Padding = new Thickness(6);
+        _column.Children.Add(_screenSpace);
+        _column.Children.Add(_sound);
         Children.Add(_column);
         call.Sharing.Changed += Update;
-        Unloaded += (_, _) => call.Sharing.Changed -= Update;
+        remote.Changed += Update;
+        Unloaded += (_, _) =>
+        {
+            call.Sharing.Changed -= Update;
+            remote.Changed -= Update;
+        };
         Update();
     }
 
@@ -508,30 +539,43 @@ internal sealed class SharePanel : Grid
     private void Update()
     {
         var sharing = _call.Sharing;
+        var offered = _remote.Allows(RemoteFeature.ScreenShare) || sharing.Active;
         var shown = sharing.Shown;
-        var said = string.Join("|", shown, sharing.Active, sharing.Listening, sharing.ScreenBusy, sharing.SoundBusy, sharing.SendingLossless, sharing.LosslessChosen, sharing.WithSound, _call.Sealed);
-        if (said == _said) return;
-        _said = said;
-        _column.Children.Clear();
+        var screenSaid = offered ? string.Join("|", shown, sharing.Active, sharing.Listening, sharing.ScreenBusy) : "";
+        if (screenSaid != _screenSaid)
+        {
+            _screenSaid = screenSaid;
+            _screen.Children.Clear();
+            if (offered) Screen(sharing, shown);
+            _screenSpace.Show(offered ? _screen : null);
+        }
+        var soundSaid = string.Join("|", sharing.Active, sharing.Listening, sharing.SoundBusy, sharing.SendingLossless, sharing.LosslessChosen, sharing.WithSound, _call.Sealed);
+        if (soundSaid == _soundSaid) return;
+        _soundSaid = soundSaid;
+        _sound.Children.Clear();
+        Sound(sharing);
+    }
 
-        _column.Children.Add(Menu.Heading(T("Picture")));
+    private void Screen(Sharing sharing, Sharing.Setting shown)
+    {
+        _screen.Children.Add(Menu.Heading(T("Picture")));
         var sizes = new Segmented(Qualities.Select(StrainCard.Label).ToList(), Array.IndexOf(Qualities, shown.Quality), fill: true) { Margin = new Thickness(4, 0, 4, 0) };
         sizes.Named(T("Picture"), "share.quality");
         sizes.Chose += index => Change(() => sharing.Choose(Qualities[index]));
-        _column.Children.Add(sizes);
-        _column.Children.Add(K.Text(Describes(shown.Quality), 11.5, ink: Ink.Muted).Pad(10, 4, 10, 0));
+        _screen.Children.Add(sizes);
+        _screen.Children.Add(K.Text(Describes(shown.Quality), 11.5, ink: Ink.Muted).Pad(10, 4, 10, 0));
         // Absent for automatic, which chooses the rate as well: a control
         // that did nothing would be a control somebody set and believed.
         if (shown.Quality != ShareQuality.Auto)
         {
             var allowed = ShareRates.Allowed(Sharing.ShorterSide(shown.Quality));
-            _column.Children.Add(Menu.Heading(T("Frames a second")).Arrives());
+            _screen.Children.Add(Menu.Heading(T("Frames a second")).Arrives());
             var rates = new Segmented(allowed.Select(r => r.ToString()).ToList(), Array.IndexOf(allowed, shown.Fps), fill: true) { Margin = new Thickness(4, 0, 4, 0) };
             rates.Named(T("Frames a second"), "share.rate");
             rates.Chose += index => Change(() => sharing.Choose(shown.Quality, allowed[index]));
-            _column.Children.Add(rates.Arrives());
+            _screen.Children.Add(rates.Arrives());
         }
-        _column.Children.Add(Menu.Rule());
+        _screen.Children.Add(Menu.Rule());
         // Not turned off while busy: a change waits its turn and a stop
         // always goes through (Sharing).
         if (sharing.Active)
@@ -542,7 +586,7 @@ internal sealed class SharePanel : Grid
                 Change(sharing.StopScreen);
             }, "stop.circle", busy: sharing.ScreenBusy);
             stop.Named(T("Stop sharing"), "share.stop");
-            _column.Children.Add(stop);
+            _screen.Children.Add(stop);
         }
         else
         {
@@ -552,9 +596,13 @@ internal sealed class SharePanel : Grid
                 _ = _call.ShareScreen();
             }, "rectangle.on.rectangle", sharing.Listening ? T("Without its sound, while sound is shared on its own") : null, role: Menu.Role.Prominent, busy: sharing.ScreenBusy);
             start.Named(T("Share your screen"), "share.start");
-            _column.Children.Add(start);
+            _screen.Children.Add(start);
         }
-        _column.Children.Add(Menu.Rule());
+        _screen.Children.Add(Menu.Rule());
+    }
+
+    private void Sound(Sharing sharing)
+    {
         if (sharing.Listening)
         {
             // Which of the two is going out, because the switch that chose it
@@ -565,7 +613,7 @@ internal sealed class SharePanel : Grid
                 Change(sharing.StopSound);
             }, "stop.circle", sharing.SendingLossless ? T("Lossless") : T("Real time"), busy: sharing.SoundBusy);
             stop.Named(T("Stop sharing sound"), "share.sound.stop");
-            _column.Children.Add(stop);
+            _sound.Children.Add(stop);
         }
         else
         {
@@ -579,7 +627,7 @@ internal sealed class SharePanel : Grid
             }, "waveform", sharing.Active && sharing.WithSound ? T("Your shared screen goes quiet while this plays") : T("Everything this computer plays, except the call"),
                 role: Menu.Role.Prominent, busy: sharing.SoundBusy);
             start.Named(T("Share only sound"), "share.sound.start");
-            _column.Children.Add(start);
+            _sound.Children.Add(start);
             // Beneath what it qualifies and decided before the share starts.
             // Off where it cannot work, with the reason in place of the
             // description: lossless is data, which the SDK does not seal and
@@ -592,7 +640,7 @@ internal sealed class SharePanel : Grid
             var row = K.Line(10, K.Fixed(new Border { Width = 18, Child = K.Symbol("hifispeaker", 13, Ink.ForegroundAt(0.85f)) }), K.Flex(words), K.Fixed(toggle));
             row.Padding = new Thickness(10, 6, 4, 6);
             row.Opacity = _call.Sealed ? 0.7 : 1;
-            _column.Children.Add(row);
+            _sound.Children.Add(row);
         }
     }
 

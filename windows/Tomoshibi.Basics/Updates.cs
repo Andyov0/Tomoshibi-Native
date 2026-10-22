@@ -123,6 +123,13 @@ public interface IUpdateClock
 /// thing somebody saw of the download was a leap to an install. Not for
 /// longer than <see cref="FillAtMost"/>, since a window with no frames (one
 /// minimised) draws nothing, and an install is not held for a bar nobody sees.
+///
+/// The deployment can say how often to look (<see cref="CheckEvery"/>, its
+/// update_check_hours), and switch the whole of it off (<see cref="Allow"/>,
+/// Remote's app-updates): then nothing is looked for or offered and the
+/// settings say nothing about updates, but a download or an install already
+/// under way is seen through, since one stopped half way is a download
+/// somebody agreed to and lost (Android's Updates.kt the same).
 /// </summary>
 public sealed class Updates
 {
@@ -162,6 +169,12 @@ public sealed class Updates
     /// <summary>This build's version, dotted as the core and apps.json write it.</summary>
     public string Running { get; }
 
+    /// <summary>Whether updates are looked for and offered at all (<see cref="Allow"/>).</summary>
+    public bool Allowed { get; private set; } = true;
+
+    /// <summary>How long between looks; the deployment can say (<see cref="CheckEvery"/>).</summary>
+    public TimeSpan Interval { get; private set; } = Every;
+
     public Step Now { get; private set; } = new Step.None();
 
     /// <summary>
@@ -180,6 +193,8 @@ public sealed class Updates
     private readonly HashSet<string> _later = new();
     private bool _free;
     private bool _started;
+    /// <summary>Moved on by every new schedule of looks, so that a wait in the one before ends in nothing.</summary>
+    private int _schedule;
     private IUpdateTransfer? _transfer;
     private Task _transferRun = Task.CompletedTask;
     private bool _holding;
@@ -203,14 +218,21 @@ public sealed class Updates
         Changed?.Invoke();
     }
 
-    /// <summary>Whether the banner is up: something to say, in the lobby, and not put away.</summary>
+    /// <summary>
+    /// Whether the banner is up: something to say, in the lobby, and not put
+    /// away; with updates switched off, only a download or an install that
+    /// was already under way.
+    /// </summary>
     public bool Shown => _free && Now switch
     {
         Step.None => false,
-        Step.Offered offered => !_later.Contains(offered.Offer.Version),
+        Step.Offered offered => Allowed && !_later.Contains(offered.Offer.Version),
         Step.Held => false,
         _ => true,
     };
+
+    /// <summary>Whether the settings say anything about updates: unless they are switched off, and then still while one is under way, for its progress and its Cancel.</summary>
+    public bool Speaks => Allowed || Now is Step.Downloading or Step.Held or Step.Installing;
 
     /// <summary>The build being offered, downloaded or installed, whatever the step.</summary>
     public Offer? Offer => Now switch
@@ -236,16 +258,66 @@ public sealed class Updates
         catch (Exception)
         {
         }
+        if (Allowed) Arrange(lookingFirst: true);
+    }
+
+    /// <summary>
+    /// The looking, every <see cref="Interval"/>, from now or from one wait
+    /// from now. Any schedule before is given up, a wait in it included: it
+    /// wakes, sees it is not the schedule any more, and looks no more.
+    /// </summary>
+    private void Arrange(bool lookingFirst)
+    {
+        var mine = ++_schedule;
         _ = Asking();
 
         async Task Asking()
         {
+            if (!lookingFirst)
+            {
+                await _clock.Wait(Interval);
+                if (mine != _schedule) return;
+            }
             while (true)
             {
                 var answered = await Check(asked: false);
-                await _clock.Wait(answered ? Every : Retry);
+                if (mine != _schedule) return;
+                await _clock.Wait(answered ? Interval : Retry);
+                if (mine != _schedule) return;
             }
         }
+    }
+
+    /// <summary>
+    /// Whether to look for and offer updates (the deployment's app-updates).
+    /// Switched off, the looking stops and an offer is taken off the screen;
+    /// a download or an install under way goes on to its end. Switched on
+    /// again, the app looks at once, since the offer it missed may be days
+    /// old.
+    /// </summary>
+    public void Allow(bool on)
+    {
+        if (on == Allowed) return;
+        Allowed = on;
+        if (_started)
+        {
+            if (on) Arrange(lookingFirst: true);
+            else _schedule++;
+        }
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// How long between looks (the deployment's update_check_hours, the
+    /// app's six hours where it says none). A change counts from now: the
+    /// next look is one new wait away, not at once, since it is said at every
+    /// start, moments after the first look.
+    /// </summary>
+    public void CheckEvery(TimeSpan interval)
+    {
+        if (interval == Interval) return;
+        Interval = interval;
+        if (_started && Allowed) Arrange(lookingFirst: false);
     }
 
     /// <summary>Told whenever the screen changes: the lobby is the only place an update is shown or worked on.</summary>
@@ -313,7 +385,7 @@ public sealed class Updates
     /// <summary>The settings' "Check for updates".</summary>
     public void CheckNow()
     {
-        if (Answer == Said.Checking) return;
+        if (!Allowed || Answer == Said.Checking) return;
         Answer = Said.Checking;
         Changed?.Invoke();
         _ = Check(asked: true);
@@ -322,7 +394,7 @@ public sealed class Updates
     /// <summary>"Update": downloads the build offered, or installs it if it is already here.</summary>
     public void Accept()
     {
-        if (Now is not Step.Offered offered || !_free) return;
+        if (Now is not Step.Offered offered || !_free || !Allowed) return;
         if (_ready is { } ready && ready.Version == offered.Offer.Version && System.IO.File.Exists(ready.File)) Install(offered.Offer, ready.File);
         else Download(offered.Offer);
     }

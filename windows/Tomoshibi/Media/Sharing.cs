@@ -51,6 +51,17 @@ internal sealed class Sharing : Observable
     /// <summary>A debug launch's way past the picker: the first screen, taken without asking (TOMOSHIBI_SHARE=screen).</summary>
     public bool SkipPicker { get; set; }
 
+    /// <summary>
+    /// The deployment's ceiling over a share (ShareCeiling, Remote's params),
+    /// read as each share starts and each change of one is made: published at
+    /// one of the size's own rates no higher than the ceiling, captured no
+    /// taller than its height, and its frames taken no faster than it. A
+    /// ceiling changed mid-share applies from the next start or change,
+    /// rather than publishing again a share somebody is watching (Android's
+    /// Sharing.kt the same).
+    /// </summary>
+    public Func<ShareCeiling> Ceiling { get; set; } = () => ShareCeiling.None;
+
     private readonly Microsoft.UI.Dispatching.DispatcherQueue _ui;
 
     public Sharing(bool synthetic, Func<IntPtr> window)
@@ -210,8 +221,11 @@ internal sealed class Sharing : Observable
                 screen.Dispose();
                 return;
             }
-            var setting = new Setting(Quality, Rate(Quality));
-            var size = ScreenSource.Fit(screen.Content, setting.Quality, setting.Fps);
+            var limits = Ceiling();
+            var setting = new Setting(Quality, limits.Published(Rate(Quality), ShorterSide(Quality)));
+            var fitted = ScreenSource.Fit(screen.Content, setting.Quality, setting.Fps);
+            var size = limits.Size(fitted.Width, fitted.Height);
+            var captured = limits.Captured(setting.Fps);
             var video = await call.PublishVideo(new VideoKind.Screen((uint)setting.Fps, setting.Quality), (uint)size.Width, (uint)size.Height);
             if (epoch != _screenEpoch)
             {
@@ -253,7 +267,7 @@ internal sealed class Sharing : Observable
                 if (sound != null) await Quietly(sound.Unpublish);
                 sound = null;
             }
-            screen.Feed(video, setting.Fps, size);
+            screen.Feed(video, captured, size);
             screen.Ended += () => Later(StopScreenFromSystem);
             if (sound != null && _capture != null)
             {
@@ -269,7 +283,7 @@ internal sealed class Sharing : Observable
             Soundless = WithSound && !hears;
             Running = setting;
             Active = true;
-            Log.Line($"sharing the screen at {ShorterSide(setting.Quality)} and {setting.Fps} fps, {size.Width}x{size.Height}, with its sound {sound != null}");
+            Log.Line($"sharing the screen at {ShorterSide(setting.Quality)} and {setting.Fps} fps, {size.Width}x{size.Height} captured at {captured}, with its sound {sound != null}");
             // Sound shared on its own may have started, or stopped, while
             // this was being published.
             await SoundStandsDown();
@@ -349,7 +363,7 @@ internal sealed class Sharing : Observable
     /// nothing is asked again, and the sound is untouched. One at a time, and
     /// given up where the share stops meanwhile.
     /// </summary>
-    private async Task Retune(Setting setting)
+    private async Task Retune(Setting asked)
     {
         await _changes.WaitAsync();
         try
@@ -357,12 +371,15 @@ internal sealed class Sharing : Observable
             var epoch = _screenEpoch;
             var (call, old, screen) = (_call, _video, _screen);
             if (!Active || call == null || old == null || screen == null) throw new Gone();
+            var limits = Ceiling();
+            var setting = asked with { Fps = limits.Published(asked.Fps, ShorterSide(asked.Quality)) };
             if (setting == Running) return;
             _screenWork++;
             Notify();
             try
             {
-                var size = ScreenSource.Fit(screen.Content, setting.Quality, setting.Fps);
+                var fitted = ScreenSource.Fit(screen.Content, setting.Quality, setting.Fps);
+                var size = limits.Size(fitted.Width, fitted.Height);
                 var fresh = await call.PublishVideo(new VideoKind.Screen((uint)setting.Fps, setting.Quality), (uint)size.Width, (uint)size.Height);
                 if (epoch != _screenEpoch)
                 {
@@ -370,7 +387,7 @@ internal sealed class Sharing : Observable
                     await Quietly(fresh.Unpublish);
                     throw new Gone();
                 }
-                screen.Feed(fresh, setting.Fps, size);
+                screen.Feed(fresh, limits.Captured(setting.Fps), size);
                 _video = fresh;
                 Running = setting;
                 await Quietly(old.Unpublish);

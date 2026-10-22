@@ -31,6 +31,8 @@ internal sealed class DevicesPanel : Grid
     private readonly DeviceRows _microphones, _speakers, _cameras;
     private readonly StackPanel _microphoneMeter = K.Column(0);
     private MicrophoneMeterRow? _meter;
+    private readonly Unfolding _blurSpace = new();
+    private readonly UIElement _blurRow;
 
     public DevicesPanel(AppModel app, CallModel call, Action close)
     {
@@ -54,14 +56,20 @@ internal sealed class DevicesPanel : Grid
         }, last: true);
         _sections.Children.Add(Rows.Section(T("Speakers"), K.Card(_speakers, 16)));
 
-        // Every camera has the hairline under it: the blur's row ends the card.
+        // Every camera has the hairline under it while the blur's row ends
+        // the card, and the last has none once it does not.
         _cameras = new DeviceRows("video", "devices.camera", async id => await _call.UseCamera(id));
         // The call's own blur, from the next frame, in what is sent and in
         // the picture of yourself (Android's DevicesPanel). Beside the list
         // rather than in it, since the list reorders its own rows as devices
-        // come and go.
+        // come and go. Gone, opening and closing its space, while the
+        // deployment has blur switched off (Remote); a blur already on stays
+        // on for this call (AppModel.FollowBlur).
         var blur = Fields.Switch(_app.Blurring, _app.SetBlur, T("Blur my background"));
-        var cameraCard = K.Column(0, _cameras, Rows.Row(T("Blur my background"), blur, symbol: "person.and.background.dotted", last: true));
+        _blurRow = Rows.Row(T("Blur my background"), blur, symbol: "person.and.background.dotted", last: true);
+        ((FrameworkElement)_blurRow).Named(T("Blur my background"), "devices.blur");
+        var cameraCard = K.Column(0, _cameras, _blurSpace);
+        Offer(first: true);
         _sections.Children.Add(Rows.Section(T("Camera"), K.Card(cameraCard, 16)));
 
         // The language, here as well as in the settings, since a call has no settings of its own.
@@ -81,13 +89,27 @@ internal sealed class DevicesPanel : Grid
         {
             _app.Media.DevicesChanged += Refresh;
             _call.Changed += Meter;
+            _app.Remote.Changed += Offered;
+            Offer(first: false);
             Refresh();
         };
         Unloaded += (_, _) =>
         {
             _app.Media.DevicesChanged -= Refresh;
             _call.Changed -= Meter;
+            _app.Remote.Changed -= Offered;
         };
+    }
+
+    private void Offered() => Offer(first: false);
+
+    /// <summary>The blur's row, while the deployment offers blur; the cameras' last hairline goes with it.</summary>
+    private void Offer(bool first)
+    {
+        var offered = _app.BlurOffered;
+        _cameras.Last = !offered;
+        if (first && !offered) return;
+        _blurSpace.Show(offered ? _blurRow : null);
     }
 
     public static Tap CloseButton(Action close)
@@ -146,7 +168,7 @@ internal sealed class DeviceRows : StackPanel
     private readonly Func<string, Task> _pick;
     /// <summary>Each device's row, in a column with the hairline under it.</summary>
     private readonly Dictionary<string, (StackPanel Item, Tap Row, string Name, Border Rule)> _rows = new();
-    private readonly bool _last;
+    private bool _last;
     private FrameworkElement? _empty;
     private string? _chosen;
     private bool _shown;
@@ -157,6 +179,22 @@ internal sealed class DeviceRows : StackPanel
         _automation = automation;
         _pick = pick;
         _last = last;
+    }
+
+    /// <summary>Whether the list ends its card, its last row with no hairline under it.</summary>
+    public bool Last
+    {
+        get => _last;
+        set
+        {
+            if (value == _last) return;
+            _last = value;
+            var items = Children.OfType<StackPanel>().ToList();
+            foreach (var (item, _, _, rule) in _rows.Values)
+            {
+                rule.Visibility = _last && items.Count > 0 && ReferenceEquals(item, items[^1]) ? Visibility.Collapsed : Visibility.Visible;
+            }
+        }
     }
 
     public void Show(IReadOnlyList<DeviceOption> devices, string? current)

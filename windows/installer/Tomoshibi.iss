@@ -256,7 +256,15 @@ var
   Logo: TBitmapImage;
   Title, Detail: TNewStaticText;
 begin
-  Shown := CreateCustomForm(ScaleX(420), ScaleY(116), False, False);
+  // Sized in the setup's own unscaled units: CreateCustomForm scales the
+  // client size by the screen's DPI itself, and without KeepSizeX and
+  // KeepSizeY stretches it by the wizard's size percent as well (120 for the
+  // modern style). Handed ScaleX(420) and ScaleY(116), the window was scaled
+  // twice and stretched, 2.56 times what its contents filled at 200 per cent
+  // (2293 by 632 pixels around a picture, a title and a bar laid out for 895
+  // by 247), and a fifth too wide even at 100. The contents are placed with
+  // ScaleX and ScaleY, which is the scale the form is made at.
+  Shown := CreateCustomForm(420, 116, True, True);
   Shown.Caption := 'Tomoshibi';
   Shown.BorderStyle := bsDialog;
   Shown.BorderIcons := [];

@@ -77,6 +77,12 @@ public sealed partial class MainWindow : Window
         };
 
         Localization.Shared.Changed += Refresh;
+        // Back at the front, the deployment is asked what it says now (Remote
+        // `Refresh`, which holds back a question asked a moment before).
+        Activated += (_, e) =>
+        {
+            if (e.WindowActivationState != WindowActivationState.Deactivated) app.Remote.Refresh();
+        };
         Appearance.Shared.Changed += () =>
         {
             Ink.ApplyAccent();

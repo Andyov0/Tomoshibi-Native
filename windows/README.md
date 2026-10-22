@@ -418,6 +418,43 @@ Tomoshibi's developer, so it was not installed." The banner's steps, posed for p
 `:about` to open the settings there), are in the kit's shots beside
 Android's and the Mac's.
 
+### What the deployment says between releases
+
+`Tomoshibi.Basics\Remote.cs` is Android's `Remote.kt` and the Apple apps'
+`Remote.swift`: the core asks `/api/apps/remote` as the app
+(`Model\CoreRemote.cs`, `Deployment.RemoteConfig`), and works the answer out
+for each of the four languages (`remote_phrases`, `remote_notice_text`). The
+last answer is kept in the preferences (`tomoshibi.remote`, and the notices
+closed under `tomoshibi.remote.closed`) and applied before the window's first
+frame; then the deployment is asked at start, every half hour, whenever the
+window comes to the front and whenever the app comes back to the lobby, never
+twice in a minute. A question not answered changes nothing and says nothing.
+Only a debug build given a deployment, or a release build, asks.
+
+- Phrases laid over: `T()` and `Say()` look in the deployment's phrases for
+  the language on screen first (`Localization.LaidOver`), and a change to them
+  redraws the screens as a change of language does.
+- Features switched off lose their way in, arriving and leaving with the
+  bar's own motion or opening and closing a space: `screen-share` the
+  screen's half of the share menu (the share button is then sound's alone),
+  `watch-together` and `music` their buttons, `background-blur` its switch in
+  the call's devices and in the settings, `app-updates` the looking, the offer
+  and the settings' row. Nothing under way is stopped: a share, a show or
+  music going out keeps what stops it, a download or an install goes on, and
+  a blur already on stays on for that call and counts as off from the next.
+- Numbers: `screen_share_max_fps` and `screen_share_max_height` are ceilings
+  over a screen share (`ShareCeiling.cs`), published at one of its size's own
+  rates and captured no faster and no taller; `update_check_hours` is the
+  updates' interval, never under ten minutes. `screen_share_hot_fps` is for a
+  device that says it is hot, which Windows does not reliably, and is not
+  read here.
+- The notice is at the top of the lobby, signed in or not: at the head of the
+  section beside the sidebar on a wide window, under the large title on a
+  narrow one, at the head of the sign-in screen's column; never in a call.
+  Its close puts that id away for good. Wherever the update's card is shown in
+  the same column it is below the notice, each opening its own space, so the
+  two never lie across each other.
+
 ## Switches
 
 Read from the environment, the same names the Apple apps read:
@@ -443,6 +480,7 @@ Read from the environment, the same names the Apple apps read:
 | `TOMOSHIBI_SHOW=…` | Opens something over the screen: `start`, `join`, `schedule`, `servers`, `settings[:general\|media\|account\|about]`, and in a call `chat`, `devices`, `sound`, `host`, `share`, `leave`. Once, in the first call. |
 | `TOMOSHIBI_SHOW=update:…` | Poses an update at a step (`offered`, `downloading`, `installing`, `failed`, `current`) and asks the deployment nothing; `:about` after it opens the settings there. |
 | `TOMOSHIBI_BLUR` | Blurs the background from the start. |
+| `TOMOSHIBI_REMOTE=file` | Reads this file, JSON as `/api/apps/remote` answers it, in place of asking the deployment what it says to the apps, through the core's own reading of one: for pictures of the notice and of features switched off. Read again whenever the deployment would be asked. |
 | `TOMOSHIBI_CAMERA_PICTURE=file` | The generated camera shows this picture (a person) drifting over its bands, for the blur to find. |
 | `TOMOSHIBI_DEBUG_SEGMENT=folder` | Runs the segmenter on `portrait-input.bin` and logs how near its mask is to `portrait-mediapipe.bin` (both from `Blur/convert.py`). |
 | `TOMOSHIBI_WATCH=link` | Watches this video together straight after joining, once the server says this person may. |

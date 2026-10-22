@@ -416,8 +416,16 @@ internal sealed class DeviceChoices : StackPanel
 {
     private readonly AppModel _app;
     private readonly StackPanel _rows = K.Column(0);
+    private readonly StackPanel _sound = K.Column(0);
     private readonly StackPanel _forget = K.Column(0);
     private readonly StackPanel _footer = K.Column(0);
+    /// <summary>
+    /// The blur's row, in a space of its own that opens and closes: gone
+    /// while the deployment has blur switched off (Remote), and kept across
+    /// the list's refills, which would otherwise draw it in again each time.
+    /// </summary>
+    private readonly Unfolding _blurSpace = new();
+    private UIElement? _blurRow;
     private int _filling;
 
     public DeviceChoices(AppModel app)
@@ -425,14 +433,39 @@ internal sealed class DeviceChoices : StackPanel
         _app = app;
         Spacing = 8;
         Children.Add(K.Text(T("Devices"), 12, K.Semibold, Ink.Muted).Pad(6, 0, 0, 0));
-        Children.Add(K.Card(K.Column(0, _rows, _forget), 16));
+        Children.Add(K.Card(K.Column(0, _rows, _blurSpace, _sound, _forget), 16));
         Children.Add(_footer);
         Loaded += (_, _) =>
         {
             _app.Media.DevicesChanged += Fill;
+            _app.Remote.Changed += Blur;
+            Blur();
             Fill();
         };
-        Unloaded += (_, _) => _app.Media.DevicesChanged -= Fill;
+        Unloaded += (_, _) =>
+        {
+            _app.Media.DevicesChanged -= Fill;
+            _app.Remote.Changed -= Blur;
+        };
+    }
+
+    /// <summary>
+    /// The web's "Blur my background" tick, kept as the web keeps it
+    /// (meet-live.blur) and applied at once: to the picture above, and to a
+    /// call that is on. Under the camera, as on Android (MediaSettings.kt);
+    /// there while the deployment offers blur.
+    /// </summary>
+    private void Blur()
+    {
+        if (!_app.BlurOffered)
+        {
+            _blurSpace.Show(null);
+            _blurRow = null;
+            return;
+        }
+        if (_blurRow != null) return;
+        _blurRow = Rows.Row(T("Blur my background"), Fields.Switch(_app.Blurring, _app.SetBlur, T("Blur my background")), symbol: "person.and.background.dotted");
+        _blurSpace.Show(_blurRow);
     }
 
     private async void Fill()
@@ -445,13 +478,11 @@ internal sealed class DeviceChoices : StackPanel
         var memory = _app.DeviceMemory;
         var picked = memory.Choices().Count > 0;
         _rows.Children.Clear();
+        _sound.Children.Clear();
         _rows.Children.Add(AdaptiveRow(T("Camera"), "video", Pick(cameras, DeviceMemory.Kind.Camera)));
-        // The web's "Blur my background" tick, kept as the web keeps it
-        // (meet-live.blur) and applied at once: to the picture above, and to
-        // a call that is on. Under the camera, as on Android (MediaSettings.kt).
-        _rows.Children.Add(Rows.Row(T("Blur my background"), Fields.Switch(_app.Blurring, _app.SetBlur, T("Blur my background")), symbol: "person.and.background.dotted"));
-        _rows.Children.Add(AdaptiveRow(T("Microphone"), "mic", Pick(microphones, DeviceMemory.Kind.Microphone), last: speakers.Count == 0 && !picked));
-        if (speakers.Count > 0) _rows.Children.Add(AdaptiveRow(T("Speakers"), "speaker.wave.2", Pick(speakers, DeviceMemory.Kind.Speakers), last: !picked));
+        // The blur's row lies between these two (Blur), under the camera.
+        _sound.Children.Add(AdaptiveRow(T("Microphone"), "mic", Pick(microphones, DeviceMemory.Kind.Microphone), last: speakers.Count == 0 && !picked));
+        if (speakers.Count > 0) _sound.Children.Add(AdaptiveRow(T("Speakers"), "speaker.wave.2", Pick(speakers, DeviceMemory.Kind.Speakers), last: !picked));
         Picked();
     }
 
@@ -724,10 +755,13 @@ internal static class About
     /// changes with a fade. A download's megabytes are the lobby's bar's
     /// (Updates.Bar), counted up at its pace and never past what has arrived,
     /// so that the two never disagree; it moves that bar too while it is
-    /// shown, the lobby's banner being under the settings.
+    /// shown, the lobby's banner being under the settings. Not there while
+    /// the deployment has updates switched off (Updates.Speaks), unless one
+    /// is under way, and opening and closing its space as that changes.
     /// </summary>
     private static UIElement UpdateRow(Updates updates)
     {
+        var space = new Unfolding();
         static string Label(Offer offer) => uniffi.tomoshibi_protocol.TomoshibiProtocolMethods.VersionLabel(offer.Version);
         string Progress(long total) => T("{received} of {total}", ("received", UpdateBanner.Megabytes((long)(updates.Bar.Shown * total))), ("total", UpdateBanner.Megabytes(total)));
         var line = K.Text("", 11.5, ink: Ink.Muted);
@@ -811,17 +845,21 @@ internal static class About
         var paced = new Paced(column, updates.Bar, _ => Refresh());
         void Changed()
         {
+            space.Show(updates.Speaks ? column : null);
             Refresh();
             paced.Wake();
         }
-        column.Loaded += (_, _) =>
+        // On the space rather than the row, which leaves the tree while it is
+        // not shown and would stop listening for when to come back.
+        space.Loaded += (_, _) =>
         {
             updates.Changed -= Changed;
             updates.Changed += Changed;
             Changed();
         };
-        column.Unloaded += (_, _) => updates.Changed -= Changed;
-        return column;
+        space.Unloaded += (_, _) => updates.Changed -= Changed;
+        if (updates.Speaks) space.Show(column);
+        return space;
     }
 }
 

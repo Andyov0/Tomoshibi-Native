@@ -21,12 +21,14 @@ namespace Tomoshibi.UI.Lobby;
 ///
 /// Shown only while the lobby is the screen (Updates.Shown), so that no call
 /// is ever interrupted by it; under the sheets and the settings, which cover
-/// it as they cover the lobby. Floating, in the wide lobby above the content
-/// and on the sign-in screen under its language menu, it slides down from
-/// above and fades, and leaves the same way; inline, in the narrow lobby's
-/// column under its large title, it opens a space for itself and closes it
-/// again. What it says changes with a cross-fade and a change of height,
-/// never a cut.
+/// it as they cover the lobby. Inline, in the sidebar's foot, in the narrow
+/// lobby's column under its large title and at the head of the sign-in
+/// screen's column, under the deployment's notice where there is one
+/// (LobbyNoticeCard), it opens a space for itself and closes it again, so
+/// that the two never lie across each other and either moves the other as it
+/// comes and goes; floating, where a screen asks for it, it slides down from
+/// above and fades, and leaves the same way. What it says changes with a
+/// cross-fade and a change of height, never a cut.
 /// </summary>
 internal sealed class UpdateBanner : Grid
 {

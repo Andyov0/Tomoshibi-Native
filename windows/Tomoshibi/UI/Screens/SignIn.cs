@@ -92,7 +92,16 @@ internal sealed class SignInScreen : Screen
         var pane = Frames.Pane(form, 30, new Thickness(18));
         pane.Rises(60);
 
-        var column = K.Column(22, heading, pane);
+        // The deployment's notice, then a newer build, at the head of the
+        // column, each opening a space for itself and the heading moved down
+        // under them: one over the other, so that neither ever lies across
+        // the other, and either coming or going moves what is below it
+        // rather than cutting (the owner, 2026-10-22). The notice is for
+        // whoever has the app, signed in or not (the deployment's "shown in
+        // the apps' lobby, signed in or not"), as the Apple apps show it.
+        var head = K.Column(0, new Lobby.LobbyNoticeCard(App.Remote, new Thickness(0, 0, 0, 18)));
+        if (App.Updates is { } updates) head.Children.Add(new Lobby.UpdateBanner(updates, inline: true, top: 0, below: 18));
+        var column = K.Column(0, head, K.Column(22, heading, pane));
         column.MaxWidth = 420;
         column.HorizontalAlignment = HorizontalAlignment.Stretch;
         var scroller = new ScrollViewer
@@ -125,9 +134,6 @@ internal sealed class SignInScreen : Screen
         Children.Add(new Backdrop());
         Children.Add(layout);
         Children.Add(Shared.LanguageMenu());
-        // Somebody not signed in gets their updates too; below the language
-        // menu, which it would otherwise cover.
-        if (App.Updates is { } updates) Children.Add(new Lobby.UpdateBanner(updates, top: Shared.TitleBar + 62));
         Children.Add(_toast);
         Update();
     }

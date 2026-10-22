@@ -79,6 +79,16 @@ public partial class App : Application
 #else
         var asksForUpdates = true;
 #endif
+        // What the deployment says between releases (Remote), asked of the
+        // same deployment as the updates, or read from a test's file; kept in
+        // the app's preferences (a rehearsal's in memory), and what was kept
+        // applied now, before the window's first frame, so that the first
+        // screen is drawn with the phrases and the switches it will have.
+        IRemoteSource? remoteSource = launch.RemoteFile is { } remoteFile ? new FileRemoteSource(remoteFile)
+            : asksForUpdates ? new CoreRemoteSource(launch.Base ?? uniffi.tomoshibi_protocol.TomoshibiProtocolMethods.HomeDeployment())
+            : null;
+        app.Remote = new Remote(remoteSource, app.Defaults, new RealUpdateClock());
+        app.Remote.Restore();
         if (asksForUpdates)
         {
             var source = new CoreUpdateSource(launch.Base ?? uniffi.tomoshibi_protocol.TomoshibiProtocolMethods.HomeDeployment(), UpdatesFolder(launch),
@@ -88,6 +98,16 @@ public partial class App : Application
                 ? new PackageInstaller()
                 : new SetupInstaller(() => quitOn.TryEnqueue(() => Current.Exit()), Motion.Settle);
             app.Updates = new Updates(source, installer, ClientDescription.Version, new RealUpdateClock());
+            // Each answer heard said once in the log, which a test reads.
+            var heard = "";
+            app.Remote.Changed += () =>
+            {
+                var answer = app.Remote.Answer;
+                var now = $"{answer.Revision} off [{string.Join(",", answer.Off.Order())}] notice {answer.Notice?.Id ?? "none"}";
+                if (now == heard) return;
+                heard = now;
+                Log.Line($"remote: {now}");
+            };
             // Each step said once in the log, which a test reads.
             var said = "";
             app.Updates.Changed += () =>

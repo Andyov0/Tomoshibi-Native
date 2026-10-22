@@ -178,8 +178,53 @@ public sealed class Localization
         if (changed) Changed?.Invoke();
     }
 
-    public string Template(string phrase) =>
-        _tables.TryGetValue(Language, out var table) && table.TryGetValue(phrase, out var said) ? said : phrase;
+    // Made with the instance rather than shared from a static: Shared is made
+    // while the class's statics are still being set, in the order they are
+    // written, and a static declared below it was still null then, so every
+    // phrase the app said threw.
+    private IReadOnlyDictionary<Language, IReadOnlyDictionary<string, string>> _laidOver = new Dictionary<Language, IReadOnlyDictionary<string, string>>();
+
+    /// <summary>
+    /// Phrases the deployment lays over the app's own (Remote, the core's
+    /// api/remote.rs), by language and then by the English they are keyed by.
+    /// Each language holds only what the deployment wrote in it, or in it
+    /// without its region or script, and never its English: where a phrase
+    /// was reworded in English alone, a reader of Japanese is better served by
+    /// the app's own Japanese than by the deployment's English (Android's and
+    /// the Apple apps' Localization the same).
+    ///
+    /// A change to what is laid over in the language on screen is said as a
+    /// change of language is, so that everything that said something says it
+    /// again: the owner, 2026-10-22, asked for wording to change between
+    /// releases without anybody starting the app again. A change only in
+    /// other languages says nothing, since nothing on screen reads them.
+    /// </summary>
+    public IReadOnlyDictionary<Language, IReadOnlyDictionary<string, string>> LaidOver
+    {
+        get => _laidOver;
+        set
+        {
+            var before = LaidIn(_laidOver, Language);
+            _laidOver = value;
+            if (!Same(before, LaidIn(value, Language))) Changed?.Invoke();
+        }
+    }
+
+    private static IReadOnlyDictionary<string, string>? LaidIn(IReadOnlyDictionary<Language, IReadOnlyDictionary<string, string>> laid, Language language) =>
+        laid.TryGetValue(language, out var table) && table.Count > 0 ? table : null;
+
+    private static bool Same(IReadOnlyDictionary<string, string>? a, IReadOnlyDictionary<string, string>? b)
+    {
+        if (a == null || b == null) return a == b;
+        return a.Count == b.Count && a.All(pair => b.TryGetValue(pair.Key, out var other) && other == pair.Value);
+    }
+
+    /// <summary>The template for a phrase in the language showing: the deployment's where it laid one over, the app's own otherwise, the English key last.</summary>
+    public string Template(string phrase)
+    {
+        if (_laidOver.TryGetValue(Language, out var laid) && laid.TryGetValue(phrase, out var over)) return over;
+        return _tables.TryGetValue(Language, out var table) && table.TryGetValue(phrase, out var said) ? said : phrase;
+    }
 
     public string T(string phrase, IReadOnlyDictionary<string, object?>? values = null) => Substitute(Template(phrase), values);
 
@@ -190,6 +235,7 @@ public sealed class Localization
     /// </summary>
     public string Say(string text)
     {
+        if (_laidOver.TryGetValue(Language, out var laid) && laid.TryGetValue(text, out var over)) return over;
         if (_tables.TryGetValue(Language, out var table) && table.TryGetValue(text, out var exact)) return exact;
         if (_folded.TryGetValue(Language, out var folded) && folded.TryGetValue(text.ToLowerInvariant(), out var loose)) return loose;
         return text;
