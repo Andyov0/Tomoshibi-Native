@@ -744,6 +744,30 @@
       "zh-Hans": "之后需要重新输入名称和口令才能登录。",
       "zh-Hant": "之後需要重新輸入名稱和密語才能登入。",
       "ja": "もう一度使うときは、名前と合言葉でサインインし直します。"
+    },
+    "Voice calls in a small bubble": {
+      "en": "Voice calls in a small bubble",
+      "zh-Hans": "纯语音时改用小浮窗",
+      "zh-Hant": "純語音時改用小浮窗",
+      "ja": "音声だけのときは小さなバブルで"
+    },
+    "When there is nothing to see, leaving Tomoshibi can keep the call in a small bubble at the edge of the screen instead of the large picture-in-picture window. Android asks you to allow this once: on the next screen, choose Tomoshibi and allow it. Without it, the large window stays.": {
+      "en": "When there is nothing to see, leaving Tomoshibi can keep the call in a small bubble at the edge of the screen instead of the large picture-in-picture window. Android asks you to allow this once: on the next screen, choose Tomoshibi and allow it. Without it, the large window stays.",
+      "zh-Hans": "没有画面的时候，离开 Tomoshibi 后通话可以缩成屏幕边上的一个小浮窗，不用系统那个大画中画窗口。Android 需要你允许一次：在接下来的页面里选 Tomoshibi，然后允许。不允许的话，还是用大窗口。",
+      "zh-Hant": "沒有畫面的時候，離開 Tomoshibi 後通話可以縮成螢幕邊上的一個小浮窗，不用系統那個大的子母畫面視窗。Android 需要你允許一次：在接下來的頁面裡選 Tomoshibi，然後允許。不允許的話，還是用大視窗。",
+      "ja": "映像がないとき、Tomoshibi を離れると、大きなピクチャ・イン・ピクチャのウインドウの代わりに、画面の端の小さなバブルで通話を続けられます。Android では一度だけ許可が必要です。次の画面で Tomoshibi を選んで許可してください。許可しない場合は大きなウインドウのままです。"
+    },
+    "Tap to watch": {
+      "en": "Tap to watch",
+      "zh-Hans": "点一下观看",
+      "zh-Hant": "點一下觀看",
+      "ja": "タップして見る"
+    },
+    "Back to the call": {
+      "en": "Back to the call",
+      "zh-Hans": "回到通话",
+      "zh-Hant": "回到通話",
+      "ja": "通話に戻る"
     }
   }
 }

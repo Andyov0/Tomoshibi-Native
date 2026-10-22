@@ -100,7 +100,7 @@ internal object MediaDebug {
         }
         val now = app.call
         Log.i(TAG, "media debug: $line done; sharing ${now?.sharing?.state ?: "-"}; out ${now?.audio?.current(input = false) ?: "-"};" +
-            " window visible ${CallWindow.visible} small ${CallWindow.inPictureInPicture} wanted ${CallWindow.wanted};" +
+            " window visible ${CallWindow.visible} small ${CallWindow.inPictureInPicture} wanted ${CallWindow.wanted}; bubble ${CallBubble.showing} allowed ${CallBubble.allowed};" +
             " thermal ${Thermal.status}; blur ${now?.blurring};" +
             " down ${now?.connection?.downKbps?.toInt()} kb/s up ${now?.connection?.upKbps?.toInt()} kb/s;" +
             " camera sent ${if (now?.cameraOn == true) now.camera.sent else "-"};" +

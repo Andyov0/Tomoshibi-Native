@@ -3361,6 +3361,36 @@
         }
       }
     },
+    "Back to the call" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Back to the call"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通話に戻る"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回到通话"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回到通話"
+          }
+        }
+      }
+    },
     "Background" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -19771,6 +19801,36 @@
         }
       }
     },
+    "Tap to watch" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tap to watch"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "タップして見る"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "点一下观看"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "點一下觀看"
+          }
+        }
+      }
+    },
     "Teal" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -25531,6 +25591,36 @@
         }
       }
     },
+    "Voice calls in a small bubble" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Voice calls in a small bubble"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声だけのときは小さなバブルで"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "纯语音时改用小浮窗"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "純語音時改用小浮窗"
+          }
+        }
+      }
+    },
     "Vote to skip ({votes}/{needed})" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -26247,6 +26337,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "有登入帳號的人開始播放影片後,會顯示在這裡。"
+          }
+        }
+      }
+    },
+    "When there is nothing to see, leaving Tomoshibi can keep the call in a small bubble at the edge of the screen instead of the large picture-in-picture window. Android asks you to allow this once: on the next screen, choose Tomoshibi and allow it. Without it, the large window stays." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When there is nothing to see, leaving Tomoshibi can keep the call in a small bubble at the edge of the screen instead of the large picture-in-picture window. Android asks you to allow this once: on the next screen, choose Tomoshibi and allow it. Without it, the large window stays."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "映像がないとき、Tomoshibi を離れると、大きなピクチャ・イン・ピクチャのウインドウの代わりに、画面の端の小さなバブルで通話を続けられます。Android では一度だけ許可が必要です。次の画面で Tomoshibi を選んで許可してください。許可しない場合は大きなウインドウのままです。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有画面的时候，离开 Tomoshibi 后通话可以缩成屏幕边上的一个小浮窗，不用系统那个大画中画窗口。Android 需要你允许一次：在接下来的页面里选 Tomoshibi，然后允许。不允许的话，还是用大窗口。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沒有畫面的時候，離開 Tomoshibi 後通話可以縮成螢幕邊上的一個小浮窗，不用系統那個大的子母畫面視窗。Android 需要你允許一次：在接下來的頁面裡選 Tomoshibi，然後允許。不允許的話，還是用大視窗。"
           }
         }
       }
