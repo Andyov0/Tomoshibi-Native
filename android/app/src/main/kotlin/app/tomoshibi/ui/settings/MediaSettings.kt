@@ -30,11 +30,15 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import app.tomoshibi.basics.Theme
 import app.tomoshibi.basics.t
 import app.tomoshibi.model.AppModel
 import app.tomoshibi.model.CallPreferences
 import app.tomoshibi.model.DeviceMemory
+import app.tomoshibi.model.RemoteFeature
 import app.tomoshibi.ui.kit.Appear
 import app.tomoshibi.ui.kit.Capsule
 import app.tomoshibi.ui.kit.Font
@@ -126,17 +130,26 @@ internal fun MediaSettings(app: AppModel, preferences: CallPreferences) {
             }
             // The web's "Blur my background" tick, kept as the web keeps it
             // (`meet-live.blur`) and applied by the call's own blur from the
-            // next call, and at once in a call that is on.
-            SettingsRow(t("Blur my background"), symbol = "person.and.background.dotted") {
-                GlassSwitch(
-                    blurWanted,
-                    { on ->
-                        blurWanted = on
-                        app.deviceMemory.rememberBlur(on)
-                        app.call?.setBlur(on)
-                    },
-                    label = t("Blur my background"),
-                )
+            // next call, and at once in a call that is on. Gone while the
+            // deployment has blur switched off (Remote), when the next call
+            // starts unblurred whatever is remembered here (CallModel
+            // `blurKept`).
+            AnimatedVisibility(
+                app.remote.allows(RemoteFeature.BackgroundBlur),
+                enter = Theme.arrive + expandVertically(Theme.settle()),
+                exit = Theme.depart + shrinkVertically(Theme.leave()),
+            ) {
+                SettingsRow(t("Blur my background"), Modifier.testTag("settings.blur"), symbol = "person.and.background.dotted") {
+                    GlassSwitch(
+                        blurWanted,
+                        { on ->
+                            blurWanted = on
+                            app.deviceMemory.rememberBlur(on)
+                            app.call?.setBlur(on)
+                        },
+                        label = t("Blur my background"),
+                    )
+                }
             }
             AdaptiveRow(t("Microphone"), symbol = "mic", last = speakers.isEmpty() && !picked) {
                 DeviceChoice("settings.microphone", microphones, preferences, DeviceMemory.Kind.Microphone)

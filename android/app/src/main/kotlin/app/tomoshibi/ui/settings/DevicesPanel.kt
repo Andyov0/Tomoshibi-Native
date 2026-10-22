@@ -225,26 +225,34 @@ fun DevicesPanel(app: AppModel, call: CallModel, close: () -> Unit, modifier: Mo
 
             Section(t("Camera")) {
                 Arriving(lists.known && lists.cameras.isEmpty()) { Empty() }
-                Rows(lists.cameras, { it.id }) { one, _ ->
+                // The last camera ends the section where the blur below it
+                // is not offered.
+                val blurOffered = call.blurOffered
+                Rows(lists.cameras, { it.id }) { one, last ->
                     ChoiceRow(
                         one.name,
                         { chooseCamera(one.id) },
                         Modifier.testTag("devices.camera.${one.id}"),
                         symbol = "video",
                         checked = lists.camera == one.id,
+                        last = last && !blurOffered,
                     )
                 }
                 // The call's own blur, from the next frame, in what is sent
-                // and in the picture of oneself.
-                SettingsRow(t("Blur my background"), symbol = "person.and.background.dotted", last = true) {
-                    GlassSwitch(
-                        blurring,
-                        { on ->
-                            blurring = on
-                            call.setBlur(on)
-                        },
-                        label = t("Blur my background"),
-                    )
+                // and in the picture of oneself. Gone where the deployment has
+                // switched blur off (Remote); a blur already on stays on for
+                // this call (CallModel `blurKept`).
+                AnimatedVisibility(blurOffered, enter = Theme.arrive + expandVertically(Theme.settle()), exit = Theme.depart + shrinkVertically(Theme.leave())) {
+                    SettingsRow(t("Blur my background"), Modifier.testTag("devices.blur"), symbol = "person.and.background.dotted", last = true) {
+                        GlassSwitch(
+                            blurring,
+                            { on ->
+                                blurring = on
+                                call.setBlur(on)
+                            },
+                            label = t("Blur my background"),
+                        )
+                    }
                 }
             }
 

@@ -84,6 +84,12 @@ enum class RoomPanel { Messages, Sound, Watch, Music, Host, Devices }
  * (ControlBar.swift `Offers`).
  */
 data class Offers(
+    /**
+     * The screen in the share's menu: unless the deployment has switched
+     * screen sharing off (Remote), and then still while a share is running,
+     * which is not stopped by it and needs its Stop.
+     */
+    val screenShare: Boolean = true,
     /** Room.tsx ~295: to whoever can start a show, to everybody once there is one. */
     val watch: Boolean = false,
     val watchPlaying: Boolean = false,
@@ -219,7 +225,7 @@ internal fun ControlBar(
             { device { call.setCamera(!call.cameraOn) } },
             quiet = !call.cameraOn, size = size,
         )
-        ShareControl(call, popovers, axis, size)
+        ShareControl(call, offers.screenShare, popovers, axis, size)
         // The hand and, behind the narrow half beside it, the reactions
         // (HandButton.tsx).
         HandControl(call, popovers, axis, beside = beside, size = size) { work -> act(work) }
@@ -391,26 +397,31 @@ private fun Count(count: Int) {
  * choices on it.
  */
 @Composable
-private fun ShareControl(call: CallModel, popovers: Popovers, axis: BarAxis, size: Dp) {
+private fun ShareControl(call: CallModel, screen: Boolean, popovers: Popovers, axis: BarAxis, size: Dp) {
     val sharing = call.sharing
+    // With the screen switched off by the deployment the button is the
+    // sound's alone, and says so, rather than offering a screen it no longer
+    // has (the Mac keeps its sound's own button in the same case).
     val symbol = when {
         sharing.active -> "rectangle.inset.filled.on.rectangle"
         sharing.listening -> "waveform.circle.fill"
+        !screen -> "waveform"
         else -> "rectangle.on.rectangle"
     }
     val label = when {
         sharing.active -> t("Screen sharing settings")
         sharing.listening -> t("Sharing sound")
+        !screen -> t("Share only sound")
         else -> t("Share your screen")
     }
-    BarPopover(SHARE, popovers, axis, width = 376.dp, panel = { SharePanel(call, popovers) }) {
+    BarPopover(SHARE, popovers, axis, width = 376.dp, panel = { SharePanel(call, screen, popovers) }) {
         BarButton(symbol, label, { popovers.toggle(SHARE) }, lit = sharing.active || sharing.listening,
             pressed = popovers.open == SHARE, size = size)
     }
 }
 
 @Composable
-private fun SharePanel(call: CallModel, popovers: Popovers) {
+private fun SharePanel(call: CallModel, screen: Boolean, popovers: Popovers) {
     val sharing = call.sharing
     // The menu's choices are plain fields of Sharing, not state a screen can
     // watch: read again whenever a change has gone through.
@@ -436,53 +447,59 @@ private fun SharePanel(call: CallModel, popovers: Popovers) {
         }
     }
     MenuCard {
-        MenuHeading(t("Picture"))
-        SegmentedChoice(
-            listOf(ShareQuality.AUTO to t("Automatic"), ShareQuality.P1080 to t("1080p"), ShareQuality.P1440 to t("1440p"), ShareQuality.P4K to t("4K")),
-            shown.quality,
-            { quality -> change { sharing.choose(quality) } },
-            Modifier.padding(horizontal = 4.dp),
-        )
-        AnimatedContent(
-            describes(shown.quality),
-            transitionSpec = { fadeIn(Theme.settle()) togetherWith fadeOut(Theme.leave()) },
-            label = "quality",
-        ) { words ->
-            KitText(words, Modifier.padding(start = 10.dp, end = 10.dp, top = 4.dp), font = Font(11.5f), color = Theme.muted)
-        }
-        // Absent for automatic, which chooses the rate as well: a control
-        // that did nothing would be a control somebody set and believed.
-        AnimatedVisibility(shown.quality != ShareQuality.AUTO, enter = Theme.arrive + expandVertically(Theme.settle()),
-            exit = Theme.depart + shrinkVertically(Theme.leave())) {
+        // The screen's half: gone while the deployment has screen sharing
+        // switched off (Offers `screenShare`), and back when it is on again.
+        AnimatedVisibility(screen, enter = Theme.arrive + expandVertically(Theme.settle()), exit = Theme.depart + shrinkVertically(Theme.leave())) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                MenuHeading(t("Frames a second"))
+                MenuHeading(t("Picture"))
                 SegmentedChoice(
-                    ShareRates.allowed(Sharing.shorterSide(shown.quality)).map { it to it.toString() },
-                    shown.fps,
-                    { rate -> change { sharing.choose(shown.quality, rate) } },
+                    listOf(ShareQuality.AUTO to t("Automatic"), ShareQuality.P1080 to t("1080p"), ShareQuality.P1440 to t("1440p"), ShareQuality.P4K to t("4K")),
+                    shown.quality,
+                    { quality -> change { sharing.choose(quality) } },
                     Modifier.padding(horizontal = 4.dp),
                 )
+                AnimatedContent(
+                    describes(shown.quality),
+                    transitionSpec = { fadeIn(Theme.settle()) togetherWith fadeOut(Theme.leave()) },
+                    label = "quality",
+                ) { words ->
+                    KitText(words, Modifier.padding(start = 10.dp, end = 10.dp, top = 4.dp), font = Font(11.5f), color = Theme.muted)
+                }
+                // Absent for automatic, which chooses the rate as well: a control
+                // that did nothing would be a control somebody set and believed.
+                AnimatedVisibility(shown.quality != ShareQuality.AUTO, enter = Theme.arrive + expandVertically(Theme.settle()),
+                    exit = Theme.depart + shrinkVertically(Theme.leave())) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        MenuHeading(t("Frames a second"))
+                        SegmentedChoice(
+                            ShareRates.allowed(Sharing.shorterSide(shown.quality)).map { it to it.toString() },
+                            shown.fps,
+                            { rate -> change { sharing.choose(shown.quality, rate) } },
+                            Modifier.padding(horizontal = 4.dp),
+                        )
+                    }
+                }
+                MenuRule()
+                // Not disabled while busy: a change waits its turn and a stop always
+                // goes through (Sharing).
+                AnimatedContent(sharing.active, transitionSpec = { Theme.arrive togetherWith Theme.depart }, label = "screen") { active ->
+                    if (active) {
+                        MenuItem(t("Stop sharing"), {
+                            popovers.close()
+                            change { sharing.stopScreen() }
+                        }, symbol = "stop.circle", busy = sharing.screenBusy)
+                    } else {
+                        MenuItem(t("Share your screen"), {
+                            popovers.close()
+                            change { sharing.start(call.call) }
+                        }, symbol = "rectangle.on.rectangle",
+                            detail = if (sharing.listening) t("Without its sound, while sound is shared on its own") else null,
+                            role = MenuRole.Prominent, busy = sharing.screenBusy)
+                    }
+                }
+                MenuRule()
             }
         }
-        MenuRule()
-        // Not disabled while busy: a change waits its turn and a stop always
-        // goes through (Sharing).
-        AnimatedContent(sharing.active, transitionSpec = { Theme.arrive togetherWith Theme.depart }, label = "screen") { active ->
-            if (active) {
-                MenuItem(t("Stop sharing"), {
-                    popovers.close()
-                    change { sharing.stopScreen() }
-                }, symbol = "stop.circle", busy = sharing.screenBusy)
-            } else {
-                MenuItem(t("Share your screen"), {
-                    popovers.close()
-                    change { sharing.start(call.call) }
-                }, symbol = "rectangle.on.rectangle",
-                    detail = if (sharing.listening) t("Without its sound, while sound is shared on its own") else null,
-                    role = MenuRole.Prominent, busy = sharing.screenBusy)
-            }
-        }
-        MenuRule()
         AnimatedContent(sharing.listening, transitionSpec = { Theme.arrive togetherWith Theme.depart }, label = "sound") { listening ->
             if (listening) {
                 // Which of the two is going out, because the switch that

@@ -129,6 +129,7 @@ class AppModel(
             if (value != screenState) Log.i(TAG, "screen ${value.name.lowercase()}")
             screenState = value
             tellUpdates()
+            remote.lobby(value == Screen.Lobby)
         }
 
     /**
@@ -141,7 +142,37 @@ class AppModel(
         internal set(value) {
             field = value
             tellUpdates()
+            follow(remote.answer)
         }
+
+    private var remoteState by mutableStateOf(Remote(source = null, store = null, scope = scope))
+
+    /**
+     * What the deployment says to the apps between their releases (Remote):
+     * the answer kept from before, applied before the first screen is drawn
+     * (create), then the deployment asked at start, every half hour, and on
+     * coming back to the front or to the lobby. Told of every change of
+     * screen, since its notice is the lobby's and nowhere else's. In a test's
+     * model, and in a debug build started by hand, one that asks nothing and
+     * so offers everything the app was built with.
+     */
+    var remote: Remote
+        get() = remoteState
+        internal set(value) {
+            remoteState = value
+            value.onApply = { follow(it) }
+            value.lobby(screen == Screen.Lobby)
+            follow(value.answer)
+        }
+
+    /**
+     * What follows from the deployment's word outside the screens, which read
+     * [remote] themselves: whether and how often the app looks for an update.
+     */
+    private fun follow(answer: RemoteAnswer) {
+        updates?.allow(answer.allows(RemoteFeature.AppUpdates))
+        updates?.checkEvery(answer.updateInterval ?: Updates.EVERY)
+    }
 
     /**
      * Whether the person is in the lobby as far as an update is concerned:
@@ -370,6 +401,7 @@ class AppModel(
         started = true
         scope.launch { keepRelaysFresh() }
         updates?.start()
+        remote.start()
         val launch = launch
         if (rehearsal && launch != null) {
             serverAddress = launch.base
@@ -846,6 +878,9 @@ class AppModel(
             // Where the choices are kept, before anything is chosen: the
             // original sound below remembers itself.
             model.memory = deviceMemory
+            // Before the camera comes up, whose blur is decided by what the
+            // deployment allowed as the call began (CallModel `remote`).
+            model.remote = remote
             // Before the microphone is published, so it goes out the way it
             // was asked for the first time rather than being republished.
             if (originalSoundWanted) quietly { model.setOriginalSound(true) }
@@ -1268,6 +1303,18 @@ class AppModel(
                         Pace.onTheDisplay(),
                     )
                 }
+                // Asked of the same deployment as the updates, for the same
+                // reason. A rehearsal keeps nothing, and reads nothing the
+                // owner's app kept. Restored here, before the first screen
+                // is drawn, so that a switch kept off is never seen on and
+                // a phrase laid over never flickers back to the app's own.
+                val asks = !BuildConfig.DEBUG || launch != null
+                app.remote = Remote(
+                    if (asks) CoreRemoteSource(launch?.base ?: homeDeployment()) else null,
+                    if (app.rehearsal) null else SharedDefaults(context),
+                    CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate),
+                )
+                app.remote.restore()
             }
         }
 

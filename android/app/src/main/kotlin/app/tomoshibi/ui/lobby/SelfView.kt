@@ -30,6 +30,7 @@ import app.tomoshibi.media.DeviceAccess
 import app.tomoshibi.media.DeviceKind
 import app.tomoshibi.model.AppModel
 import app.tomoshibi.model.DeviceMemory
+import app.tomoshibi.model.RemoteFeature
 import app.tomoshibi.ui.kit.Appear
 import app.tomoshibi.ui.kit.Backdrop
 import app.tomoshibi.ui.kit.ContinuousShape
@@ -115,8 +116,10 @@ fun FeedSelfViews(app: AppModel) {
                 // time it runs.
                 DeviceAccess.ensure(DeviceKind.Camera)
                 val capture = SelfViews.capture(context)
-                // Blurred as the call will send it, where blur is chosen.
-                capture.blurring = app.deviceMemory.blur
+                // Blurred as the call will send it, where blur is chosen:
+                // not while the deployment has blur switched off, when the
+                // call will not blur it either (CallModel `blurKept`).
+                capture.blurring = app.deviceMemory.blur && app.remote.allows(RemoteFeature.BackgroundBlur)
                 capture.showPreview(view.surfaceProvider)
                 if (!capture.running) {
                     // The camera the call will start on: the one last

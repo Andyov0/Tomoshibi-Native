@@ -88,6 +88,7 @@ import app.tomoshibi.basics.t
 import app.tomoshibi.model.AppModel
 import app.tomoshibi.model.CallModel
 import app.tomoshibi.model.Person
+import app.tomoshibi.model.RemoteFeature
 import app.tomoshibi.model.Sound
 import app.tomoshibi.model.Surface
 import app.tomoshibi.model.host.CrateRules
@@ -367,7 +368,7 @@ private fun Room(app: AppModel, call: CallModel, state: RoomState, host: HostFea
             // a book, moving there as the phone is stood up or opened.
             val shift by animateDpAsState(if (shown) 0.dp else 110.dp, if (shown) Theme.settle() else Theme.leave(), label = "controls")
             val seen by animateFloatAsState(if (shown) 1f else 0f, if (shown) Theme.settle() else Theme.leave(), label = "seen")
-            val offers = offers(call, host)
+            val offers = offers(app, call, host)
             // Without the lane: the bar along the foot is centred on the
             // whole width, as it was before the fold.
             val along = if (shape.posture == Posture.Book) shape.bar else Rect(0f, 0f, whole.width, size.height)
@@ -413,16 +414,26 @@ private fun Room(app: AppModel, call: CallModel, state: RoomState, host: HostFea
     }
 }
 
-/** What the features offer the bar (ControlBar.swift `Offers`), read here so the bar does not hold the features. */
-private fun offers(call: CallModel, host: HostFeature): Offers {
+/**
+ * What the features offer the bar (ControlBar.swift `Offers`), read here so
+ * the bar does not hold the features. A feature the deployment has switched
+ * off (Remote) loses its button, unless it is under way: a share running, a
+ * show on the stage, music playing, each of which goes on, and keeps its
+ * button for whoever has to stop it or turn it down.
+ */
+private fun offers(app: AppModel, call: CallModel, host: HostFeature): Offers {
     val watch = call.parts[BarOffer.WATCH] as? BarOffer
     val music = call.parts[BarOffer.MUSIC] as? BarOffer
     val sendingMusic = call.people.any { it.musicTrack != null }
+    val remote = app.remote
+    val onStage = watchShowing(call)
+    val musicPlaying = music?.playing ?: sendingMusic
     return Offers(
-        watch = watch?.offered ?: watchShowing(call),
+        screenShare = remote.allows(RemoteFeature.ScreenShare) || call.sharing.active,
+        watch = (watch?.offered ?: onStage) && (remote.allows(RemoteFeature.WatchTogether) || onStage),
         watchPlaying = watch?.playing ?: false,
-        music = music?.offered ?: sendingMusic,
-        musicPlaying = music?.playing ?: sendingMusic,
+        music = (music?.offered ?: sendingMusic) && (remote.allows(RemoteFeature.Music) || musicPlaying),
+        musicPlaying = musicPlaying,
         host = host.standing.yours,
         knocking = host.waiting.size,
     )

@@ -127,7 +127,26 @@ class Localization private constructor(
         if (!chosen) language = Language.detect(Language.systemPreferences())
     }
 
-    fun template(phrase: String): String = tables[language]?.get(phrase) ?: phrase
+    /**
+     * Phrases the deployment lays over the app's own (Remote, the core's
+     * api/remote.rs), by language and then by the English they are keyed by.
+     * Each language holds only what the deployment wrote in it, or in it
+     * without its region or script, and never its English: where a phrase
+     * was reworded in English alone, a reader of Japanese is better served by
+     * the app's own Japanese than by the deployment's English.
+     *
+     * Snapshot state, read by every phrase, so that whatever says something
+     * draws again when what is laid over changes, as it does when the
+     * language does: the owner, 2026-10-22, asked for wording to change
+     * between releases without anybody starting the app again.
+     */
+    var laidOver by mutableStateOf<Map<Language, Map<String, String>>>(emptyMap())
+
+    /** The template for a phrase in the language showing: the deployment's where it laid one over, the app's own otherwise. */
+    fun template(phrase: String): String {
+        val language = language
+        return laidOver[language]?.get(phrase) ?: tables[language]?.get(phrase) ?: phrase
+    }
 
     fun t(phrase: String, values: Map<String, Any?>? = null): String = substitute(template(phrase), values)
 
@@ -138,6 +157,7 @@ class Localization private constructor(
      */
     fun say(text: String): String {
         val language = language
+        laidOver[language]?.get(text)?.let { return it }
         tables[language]?.get(text)?.let { return it }
         folded[language]?.get(text.lowercase(Locale.ROOT))?.let { return it }
         return text

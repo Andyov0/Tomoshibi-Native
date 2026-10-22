@@ -79,26 +79,31 @@ internal class ScreenCapture(context: Context) {
     /** What was being shared, at its own size, before it was fitted to a setting. */
     private var content: Pair<Int, Int> = 0 to 0
     private var quality: ShareQuality = ShareQuality.AUTO
+    /** The rate the share is published at, which decides the size it is captured at (share.rs `share_capture_request`). */
     private var fps = 30
+    /** The deployment's ceiling over the share (ShareCeiling), held to whatever size the capture is made at. */
+    private var limits = ShareCeiling.NONE
 
     val running: Boolean get() = display != null
 
     /**
-     * Mirrors the screen through [projection] into [video], at [width] by
-     * [height] (from [size]) and no more than [fps] frames a second. Throws
-     * where the display or the GPU would not start; nothing is left running
-     * then.
+     * Mirrors the screen through [projection] into [video], at the size a
+     * share published at [fps] is captured at, held to [limits], and no more
+     * than [captured] frames a second, which is [fps] or less (Sharing
+     * `plan`). Throws where the display or the GPU would not start; nothing
+     * is left running then.
      */
-    fun start(projection: MediaProjection, quality: ShareQuality, fps: Int, video: VideoInput) {
+    fun start(projection: MediaProjection, quality: ShareQuality, fps: Int, video: VideoInput, captured: Int = fps, limits: ShareCeiling = ShareCeiling.NONE) {
         stop()
         this.quality = quality
         this.fps = fps
+        this.limits = limits
         content = screenSize(context)
-        val (width, height) = fit(content, quality, fps)
+        val (width, height) = bounded(content, quality, fps, limits)
         val thread = HandlerThread("tomoshibi-screen", Process.THREAD_PRIORITY_DISPLAY).also { it.start() }
         val gl = Handler(thread.looper)
         val reader = try {
-            onThread(gl) { PlaneReader(gl, width, height, fps, video) }
+            onThread(gl) { PlaneReader(gl, width, height, captured, video) }
         } catch (fault: Exception) {
             thread.quitSafely()
             throw fault
@@ -130,7 +135,7 @@ internal class ScreenCapture(context: Context) {
         this.display = display
         size = width to height
         followTurns()
-        Log.i(TAG, "screen capture ${width}x$height at $fps fps from ${content.first}x${content.second}")
+        Log.i(TAG, "screen capture ${width}x$height at $captured fps from ${content.first}x${content.second}")
     }
 
     /**
@@ -140,14 +145,27 @@ internal class ScreenCapture(context: Context) {
      * than made again, because Android 14 allows one per consent, and a share
      * changed that way would need the person to be asked again.
      */
-    fun retune(quality: ShareQuality, fps: Int, video: VideoInput) {
+    fun retune(quality: ShareQuality, fps: Int, video: VideoInput, captured: Int = fps, limits: ShareCeiling = this.limits) {
         this.quality = quality
         this.fps = fps
-        val target = fit(content, quality, fps)
+        this.limits = limits
+        val target = bounded(content, quality, fps, limits)
         resizeTo(target)
         val reader = reader ?: return
-        gl?.post { reader.retune(fps, video) }
-        Log.i(TAG, "screen capture now ${target.first}x${target.second} at $fps fps")
+        gl?.post { reader.retune(captured, video) }
+        Log.i(TAG, "screen capture now ${target.first}x${target.second} at $captured fps")
+    }
+
+    /**
+     * The running capture's frames taken at [captured] a second from now,
+     * into the same picture track at the same size: the device got hot or
+     * cooled down (the deployment's screen_share_hot_fps), and nobody
+     * watching is to see the share go and come back for it.
+     */
+    fun pace(captured: Int) {
+        val reader = reader ?: return
+        gl?.post { reader.pace(captured) }
+        Log.i(TAG, "screen capture now at $captured fps")
     }
 
     /**
@@ -160,11 +178,16 @@ internal class ScreenCapture(context: Context) {
     fun resize(width: Int, height: Int) {
         if (width <= 0 || height <= 0 || display == null) return
         content = width to height
-        resizeTo(fit(content, quality, fps))
+        resizeTo(bounded(content, quality, fps, limits))
     }
 
-    /** What the setting asks for of [content], as the size the capture is made at now. */
-    fun fitted(quality: ShareQuality, fps: Int): Pair<Int, Int> = fit(content, quality, fps)
+    /** What the setting asks for of what is shared, held to [limits]: the size the capture would be made at now. */
+    fun fitted(quality: ShareQuality, fps: Int, limits: ShareCeiling = this.limits): Pair<Int, Int> = bounded(content, quality, fps, limits)
+
+    private fun bounded(content: Pair<Int, Int>, quality: ShareQuality, fps: Int, limits: ShareCeiling): Pair<Int, Int> {
+        val (width, height) = fit(content, quality, fps)
+        return limits.size(width, height)
+    }
 
     /** The last picture sent, as the core was handed it, for a debug build to look at. */
     internal fun picture(): PlaneReader.Picture? {
@@ -368,6 +391,11 @@ internal class PlaneReader(
     fun retune(fps: Int, video: VideoInput) {
         interval = 1_000_000_000L / fps.coerceAtLeast(1)
         this.video = video
+    }
+
+    /** Frames taken at [fps] a second from now, into the same track. */
+    fun pace(fps: Int) {
+        interval = 1_000_000_000L / fps.coerceAtLeast(1)
     }
 
     /** One picture's planes as they were sent: luma rows of [stride], chroma rows of half that. */

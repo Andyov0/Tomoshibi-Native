@@ -292,4 +292,45 @@ class CallModelTest {
         model.apply(CallEvent.ParticipantJoined(person("g-ada", "Ada")))
         assertEquals(listOf(1), heard)
     }
+
+    /**
+     * The deployment's background-blur (Remote): a blur on as it is switched
+     * off stays on for this call, the camera going off and on again
+     * included, since taking it off would show everybody the room behind
+     * somebody who chose not to show it; the next call starts unblurred,
+     * whatever was remembered, and with blur back on it blurs again.
+     */
+    @Test
+    fun aBlurOnAsTheDeploymentSwitchesItOffStaysForTheCallAndNotTheNext() = runTest {
+        val memory = DeviceMemory(MemoryDefaults()).apply { rememberBlur(true) }
+        var off = emptySet<String>()
+        val source = object : RemoteSource {
+            override suspend fun fetch() = RemoteAnswer(off = off)
+            override fun read(kept: String): RemoteAnswer? = null
+        }
+        val remote = Remote(source, null, backgroundScope)
+        remote.start()
+        runCurrent()
+        val first = model().apply {
+            this.memory = memory
+            this.remote = remote
+        }
+        assertTrue(first.blurOffered)
+        assertTrue(first.blursCamera)
+        off = setOf("background-blur")
+        advanceTimeBy(Remote.EVERY)
+        runCurrent()
+        assertFalse("the switch is still offered", first.blurOffered)
+        assertTrue("a blur on was taken off in the middle of the call", first.blursCamera)
+
+        val next = model().apply {
+            this.memory = memory
+            this.remote = remote
+        }
+        assertFalse("the next call came up blurred with blur switched off", next.blursCamera)
+        off = emptySet()
+        advanceTimeBy(Remote.EVERY)
+        runCurrent()
+        assertTrue("blur back on, the remembered blur did not come back", next.blursCamera)
+    }
 }

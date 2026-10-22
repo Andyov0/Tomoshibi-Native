@@ -96,6 +96,10 @@ class MainActivity : ComponentActivity() {
         // learns whether it was allowed.
         Foreground.resumed(this)
         app.updates?.resumed()
+        // Back in front: what the deployment says may have changed while the
+        // app was behind another (Remote `refresh`, which holds back a
+        // question asked a moment ago).
+        app.remote.refresh()
     }
 
     override fun onPause() {

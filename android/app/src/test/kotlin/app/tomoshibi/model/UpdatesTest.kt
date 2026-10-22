@@ -388,6 +388,62 @@ class UpdatesTest {
         assertEquals("a new download began with the last one's bar", 0f, bar.value)
     }
 
+    /**
+     * The deployment's app-updates switched off (Remote): nothing is looked
+     * for or offered, and the settings say nothing, but a download under way
+     * goes on to its end and keeps its banner. Switched on again, the app
+     * looks at once.
+     */
+    @Test
+    fun switchedOffNothingIsLookedForOrOfferedButADownloadUnderWayGoesOn() = runTest {
+        val updates = offered()
+        updates.allow(false)
+        assertFalse("an offer stayed up with updates switched off", updates.shown)
+        assertFalse(updates.speaks)
+        updates.accept()
+        updates.checkNow()
+        runCurrent()
+        assertTrue("downloaded with updates switched off", source.transfers.isEmpty())
+        val asked = source.asked
+        advanceTimeBy(Updates.EVERY * 3)
+        runCurrent()
+        assertEquals("looked for an update with updates switched off", asked, source.asked)
+
+        updates.allow(true)
+        runCurrent()
+        assertEquals("did not look at once when switched on again", asked + 1, source.asked)
+        assertTrue(updates.shown)
+        updates.accept()
+        runCurrent()
+        // Off again while it downloads: it goes on, and says so.
+        updates.allow(false)
+        assertTrue("a download under way lost its banner", updates.shown)
+        assertTrue(updates.speaks)
+        assertFalse("a download under way was stopped", source.transfers.single().cancelled)
+        source.transfers.single().outcome.complete(null)
+        runCurrent()
+        assertEquals(listOf(source.transfers.single().file), installer.installs)
+    }
+
+    @Test
+    fun theDeploymentSaysHowOftenToLookFromTheNextWait() = runTest {
+        source.answer = { null }
+        val updates = updates()
+        updates.lobby(true)
+        updates.start()
+        runCurrent()
+        assertEquals(1, source.asked)
+        updates.checkEvery(60 * 60 * 1000L)
+        runCurrent()
+        assertEquals("looked at once for a change of how often", 1, source.asked)
+        advanceTimeBy(60 * 60 * 1000L + 1)
+        runCurrent()
+        assertEquals(2, source.asked)
+        advanceTimeBy(60 * 60 * 1000L)
+        runCurrent()
+        assertEquals(3, source.asked)
+    }
+
     @Test
     fun nothingIsInstalledWithoutTheInstallPermissionAndARefusalIsSaid() = runTest {
         installer.allowed = false

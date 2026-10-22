@@ -18,6 +18,7 @@ import app.tomoshibi.media.DeviceKind
 import app.tomoshibi.media.DeviceRefused
 import app.tomoshibi.media.LosslessPlayback
 import app.tomoshibi.media.PictureInPicture
+import app.tomoshibi.media.ShareCeiling
 import app.tomoshibi.media.Sharing
 import app.tomoshibi.media.VideoHub
 import java.time.Instant
@@ -540,6 +541,36 @@ class CallModel internal constructor(
     /** Blurs the background behind the camera or stops, and remembers it for the next call as the web does. */
     val blurring: Boolean get() = cameraMade && camera.blurring
 
+    /**
+     * What the deployment says to the apps (AppModel's Remote), given as the
+     * call is joined, before the camera comes up: which of the call's
+     * controls are offered, and the ceiling over a shared screen. Null, as
+     * for a call nobody gave one to, offers everything the app was built
+     * with.
+     */
+    var remote: Remote? = null
+        set(value) {
+            field = value
+            blurKept = value?.allows(RemoteFeature.BackgroundBlur) ?: true
+            sharing.ceiling = { value?.ceiling ?: ShareCeiling.NONE }
+        }
+
+    /** Whether the blur switch is offered (the deployment's background-blur). */
+    val blurOffered: Boolean get() = remote?.allows(RemoteFeature.BackgroundBlur) ?: true
+
+    /**
+     * Whether blur was offered as this call began. A blur switched off by
+     * the deployment mid-call is not taken off a camera that has it, which
+     * would show everybody the room behind somebody who had chosen not to
+     * show it, and it is not lost when the camera goes off and on again in
+     * the same call; from the next call it counts as off, whatever was
+     * remembered.
+     */
+    private var blurKept = true
+
+    /** Whether the camera comes up blurred: where blur is chosen, and allowed ([blurKept]). */
+    internal val blursCamera: Boolean get() = memory.blur && (blurKept || blurOffered)
+
     fun setBlur(on: Boolean) {
         camera.blurring = on
         memory.rememberBlur(on)
@@ -635,8 +666,9 @@ class CallModel internal constructor(
                         return
                     }
                     try {
-                        // Blurred from the first frame where blur is chosen.
-                        camera.blurring = memory.blur
+                        // Blurred from the first frame where blur is chosen,
+                        // and allowed.
+                        camera.blurring = blursCamera
                         camera.start(into = input)
                     } catch (fault: Throwable) {
                         // A camera published and never fed is a black tile

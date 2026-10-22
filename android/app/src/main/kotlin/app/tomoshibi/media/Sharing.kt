@@ -146,6 +146,38 @@ class Sharing(context: Context? = null) {
         }
 
     private val screen = context?.let { ScreenCapture(it) }
+
+    /**
+     * The deployment's ceiling over a share (ShareCeiling, Remote's params),
+     * read as each share starts and each change of one is made; the call
+     * points it at what the deployment says (CallModel `remote`). A ceiling
+     * changed mid-share applies from the next start or change, rather than
+     * republishing a share somebody is watching.
+     */
+    var ceiling: () -> ShareCeiling = { ShareCeiling.NONE }
+
+    /** The frames a second the running capture was asked for: the published rate or less (`plan`). */
+    private var capturing = 0
+    /** Told of the device's heat while a share runs (Thermal). */
+    private var heat: AutoCloseable? = null
+
+    /** What a share is published and captured at: the setting that goes out, the size it is captured at, and its frames a second. */
+    internal data class Plan(val setting: Setting, val size: Pair<Int, Int>, val captured: Int)
+
+    /**
+     * The share for [quality] at the rate [wanted], under the ceiling that
+     * applies now: published at one of the size's own rates no higher than
+     * the ceiling, captured at no more than the ceiling's height, and taking
+     * frames no faster than the ceiling, or the ceiling for a hot device
+     * where [hot]. [fit] is the size a rate is captured at for this share,
+     * before the ceiling (ScreenCapture `fit`).
+     */
+    internal fun plan(quality: ShareQuality, wanted: Int, hot: Boolean, fit: (fps: Int) -> Pair<Int, Int>): Plan {
+        val limits = ceiling()
+        val published = limits.published(wanted, shorterSide(quality))
+        val (width, height) = fit(published)
+        return Plan(Setting(quality, published), limits.size(width, height), limits.captured(published, hot))
+    }
     private val playback = PlaybackCapture()
     /** The call the screen was shared into, for giving it its sound back. */
     private var call: Call? = null
@@ -261,9 +293,11 @@ class Sharing(context: Context? = null) {
         }
         screenWork++
         try {
-            val setting = Setting(quality, rate(quality))
+            val content = ScreenCapture.screenSize(context)
+            val plan = plan(quality, rate(quality), Thermal.hot) { fps -> ScreenCapture.fit(content, quality, fps) }
+            val setting = plan.setting
             val rate = setting.fps
-            val (width, height) = ScreenCapture.fit(ScreenCapture.screenSize(context), setting.quality, rate)
+            val (width, height) = plan.size
             val video = call.publishVideo(VideoKind.Screen(rate.toUInt(), setting.quality), width.toUInt(), height.toUInt())
             if (epoch != screenEpoch) {
                 Log.i(TAG, "the share was called off while it was published; taking it back")
@@ -289,7 +323,7 @@ class Sharing(context: Context? = null) {
             }
             try {
                 lease.usedForDisplay()
-                screen.start(projection, setting.quality, rate, video)
+                screen.start(projection, setting.quality, rate, video, plan.captured, ceiling())
                 if (hears && !playback.started) playback.start(projection)
             } catch (fault: Exception) {
                 Log.e(TAG, "the share would not start: ${fault.message}")
@@ -320,8 +354,11 @@ class Sharing(context: Context? = null) {
             soundless = withSound && !hears
             screenLease = lease
             running = setting
+            capturing = plan.captured
             active = true
-            Log.i(TAG, "sharing the screen at ${shorterSide(setting.quality)} and $rate fps, ${width}x$height, with its sound ${sound != null}")
+            heat?.close()
+            heat = Thermal.watch { paceToHeat() }
+            Log.i(TAG, "sharing the screen at ${shorterSide(setting.quality)} and $rate fps, ${width}x$height captured at ${plan.captured}, with its sound ${sound != null}")
             // Sound shared on its own may have started, or stopped, while
             // this was being published.
             soundStandsDown()
@@ -329,6 +366,23 @@ class Sharing(context: Context? = null) {
         } finally {
             screenWork--
         }
+    }
+
+    /**
+     * The device got hot, or cooled down again: the running capture takes
+     * its frames at the rate that applies now (the deployment's
+     * screen_share_hot_fps), in place and into the same picture track, so
+     * that nobody watching sees the share go and come back. What is
+     * published stays as it was; only its frames come slower, and then as
+     * before.
+     */
+    private fun paceToHeat() {
+        val running = running ?: return
+        val captured = ceiling().captured(running.fps, Thermal.hot)
+        if (captured == capturing) return
+        capturing = captured
+        screen?.pace(captured)
+        Log.i(TAG, "the shared screen's frames follow the heat: $captured a second")
     }
 
     /** Whether the share may hear other apps' sound, asking for the permission that needs. */
@@ -379,18 +433,21 @@ class Sharing(context: Context? = null) {
      * the sound is untouched. One at a time, and given up where the share
      * stops meanwhile.
      */
-    private suspend fun retune(setting: Setting) {
+    private suspend fun retune(asked: Setting) {
         changes.take {
             val epoch = screenEpoch
             val call = call
             val old = video
             val screen = screen
             if (!active || call == null || old == null || screen == null) throw Gone()
+            val limits = ceiling()
+            val plan = plan(asked.quality, asked.fps, Thermal.hot) { fps -> screen.fitted(asked.quality, fps, ShareCeiling.NONE) }
+            val setting = plan.setting
             if (setting == running) return@take
             screenWork++
             try {
                 val rate = setting.fps
-                val (width, height) = screen.fitted(setting.quality, rate)
+                val (width, height) = plan.size
                 val fresh = call.publishVideo(VideoKind.Screen(rate.toUInt(), setting.quality), width.toUInt(), height.toUInt())
                 if (epoch != screenEpoch) {
                     // The stop took the old track down; this one is nobody's.
@@ -398,7 +455,7 @@ class Sharing(context: Context? = null) {
                     throw Gone()
                 }
                 try {
-                    screen.retune(setting.quality, rate, fresh)
+                    screen.retune(setting.quality, rate, fresh, plan.captured, limits)
                 } catch (fault: Exception) {
                     Log.e(TAG, "the share would not change: ${fault.message}")
                     quietly { fresh.unpublish() }
@@ -410,6 +467,7 @@ class Sharing(context: Context? = null) {
                 }
                 video = fresh
                 running = setting
+                capturing = plan.captured
                 quietly { old.unpublish() }
                 Log.i(TAG, "share now at ${shorterSide(setting.quality)} and $rate fps, ${width}x$height")
             } finally {
@@ -432,6 +490,9 @@ class Sharing(context: Context? = null) {
         this.screenSound = null
         screenLease = null
         running = null
+        capturing = 0
+        heat?.close()
+        heat = null
         active = false
         soundless = false
         hearing = false
@@ -630,6 +691,76 @@ private suspend fun quietly(work: suspend () -> Unit) {
     }
 }
 
+
+/**
+ * The deployment's ceiling over a screen share (Remote's params, the core's
+ * api/remote.rs), as the Apple apps read it (ShareCeiling.swift). Ceilings
+ * only: what is published keeps the web's track names, sizes, rates and
+ * layers (CLAUDE.md), and is never asked for more than somebody chose.
+ */
+data class ShareCeiling(
+    /** Frames a second at most (screen_share_max_fps). */
+    val fps: Int? = null,
+    /** The captured picture's height at most, in pixels, its width brought down with it (screen_share_max_height). */
+    val height: Int? = null,
+    /** Frames a second at most while the device is hot (screen_share_hot_fps). */
+    val hotFps: Int? = null,
+) {
+    /**
+     * The rate a share is published at, for a rate chosen at a size (the
+     * share menu's shorter side, 0 for automatic): the size's own clamp
+     * first (ShareRates), then the highest of its rates under the ceiling,
+     * or its lowest where every one is over it.
+     *
+     * One of the size's rates and never another number: the core takes a
+     * rate a size does not offer for its highest (share.rs `share_profile`),
+     * so a ceiling of 24 handed on as it was would have published 1080p at
+     * 240. Automatic has the one rate, and keeps it; its frames are held to
+     * the ceiling at the capture ([captured]).
+     */
+    fun published(wanted: Int, shorterSide: Int): Int {
+        val chosen = ShareRates.clamp(wanted, shorterSide)
+        val fps = fps ?: return chosen
+        if (fps >= chosen) return chosen
+        val rates = ShareRates.allowed(shorterSide)
+        return rates.filter { it <= fps }.maxOrNull() ?: rates.minOrNull() ?: chosen
+    }
+
+    /** The frames a second a share published at [published] is captured at: no more than that, the ceiling, and while the device is [hot] the ceiling for heat. */
+    fun captured(published: Int, hot: Boolean): Int {
+        val limit = listOfNotNull(fps, if (hot) hotFps else null).minOrNull() ?: published
+        return minOf(published, limit).coerceAtLeast(1)
+    }
+
+    /** A capture's size under the height, its width scaled with it and both even, as the encoder needs them (ScreenCapture `fit`). */
+    fun size(width: Int, height: Int): Pair<Int, Int> {
+        val ceiling = this.height ?: return width to height
+        if (height <= ceiling) return width to height
+        val scaled = (width.toDouble() * ceiling / height).toInt() and 1.inv()
+        return scaled.coerceAtLeast(2) to (ceiling and 1.inv()).coerceAtLeast(2)
+    }
+
+    companion object {
+        val NONE = ShareCeiling()
+
+        /**
+         * From the deployment's numbers. A number that is not a positive
+         * count (nought, which the deployment writes for "do not lower", a
+         * negative, a fraction under one) is no ceiling: a share is never
+         * asked for no frames at all because a field was left at zero.
+         */
+        fun of(params: Map<String, Double>) = ShareCeiling(
+            count(params["screen_share_max_fps"]),
+            count(params["screen_share_max_height"]),
+            count(params["screen_share_hot_fps"]),
+        )
+
+        private fun count(number: Double?): Int? {
+            if (number == null || !number.isFinite() || number < 1) return null
+            return minOf(number, 1_000_000.0).toInt()
+        }
+    }
+}
 
 /**
  * The frame rates each size of screen share may be asked for (room.ts

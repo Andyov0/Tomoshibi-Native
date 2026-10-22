@@ -33,6 +33,7 @@ import androidx.compose.material.icons.rounded.BackHand
 import androidx.compose.material.icons.rounded.BlurOn
 import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.CallEnd
+import androidx.compose.material.icons.rounded.Campaign
 import androidx.compose.material.icons.rounded.ChatBubble
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CheckCircle
@@ -141,6 +142,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import app.tomoshibi.BuildConfig
@@ -249,6 +251,8 @@ private val symbols: Map<String, SfSymbol> by lazy {
     "lock" to SfSymbol({ Icons.Rounded.LockOpen }, 0.950f, 1.140f, 0.140f, 0.090f, 0.660f, 0.950f),
     "lock.fill" to SfSymbol({ Icons.Rounded.Lock }, 0.950f, 1.140f, 0.140f, 0.090f, 0.660f, 0.950f),
     "magnifyingglass" to SfSymbol({ Icons.Rounded.Search }, 1.180f, 1.150f, 0.110f, 0.090f, 0.960f, 0.960f),
+    // Measured 2026-10-22 as the others were: the lobby's notice from the deployment (LobbyNoticeCard).
+    "megaphone.fill" to SfSymbol({ Icons.Rounded.Campaign }, 1.340f, 1.220f, 0.120f, 0.090f, 1.100f, 1.040f),
     "mic" to SfSymbol({ Icons.Rounded.MicNone }, 1.000f, 1.230f, 0.150f, 0.090f, 0.700f, 1.040f),
     "mic.fill" to SfSymbol({ Icons.Rounded.Mic }, 1.000f, 1.220f, 0.150f, 0.090f, 0.700f, 1.030f),
     "mic.slash.fill" to SfSymbol({ Icons.Rounded.MicOff }, 1.000f, 1.220f, 0.080f, 0.090f, 0.840f, 1.030f),
@@ -430,7 +434,9 @@ fun SwappingSymbol(
         },
         label = "symbol",
     ) { shown ->
-        Symbol(shown, size = size, weight = weight, tint = tint, contentDescription = contentDescription)
+        // Named for the tests, which see the two at once while one gives way
+        // to the other (RemoteRoomTest); nothing a screen reader is told.
+        Symbol(shown, Modifier.testTag("symbol.$shown"), size = size, weight = weight, tint = tint, contentDescription = contentDescription)
     }
 }
 

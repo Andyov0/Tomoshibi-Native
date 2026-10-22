@@ -43,6 +43,13 @@ import kotlinx.coroutines.launch
  * "Update" to install without downloading it again, rather than installing
  * it; so does leaving the lobby in it.
  *
+ * The deployment can say how often to look ([checkEvery], its
+ * update_check_hours), and switch the whole of it off ([allow], Remote's
+ * app-updates): then nothing is looked for or offered and the settings say
+ * nothing about updates, but a download or an install already under way is
+ * seen through, since one stopped half way is a download somebody agreed to
+ * and lost.
+ *
  * Kept apart from the core and the platform (UpdateSource, UpdateInstaller)
  * so that the rules can be tested on the JVM, where neither can be loaded.
  * Every method is for the main thread.
@@ -59,9 +66,11 @@ class Updates(
      * not at all in the tests.
      */
     val downloadBar: Pace,
-    private val every: Long = EVERY,
+    every: Long = EVERY,
     private val retry: Long = RETRY,
 ) {
+    /** How long between looks; the deployment can say ([checkEvery]). */
+    private var every = every
     /** Where an update has got to. */
     sealed interface Step {
         data object None : Step
@@ -101,16 +110,31 @@ class Updates(
     /** In the lobby, where an update may be shown, downloaded and installed. */
     private var free by mutableStateOf(false)
 
-    /** Whether the banner is up: something to say, in the lobby, and not put away. */
+    /** Whether updates are looked for and offered at all ([allow]). */
+    var allowed by mutableStateOf(true)
+        private set
+
+    /**
+     * Whether the banner is up: something to say, in the lobby, and not put
+     * away; with updates switched off, only a download or an install that
+     * was already under way.
+     */
     val shown: Boolean
         get() {
             if (!free) return false
             return when (val now = step) {
                 Step.None -> false
-                is Step.Offered -> now.offer.version !in later
+                is Step.Offered -> allowed && now.offer.version !in later
                 is Step.Held -> false
                 else -> true
             }
+        }
+
+    /** Whether the settings say anything about updates: unless they are switched off, and then still while one is under way, for its progress and its Cancel. */
+    val speaks: Boolean
+        get() = allowed || when (step) {
+            is Step.Downloading, is Step.Held, is Step.Permission, is Step.Installing -> true
+            else -> false
         }
 
     /** The build being offered, downloaded or installed, whatever the step. */
@@ -125,6 +149,7 @@ class Updates(
         }
 
     private var started = false
+    private var schedule: Job? = null
     private var transfer: Transfer? = null
     private var transferJob: Job? = null
     /** Set when the transfer is stopped because the person left the lobby, not because they cancelled. */
@@ -148,12 +173,53 @@ class Updates(
         // installing (allow), which the first check looks at again.
         runCatching { source.clear(keepingKept = true) }
         carrying = true
-        scope.launch {
+        if (allowed) arrange(lookingFirst = true)
+    }
+
+    /**
+     * The looking, every [every], from now ([lookingFirst]) or from one wait
+     * from now. Any schedule before is given up, a wait in it included.
+     */
+    private fun arrange(lookingFirst: Boolean) {
+        schedule?.cancel()
+        schedule = scope.launch {
+            if (!lookingFirst) delay(every)
             while (true) {
                 val answered = check(asked = false)
                 delay(if (answered) every else retry)
             }
         }
+    }
+
+    /**
+     * Whether to look for and offer updates (the deployment's app-updates).
+     * Switched off, the looking stops and an offer is taken off the screen;
+     * a download or an install under way goes on to its end. Switched on
+     * again, the app looks at once, since the offer it missed may be days
+     * old.
+     */
+    fun allow(on: Boolean) {
+        if (on == allowed) return
+        allowed = on
+        if (!started) return
+        if (on) {
+            arrange(lookingFirst = true)
+        } else {
+            schedule?.cancel()
+            schedule = null
+        }
+    }
+
+    /**
+     * How long between looks, in milliseconds (the deployment's
+     * update_check_hours, the app's six hours where it says none). A change
+     * counts from now: the next look is one new wait away, not at once,
+     * since it is said at every start, moments after the first look.
+     */
+    fun checkEvery(interval: Long) {
+        if (interval == every) return
+        every = interval
+        if (started && allowed) arrange(lookingFirst = false)
     }
 
     /** Told whenever the screen changes: [inLobby] is the only place an update is shown or worked on. */
@@ -186,7 +252,7 @@ class Updates(
 
     /** The settings' "Check for updates". */
     fun checkNow() {
-        if (said == Said.Checking) return
+        if (!allowed || said == Said.Checking) return
         said = Said.Checking
         scope.launch { check(asked = true) }
     }
@@ -194,7 +260,7 @@ class Updates(
     /** "Update": downloads the build offered, or installs it if it is already here. */
     fun accept() {
         val now = step as? Step.Offered ?: return
-        if (!free) return
+        if (!free || !allowed) return
         val kept = ready
         if (kept != null && kept.first == now.offer.version && kept.second.exists()) {
             arrived(now.offer, kept.second)

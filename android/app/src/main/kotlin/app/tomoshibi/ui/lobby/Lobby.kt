@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -264,9 +265,11 @@ private fun PhoneLobby(app: AppModel, account: Account, state: LobbyState) {
                         Spacer(Modifier.windowInsetsTopHeight(WindowInsets.safeDrawing))
                         Spacer(Modifier.height(BarHeight))
                         KitText("Tomoshibi", Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp), font = Font(34f, Font.Bold), lines = 1)
-                        // In the page under its title, rather than over it: laid
-                        // over the top it covered the title, and what the
+                        // The deployment's notice first, then the update: in the
+                        // page under its title, rather than over it, where laid
+                        // over the top the banner covered the title and what the
                         // navigation bar leaves of it.
+                        LobbyNoticeCard(app, padding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 12.dp))
                         UpdateBanner(app, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), inline = true)
                         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
                             Hero(app, state, Modifier.rise())
@@ -610,9 +613,6 @@ private fun WideLobby(app: AppModel, account: Account, state: LobbyState) {
                     if (onTable) DeskLobby(app, account, state) else SidebarLobby(app, account, state)
                 }
             }
-            // Over the whole window only on the desk, where there is no
-            // section of its own to sit in; beside the sidebar otherwise.
-            if (standing) UpdateBanner(app, Modifier.windowInsetsPadding(WindowInsets.safeDrawing))
             ProblemToast(app, Modifier.windowInsetsPadding(WindowInsets.safeDrawing))
             DialogHost(state.settings, { state.settings = false }, width = 900.dp, height = 700.dp) {
                 SettingsView(app, close = { state.settings = false }, Modifier.heightIn(max = 700.dp), state.settingsPage)
@@ -659,7 +659,11 @@ private fun SidebarLobby(app: AppModel, account: Account, state: LobbyState) {
                 )
             }
             if (folded != null) Spacer(Modifier.width(folded.second - folded.first))
-            Box(Modifier.weight(1f).fillMaxHeight()) {
+            // The deployment's notice at the top of the section, whichever
+            // section it is, with the section moved down under it: the
+            // picture of yourself still fills the stage behind it, and the
+            // greeting and the server menu start below it.
+            UnderLobbyNotice(app, WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.End), Modifier.weight(1f).fillMaxHeight()) {
                 ChosenSection(app, account, state)
                 // In the section beside the sidebar, whose buttons it covered
                 // when it was centred on the window, and below the server menu
@@ -716,7 +720,14 @@ private fun DeskLobby(app: AppModel, account: Account, state: LobbyState) {
             Appear(state.place == Place.Home, Modifier.fillMaxSize(), enter = fadeIn(Theme.settle()), exit = fadeOut(Theme.leave())) {
                 CameraStage(app, Modifier.fillMaxSize().glassSource(1f))
             }
-            ChosenSection(app, account, state, onTable = true)
+            // The upper half is what is looked at: the deployment's notice at
+            // its top, the section moved down under it, and the update below
+            // the notice rather than over it, across the top of the window as
+            // it was before there was a notice to keep clear of.
+            UnderLobbyNotice(app, WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal), Modifier.fillMaxSize()) {
+                ChosenSection(app, account, state, onTable = true)
+                UpdateBanner(app, Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal)))
+            }
         }
         Box(Modifier.inPane(lower, width, height)) {
             Desk(

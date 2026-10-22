@@ -6,6 +6,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -78,8 +81,14 @@ internal fun AboutSettings(app: AppModel) {
                 KitText(version, font = Font(12.5f, mono = true), color = Theme.muted, lines = 1)
             }
             // Only where the app looks for updates at all: not in a debug
-            // build started by hand, which would ask the real deployment.
-            app.updates?.let { UpdateRow(it) }
+            // build started by hand, which would ask the real deployment,
+            // and not while the deployment has them switched off, unless one
+            // is already on its way (Updates `speaks`).
+            app.updates?.let { updates ->
+                AnimatedVisibility(updates.speaks, enter = Theme.arrive + expandVertically(Theme.settle()), exit = Theme.depart + shrinkVertically(Theme.leave())) {
+                    UpdateRow(updates)
+                }
+            }
             SettingsRow(t("Media core"), symbol = "cpu", last = info == null) {
                 KitText(core, font = Font(12.5f, mono = true), color = Theme.muted, lines = 1)
             }
