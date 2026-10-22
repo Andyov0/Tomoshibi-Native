@@ -104,7 +104,7 @@ internal sealed class UpdateBanner : Grid
             Step.Offered offered => $"offered {offered.Offer.Version} {offered.Problem}",
             Step.Downloading downloading => $"downloading {downloading.Offer.Version}",
             Step.Held held => $"downloading {held.Offer.Version}",
-            Step.Installing installing => $"installing {installing.Offer.Version}",
+            Step.Installing installing => $"installing {installing.Offer.Version} {installing.Started}",
             _ => "",
         } + Localization.Shared.Language;
         if (said != _said)
@@ -183,11 +183,15 @@ internal sealed class UpdateBanner : Grid
                 Button(offered.Problem != null ? T("Try again") : T("Update"), _updates.Accept, "update.accept", prominent: true),
             ]),
         Step.Downloading or Step.Held => Downloading(TomoshibiProtocolMethods.VersionLabel(_updates.Offer!.Version)),
+        // Cancel only while the install can still be given up (Started): a
+        // package's until Windows has done with it; never the setup
+        // program's, which once started runs to its end whatever the app does
+        // and is started at once (SetupInstaller).
         Step.Installing installing => Said(
             null,
             T("Installing Tomoshibi {version}", ("version", TomoshibiProtocolMethods.VersionLabel(installing.Offer.Version))),
             [T("Tomoshibi will open again when it is done.")],
-            buttons: [Button(T("Cancel"), _updates.StopInstalling, "update.cancel")]),
+            buttons: installing.Started ? [] : [Button(T("Cancel"), _updates.StopInstalling, "update.cancel")]),
         _ => new Grid(),
     };
 
@@ -302,10 +306,13 @@ internal sealed class UpdateBanner : Grid
         foreach (var line in lines) words.Children.Add(K.Text(line, 12.5, ink: Ink.Muted, lines: _sidebar ? 3 : 6));
         if (problem != null) words.Children.Add(K.Text(problem, 12.5, ink: Ink.Danger));
         foreach (var part in extra ?? []) words.Children.Add(part);
-        var row = K.Row(8, buttons);
-        row.HorizontalAlignment = HorizontalAlignment.Right;
-        row.Margin = new Thickness(0, 6, 0, 0);
-        words.Children.Add(row);
+        if (buttons.Length > 0)
+        {
+            var row = K.Row(8, buttons);
+            row.HorizontalAlignment = HorizontalAlignment.Right;
+            row.Margin = new Thickness(0, 6, 0, 0);
+            words.Children.Add(row);
+        }
         return K.Line(12, K.Fixed(circle), K.Flex(words));
     }
 }

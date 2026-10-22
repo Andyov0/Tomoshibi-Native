@@ -120,7 +120,7 @@ internal sealed class LobbyScreen : Screen
         {
             var (start, room, sealing) = (meeting.Starting, meeting.Room, meeting.Sealing);
             _closeSheet?.Invoke();
-            OpenSheet(start, room, sealing);
+            OpenSheet(start, room, sealing, again: true);
         }
         if (_settings is { } settings && _settingsWide != wide)
         {
@@ -248,9 +248,13 @@ internal sealed class LobbyScreen : Screen
 
     // The sheet that starts or joins a meeting.
 
-    private void OpenSheet(bool start, string room, bool? sealing = null)
+    /// <param name="again">Made again in the new width's form (Reopen), which is the sheet already open, not a new way into a call.</param>
+    private void OpenSheet(bool start, string room, bool? sealing = null, bool again = false)
     {
         if (_closeSheet != null) return;
+        // Not opened while an update is being installed, rather than opened
+        // to refuse its own Start or Join: the reason is said at the foot.
+        if (!again && App.RefusedForUpdate()) return;
         _meeting = new MeetingSheet(App, _account, start, room, () => _closeSheet?.Invoke(), _wide == true, sealing);
         var close = Overlay.Current!.ShowDialog(_meeting, 560, null, () =>
         {

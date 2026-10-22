@@ -468,10 +468,8 @@ public class RemoteTests
 
     private sealed class Installer : IUpdateInstaller
     {
-        public Task<Installed> Install(string file, string version) => new TaskCompletionSource<Installed>().Task;
-        public void Stop()
-        {
-        }
+        public Task<Installed> Install(string file, string version, Action started) => new TaskCompletionSource<Installed>().Task;
+        public bool Stop() => true;
     }
 
     [Fact]

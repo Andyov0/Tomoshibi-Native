@@ -126,7 +126,8 @@ internal sealed partial class PackageInstaller : IUpdateInstaller
     /// <summary>Restarted after an update only: not after a crash or a hang (RESTART_NO_CRASH, RESTART_NO_HANG), which would open a call's app again by itself.</summary>
     private const int AfterUpdatesOnly = 1 | 2;
 
-    public async Task<Installed> Install(string file, string version)
+    /// <param name="started">Not called: the package manager's operation can be cancelled until it is done.</param>
+    public async Task<Installed> Install(string file, string version, Action started)
     {
         Windows.ApplicationModel.Package running;
         try
@@ -203,7 +204,11 @@ internal sealed partial class PackageInstaller : IUpdateInstaller
         }
     }
 
-    public void Stop() => _operation?.Cancel();
+    public bool Stop()
+    {
+        _operation?.Cancel();
+        return true;
+    }
 
     /// <summary>
     /// The name, publisher and version a bundle's manifest gives it
@@ -275,36 +280,86 @@ internal sealed partial class PackageInstaller : IUpdateInstaller
 /// for a later one (setup.ps1), which is what every app out there compares
 /// it with, this one and those from before builds were said alike.
 /// Downloaded by the app rather than a browser, it carries no mark of the
-/// web, so SmartScreen does not ask again. The setup runs silently, closes
-/// this app if it is still open, and opens the new one when it is done; this
-/// app quits once it is started.
+/// web, so SmartScreen does not ask again. The setup runs silently, shows a
+/// small window of its own, closes this app if it is still open, and opens
+/// the new one when it is done; this app quits once it is started.
+///
+/// Reading the stamp and starting the setup are done off the window's
+/// thread. Starting it holds the thread it runs on for as long as the system
+/// takes to look a new program over before it runs: eight to eleven seconds
+/// for a 145 MB setup the VM had not seen, Defender reading all of it, and
+/// longer on the owner's computer; the stamp is read in milliseconds. Done on
+/// the window's thread, the window stood frozen on the finished download and
+/// then went, with nothing on the screen until the setup's window came
+/// (10-23, updating from 0.1.3 to 0.1.4). It had been kept there because a
+/// call joined in those seconds would be ended by the install; the lobby now
+/// refuses to begin one while a build is being installed (Updates.HoldsCalls).
 /// </summary>
 internal sealed class SetupInstaller : IUpdateInstaller
 {
     private readonly Action _quit;
-    private readonly TimeSpan _arrive;
-    private volatile bool _stopped;
+    private readonly object _gate = new();
+    private Attempt? _attempt;
 
-    /// <param name="quit">Ends the app, on its own thread, once the setup is running.</param>
-    /// <param name="arrive">How long the install's card takes to arrive in the lobby (Motion.Settle), which the setup is started after.</param>
-    public SetupInstaller(Action quit, TimeSpan arrive)
+    /// <summary>
+    /// One press's install. Its own, so that one given up while its stamp is
+    /// still being read stays given up: "Update" pressed again in those
+    /// seconds starts another, and the first, once read, starts nothing.
+    /// </summary>
+    private sealed class Attempt
     {
-        _quit = quit;
-        _arrive = arrive;
+        public bool Stopped;
+        public bool Committed;
+        public readonly TaskCompletionSource Stop = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 
-    public async Task<Installed> Install(string file, string version)
+    /// <param name="quit">Ends the app, on its own thread, once the setup is running.</param>
+    public SetupInstaller(Action quit)
     {
-        _stopped = false;
-        // The install's card is let arrive first. Reading the setup and
-        // starting it hold this thread for as long as the system takes to
-        // look a new program over before it runs: eight seconds for the
-        // 145 MB setup in the VM, Defender reading all of it. The card put up
-        // the moment before was never drawn, and the window stood frozen on
-        // the finished download until the app went. Given up in this moment
-        // (Cancel, the lobby left), nothing has been started.
-        await Task.Delay(_arrive);
-        if (_stopped) return new Installed.Stopped();
+        _quit = quit;
+    }
+
+    /// <param name="started">
+    /// Called at once. The stamp is read in milliseconds (4 to 12 in the VM)
+    /// and the setup then started, which nothing calls back; a Cancel on the
+    /// install's card was there for a fifth of a second and taken away again,
+    /// a button that flickered and did nothing. Being given up is still
+    /// possible until the setup is started (Stop), for the lobby left.
+    /// </param>
+    public async Task<Installed> Install(string file, string version, Action started)
+    {
+        started();
+        var attempt = new Attempt();
+        lock (_gate) _attempt = attempt;
+        var work = Task.Run(() => Run(attempt, file, version));
+        // Given up while the stamp is still being read: said at once, rather
+        // than when the system has finished reading; nothing will be started
+        // (Run looks under the gate before it starts anything).
+        if (await Task.WhenAny(work, attempt.Stop.Task) != work) return new Installed.Stopped();
+        var installed = await work;
+        if (installed is Installed.Done) _quit();
+        return installed;
+    }
+
+    /// <summary>Refused once the setup is being started: from then on it runs whatever the app does.</summary>
+    public bool Stop()
+    {
+        Attempt? attempt;
+        lock (_gate)
+        {
+            attempt = _attempt;
+            if (attempt == null) return true;
+            if (attempt.Committed) return false;
+            attempt.Stopped = true;
+        }
+        attempt.Stop.TrySetResult();
+        return true;
+    }
+
+    /// <summary>Off the window's thread: reads the setup and starts it.</summary>
+    private Installed Run(Attempt attempt, string file, string version)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         try
         {
             // Inno Setup pads the strings of its version stamp with spaces,
@@ -324,28 +379,32 @@ internal sealed class SetupInstaller : IUpdateInstaller
             Log.Line($"update: the setup could not be read: {fault.Message}");
             return new Installed.Failed(T("The update could not be opened."));
         }
-        // Given up between the press and here: nothing has been started.
-        if (_stopped) return new Installed.Stopped();
+        Log.Line($"update: read the setup's stamp in {clock.ElapsedMilliseconds} ms");
+        lock (_gate)
+        {
+            // Given up between the press and here: nothing has been started.
+            if (attempt.Stopped) return new Installed.Stopped();
+            attempt.Committed = true;
+        }
+        clock.Restart();
         try
         {
-            var setup = new System.Diagnostics.ProcessStartInfo(file)
+            var start = new System.Diagnostics.ProcessStartInfo(file)
             {
                 Arguments = "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CLOSEAPPLICATIONS /NORESTARTAPPLICATIONS /SP-",
                 UseShellExecute = false,
             };
             Log.Line($"update: running the setup for {version}");
-            System.Diagnostics.Process.Start(setup);
+            System.Diagnostics.Process.Start(start)?.Dispose();
         }
         catch (Exception fault)
         {
             Log.Line($"update: the setup did not start: {fault.HResult:X8} {fault.Message}");
             return new Installed.Failed(T("The update could not be installed."));
         }
-        _quit();
+        Log.Line($"update: the setup started in {clock.ElapsedMilliseconds} ms");
         return new Installed.Done();
     }
-
-    public void Stop() => _stopped = true;
 }
 
 /// <summary>The real clock, for the checks' six hours.</summary>

@@ -406,6 +406,20 @@ download begins again. The install waits for it to be drawn full, three
 seconds at most, for a window with no frames. The setup's own window paces
 its bar the same way off a timer and draws it full before it goes.
 
+The app as it is given out is not a package but a setup program
+(`installer\Tomoshibi.iss`, built by `setup.ps1`), and it updates itself by
+running the newer one silently (`SetupInstaller`). The setup's stamp is read
+and the setup started off the window's thread: starting it holds the thread it
+is started on for as long as the system takes to look the new program over,
+seven to eleven seconds for a 145 MB setup the VM had not seen, and up to
+0.1.4 the window stood frozen for all of it. While a build is being installed no call is begun
+(`Updates.HoldsCalls`): the start and join sheet does not open, and a link, a
+meeting's row or the join screen is refused, with "Tomoshibi is installing an
+update and will open again in a moment. Start or join the meeting then." The
+install's card offers no Cancel here: the stamp is read in milliseconds and
+the setup started at once, and a setup once started runs to its end whatever
+the app does (a package's install keeps its Cancel, which Windows honours).
+
 Tested end to end with the packages above against a local deployment of
 the newer server (which has `/api/apps/latest/windows`) whose shelf held
 0.1.0.2: the installed 0.1.0.1 offered it in the lobby, downloaded the 220 MB
@@ -414,7 +428,7 @@ three seconds later as 0.1.0.2 with nothing more to offer. A 0.1.0.3 signed
 by another certificate (CN=Tomoshibi Impostor) was offered, downloaded and
 refused before Windows was handed it: "The update is not signed by
 Tomoshibi's developer, so it was not installed." The banner's steps, posed for pictures
-(`TOMOSHIBI_SHOW=update:offered|downloading|installing|failed|current`, and
+(`TOMOSHIBI_SHOW=update:offered|downloading|installing|installing-started|failed|current`, and
 `:about` to open the settings there), are in the kit's shots beside
 Android's and the Mac's.
 

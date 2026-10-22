@@ -292,6 +292,23 @@ internal sealed class AppModel : Observable
         _telling = false;
     }
 
+    /// <summary>
+    /// Refuses to begin a call while a build is being installed
+    /// (Updates.HoldsCalls), and says why: the install ends the app, and the
+    /// lobby is no longer frozen while it starts, so a press that used to
+    /// fall on a frozen window would now reach a call that the update ended
+    /// as it began. Every way into a call comes through here: the start and
+    /// join sheet, a link (pasted, handed over by the system, or a meeting's
+    /// row), the join screen.
+    /// </summary>
+    public bool RefusedForUpdate()
+    {
+        if (Updates?.HoldsCalls != true) return false;
+        Log.Line("refused a call: an update is being installed");
+        Problem = T("Tomoshibi is installing an update and will open again in a moment. Start or join the meeting then.");
+        return true;
+    }
+
     private readonly string _serverAddress;
 
     private string _room = "";
@@ -641,6 +658,7 @@ internal sealed class AppModel : Observable
             return;
         }
         if (MovingTo != null) return;
+        if (RefusedForUpdate()) return;
         CancelJoin();
         if (OpenedLink.Parse(link) is not { } parts) return;
         // A link opened at launch can arrive before the deployment has
@@ -875,6 +893,7 @@ internal sealed class AppModel : Observable
     public void Prepare(string room)
     {
         if (Call != null || MovingTo != null) return;
+        if (RefusedForUpdate()) return;
         if (Account == null && Invite == null && !Rehearsal)
         {
             Tell(T("Rooms here are by invitation. Open the link you were sent, or sign in."));
@@ -918,6 +937,7 @@ internal sealed class AppModel : Observable
     {
         if (Deployment is not { } deployment) return;
         if (Joining) return;
+        if (RefusedForUpdate()) return;
         Joining = true;
         Updates?.Joining(true);
         Ask(+1);

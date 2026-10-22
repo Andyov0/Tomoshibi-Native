@@ -96,7 +96,7 @@ public partial class App : Application
             var quitOn = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
             IUpdateInstaller installer = ClientDescription.Packaged
                 ? new PackageInstaller()
-                : new SetupInstaller(() => quitOn.TryEnqueue(() => Current.Exit()), Motion.Settle);
+                : new SetupInstaller(() => quitOn.TryEnqueue(() => Current.Exit()));
             app.Updates = new Updates(source, installer, ClientDescription.Version, new RealUpdateClock());
             // Each answer heard said once in the log, which a test reads.
             var heard = "";
@@ -117,7 +117,7 @@ public partial class App : Application
                     Updates.Step.Offered o => $"offered {o.Offer.Version}{(o.Problem != null ? $" ({o.Problem})" : "")}",
                     Updates.Step.Downloading d => $"downloading {d.Offer.Version}",
                     Updates.Step.Held h => $"held {h.Offer.Version}",
-                    Updates.Step.Installing i => $"installing {i.Offer.Version}",
+                    Updates.Step.Installing i => $"installing {i.Offer.Version}{(i.Started ? ", started" : "")}",
                     _ => "none",
                 };
                 if (now == said) return;
@@ -163,7 +163,7 @@ public partial class App : Application
 
     /// <summary>
     /// A step of an update to take a picture of (TOMOSHIBI_SHOW=update:offered,
-    /// downloading, installing, failed or current), with the notes a release
+    /// downloading, installing, installing-started, failed or current), with the notes a release
     /// writes (update-kit's publish.py), as Android's screenshot tests pose
     /// theirs; nothing is asked of the deployment.
     /// </summary>
@@ -181,6 +181,7 @@ public partial class App : Application
         {
             "downloading" => new Updates.Step.Downloading(offer, 23_400_000, 56_093_610),
             "installing" => new Updates.Step.Installing(offer),
+            "installing-started" => new Updates.Step.Installing(offer, Started: true),
             "failed" => new Updates.Step.Offered(offer, Words.T("The download was damaged and has been deleted. Try again.")),
             "current" => new Updates.Step.None(),
             _ => new Updates.Step.Offered(offer),
