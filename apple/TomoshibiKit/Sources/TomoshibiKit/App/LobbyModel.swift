@@ -83,11 +83,10 @@ public final class LobbyModel {
         return URL(string: "\(root)?meeting=\(encoded)#/\(one.room)")
     }
 
-    /// meeting.ts `whenSaid`: the date, the time and the zone, in the
-    /// reader's language.
+    /// meeting.ts `whenSaid` (MeetingTimes, which the Messages extension
+    /// writes its cards' times with too).
     public static func said(_ date: Date) -> String {
-        date.formatted(Date.FormatStyle(date: .abbreviated, time: .shortened, locale: Localization.shared.language.locale)
-            .timeZone(.specificName(.short)))
+        MeetingTimes.said(date)
     }
 
     /// calendar.ts `icsFor`, written where the system can hand it to a
@@ -113,22 +112,11 @@ public final class LobbyModel {
         return file
     }
 
-    /// Schedule.tsx `explainArranging`.
+    /// Schedule.tsx `explainArranging`, which the Messages extension says
+    /// too (MeetingRefusals).
     static func explain(_ error: Error) -> String {
         guard case let ProtocolError.Refused(_, code) = error else { return t("Something went wrong. Try again.") }
-        switch code {
-        case "room_already_arranged": return t("That room already has a meeting arranged.")
-        case "bad_time": return t("That time is not one a meeting can be arranged for.")
-        case "meetings_need_invites": return t("Meetings here ask for an account, so a link cannot let anybody in.")
-        case "not_yours": return t("That is somebody else's room.")
-        case "too_many_meetings": return t("You have as many meetings arranged as you can have.")
-        case "invalid_room": return t("Room names can only use lowercase letters, numbers and dashes.")
-        case "scoped_room": return t("A room held under a scope cannot be arranged ahead. Send a link with a time on it instead.")
-        case "relay_not_allowed": return t("Access denied. That server is for administrators.")
-        case "not_signed_in": return t("Your session has expired. Sign in again.")
-        case "not_allowed": return t("Arranging meetings has not been opened to you.")
-        default: return t("Something went wrong. Try again.")
-        }
+        return MeetingRefusals.sentence(code)
     }
 
     // MARK: Rooms lately

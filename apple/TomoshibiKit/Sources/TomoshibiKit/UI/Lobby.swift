@@ -182,30 +182,8 @@ struct LobbyView: View {
 
 // MARK: - The mark and small pieces
 
-/// The product's own mark, as the favicon and the app icon draw it.
-struct Mark: View {
-    var size: CGFloat = 20
-
-    var body: some View {
-        Canvas { context, area in
-            let unit = area.width / 32
-            context.fill(Path(roundedRect: CGRect(origin: .zero, size: area), cornerRadius: 8 * unit, style: .continuous),
-                         with: .color(Mark.ground))
-            let inner = unit * 0.86
-            let offset = (area.width - 32 * inner) / 2
-            for (x, y, live) in [(6.0, 8.0, false), (17, 8, false), (6, 17, false), (17, 17, true)] {
-                let tile = CGRect(x: offset + x * inner, y: offset + y * inner, width: 9 * inner, height: 7 * inner)
-                context.fill(Path(roundedRect: tile, cornerRadius: 2 * inner), with: .color(live ? Mark.live : Mark.idle))
-            }
-        }
-        .frame(width: size, height: size)
-        .accessibilityHidden(true)
-    }
-
-    static let ground = Color(red: 0x0F / 255, green: 0x0E / 255, blue: 0x0D / 255)
-    static let idle = Color(red: 0x55 / 255, green: 0x52 / 255, blue: 0x4E / 255)
-    static let live = Color(red: 0xFF / 255, green: 0xA2 / 255, blue: 0x3B / 255)
-}
+// The product's own mark is Mark, in TomoshibiBasics, where the Messages
+// extension draws it too.
 
 /// The person, as a circle with their initial in it.
 struct Initial: View {
@@ -1879,13 +1857,9 @@ struct MeetingRow: View {
         return date
     }
 
-    /// A meeting's time as a row has room for it: this year's go without
-    /// the year, which with the zone cut the time short on a phone ("Oct
-    /// 18, 2026 at 10:00 AM G…").
+    /// A meeting's time as a row has room for it (MeetingTimes `short`).
     static func said(_ date: Date) -> String {
-        guard Calendar.current.isDate(date, equalTo: Date(), toGranularity: .year) else { return LobbyModel.said(date) }
-        return date.formatted(Date.FormatStyle(locale: Localization.shared.language.locale)
-            .month(.abbreviated).day().hour().minute().timeZone(.specificName(.short)))
+        MeetingTimes.short(date)
     }
 }
 
