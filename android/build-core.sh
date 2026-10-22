@@ -78,4 +78,8 @@ JAR=$(find "$CORE/target" -path "*android-arm64-release/libwebrtc.jar" | head -1
 [ -n "$JAR" ] || { echo "libwebrtc.jar not found under $CORE/target" >&2; exit 1; }
 mkdir -p "$MODULE/libs"
 cp "$JAR" "$MODULE/libs/libwebrtc.jar"
+# The encoder factory the native half makes by name is the core module's own
+# (android/core/src/main/java/livekit/org/webrtc/DefaultVideoEncoderFactory.java,
+# which says why); the jar's copy is taken out so that the name is found once.
+zip -q -d "$MODULE/libs/libwebrtc.jar" 'livekit/org/webrtc/DefaultVideoEncoderFactory.class'
 echo "built $PROFILE core into $MODULE"

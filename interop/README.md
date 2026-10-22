@@ -11,6 +11,12 @@ against a local deployment on 127.0.0.1:8080.
   and counts what was decoded rather than what was declared.
 - `channels.js` — evaluated in the page: the dominant frequency of each channel
   of every received audio track, which is how stereo is told from mono.
+- `share-layers.mjs <port> <base> <room> <invite> [shot.png]` — follows the
+  probe in, waits for its shared screen, then draws the page large, middling
+  and small in turn so that adaptive streaming asks for each rung, and reports
+  the size and rate decoded at each: the check that a share's ladder arrives as
+  the web publishes it. `base` is the deployment's address, for a deployment
+  that is not on 127.0.0.1:8080.
 - `peek.mjs <port> <expression>` — evaluates one expression in the page.
 - `listen.py <port>` — answers every request with 401 and prints what was asked
   for; used to prove the core sends no `/rtc/validate`.
