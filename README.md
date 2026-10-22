@@ -51,7 +51,7 @@ client's own.
 
 ## Platforms
 
-| | Built with | Notes |
+| Platform | Built with | Notes |
 |---|---|---|
 | **macOS** | SwiftUI | Signed and notarised disk image |
 | **iOS, iPadOS** | SwiftUI | Distributed through TestFlight |
@@ -72,7 +72,7 @@ upstream on its own.
 
 ## Repository
 
-| | |
+| Folder | What is in it |
 |---|---|
 | `core/` | The Rust core and its bindings |
 | `apple/` | macOS, iOS and iPadOS |
