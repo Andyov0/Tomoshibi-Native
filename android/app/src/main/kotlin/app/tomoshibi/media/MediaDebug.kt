@@ -100,7 +100,7 @@ internal object MediaDebug {
         }
         val now = app.call
         Log.i(TAG, "media debug: $line done; sharing ${now?.sharing?.state ?: "-"}; out ${now?.audio?.current(input = false) ?: "-"};" +
-            " window visible ${CallWindow.visible} small ${CallWindow.inPictureInPicture} wanted ${CallWindow.wanted};" +
+            " window visible ${CallWindow.visible} small ${CallWindow.inPictureInPicture} wanted ${CallWindow.wanted}; bubble ${CallBubble.showing} allowed ${CallBubble.allowed};" +
             " thermal ${Thermal.status}; blur ${now?.blurring};" +
             " down ${now?.connection?.downKbps?.toInt()} kb/s up ${now?.connection?.upKbps?.toInt()} kb/s;" +
             " camera sent ${if (now?.cameraOn == true) now.camera.sent else "-"};" +
@@ -108,13 +108,12 @@ internal object MediaDebug {
     }
 
     /**
-     * The screen share's last picture, from the planes exactly as the core
-     * was handed them, read back at video range: the check that the GPU's
-     * conversion is the right way up, the right way round and the right
-     * colours, which an emulator that cannot encode H.264 never shows a
-     * browser.
+     * The screen share's texture as it is, read back through WebRTC's own
+     * conversion at video range: the check that what the encoders are handed
+     * is the right way up, the right way round and the right colours, beside
+     * what a browser receives of it.
      */
-    private fun sharedPicture(context: Context, picture: PlaneReader.Picture) {
+    private fun sharedPicture(context: Context, picture: ScreenFrames.Picture) {
         val width = picture.width
         val height = picture.height
         val pixels = IntArray(width * height)

@@ -5,6 +5,7 @@ import android.view.Surface
 import com.sun.jna.Callback
 import com.sun.jna.CallbackThreadInitializer
 import com.sun.jna.Native
+import livekit.org.webrtc.VideoFrame
 
 /**
  * The few calls into the core that carry Java objects, which JNA cannot, and
@@ -38,6 +39,18 @@ object CoreNative {
     external fun windowFromSurface(surface: Surface): Long
 
     external fun releaseWindow(window: Long)
+
+    /**
+     * One frame held by WebRTC itself, a texture rather than bytes, sent
+     * through the input behind [input] (`VideoInput.frameHandle`): retained
+     * until every encoder has drawn it, then released. [width] and [height]
+     * are the buffer's own. False where it could not be sent that way, for
+     * the caller to send it as planes instead.
+     */
+    external fun pushFrame(input: Long, buffer: VideoFrame.Buffer, width: Int, height: Int, timestampUs: Long): Boolean
+
+    /** Gives back a handle from `VideoInput.frameHandle`. */
+    external fun releaseFrameInput(input: Long)
 
     /** Attached for good, never detached on return; a daemon, as a thread the core made should not hold the VM. */
     private val attached = CallbackThreadInitializer(true, false, "tomoshibi-core")

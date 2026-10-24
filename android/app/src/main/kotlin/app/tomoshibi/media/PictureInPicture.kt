@@ -101,6 +101,12 @@ object CallWindow {
         /** What it shows' width and height as it is shown, or null where it shows no picture: a square window, the smallest. */
         val shape: Pair<Int, Int>? = null,
         val microphone: Boolean = false,
+        /**
+         * Nothing to see, and leave to draw over other apps: leaving the app
+         * puts the call in the app's own bubble (CallBubble) rather than in
+         * the system's window, which is not opened by itself at all then.
+         */
+        val bubble: Boolean = false,
     )
 
     var wanted = Wanted()
@@ -137,12 +143,15 @@ object CallWindow {
         activity.addOnUserLeaveHintListener {
             // Before Android 12 nothing opens the window on the way home but
             // this; from 12 the system has already done it.
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && wanted.inCall) enter(activity)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S && wanted.inCall && !wanted.bubble) enter(activity)
         }
         activity.lifecycle.addObserver(LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_START -> visible = true
                 Lifecycle.Event.ON_STOP -> visible = false
+                // The leave to draw over other apps may have been given or
+                // taken back in Settings meanwhile.
+                Lifecycle.Event.ON_RESUME -> CallBubble.refresh(activity)
                 else -> {}
             }
         })
@@ -158,6 +167,19 @@ object CallWindow {
         intent.removeExtra(CONTROL_EXTRA)
         val control = CallKeeper.Control.entries.firstOrNull { it.name == name } ?: return
         CallKeeper.control(control)
+    }
+
+    /**
+     * The small window put away while it has nothing left to show and the
+     * bubble can take the call (CallMedia `bubble`): a share ended or a video
+     * put down while somebody was watching it small. The task goes behind
+     * the others, which is how the window closes from inside it.
+     */
+    fun giveWayToBubble() {
+        val activity = activity?.get() ?: return
+        if (!inPictureInPicture) return
+        Log.i(TAG, "nothing left to show in the small window; the bubble takes the call")
+        activity.moveTaskToBack(true)
     }
 
     /** A debug build's `pip`: the small window opened as if the app had been left. */
@@ -203,7 +225,7 @@ object CallWindow {
         builder.setActions(actions(activity))
         stage?.let { builder.setSourceRectHint(it) }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            builder.setAutoEnterEnabled(wanted.inCall)
+            builder.setAutoEnterEnabled(wanted.inCall && !wanted.bubble)
             // A live picture: drawn again at the new size rather than
             // stretched while the window is resized (the platform's advice
             // for video).

@@ -21,6 +21,11 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- The call's own small bubble over other apps when it has nothing to
+         show (media/CallBubble.kt). Granted only on the system's page, which
+         the call opens once after saying why; without it the system's small
+         window is used as before. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <!-- The app installing its own update (media/SelfInstall.kt). Declared,
          Android still asks the person to allow it in "Install unknown apps"
          before the first install, which the app explains before opening

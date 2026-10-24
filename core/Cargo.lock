@@ -2785,6 +2785,7 @@ checksum = "06bdbd8cfc056b8d2e2e85f29b56a3bdbecb527cef81eb39e3e7b98af4652770"
 name = "tomoshibi-core"
 version = "0.1.0"
 dependencies = [
+ "cc",
  "futures-util",
  "jni",
  "livekit",
@@ -2795,6 +2796,7 @@ dependencies = [
  "tokio",
  "tomoshibi-protocol",
  "uniffi",
+ "webrtc-sys-build",
  "windows",
 ]
 

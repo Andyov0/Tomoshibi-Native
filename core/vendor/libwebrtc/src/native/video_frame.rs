@@ -190,6 +190,22 @@ impl NativeBuffer {
         (fd >= 0).then_some(fd)
     }
 
+    /// Tomoshibi: an Android frame buffer made in C++ by the caller, as an
+    /// owned `livekit_ffi::VideoFrameBuffer*` (`std::unique_ptr::release`),
+    /// taken over here; null gives nothing. webrtc-sys can make a native
+    /// buffer from a CVPixelBuffer or a DMA-BUF and from nothing an Android
+    /// app holds, so the app wraps its texture frames itself
+    /// (tomoshibi-core src/android_frame.cc).
+    #[cfg(target_os = "android")]
+    pub unsafe fn from_android_buffer(raw: *mut std::ffi::c_void) -> Option<vf::native::NativeBuffer> {
+        if raw.is_null() {
+            return None;
+        }
+        Some(vf::native::NativeBuffer {
+            handle: NativeBuffer { sys_handle: UniquePtr::from_raw(raw as *mut vfb_sys::ffi::VideoFrameBuffer) },
+        })
+    }
+
     pub fn sys_handle(&self) -> &vfb_sys::ffi::VideoFrameBuffer {
         &self.sys_handle
     }

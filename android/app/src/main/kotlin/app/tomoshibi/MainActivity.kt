@@ -3,6 +3,7 @@ package app.tomoshibi
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color as AndroidColor
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.WindowManager
@@ -14,6 +15,7 @@ import androidx.lifecycle.lifecycleScope
 import app.tomoshibi.basics.Appearance
 import app.tomoshibi.basics.Localization
 import app.tomoshibi.core.CoreNative
+import app.tomoshibi.core.TestEncoders
 import app.tomoshibi.media.DeviceAccess
 import app.tomoshibi.media.Foreground
 import app.tomoshibi.model.AppModel
@@ -56,6 +58,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // An emulator has no hardware H.264 and the prebuilt WebRTC no
+        // software one, so nothing it sent ever reached a browser; a debug
+        // build there encodes with the platform's software codec instead
+        // (TestEncoders), set before the first call makes the encoders.
+        if (BuildConfig.DEBUG && Build.HARDWARE in setOf("ranchu", "goldfish")) TestEncoders.softwareH264 = true
         CoreNative.load(this)
         Localization.install(this)
         Appearance.install(this)
