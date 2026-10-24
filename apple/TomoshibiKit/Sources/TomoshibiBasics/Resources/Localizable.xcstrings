@@ -24421,6 +24421,36 @@
         }
       }
     },
+    "Tomoshibi is installing an update and will open again in a moment. Start or join the meeting then." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tomoshibi is installing an update and will open again in a moment. Start or join the meeting then."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tomoshibi はアップデートをインストール中で、まもなく自動でもう一度開きます。会議の開始や参加はそのあとにしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tomoshibi 正在安装更新，稍后会自动重新打开，届时再开始或加入会议。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tomoshibi 正在安裝更新，稍後會自動重新開啟，屆時再開始或加入會議。"
+          }
+        }
+      }
+    },
     "Tomoshibi is not allowed to install apps, so it could not install the update. Allow it on the next screen to try again." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,

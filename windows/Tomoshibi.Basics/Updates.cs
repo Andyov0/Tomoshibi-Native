@@ -79,11 +79,18 @@ public abstract record Installed
 /// <summary>Where a build is installed: the system's package manager, or a test's stand-in.</summary>
 public interface IUpdateInstaller
 {
-    /// <summary>Hands the build, <paramref name="version"/> as offered, to the system; returns once it is done, given up or failed (when it is done the app has usually been ended).</summary>
-    Task<Installed> Install(string file, string version);
+    /// <summary>
+    /// Hands the build, <paramref name="version"/> as offered, to the system;
+    /// returns once it is done, given up or failed (when it is done the app
+    /// has usually been ended). <paramref name="started"/> is called, on the
+    /// caller's thread, once the install has gone past the point where it
+    /// can be given up: a setup program that has been started runs to its
+    /// end whatever the app does.
+    /// </summary>
+    Task<Installed> Install(string file, string version, Action started);
 
-    /// <summary>Gives up an install under way, which then returns <see cref="Installed.Stopped"/>.</summary>
-    void Stop();
+    /// <summary>Gives up an install under way, which then returns <see cref="Installed.Stopped"/>; false where it has already started and cannot be.</summary>
+    bool Stop();
 }
 
 /// <summary>Time, for the checks' six hours: the real one, or a test's that passes six hours in an instant.</summary>
@@ -104,7 +111,9 @@ public interface IUpdateClock
 /// only in the lobby; one found during a call waits for the lobby; a download
 /// is held when the person leaves the lobby and carries on, where it
 /// stopped, when they are back; an install under way when they leave is
-/// given up and the build kept, since installing ends the app.
+/// given up and the build kept, since installing ends the app; and while one
+/// is under way no call is begun (<see cref="HoldsCalls"/>), since a setup
+/// once started cannot be called back.
 ///
 /// Asked once at start and every six hours after. A check that fails is kept
 /// quiet and asked again in ten minutes; a notice for each would teach
@@ -156,7 +165,12 @@ public sealed class Updates
         /// <summary>A download the person left the lobby during: stopped, kept, and carried on when they are back.</summary>
         public sealed record Held(Offer Offer, long Received, long Total) : Step;
 
-        public sealed record Installing(Offer Offer) : Step;
+        /// <summary>
+        /// Being installed; <paramref name="Started"/> once the install can no
+        /// longer be given up (<see cref="IUpdateInstaller.Install"/>), when
+        /// there is no Cancel to offer.
+        /// </summary>
+        public sealed record Installing(Offer Offer, bool Started = false) : Step;
     }
 
     /// <summary>What a check somebody asked for found, for the settings to say.</summary>
@@ -233,6 +247,20 @@ public sealed class Updates
 
     /// <summary>Whether the settings say anything about updates: unless they are switched off, and then still while one is under way, for its progress and its Cancel.</summary>
     public bool Speaks => Allowed || Now is Step.Downloading or Step.Held or Step.Installing;
+
+    /// <summary>
+    /// Whether a call may not be begun now: while a build is being installed,
+    /// which ends the app. The install is started off the window's thread,
+    /// so the lobby goes on answering while the system looks the setup over
+    /// (eight to eleven seconds for the 145 MB setup in the VM, Defender
+    /// reading all of it); a call begun in those seconds would be ended by the
+    /// install as it began, and once the setup has started nothing can call it
+    /// back. The
+    /// app refuses to begin one and says why; where the install can still be
+    /// given up (a package's), its Cancel is there for somebody who would
+    /// rather be in the call.
+    /// </summary>
+    public bool HoldsCalls => Now is Step.Installing;
 
     /// <summary>The build being offered, downloaded or installed, whatever the step.</summary>
     public Offer? Offer => Now switch
@@ -371,9 +399,12 @@ public sealed class Updates
             case Step.Installing when !inLobby:
                 // Given up rather than let end the app in whatever the
                 // person went on to: a call is ended by the install. The build
-                // is kept for "Update" back in the lobby.
+                // is kept for "Update" back in the lobby. One that has
+                // started goes on (HoldsCalls keeps a call from being begun
+                // meanwhile), and the app goes with it.
                 _walkedAway = true;
-                _installer.Stop();
+                if (!_installer.Stop()) _walkedAway = false;
+                Changed?.Invoke();
                 return;
             case Step.Held held when inLobby:
                 Download(held.Offer);
@@ -444,11 +475,13 @@ public sealed class Updates
         Set(step);
     }
 
-    /// <summary>"Cancel", on an install: given up, and the build kept for "Update" again.</summary>
+    /// <summary>"Cancel", on an install: given up, and the build kept for "Update" again; nothing once the install has started, when Cancel is no longer offered.</summary>
     public void StopInstalling()
     {
-        if (Now is not Step.Installing) return;
+        if (Now is not Step.Installing { Started: false }) return;
         _walkedAway = false;
+        // Refused by an install that started in the moment before the press,
+        // before it had said so: it goes on, and says so now.
         _installer.Stop();
     }
 
@@ -594,7 +627,10 @@ public sealed class Updates
             Installed installed;
             try
             {
-                installed = await _installer.Install(file, offer.Version);
+                installed = await _installer.Install(file, offer.Version, () =>
+                {
+                    if (Now is Step.Installing { Started: false } now && now.Offer.Version == offer.Version) Set(now with { Started = true });
+                });
             }
             catch (Exception)
             {

@@ -113,17 +113,34 @@ public class UpdatesTests
         public int Stopped;
         public readonly List<string> Installs = new();
         public TaskCompletionSource<Installed> Answer = new();
+        private Action? _started;
 
-        public Task<Installed> Install(string file, string version)
+        /// <summary>The setup has been started: from here nothing calls it back (SetupInstaller).</summary>
+        public bool Committed;
+
+        public Task<Installed> Install(string file, string version, Action started)
         {
             Installs.Add(file);
+            Committed = false;
+            _started = started;
             return Answer.Task;
         }
 
-        public void Stop()
+        /// <summary>Starts the setup, and says so as the real one does, a moment later.</summary>
+        public void Commit(bool say = true)
+        {
+            Committed = true;
+            if (say) _started!();
+        }
+
+        public void SayStarted() => _started!();
+
+        public bool Stop()
         {
             Stopped++;
+            if (Committed) return false;
             Answer.TrySetResult(new Installed.Stopped());
+            return true;
         }
     }
 
@@ -474,6 +491,77 @@ public class UpdatesTests
         updates.Accept();
         Assert.Single(_source.Transfers);
         Assert.Equal(new[] { transfer.File, transfer.File }, _installer.Installs);
+    }
+
+    /// <summary>
+    /// The setup is started off the window's thread, so the lobby answers
+    /// presses for the seconds the system takes to look it over. A call begun
+    /// then was ended by the install as it began, which was why the setup was
+    /// once started on the window's thread, frozen; so no call is begun while
+    /// a build is being installed, whether it can still be given up or not,
+    /// and from when it is given up or fails, calls are begun again.
+    /// </summary>
+    [Fact]
+    public void NoCallIsBegunWhileABuildIsBeingInstalled()
+    {
+        var updates = Offered();
+        Assert.False(updates.HoldsCalls);
+        updates.Accept();
+        Assert.False(updates.HoldsCalls);
+        _source.Transfers[^1].Outcome.SetResult(null);
+        Draw(updates);
+        Assert.IsType<Step.Installing>(updates.Now);
+        Assert.True(updates.HoldsCalls);
+        updates.StopInstalling();
+        Assert.False(updates.HoldsCalls);
+
+        _installer.Answer = new TaskCompletionSource<Installed>();
+        updates.Accept();
+        _installer.Commit();
+        Assert.True(updates.HoldsCalls);
+        _installer.Answer.SetResult(new Installed.Failed("The update could not be installed."));
+        Assert.False(updates.HoldsCalls);
+    }
+
+    /// <summary>
+    /// A setup that has been started runs to its end whatever the app does,
+    /// and closes the app: from then on there is no Cancel, a press of the
+    /// one still on the screen does nothing, and leaving the lobby does not
+    /// pretend to have given it up.
+    /// </summary>
+    [Fact]
+    public void AnInstallThatHasStartedCannotBeGivenUp()
+    {
+        var (updates, _) = Downloaded();
+        Assert.Equal(new Step.Installing(MakeOffer("0.1.0.8")), updates.Now);
+        _installer.Commit();
+        Assert.Equal(new Step.Installing(MakeOffer("0.1.0.8"), Started: true), updates.Now);
+        updates.StopInstalling();
+        Assert.Equal(0, _installer.Stopped);
+        Assert.Equal(new Step.Installing(MakeOffer("0.1.0.8"), Started: true), updates.Now);
+        updates.Lobby(false);
+        Assert.IsType<Step.Installing>(updates.Now);
+        Assert.True(updates.HoldsCalls);
+        _installer.Answer.SetResult(new Installed.Done());
+        Assert.Equal(new Step.None(), updates.Now);
+    }
+
+    /// <summary>
+    /// Cancel pressed in the moment the setup was being started, before the
+    /// installer had said so: the installer refuses, and the install goes on
+    /// and says so a moment later, rather than the card saying it was not
+    /// installed while the setup runs.
+    /// </summary>
+    [Fact]
+    public void CancelPressedAsTheSetupStartsIsRefusedByTheInstaller()
+    {
+        var (updates, _) = Downloaded();
+        _installer.Commit(say: false);
+        updates.StopInstalling();
+        Assert.Equal(1, _installer.Stopped);
+        Assert.Equal(new Step.Installing(MakeOffer("0.1.0.8")), updates.Now);
+        _installer.SayStarted();
+        Assert.Equal(new Step.Installing(MakeOffer("0.1.0.8"), Started: true), updates.Now);
     }
 
     [Fact]

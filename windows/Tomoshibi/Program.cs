@@ -39,6 +39,25 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        // Opened while an update's setup is putting the files in place (the
+        // person saw the window go and opened the app again, as the owner did
+        // on 10-23, more than once): a window here would be an app running
+        // from files that are being replaced, and holding them against the
+        // setup. The setup's own window is brought to the front instead, and
+        // this launch ends. Asked first, of the system alone, and the rest of
+        // the start is a method of its own, so that nothing of the app's other
+        // files (the Windows App SDK, the core) is loaded to ask it.
+        if (SetupSignals.InstallUnderWay())
+        {
+            SetupSignals.BringSetupForward();
+            return 0;
+        }
+        return Start(args);
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static int Start(string[] args)
+    {
         WinRT.ComWrappersSupport.InitializeComWrappers();
         Launch = Launch.FromEnvironment();
         AppActivationArguments? activated = null;
@@ -78,6 +97,9 @@ internal static class Program
                     }
                 });
                 done.Wait(TimeSpan.FromSeconds(10));
+                // The app that was already open has come forward with its
+                // window: what a setup that opened this launch waits for.
+                SetupSignals.SayAppShown();
                 return 0;
             }
             first.Activated += (_, e) => Handed.Hand(LinkOf(e));

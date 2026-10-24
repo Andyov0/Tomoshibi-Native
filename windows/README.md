@@ -406,6 +406,50 @@ download begins again. The install waits for it to be drawn full, three
 seconds at most, for a window with no frames. The setup's own window paces
 its bar the same way off a timer and draws it full before it goes.
 
+The app as it is given out is not a package but a setup program
+(`installer\Tomoshibi.iss`, built by `setup.ps1`), and it updates itself by
+running the newer one silently (`SetupInstaller`). The setup's stamp is read
+and the setup started off the window's thread: starting it holds the thread it
+is started on for as long as the system takes to look the new program over,
+seven to eleven seconds for a 145 MB setup the VM had not seen, and up to
+0.1.4 the window stood frozen for all of it. While a build is being installed no call is begun
+(`Updates.HoldsCalls`): the start and join sheet does not open, and a link, a
+meeting's row or the join screen is refused, with "Tomoshibi is installing an
+update and will open again in a moment. Start or join the meeting then." The
+install's card offers no Cancel here: the stamp is read in milliseconds and
+the setup started at once, and a setup once started runs to its end whatever
+the app does (a package's install keeps its Cancel, which Windows honours).
+
+The screen is never left empty in between, where it was for about half a
+second as the app went and a second and a half as the setup's window went.
+Each window waits for the next before it goes, told through named events in
+the person's session (`Model\SetupSignals.cs`, spelt again in the setup's
+`[Code]`): the setup shows its window as it starts, before it closes the app,
+and says so, and the app quits then (or after twenty seconds without word);
+once the files are in place the setup listens for the app it opens, which
+says so once its window has drawn, and only then does the setup's window,
+kept above every other, fade (or after thirty seconds). An app from 0.1.4 or
+before quits the moment it has started the setup, and the setup's window
+comes as early as it can for it all the same. The app opened while the files
+are being replaced does not open a window over half its files: it brings the
+setup's window to the front and ends, and the program file is put in place
+last, so that nothing starts before the rest is there. Opened from its
+shortcut in the seconds the program file is not there, it is Windows that
+answers, with its own "Problem with Shortcut".
+
+Tested in the VM against the kit's deployment, a debug 0.1.4.90 updating
+itself to 0.1.4.91 from the shelf, every tenth of a second noting the app's
+and the setup's windows and whether the old app's window thread answered:
+nothing on the screen at any moment in twelve updates, one of them with
+every processor kept busy; the old app's thread answered throughout the
+seven to eleven seconds the setup took to start; the setup's window up 0.8
+to 2 seconds after it was started, and the old app gone 0.4 seconds after
+that; the new app's window opening beneath the setup's, and the setup's
+fading once the new one's first frame was on the screen, 2.8 to 4.6 seconds
+after the setup had opened it (the VM's own screen, captured from the host,
+says the same). Started as 0.1.4 starts it, quitting at once, the setup's
+window came 0.5 seconds after 0.1.4's went.
+
 Tested end to end with the packages above against a local deployment of
 the newer server (which has `/api/apps/latest/windows`) whose shelf held
 0.1.0.2: the installed 0.1.0.1 offered it in the lobby, downloaded the 220 MB
@@ -414,7 +458,7 @@ three seconds later as 0.1.0.2 with nothing more to offer. A 0.1.0.3 signed
 by another certificate (CN=Tomoshibi Impostor) was offered, downloaded and
 refused before Windows was handed it: "The update is not signed by
 Tomoshibi's developer, so it was not installed." The banner's steps, posed for pictures
-(`TOMOSHIBI_SHOW=update:offered|downloading|installing|failed|current`, and
+(`TOMOSHIBI_SHOW=update:offered|downloading|installing|installing-started|failed|current`, and
 `:about` to open the settings there), are in the kit's shots beside
 Android's and the Mac's.
 
@@ -451,6 +495,10 @@ Only a debug build given a deployment, or a release build, asks.
 - The notice is at the top of the lobby, signed in or not: at the head of the
   section beside the sidebar on a wide window, under the large title on a
   narrow one, at the head of the sign-in screen's column; never in a call.
+  On a wide window it takes over the band each section keeps clear for the
+  title bar, so that the section's own spacing is what lies between them (the
+  greeting 40 below the card, the server menu 12), not the title bar's height
+  again on top of it.
   Its close puts that id away for good. Wherever the update's card is shown in
   the same column it is below the notice, each opening its own space, so the
   two never lie across each other.
