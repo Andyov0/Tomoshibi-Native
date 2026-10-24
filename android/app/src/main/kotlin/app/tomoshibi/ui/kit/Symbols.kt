@@ -66,6 +66,7 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.HourglassTop
 import androidx.compose.material.icons.rounded.HowToReg
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.IosShare
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.Language
 import androidx.compose.material.icons.rounded.Link
@@ -300,6 +301,7 @@ private val symbols: Map<String, SfSymbol> by lazy {
     "speaker.wave.1.fill" to SfSymbol({ Icons.AutoMirrored.Rounded.VolumeDown }, 1.170f, 1.050f, 0.150f, 0.100f, 0.870f, 0.850f),
     "speaker.wave.2" to SfSymbol({ Icons.AutoMirrored.Rounded.VolumeUp }, 1.390f, 1.050f, 0.150f, 0.100f, 1.090f, 0.850f),
     "speaker.wave.2.fill" to SfSymbol({ Icons.AutoMirrored.Rounded.VolumeUp }, 1.390f, 1.050f, 0.150f, 0.100f, 1.090f, 0.850f),
+    "square.and.arrow.up" to SfSymbol({ Icons.Rounded.IosShare }, 1.120f, 1.350f, 0.120f, 0.160f, 0.870f, 1.100f),
     "stop.circle" to SfSymbol({ Icons.Rounded.StopCircle }, 1.180f, 1.180f, 0.090f, 0.090f, 0.990f, 0.990f),
     "trash" to SfSymbol({ Icons.Rounded.DeleteOutline }, 1.090f, 1.270f, 0.070f, 0.090f, 0.960f, 1.080f),
     "video" to SfSymbol({ Icons.Rounded.Videocam }, 1.430f, 0.990f, 0.150f, 0.090f, 1.210f, 0.800f),
