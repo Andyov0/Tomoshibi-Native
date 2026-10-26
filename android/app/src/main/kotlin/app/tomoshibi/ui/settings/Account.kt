@@ -153,15 +153,15 @@ private fun Profile(app: AppModel, account: Account, say: (String?) -> Unit) {
         Column(
             Modifier
                 .fillMaxWidth()
-                .background(Color.White.copy(alpha = 0.05f), shape)
-                .border(1.dp, Color.White.copy(alpha = 0.07f), shape),
+                .background(Theme.plate(0.05f), shape)
+                .border(1.dp, Theme.wash.copy(alpha = 0.07f), shape),
         ) {
             Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
                 Box {
                     AccountAvatar(
                         account.name,
                         app.avatarAddress,
-                        Modifier.dropShadow(CircleShape, Shadow(radius = 10.dp, color = Color.Black, offset = DpOffset(0.dp, 4.dp), alpha = 0.35f)),
+                        Modifier.dropShadow(CircleShape, Shadow(radius = 10.dp, color = Color.Black, offset = DpOffset(0.dp, 4.dp), alpha = Theme.shade(0.35f))),
                         size = 72.dp,
                     )
                     GlassButton(
@@ -180,7 +180,7 @@ private fun Profile(app: AppModel, account: Account, say: (String?) -> Unit) {
                     SelectionContainer { KitText(account.trip, font = Font(12f, mono = true), color = Theme.muted) }
                 }
             }
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.06f)))
+            Box(Modifier.fillMaxWidth().height(1.dp).background(Theme.wash.copy(alpha = 0.06f)))
             Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 KitText(t("Shown beside your name in a call. Scaled down before it is sent."), font = Font(11.5f), color = Theme.muted)
                 // Wrapping rather than in one row, which on a phone held
@@ -254,7 +254,7 @@ private fun Abilities(app: AppModel, account: Account) {
                 }
             }
             if (account.scopes.isNotEmpty() || created != null) {
-                Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.06f)))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Theme.wash.copy(alpha = 0.06f)))
                 val rows = buildList<Pair<String, @Composable () -> Unit>> {
                     if (account.scopes.isNotEmpty()) {
                         add(t("Your scopes") to {

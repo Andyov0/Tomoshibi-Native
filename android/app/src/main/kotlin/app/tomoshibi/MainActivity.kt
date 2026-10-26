@@ -67,10 +67,12 @@ class MainActivity : ComponentActivity() {
         Localization.install(this)
         Appearance.install(this)
         DeviceAccess.install(this)
-        // From edge to edge, the bars drawn light over the app's own dark
-        // ground: every screen keeps its controls inside the safe area, the
-        // display cutout and the keyboard included, and lets its pictures
-        // and its backdrop run under the bars.
+        // From edge to edge, the bars clear: every screen keeps its controls
+        // inside the safe area, the display cutout and the keyboard included,
+        // and lets its pictures and its backdrop run under the bars. Their
+        // icons start light, as over the dark, and the app's root turns them
+        // dark over a light screen from its first frame (ui/App.kt
+        // `SystemBars`).
         enableEdgeToEdge(SystemBarStyle.dark(AndroidColor.TRANSPARENT), SystemBarStyle.dark(AndroidColor.TRANSPARENT))
         // The window gives way to the keyboard rather than being pushed up
         // under it, so that the screens can keep a field and its button

@@ -158,7 +158,7 @@ fun MediaSlider(
         contentAlignment = Alignment.CenterStart,
     ) {
         val width = maxWidth.coerceAtLeast(1.dp)
-        Box(Modifier.fillMaxWidth().height(track).background(Color.White.copy(alpha = 0.14f), Capsule))
+        Box(Modifier.fillMaxWidth().height(track).background(Theme.wash.copy(alpha = 0.14f), Capsule))
         Box(
             Modifier
                 .size(maxOf(track, (width - knob) * fraction + knob / 2), track)
@@ -209,7 +209,7 @@ fun MediaSpinner(modifier: Modifier = Modifier, size: Float = 16f, tint: Color =
 @Composable
 fun MediaProgress(fraction: Float, modifier: Modifier = Modifier, tint: Color = Theme.tally) {
     val shown by animateFloatAsState(fraction.coerceIn(0f, 1f), tween(500, easing = LinearEasing), label = "progress")
-    Box(modifier.fillMaxWidth().height(3.dp).clearAndSetSemantics {}.background(Color.White.copy(alpha = 0.12f), Capsule)) {
+    Box(modifier.fillMaxWidth().height(3.dp).clearAndSetSemantics {}.background(Theme.wash.copy(alpha = 0.12f), Capsule)) {
         Box(Modifier.fillMaxWidth(shown).height(3.dp).background(tint, Capsule))
     }
 }
@@ -252,7 +252,7 @@ fun MediaPanelGlass(modifier: Modifier = Modifier, cornerRadius: Dp = 22.dp, con
 /** A hairline between the parts of a panel (`MediaRule`). */
 @Composable
 fun MediaRule(modifier: Modifier = Modifier) {
-    Box(modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.07f)))
+    Box(modifier.fillMaxWidth().height(1.dp).background(Theme.wash.copy(alpha = 0.07f)))
 }
 
 /**
@@ -277,7 +277,7 @@ fun MediaIconButton(
     val press = rememberPress()
     val filled = lit || prominent
     val fill by animateColorAsState(
-        if (filled) Theme.tally else Color.White.copy(alpha = if (press.lit && on) 0.12f else 0f),
+        if (filled) Theme.tally else Theme.wash.copy(alpha = if (press.lit && on) 0.12f else 0f),
         if (filled) Theme.settle() else Motion.hover(), label = "fill",
     )
     val ink by animateColorAsState(
@@ -316,7 +316,7 @@ fun MediaButton(
     val on = enabled && LocalEnabled.current
     val press = rememberPress()
     val fill by animateColorAsState(
-        if (prominent) Theme.tally else if (quiet) Color.Transparent else Color.White.copy(alpha = if (press.pressed) 0.16f else 0.10f),
+        if (prominent) Theme.tally else if (quiet) Color.Transparent else Theme.wash.copy(alpha = if (press.pressed) 0.16f else 0.10f),
         Theme.settle(), label = "fill",
     )
     val scale by animateFloatAsState(if (press.pressed) 0.97f else 1f, Theme.settle(), label = "press")
@@ -329,7 +329,7 @@ fun MediaButton(
             .alpha(if (on) 1f else 0.4f)
             .heightIn(min = height)
             .background(fill, Capsule)
-            .border(1.dp, Color.White.copy(alpha = if (prominent || quiet) 0f else 0.08f), Capsule)
+            .border(1.dp, Theme.wash.copy(alpha = if (prominent || quiet) 0f else 0.08f), Capsule)
             .pressable(press, Capsule, on, Role.Button, label, onClick = onClick)
             .padding(horizontal = 12.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
@@ -352,7 +352,7 @@ fun MediaEmpty(symbol: String, text: String, modifier: Modifier = Modifier) {
         verticalArrangement = Arrangement.spacedBy(10.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Box(Modifier.size(44.dp).background(Color.White.copy(alpha = 0.07f), CircleShape), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(44.dp).background(Theme.wash.copy(alpha = 0.07f), CircleShape), contentAlignment = Alignment.Center) {
             Symbol(symbol, size = 17f, weight = Font.Medium, tint = Theme.muted)
         }
         KitText(text, font = Font(12f), color = Theme.muted, align = TextAlign.Center)
@@ -392,7 +392,7 @@ fun MediaRow(
     Row(
         modifier
             .fillMaxWidth()
-            .background(Color.White.copy(alpha = light), shape)
+            .background(Theme.wash.copy(alpha = light), shape)
             .then(if (onClick != null) Modifier.pressable(press, shape, true, Role.Button, onClick = onClick) else Modifier.hoverable(press.source))
             .padding(horizontal = 8.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -417,7 +417,7 @@ fun MediaArtwork(url: String, modifier: Modifier = Modifier, symbol: String = "m
             .clip(shape)
             .background(Theme.surfaceHigh)
             .background(Theme.tally.copy(alpha = 0.18f))
-            .border(1.dp, Color.White.copy(alpha = 0.08f), shape),
+            .border(1.dp, Theme.wash.copy(alpha = 0.08f), shape),
         contentAlignment = Alignment.Center,
     ) {
         Symbol(symbol, size = 13f, weight = Font.Semibold, tint = Theme.foreground.copy(alpha = 0.7f))
@@ -431,7 +431,7 @@ fun MediaBadge(text: String, modifier: Modifier = Modifier, symbol: String? = nu
     val ink = if (lit) Theme.tally else Theme.foreground.copy(alpha = 0.75f)
     Row(
         modifier
-            .background(if (lit) Theme.tally.copy(alpha = 0.16f) else Color.White.copy(alpha = 0.09f), Capsule)
+            .background(if (lit) Theme.tally.copy(alpha = 0.16f) else Theme.wash.copy(alpha = 0.09f), Capsule)
             .border(1.dp, if (lit) Theme.tally.copy(alpha = 0.35f) else Color.Transparent, Capsule)
             .padding(horizontal = 7.dp, vertical = 3.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp),

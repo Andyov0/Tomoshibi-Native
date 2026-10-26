@@ -13,6 +13,7 @@ import app.tomoshibi.basics.Localization
 import app.tomoshibi.basics.t
 import app.tomoshibi.model.CallModel
 import app.tomoshibi.model.CallToast
+import app.tomoshibi.ui.InMeeting
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.captureScreenRoboImage
 import org.junit.After
@@ -77,7 +78,7 @@ class RoomScreenshotTest(private val language: Language) {
     private fun shoot(name: String, call: CallModel, settle: Long = 2500, before: () -> Unit = {}) {
         val app = app()
         compose.setContent {
-            CompositionLocalProvider(LocalRoomPictures provides standInPictures) { RoomView(app, call) }
+            InMeeting { CompositionLocalProvider(LocalRoomPictures provides standInPictures) { RoomView(app, call) } }
         }
         compose.mainClock.advanceTimeBy(600)
         compose.waitForIdle()

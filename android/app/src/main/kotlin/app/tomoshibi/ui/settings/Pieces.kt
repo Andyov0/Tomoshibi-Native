@@ -173,7 +173,7 @@ internal fun AdaptiveRow(
                             Modifier
                                 .padding(end = 12.dp)
                                 .size(26.dp)
-                                .background(Color.White.copy(alpha = 0.10f), rounded(7f)),
+                                .background(Theme.wash.copy(alpha = 0.10f), rounded(7f)),
                             contentAlignment = Alignment.Center,
                         ) { Symbol(symbol, size = 12.5f, weight = Font.Semibold, tint = Theme.foreground) }
                     }
@@ -239,7 +239,7 @@ internal fun CloseButton(label: String, onClick: () -> Unit, modifier: Modifier 
     val press = rememberPress()
     val on = LocalEnabled.current
     val ink by animateColorAsState(if (press.lit) Theme.foreground else Theme.muted, Motion.hover(), label = "ink")
-    val fill by animateColorAsState(Color.White.copy(alpha = if (press.lit) 0.16f else 0.08f), Motion.hover(), label = "fill")
+    val fill by animateColorAsState(Theme.wash.copy(alpha = if (press.lit) 0.16f else 0.08f), Motion.hover(), label = "fill")
     Box(
         modifier
             .barPress(press)

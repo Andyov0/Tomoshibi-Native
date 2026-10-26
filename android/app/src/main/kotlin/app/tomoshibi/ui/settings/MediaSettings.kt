@@ -24,7 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -200,7 +199,7 @@ private fun DevicePreview(check: DeviceCheck) {
             .fillMaxWidth()
             .aspectRatio(16f / 9f)
             .clip(shape)
-            .border(1.dp, Color.White.copy(alpha = 0.08f), shape),
+            .border(1.dp, Theme.wash.copy(alpha = 0.08f), shape),
     ) {
         // A camera-off tile's grey, as CameraStage's framed preview is.
         Box(Modifier.matchParentSize().background(Theme.surface))

@@ -77,7 +77,8 @@ fun PictureButton(
         horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        KitInk(Theme.foreground) { KitFont(Font(12.5f, Font.Semibold)) { content() } }
+        // Light words whatever the appearance: what is under them is a picture.
+        KitInk(Theme.onPicture) { KitFont(Font(12.5f, Font.Semibold)) { content() } }
     }
 }
 

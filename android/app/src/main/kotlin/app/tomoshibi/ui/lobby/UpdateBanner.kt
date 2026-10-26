@@ -118,7 +118,7 @@ private fun Card(updates: Updates, said: Step, modifier: Modifier, floating: Boo
     val shape = ContinuousShape(20.dp)
     Box(
         modifier
-            .then(if (floating) Modifier.dropShadow(shape, Shadow(radius = 18.dp, color = Color.Black, offset = DpOffset(0.dp, 8.dp), alpha = 0.35f)) else Modifier)
+            .then(if (floating) Modifier.dropShadow(shape, Shadow(radius = 18.dp, color = Color.Black, offset = DpOffset(0.dp, 8.dp), alpha = Theme.shade(0.35f))) else Modifier)
             .background(Theme.surface, shape)
             .border(1.dp, Theme.border, shape)
             .padding(14.dp)

@@ -17,6 +17,7 @@ import app.tomoshibi.model.CallModel
 import app.tomoshibi.model.CallToast
 import app.tomoshibi.model.host.standInRules
 import app.tomoshibi.ui.Hinge
+import app.tomoshibi.ui.InMeeting
 import app.tomoshibi.ui.LocalHinge
 import app.tomoshibi.ui.settings.FakeCameras
 import app.tomoshibi.ui.settings.LocalCallCameras
@@ -85,7 +86,7 @@ class FoldRoomScreenshotTest(private val language: Language, private val held: H
     private fun shoot(name: String, call: CallModel, before: () -> Unit = {}) {
         val app = app()
         compose.setContent {
-            CompositionLocalProvider(LocalRoomPictures provides standInPictures, LocalHinge provides hinge, LocalCallCameras provides FakeCameras) { RoomView(app, call) }
+            InMeeting { CompositionLocalProvider(LocalRoomPictures provides standInPictures, LocalHinge provides hinge, LocalCallCameras provides FakeCameras) { RoomView(app, call) } }
         }
         compose.mainClock.advanceTimeBy(600)
         compose.waitForIdle()
@@ -232,7 +233,7 @@ class FoldRoomScreenshotTest(private val language: Language, private val held: H
         compose.mainClock.advanceTimeByFrame()
         val app = app()
         compose.setContent {
-            CompositionLocalProvider(LocalRoomPictures provides standInPictures, LocalHinge provides hinge, LocalCallCameras provides FakeCameras) { RoomView(app, call) }
+            InMeeting { CompositionLocalProvider(LocalRoomPictures provides standInPictures, LocalHinge provides hinge, LocalCallCameras provides FakeCameras) { RoomView(app, call) } }
         }
         compose.mainClock.advanceTimeBy(3000)
         compose.waitForIdle()

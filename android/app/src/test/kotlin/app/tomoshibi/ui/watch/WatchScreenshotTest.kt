@@ -33,6 +33,7 @@ import app.tomoshibi.feature.watch.callModel
 import app.tomoshibi.feature.watch.resolved
 import app.tomoshibi.feature.watch.show
 import app.tomoshibi.feature.watch.video
+import app.tomoshibi.ui.InMeeting
 import app.tomoshibi.ui.kit.Backdrop
 import app.tomoshibi.ui.kit.GlassBackdrop
 import app.tomoshibi.ui.kit.glassSource
@@ -98,11 +99,14 @@ class WatchScreenshotTest(private val language: Language, private val width: Int
 
     private fun page(content: @Composable () -> Unit) {
         compose.setContent {
-            GlassBackdrop {
-                Box(Modifier.fillMaxWidth().testTag("page")) {
-                    Box(Modifier.matchParentSize().background(Theme.background))
-                    Backdrop(Modifier.matchParentSize().glassSource())
-                    Box(Modifier.padding(12.dp)) { content() }
+            // A panel of the call's, drawn as the call is.
+            InMeeting {
+                GlassBackdrop {
+                    Box(Modifier.fillMaxWidth().testTag("page")) {
+                        Box(Modifier.matchParentSize().background(Theme.background))
+                        Backdrop(Modifier.matchParentSize().glassSource())
+                        Box(Modifier.padding(12.dp)) { content() }
+                    }
                 }
             }
         }

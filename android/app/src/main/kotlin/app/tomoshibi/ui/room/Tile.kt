@@ -240,7 +240,8 @@ internal fun TileFrame(
  */
 @Composable
 private fun NameLabel(marks: TileMarks, compact: Boolean) {
-    val ink by animateColorAsState(if (marks.speaking) Theme.tally else Theme.foreground, Theme.settle(), label = "name")
+    // Light words on the dimming whatever the appearance: what is under them is a picture.
+    val ink by animateColorAsState(if (marks.speaking) Theme.tally else Theme.onPicture, Theme.settle(), label = "name")
     Row(
         Modifier
             // Over the picture, a dimming rather than glass: one piece of
@@ -473,7 +474,7 @@ internal fun ShareCardFace(name: String, compact: Boolean = false) {
             Box(
                 Modifier
                     .size(if (compact) 30.dp else 48.dp)
-                    .background(Color.White.copy(alpha = 0.08f), CircleShape),
+                    .background(Theme.wash.copy(alpha = 0.08f), CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
                 Symbol("rectangle.inset.filled.and.person.filled", size = if (compact) 15f else 22f, weight = Font.Medium,

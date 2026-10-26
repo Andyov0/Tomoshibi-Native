@@ -134,10 +134,11 @@ private fun Question(progress: State<Float>, arriving: Boolean, asked: Boolean, 
     if (asked) BackHandler { answer(false) }
     val focus = remember { FocusRequester() }
     LaunchedEffect(asked) { if (asked) runCatching { focus.requestFocus() } }
+    val dimming = veil
     Box(
         Modifier
             .fillMaxSize()
-            .drawBehind { drawRect(Veil, alpha = progress.value) }
+            .drawBehind { drawRect(dimming, alpha = progress.value) }
             .pointerInput(Unit) { detectTapGestures { answer(false) } }
             .testTag("signout.glass"),
     )
@@ -170,7 +171,7 @@ private fun Question(progress: State<Float>, arriving: Boolean, asked: Boolean, 
                             from + (1f - from) * progress.value
                         },
                     )
-                    .dropShadow(shape, CardShadow)
+                    .dropShadow(shape, cardShadow(Theme.shade(0.4f)))
                     .clip(shape)
                     .background(Theme.surface)
                     .border(1.dp, Theme.border, shape)
@@ -231,9 +232,10 @@ private val Frost = 24.dp
 
 /**
  * Over the frost, the Swift's black at 28 per cent; with no frost, darker,
- * so that the window behind still reads as set aside.
+ * so that the window behind still reads as set aside. Half as dark in the
+ * light (Palette.shade).
  */
-private val Veil: Color get() = Color.Black.copy(alpha = if (Frosts) 0.28f else 0.5f)
+private val veil: Color @Composable get() = Color.Black.copy(alpha = Theme.shade(if (Frosts) 0.28f else 0.5f))
 
 /** SignOutPrompt.swift's: 40 per cent black, 28 soft, 12 down. */
-private val CardShadow = Shadow(radius = 28.dp, color = Color.Black, offset = DpOffset(0.dp, 12.dp), alpha = 0.4f)
+private fun cardShadow(alpha: Float) = Shadow(radius = 28.dp, color = Color.Black, offset = DpOffset(0.dp, 12.dp), alpha = alpha)

@@ -203,7 +203,7 @@ private fun DeskTab(desk: SongDesk) {
                                 t("{name} (music)", mapOf("name" to player.name.ifEmpty { player.id })),
                                 setting.volume, setting.blocked,
                                 { desk.setVolume(player.id, it) }, { desk.setBlocked(player.id, it) },
-                                Modifier.background(Color.White.copy(alpha = 0.05f), rounded(16f)).padding(12.dp),
+                                Modifier.background(Theme.wash.copy(alpha = 0.05f), rounded(16f)).padding(12.dp),
                             )
                         }
                         else -> Idle(desk)
@@ -263,7 +263,7 @@ private fun DeskTab(desk: SongDesk) {
 private fun NowPlaying(desk: SongDesk, state: DeskState, now: DeskEntry) {
     val voted = desk.call.localIdentity in state.votes
     val shape = rounded(18f)
-    Box(Modifier.fillMaxWidth().clip(shape).border(1.dp, Color.White.copy(alpha = 0.09f), shape)) {
+    Box(Modifier.fillMaxWidth().clip(shape).border(1.dp, Theme.wash.copy(alpha = 0.09f), shape)) {
         // The card's size, whatever the cover's: the cover fills the card and
         // is clipped to it, blurred, under a shade. On Apple a cover laid in
         // the background made the background its own square, which stood out
@@ -563,7 +563,7 @@ private fun PlaylistTab(desk: SongDesk) {
                 item(key = "link " + found.title) {
                     Row(
                         Modifier.padding(bottom = 6.dp).arriving(this).fillMaxWidth()
-                            .background(Color.White.copy(alpha = 0.05f), rounded(14f)).padding(10.dp),
+                            .background(Theme.wash.copy(alpha = 0.05f), rounded(14f)).padding(10.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {

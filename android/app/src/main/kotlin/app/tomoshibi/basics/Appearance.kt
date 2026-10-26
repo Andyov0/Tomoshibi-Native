@@ -77,21 +77,23 @@ class Appearance private constructor(private val preferences: SharedPreferences?
 }
 
 /**
- * The colours on offer, each with the colour drawn on top of it: Apple's
- * dark-appearance system colours apart from the first, which is the
- * product's, the same on every platform so that somebody's choice looks the
- * same on their phone and their Mac.
+ * The colours on offer, each with its light-appearance variant and the
+ * colour drawn on top of it: Apple's system colours of either appearance
+ * apart from the first, which is the product's, the same on every platform
+ * so that somebody's choice looks the same on their phone and their Mac
+ * (the daylight palette, 2026-10-26). What is drawn on top is the same in
+ * either: each one's words read on the light variant as well as on the dark.
  */
-enum class Accent(val key: String, val color: Color, val onColor: Color) {
-    Amber("amber", Color(1.0f, 0.635f, 0.231f), Color(0.122f, 0.071f, 0.0f)),
-    Orange("orange", Color(1.0f, 0.624f, 0.039f), Color(0.122f, 0.071f, 0.0f)),
-    Pink("pink", Color(1.0f, 0.216f, 0.373f), Color.White),
-    Purple("purple", Color(0.749f, 0.353f, 0.949f), Color.White),
-    Indigo("indigo", Color(0.369f, 0.361f, 0.902f), Color.White),
-    Blue("blue", Color(0.039f, 0.518f, 1.0f), Color.White),
-    Teal("teal", Color(0.251f, 0.784f, 0.878f), Color(0.0f, 0.15f, 0.18f)),
-    Green("green", Color(0.188f, 0.820f, 0.345f), Color(0.0f, 0.17f, 0.055f)),
-    Graphite("graphite", Color(0.596f, 0.596f, 0.616f), Color(0.07f, 0.07f, 0.08f));
+enum class Accent(val key: String, val color: Color, val light: Color, val onColor: Color) {
+    Amber("amber", Color(1.0f, 0.635f, 0.231f), Color(0xFFF2901E), Color(0.122f, 0.071f, 0.0f)),
+    Orange("orange", Color(1.0f, 0.624f, 0.039f), Color(0xFFFF9500), Color(0.122f, 0.071f, 0.0f)),
+    Pink("pink", Color(1.0f, 0.216f, 0.373f), Color(0xFFFF2D55), Color.White),
+    Purple("purple", Color(0.749f, 0.353f, 0.949f), Color(0xFFAF52DE), Color.White),
+    Indigo("indigo", Color(0.369f, 0.361f, 0.902f), Color(0xFF5856D6), Color.White),
+    Blue("blue", Color(0.039f, 0.518f, 1.0f), Color(0xFF007AFF), Color.White),
+    Teal("teal", Color(0.251f, 0.784f, 0.878f), Color(0xFF30B0C7), Color(0.0f, 0.15f, 0.18f)),
+    Green("green", Color(0.188f, 0.820f, 0.345f), Color(0xFF34C759), Color(0.0f, 0.17f, 0.055f)),
+    Graphite("graphite", Color(0.596f, 0.596f, 0.616f), Color(0xFF8E8E93), Color(0.07f, 0.07f, 0.08f));
 
     val displayName: String
         get() = when (this) {

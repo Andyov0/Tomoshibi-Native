@@ -13,7 +13,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
@@ -54,9 +53,9 @@ fun BarButton(
     val plate by animateColorAsState(
         when {
             lit -> Theme.tally
-            pressed -> Color.White.copy(alpha = 0.24f)
-            press.lit && on -> Color.White.copy(alpha = 0.18f)
-            else -> Color.White.copy(alpha = 0.12f)
+            pressed -> Theme.wash.copy(alpha = 0.24f)
+            press.lit && on -> Theme.wash.copy(alpha = 0.18f)
+            else -> Theme.wash.copy(alpha = 0.12f)
         },
         if (lit || pressed) Theme.settle() else Motion.hover(),
         label = "plate",
@@ -73,7 +72,7 @@ fun BarButton(
                 .barPress(press)
                 .size(size)
                 .background(plate, CircleShape)
-                .border(1.dp, Color.White.copy(alpha = edge), CircleShape)
+                .border(1.dp, Theme.wash.copy(alpha = edge), CircleShape)
                 .pressable(press, CircleShape, on, Role.Button, label, selected = if (lit || pressed) true else null,
                     onClick = onClick),
             contentAlignment = Alignment.Center,

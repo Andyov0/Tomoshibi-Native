@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import app.tomoshibi.basics.Theme
@@ -40,8 +41,8 @@ fun SettingsSection(
         Column(
             Modifier
                 .fillMaxWidth()
-                .background(Color.White.copy(alpha = 0.05f), shape)
-                .border(1.dp, Color.White.copy(alpha = 0.07f), shape),
+                .background(Theme.plate(0.05f), shape)
+                .border(1.dp, Theme.wash.copy(alpha = 0.07f), shape),
             content = content,
         )
         if (footer != null) {
@@ -73,7 +74,7 @@ fun SettingsRow(
                 Box(
                     Modifier
                         .size(26.dp)
-                        .background(Color.White.copy(alpha = 0.10f), rounded(7f)),
+                        .background(Theme.wash.copy(alpha = 0.10f), rounded(7f)),
                     contentAlignment = Alignment.Center,
                 ) { Symbol(symbol, size = 12.5f, weight = Font.Semibold, tint = Theme.foreground) }
             }
@@ -121,12 +122,17 @@ fun SectionTile(symbol: String, modifier: Modifier = Modifier, lit: Boolean = fa
     val ink by animateColorAsState(if (lit) Theme.tallyForeground else Theme.foreground, Theme.settle(), label = "ink")
     val shape = rounded(size * 0.28f)
     val tally = Theme.tally
+    // In the dark a white edge that brightens as the colour comes in; in the
+    // light the page's dark hairline gives way to the same white one, a dark
+    // line round the colour reading as an outline drawn round it.
+    val edge = if (Theme.dark) Theme.wash.copy(alpha = 0.06f + 0.16f * glow)
+    else lerp(Color.Black.copy(alpha = 0.06f), Color.White.copy(alpha = 0.22f), glow)
     Box(
         modifier
             .size(size.dp)
-            .background(Color.White.copy(alpha = 0.10f * (1f - glow)), shape)
+            .background(Theme.wash.copy(alpha = 0.10f * (1f - glow)), shape)
             .background(tally.copy(alpha = glow), shape)
-            .border(1.dp, Color.White.copy(alpha = 0.06f + 0.16f * glow), shape),
+            .border(1.dp, edge, shape),
         contentAlignment = Alignment.Center,
     ) { Symbol(symbol, size = size * 0.44f, weight = Font.Semibold, tint = ink) }
 }
@@ -140,7 +146,7 @@ fun LevelMeter(level: Float, modifier: Modifier = Modifier, segments: Int = 14) 
     Row(modifier.clearAndSetSemantics {}, horizontalArrangement = Arrangement.spacedBy(2.5.dp)) {
         for (index in 0 until segments) {
             val lit = index.toFloat() / segments < level
-            val fill by animateColorAsState(if (lit) Theme.tally else Color.White.copy(alpha = 0.12f), Motion.follow(), label = "segment")
+            val fill by animateColorAsState(if (lit) Theme.tally else Theme.wash.copy(alpha = 0.12f), Motion.follow(), label = "segment")
             Box(Modifier.size(4.dp, 14.dp).background(fill, Capsule))
         }
     }

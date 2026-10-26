@@ -68,7 +68,7 @@ internal fun AboutSettings(app: AppModel) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Mark(
-                Modifier.dropShadow(rounded(19f), Shadow(radius = 14.dp, color = Color.Black, offset = DpOffset(0.dp, 6.dp), alpha = 0.4f)),
+                Modifier.dropShadow(rounded(19f), Shadow(radius = 14.dp, color = Color.Black, offset = DpOffset(0.dp, 6.dp), alpha = Theme.shade(0.4f))),
                 size = 76.dp,
             )
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -144,7 +144,7 @@ private fun UpdateRow(updates: Updates) {
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(26.dp).background(Color.White.copy(alpha = 0.10f), rounded(7f)), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(26.dp).background(Theme.wash.copy(alpha = 0.10f), rounded(7f)), contentAlignment = Alignment.Center) {
                 Symbol("arrow.clockwise", size = 12.5f, weight = Font.Semibold)
             }
             Column(Modifier.weight(1f).animateContentSize(Theme.settle()), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -191,7 +191,7 @@ private fun SourceRow(source: String) {
     Row(
         Modifier
             .fillMaxWidth()
-            .background(Color.White.copy(alpha = light))
+            .background(Theme.wash.copy(alpha = light))
             .pressable(press, RectangleShape, true, Role.Button) { runCatching { uri.openUri(source) } }
             .heightIn(min = 48.dp)
             .padding(horizontal = 14.dp, vertical = 9.dp)
@@ -199,7 +199,7 @@ private fun SourceRow(source: String) {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(26.dp).background(Color.White.copy(alpha = 0.10f), rounded(7f)), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(26.dp).background(Theme.wash.copy(alpha = 0.10f), rounded(7f)), contentAlignment = Alignment.Center) {
             Symbol("chevron.left.forwardslash.chevron.right", size = 12.5f, weight = Font.Semibold)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {

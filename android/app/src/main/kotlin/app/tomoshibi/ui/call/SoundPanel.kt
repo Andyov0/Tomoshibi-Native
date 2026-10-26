@@ -26,7 +26,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -115,7 +114,7 @@ private fun PersonSounds(feature: HostFeature, person: Person) {
                 KitText(
                     t("microphone off"),
                     Modifier
-                        .background(Color.White.copy(alpha = 0.07f), Capsule)
+                        .background(Theme.wash.copy(alpha = 0.07f), Capsule)
                         .padding(horizontal = 7.dp, vertical = 2.dp),
                     font = Font(10.5f, Font.Medium), color = Theme.muted, lines = 1,
                 )
@@ -159,7 +158,7 @@ private fun SoundRow(feature: HostFeature, person: Person, sound: Sound, name: S
             // the two read as opposites, and only one is being decided.
             val press = rememberPress()
             val label = if (setting.blocked) t("Unmute {name}", mapOf("name" to name)) else t("Mute {name}", mapOf("name" to name))
-            val fill by animateColorAsState(Color.White.copy(alpha = if (setting.blocked) 0.16f else 0.06f), Theme.settle(), label = "fill")
+            val fill by animateColorAsState(Theme.wash.copy(alpha = if (setting.blocked) 0.16f else 0.06f), Theme.settle(), label = "fill")
             // Pressed over a fingertip on a phone and the cover screen, beside
             // a slider that would otherwise take the presses meant for it.
             Box(

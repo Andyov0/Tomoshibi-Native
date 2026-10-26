@@ -125,6 +125,9 @@ android {
                 // Drawn through the hardware renderer, which carries
                 // RenderEffect, rather than the software canvas.
                 it.systemProperty("robolectric.pixelCopyRenderMode", "hardware")
+                // The appearance the pictures are drawn in: the dark unless
+                // `-Pappearance=light` (ui/TestAppearance.kt).
+                it.systemProperty("tomoshibi.appearance", providers.gradleProperty("appearance").getOrElse("dark"))
                 it.maxHeapSize = "3g"
             }
         }

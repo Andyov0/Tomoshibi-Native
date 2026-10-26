@@ -35,7 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
@@ -287,7 +286,7 @@ fun ClockGrid(values: List<Int>, columns: Int, chosen: Int, modifier: Modifier =
                             val press = rememberPress()
                             val shape = rounded(9f)
                             val fill by animateColorAsState(
-                                if (isChosen) Theme.tally else Color.White.copy(alpha = if (press.lit) 0.12f else 0.06f),
+                                if (isChosen) Theme.tally else Theme.wash.copy(alpha = if (press.lit) 0.12f else 0.06f),
                                 Theme.settle(), label = "cell",
                             )
                             Box(

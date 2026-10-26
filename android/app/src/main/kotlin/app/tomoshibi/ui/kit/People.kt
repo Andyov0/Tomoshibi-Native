@@ -57,7 +57,7 @@ fun AccountAvatar(name: String, address: String?, modifier: Modifier = Modifier,
         modifier
             .size(size)
             .clearAndSetSemantics {}
-            .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape),
+            .border(1.dp, Theme.wash.copy(alpha = 0.12f), CircleShape),
         contentAlignment = Alignment.Center,
     ) {
         Initial(name, size = size)
@@ -169,10 +169,11 @@ fun Chip(
     mono: Boolean = false,
 ) {
     val tally = Theme.tally
-    val edge = if (withheld) Color.White.copy(alpha = 0.18f) else if (lit) tally.copy(alpha = 0.4f) else Color.White.copy(alpha = 0.08f)
+    val wash = Theme.wash
+    val edge = if (withheld) wash.copy(alpha = 0.18f) else if (lit) tally.copy(alpha = 0.4f) else wash.copy(alpha = 0.08f)
     Row(
         modifier
-            .background(if (withheld) Color.Transparent else if (lit) tally.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.08f), Capsule)
+            .background(if (withheld) Color.Transparent else if (lit) tally.copy(alpha = 0.14f) else wash.copy(alpha = 0.08f), Capsule)
             .drawBehind {
                 val line = 1.dp.toPx()
                 inset(line / 2) {

@@ -24,6 +24,8 @@ import app.tomoshibi.basics.Language
 import app.tomoshibi.basics.Localization
 import app.tomoshibi.basics.Theme
 import app.tomoshibi.model.AppModel
+import app.tomoshibi.ui.InAppearance
+import app.tomoshibi.ui.InMeeting
 import app.tomoshibi.ui.kit.Backdrop
 import app.tomoshibi.ui.kit.GlassBackdrop
 import app.tomoshibi.ui.kit.glassSource
@@ -88,7 +90,7 @@ class SettingsScreenshotTest(private val language: Language) {
     private fun shoot(name: String, opening: SettingsTopic?, app: AppModel = fakeApp()) {
         compose.setContent {
             CompositionLocalProvider(LocalSettingsPlatform provides platform) {
-                SettingsView(app, {}, Modifier, opening)
+                InAppearance { SettingsView(app, {}, Modifier, opening) }
             }
         }
         settle()
@@ -131,7 +133,8 @@ class SettingsScreenshotTest(private val language: Language) {
         val app = fakeApp()
         val call = fakeCall()
         compose.setContent {
-            CompositionLocalProvider(LocalSettingsPlatform provides platform, LocalCallCameras provides FakeCameras) {
+            // Opened from inside a call, and drawn as the call is.
+            CompositionLocalProvider(LocalSettingsPlatform provides platform, LocalCallCameras provides FakeCameras) { InMeeting {
                 GlassBackdrop {
                     Box(Modifier.fillMaxSize()) {
                         Box(Modifier.matchParentSize().background(Theme.background))
@@ -145,7 +148,7 @@ class SettingsScreenshotTest(private val language: Language) {
                         ) { DevicesPanel(app, call, {}) }
                     }
                 }
-            }
+            } }
         }
         settle()
         compose.onRoot().captureRoboImage(file(name))

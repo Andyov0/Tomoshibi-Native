@@ -52,14 +52,19 @@
              target SDK implies: an activity that cannot be resized is moved
              between the screens in size compatibility, letterboxed or made
              again, rather than handed the new screen as a change it lays
-             itself out for. -->
+             itself out for. The night mode too (uiMode): the screens follow
+             the system's appearance as it turns, at sunset or from the quick
+             settings, and made again for it the activity dropped whatever a
+             screen had open, a call's panels included; turned round for
+             itself, the composition reads the new mode and crosses to the
+             other palette (ui/App.kt). -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
             android:resizeableActivity="true"
             android:supportsPictureInPicture="true"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|colorMode">
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|colorMode|uiMode">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

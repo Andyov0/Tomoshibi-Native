@@ -58,7 +58,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onPlaced
@@ -345,7 +344,7 @@ private fun AccountCard(app: AppModel, modifier: Modifier, onClick: () -> Unit) 
         modifier
             .fillMaxWidth()
             .glassPane(26.dp)
-            .background(Color.White.copy(alpha = light), shape)
+            .background(Theme.wash.copy(alpha = light), shape)
             .pressable(press, shape, true, Role.Button, onClick = onClick)
             .padding(16.dp)
             .testTag("settings.account"),
@@ -380,7 +379,7 @@ private fun TopicRow(one: SettingsTopic, summary: String, last: Boolean, onClick
         Row(
             Modifier
                 .fillMaxWidth()
-                .background(Color.White.copy(alpha = light))
+                .background(Theme.wash.copy(alpha = light))
                 .pressable(press, androidx.compose.ui.graphics.RectangleShape, true, Role.Button, onClick = onClick)
                 .padding(horizontal = 14.dp, vertical = 11.dp)
                 .testTag("settings.topic.${one.name.lowercase()}"),
@@ -529,7 +528,7 @@ private fun Sidebar(app: AppModel, section: SettingsTopic, close: () -> Unit, mo
             Row(
                 Modifier
                     .fillMaxWidth()
-                    .background(Color.White.copy(alpha = 0.05f), rounded(14f))
+                    .background(Theme.plate(0.05f), rounded(14f))
                     .padding(10.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -576,8 +575,8 @@ private fun SidebarRows(section: SettingsTopic, choose: (SettingsTopic) -> Unit)
                     .offset { IntOffset(0, top.value.toInt()) }
                     .fillMaxWidth()
                     .height(with(density) { height.value.toDp() })
-                    .background(Color.White.copy(alpha = 0.11f), rounded(12f))
-                    .border(1.dp, Color.White.copy(alpha = 0.07f), rounded(12f)),
+                    .background(Theme.wash.copy(alpha = 0.11f), rounded(12f))
+                    .border(1.dp, Theme.wash.copy(alpha = 0.07f), rounded(12f)),
             )
         }
         Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -603,7 +602,7 @@ private fun SidebarRow(one: SettingsTopic, chosen: Boolean, modifier: Modifier, 
     Row(
         modifier
             .fillMaxWidth()
-            .background(Color.White.copy(alpha = light), shape)
+            .background(Theme.wash.copy(alpha = light), shape)
             .pressable(press, shape, true, Role.Tab, selected = chosen, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 9.dp)
             .testTag("settings.section.${one.name.lowercase()}"),

@@ -501,8 +501,8 @@ internal fun IdentityBox(
     Column(
         Modifier
             .fillMaxWidth()
-            .background(Color.Black.copy(alpha = 0.22f), shape)
-            .border(1.dp, Color.White.copy(alpha = 0.10f), shape)
+            .background(Theme.recess(0.22f), shape)
+            .border(1.dp, Theme.wash.copy(alpha = 0.10f), shape)
             .animateContentSize(Theme.settle()),
     ) {
         IdentityRow(if (fixed) "person.fill.checkmark" else "person", if (fixed) Theme.tally else Theme.muted) {
@@ -514,7 +514,7 @@ internal fun IdentityBox(
         }
         AnimatedVisibility(!nameOnly, enter = expandVertically(Theme.settle()) + fadeIn(Theme.settle()), exit = shrinkVertically(Theme.leave()) + fadeOut(Theme.leave())) {
             Column {
-                Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.07f)))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Theme.wash.copy(alpha = 0.07f)))
                 PassphraseRow(passphrase, onPassphrase, onSubmit)
             }
         }

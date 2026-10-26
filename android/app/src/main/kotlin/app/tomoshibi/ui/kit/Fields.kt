@@ -35,7 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
@@ -90,8 +89,8 @@ fun GlassField(
         modifier
             .fillMaxWidth()
             .height(height)
-            .background(Color.Black.copy(alpha = 0.24f), shape)
-            .border(1.dp, Color.White.copy(alpha = 0.10f), shape)
+            .background(Theme.recess(0.24f), shape)
+            .border(1.dp, Theme.wash.copy(alpha = 0.10f), shape)
             .padding(horizontal = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -243,7 +242,7 @@ fun MediaField(
     val source = remember { MutableInteractionSource() }
     val focused by source.collectIsFocusedAsState()
     val focus = remember { FocusRequester() }
-    val edge by animateColorAsState(if (focused) Theme.tally.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.09f), Theme.settle(), label = "edge")
+    val edge by animateColorAsState(if (focused) Theme.tally.copy(alpha = 0.75f) else Theme.wash.copy(alpha = 0.09f), Theme.settle(), label = "edge")
     val width by animateDpAsState(if (focused) 1.5.dp else 1.dp, Theme.settle(), label = "width")
     val symbolInk by animateColorAsState(if (focused) Theme.foreground else Theme.muted, Theme.settle(), label = "symbol")
     val font = Font(13f)
@@ -251,7 +250,7 @@ fun MediaField(
         modifier
             .fillMaxWidth()
             .height(34.dp)
-            .background(Color.Black.copy(alpha = 0.24f), Capsule)
+            .background(Theme.recess(0.24f), Capsule)
             .border(width, edge, Capsule)
             .clickable(interactionSource = null, indication = null) { focus.requestFocus() }
             .padding(horizontal = 12.dp),

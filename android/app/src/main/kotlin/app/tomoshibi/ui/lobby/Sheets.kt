@@ -109,7 +109,7 @@ fun SheetHost(
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.45f))
+                        .background(Color.Black.copy(alpha = Theme.shade(0.45f)))
                         .pointerInput(Unit) { detectTapGestures { dismiss() } },
                 )
             }
@@ -187,7 +187,7 @@ fun SheetHost(
                             scaleX = 1f - shrink
                             scaleY = 1f - shrink
                         }
-                        .then(if (page) Modifier.dropShadow(shape, Shadow(radius = 18.dp, color = Color.Black, offset = DpOffset(0.dp, -2.dp), alpha = 0.35f)) else Modifier)
+                        .then(if (page) Modifier.dropShadow(shape, Shadow(radius = 18.dp, color = Color.Black, offset = DpOffset(0.dp, -2.dp), alpha = Theme.shade(0.35f))) else Modifier)
                         .clip(shape)
                         .background(background)
                         // Every press on the sheet is the sheet's. Compose hands
@@ -208,7 +208,7 @@ fun SheetHost(
                                 .align(Alignment.TopCenter)
                                 .padding(top = 6.dp)
                                 .size(36.dp, 5.dp)
-                                .background(Color.White.copy(alpha = 0.32f), Capsule),
+                                .background(Theme.wash.copy(alpha = 0.32f), Capsule),
                         )
                     }
                 }
@@ -242,7 +242,7 @@ fun DialogHost(
             Box(
                 Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.45f))
+                    .background(Color.Black.copy(alpha = Theme.shade(0.45f)))
                     .pointerInput(Unit) { detectTapGestures { dismiss() } },
             )
         }
@@ -275,7 +275,7 @@ fun DialogHost(
                         Modifier
                             .width(min(width, areaWidth))
                             .then(if (height != null) Modifier.heightIn(max = height) else Modifier)
-                            .dropShadow(shape, Shadow(radius = 30.dp, color = Color.Black, offset = DpOffset(0.dp, 10.dp), alpha = 0.45f))
+                            .dropShadow(shape, Shadow(radius = 30.dp, color = Color.Black, offset = DpOffset(0.dp, 10.dp), alpha = Theme.shade(0.45f)))
                             .clip(shape)
                             .background(Theme.surface)
                             // A press inside is the sheet's, never the dimmed window's.

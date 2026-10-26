@@ -127,7 +127,7 @@ fun SignInView(app: AppModel) {
             Backdrop(Modifier.fillMaxSize().glassSource())
             val heading: @Composable () -> Unit = {
                 Column(Modifier.rise(), verticalArrangement = Arrangement.spacedBy(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Mark(Modifier.dropShadow(rounded(19f), Shadow(radius = 18.dp, color = Color.Black, offset = DpOffset(0.dp, 8.dp), alpha = 0.45f)), size = 76.dp)
+                    Mark(Modifier.dropShadow(rounded(19f), Shadow(radius = 18.dp, color = Color.Black, offset = DpOffset(0.dp, 8.dp), alpha = Theme.shade(0.45f))), size = 76.dp)
                     KitText(t("Sign in"), font = Font(28f, Font.Bold), lines = 1)
                     KitText(
                         t("Meetings here are started by the people who belong here. If somebody sent you a link, open that instead."),
@@ -324,8 +324,8 @@ private fun LinkField(text: String, onText: (String) -> Unit, modifier: Modifier
     Row(
         modifier
             .height(38.dp)
-            .background(Color.Black.copy(alpha = 0.22f), Capsule)
-            .border(1.dp, Color.White.copy(alpha = 0.12f), Capsule)
+            .background(Theme.recess(0.22f), Capsule)
+            .border(1.dp, Theme.wash.copy(alpha = 0.12f), Capsule)
             .padding(horizontal = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,

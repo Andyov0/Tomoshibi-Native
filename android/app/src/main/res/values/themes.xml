@@ -1,10 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The room's evening ground behind the first frame, as on the iPhone,
-         so that the app does not open on white before Compose draws. -->
-    <style name="Theme.Tomoshibi" parent="android:Theme.Material.NoActionBar">
-        <item name="android:windowBackground">@android:color/black</item>
+    <!-- The ground behind the first frame, so that the app does not open on
+         a colour it is not before Compose draws: in the light, the page's
+         grey the screens stand on (the daylight palette's background), with
+         the bars' icons dark over it. The dark's is values-night. -->
+    <style name="Theme.Tomoshibi" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/daylight_ground</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
         <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
+
+    <color name="daylight_ground">#FFF2F2F7</color>
 </resources>

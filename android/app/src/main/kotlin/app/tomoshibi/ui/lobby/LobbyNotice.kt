@@ -109,7 +109,7 @@ private fun Card(remote: Remote, notice: LobbyNotice, text: String, floating: Bo
         Modifier
             .widthIn(max = 560.dp)
             .fillMaxWidth()
-            .then(if (floating) Modifier.dropShadow(shape, Shadow(radius = 18.dp, color = Color.Black, offset = DpOffset(0.dp, 8.dp), alpha = 0.35f)) else Modifier)
+            .then(if (floating) Modifier.dropShadow(shape, Shadow(radius = 18.dp, color = Color.Black, offset = DpOffset(0.dp, 8.dp), alpha = Theme.shade(0.35f))) else Modifier)
             .background(Theme.surface, shape)
             .border(1.dp, if (notice.warning) Theme.danger.copy(alpha = 0.45f) else Theme.border, shape)
             .padding(start = 14.dp, end = 10.dp, top = 12.dp, bottom = 12.dp)

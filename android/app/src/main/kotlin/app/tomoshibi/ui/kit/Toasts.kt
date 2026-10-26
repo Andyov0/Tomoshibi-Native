@@ -41,7 +41,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
@@ -325,7 +324,7 @@ private fun ToastCard(
 @Composable
 private fun ToastLine(toast: CallToast, attachment: (@Composable () -> Unit)?, act: () -> Unit, close: () -> Unit) {
     val edge = when (toast.kind) {
-        CallToast.Kind.Info -> Color.White.copy(alpha = 0.22f)
+        CallToast.Kind.Info -> Theme.wash.copy(alpha = 0.22f)
         CallToast.Kind.Signal, CallToast.Kind.Warning -> Theme.tally
         CallToast.Kind.Failure -> Theme.danger
     }
@@ -385,7 +384,7 @@ private fun CloseDot(action: () -> Unit) {
     Box(
         Modifier
             .size(20.dp)
-            .background(Color.White.copy(alpha = light), CircleShape)
+            .background(Theme.wash.copy(alpha = light), CircleShape)
             .pressable(press, CircleShape, true, Role.Button, t("Dismiss"), onClick = action),
         contentAlignment = Alignment.Center,
     ) { Symbol("xmark", size = 8.5f, weight = Font.Bold, tint = if (press.lit) Theme.foreground else Theme.muted) }

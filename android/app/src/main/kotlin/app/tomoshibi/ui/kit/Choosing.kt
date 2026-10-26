@@ -68,7 +68,7 @@ fun GlassSwitch(
 /** The switch drawn, for a row that is itself the switch. */
 @Composable
 internal fun SwitchTrack(checked: Boolean, enabled: Boolean, modifier: Modifier = Modifier) {
-    val fill by animateColorAsState(if (checked) Theme.tally else Color.White.copy(alpha = 0.14f), Theme.settle(), label = "fill")
+    val fill by animateColorAsState(if (checked) Theme.tally else Theme.wash.copy(alpha = 0.14f), Theme.settle(), label = "fill")
     val edge by animateFloatAsState(if (checked) 0f else 0.1f, Theme.settle(), label = "edge")
     val knob by animateDpAsState(if (checked) 15.dp else 0.dp, Theme.settle(), label = "knob")
     Box(
@@ -76,7 +76,7 @@ internal fun SwitchTrack(checked: Boolean, enabled: Boolean, modifier: Modifier 
             .alpha(if (enabled) 1f else 0.4f)
             .size(38.dp, 23.dp)
             .background(fill, Capsule)
-            .border(1.dp, Color.White.copy(alpha = edge), Capsule)
+            .border(1.dp, Theme.wash.copy(alpha = edge), Capsule)
             .padding(2.5.dp),
     ) {
         Box(
@@ -104,11 +104,13 @@ fun <T> SegmentedChoice(
     val chosen = options.indexOfFirst { it.first == selection }
     val place by animateFloatAsState(chosen.coerceAtLeast(0).toFloat(), Theme.settle(), label = "pill")
     val gap = 2.dp
+    // Read here: what is drawn behind is not composed, and cannot read the palette itself.
+    val wash = Theme.wash
     Row(
         modifier
             .fillMaxWidth()
-            .background(Color.Black.copy(alpha = 0.22f), Capsule)
-            .border(1.dp, Color.White.copy(alpha = 0.07f), Capsule)
+            .background(Theme.recess(0.22f), Capsule)
+            .border(1.dp, wash.copy(alpha = 0.07f), Capsule)
             .padding(2.dp)
             .drawBehind {
                 if (chosen < 0 || options.isEmpty()) return@drawBehind
@@ -116,8 +118,8 @@ fun <T> SegmentedChoice(
                 val width = (size.width - spacing * (options.size - 1)) / options.size
                 val left = place * (width + spacing)
                 val radius = CornerRadius(size.height / 2)
-                drawRoundRect(Color.White.copy(alpha = 0.16f), Offset(left, 0f), Size(width, size.height), radius)
-                drawRoundRect(Color.White.copy(alpha = 0.10f), Offset(left + 0.5f, 0.5f), Size(width - 1f, size.height - 1f),
+                drawRoundRect(wash.copy(alpha = 0.16f), Offset(left, 0f), Size(width, size.height), radius)
+                drawRoundRect(wash.copy(alpha = 0.10f), Offset(left + 0.5f, 0.5f), Size(width - 1f, size.height - 1f),
                     radius, style = Stroke(1.dp.toPx()))
             }
             .selectableGroup(),
@@ -227,7 +229,7 @@ fun ChoiceRow(
             Modifier
                 .fillMaxWidth()
                 .alpha(if (on) 1f else 0.45f)
-                .background(Color.White.copy(alpha = light))
+                .background(Theme.wash.copy(alpha = light))
                 .pressable(press, androidx.compose.ui.graphics.RectangleShape, on, Role.Button,
                     selected = if (checked) true else null, onClick = onClick)
                 // A fingertip tall on a phone and the cover screen, where the
@@ -275,6 +277,6 @@ internal fun Hairline(leading: Dp) {
             .padding(start = leading)
             .fillMaxWidth()
             .height(1.dp)
-            .background(Color.White.copy(alpha = 0.06f)),
+            .background(Theme.wash.copy(alpha = 0.06f)),
     )
 }
