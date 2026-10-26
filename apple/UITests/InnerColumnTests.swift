@@ -350,6 +350,40 @@ final class WideColumnTests: ColumnTestCase {
         inColumn(account, app, "the account, home again")
     }
 
+    /// The settings and the schedule stay open as the iPad is turned upright
+    /// and back: upright the settings are a sheet and the schedule the
+    /// section beside the sidebar, on its side both cover the whole screen
+    /// with their close in the column. The turn hands one over to the other
+    /// where it stands, and the sheet it takes down does not close them.
+    func testTheSettingsAndTheScheduleStayOpenAsItTurns() throws {
+        continueAfterFailure = false
+        for (opened, shown) in [("settings", "General"), ("scheduled", "Arrange")] {
+            let app = try launchWide(["TOMOSHIBI_DEBUG_LOBBY": opened])
+            let it = opened == "settings" ? app.staticTexts[shown].firstMatch : app.buttons[shown]
+            XCTAssertTrue(it.waitForExistence(timeout: 30), "\(opened), open on its side")
+            inColumn(app.buttons["Close"], app, "\(opened)' close, on its side")
+            XCUIDevice.shared.orientation = .portrait
+            let deadline = Date().addingTimeInterval(20)
+            while !(window(app).height > window(app).width) && Date() < deadline { usleep(500_000) }
+            XCTAssertGreaterThan(window(app).height, window(app).width, "the iPad upright")
+            sleep(2)
+            XCTAssertTrue(it.exists, "\(opened), still open upright")
+            if opened == "scheduled" {
+                XCTAssertTrue(app.buttons["Start"].exists, "the schedule beside the sidebar, upright")
+            }
+            XCUIDevice.shared.orientation = .landscapeLeft
+            let back = Date().addingTimeInterval(20)
+            while !(window(app).width > window(app).height) && Date() < back { usleep(500_000) }
+            sleep(2)
+            XCTAssertTrue(it.exists, "\(opened), still open on its side again")
+            let close = app.buttons["Close"]
+            inColumn(close, app, "\(opened)' close, on its side again")
+            close.tap()
+            XCTAssertTrue(it.waitForNonExistence(timeout: 10), "\(opened), closed by the column's close")
+            inColumn(app.buttons["Settings"], app, "home again, the account")
+        }
+    }
+
     /// Joining and starting, at the column's foot, open the join and start
     /// sheet, whose close at the column's head takes it down.
     func testJoiningAndStartingArePressedInTheColumn() throws {

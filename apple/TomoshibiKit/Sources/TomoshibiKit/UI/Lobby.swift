@@ -1,4 +1,5 @@
 import AVFoundation
+import os
 import SwiftUI
 import TomoshibiBasics
 import TomoshibiCore
@@ -111,6 +112,13 @@ struct LobbyView: View {
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.layoutDirection) private var direction
+    /// The layout the lobby last settled in, which a turn with the
+    /// settings or the schedule open holds on to for a moment (`signedIn`).
+    @State private var settled: LobbyLayout?
+    /// When the system last finished changing the window's size.
+    @State private var turns = TurnClock()
+    /// Whether the covers come and go now by fading where they stand.
+    @State private var coverMotion = CoverMotion()
     #endif
 
     var body: some View {
@@ -149,20 +157,91 @@ struct LobbyView: View {
         // down its side (VerticalBar `sideways`), rather than as an iPad.
         let sideways = VerticalBarWindow.shared.sideways(regular: sizeClass == .regular,
                                                          rightToLeft: direction == .rightToLeft)
-        let wide = sizeClass == .regular && !sideways
+        let now = LobbyLayout(wide: sizeClass == .regular && !sideways, sideways: sideways)
+        // The settings and the schedule cover the whole of the inner display
+        // on its side, as a sheet covers the outer display, with their close
+        // in the column down its side: as a sheet there they stood in the
+        // middle of the screen, short of the column, and kept their close on
+        // themselves. They are drawn over the lobby in its own layers there
+        // (`layered`), and elsewhere as before: the settings a sheet, the
+        // schedule a sheet on a phone and a section beside the sidebar.
+        //
+        // Turning the phone with either open changes one for the other in
+        // place. Presented as a full screen cover on its side, the cover
+        // went down and only then the sheet came up, or the other way, and
+        // the lobby stood bare between them for half a second (the owner,
+        // 2026-10-27). Now whatever is arriving comes over what is leaving
+        // before that goes: into the side, the cover fades in over the
+        // lobby as it was, and the lobby and its sheet change under it once
+        // it is there; out of the side, the lobby changes under the cover
+        // and the sheet fades in over it, and then the cover fades out
+        // (`settled` is the layout from before, held for that long).
+        let covered = state.settings || state.place == .scheduled
+        let was = settled ?? now
+        let turning = covered && was != now && (was.sideways || now.sideways)
+        let drawn = turning && now.sideways ? was : now
+        let layered = now.sideways || (turning && was.sideways)
+        // The covers go down to the foot when somebody closes them and
+        // come up from it when somebody opens them; with a turn they fade
+        // where they stand (CoverTransition).
+        let _ = coverMotion.fading = covered && (turning || !now.sideways)
         ZStack {
-            if wide {
+            if drawn.wide {
                 SidebarLobby(app: app, account: account, state: state)
+                    .accessibilityHidden(layered && covered)
                     .transition(.asymmetric(insertion: .opacity.animation(Theme.settle),
                                             removal: .opacity.animation(Theme.leave)))
             } else {
-                PhoneLobby(app: app, account: account, state: state, sideways: sideways)
+                PhoneLobby(app: app, account: account, state: state, sideways: drawn.sideways)
+                    .accessibilityHidden(layered && covered)
                     .transition(.asymmetric(insertion: .opacity.animation(Theme.settle),
                                             removal: .opacity.animation(Theme.leave)))
             }
+            ZStack {
+                if layered && state.place == .scheduled {
+                    ScheduleView(app: app, account: account, draft: state.schedule, close: { state.place = .home })
+                        .lobbyCover(coverMotion)
+                }
+                if layered && state.settings {
+                    SettingsView(app: app)
+                        .environment(\.closeSettings, CloseSettings { state.settings = false })
+                        .lobbyCover(coverMotion)
+                        .zIndex(1)
+                }
+            }
+            // Arriving on the settle curve and leaving on the leave curve,
+            // whether somebody opened or closed one or the phone was turned.
+            .animation(state.settings ? Theme.settle : Theme.leave, value: state.settings)
+            .animation(state.place == .scheduled ? Theme.settle : Theme.leave, value: state.place == .scheduled)
+            .animation(layered ? Theme.settle : Theme.leave, value: layered)
+            .zIndex(1)
         }
-        .onChange(of: wide) { state.popovers.close() }
-        .onChange(of: sideways) { state.popovers.close() }
+        .onChange(of: drawn.wide) { state.popovers.close() }
+        .onChange(of: drawn.sideways) { state.popovers.close() }
+        .background(TurnWatcher(clock: turns))
+        .task(id: now) {
+            // Held only while something is open over the lobby and the
+            // turn is into the side or out of it; any other is the lobby's
+            // own fade, as it was. Held
+            // from when the system has finished turning the window, not
+            // from when the lobby was told its new size: the system turns
+            // it with a picture of the window as it was over it (on the
+            // simulator's stand-in for the inner display, for most of a
+            // second), and puts a sheet up only once it has. Counted from
+            // the new size, the cover had gone before anything could be
+            // seen, and the lobby stood bare under a sheet fading in.
+            if covered, let settled, settled != now, settled.sideways || now.sideways {
+                let asked = Date()
+                do {
+                    while turns.finished < asked.addingTimeInterval(-0.1),
+                          Date().timeIntervalSince(asked) < LobbyLayout.longestTurn {
+                        try await Task.sleep(for: .milliseconds(50))
+                    }
+                    try await Task.sleep(for: .seconds(LobbyLayout.handover))
+                } catch { return }
+            }
+            settled = now
+        }
         // Presented above both layouts, so that what they hold outlives a
         // change between them: presented from inside one, a sheet went with
         // it, and a Duo opened with the start sheet up lost the room typed
@@ -170,14 +249,10 @@ struct LobbyView: View {
         .fullScreenCover(item: $state.sheet) { mode in
             MeetingSheet(app: app, mode: mode)
         }
-        // The settings and the schedule cover the whole of the inner display
-        // on its side, as a sheet covers the outer display, with their close
-        // in the column down its side: as a sheet there they stood in the
-        // middle of the screen, short of the column, and kept their close on
-        // themselves. Each is one or the other by the layout, and the binding
-        // of the one not drawn neither shows it nor closes it, so that turning
-        // the phone or opening it takes one down and puts the other up with
-        // the settings or the schedule still open.
+        // A sheet's binding neither shows it nor closes it while the layout
+        // drawn is not its own, so that turning the phone or opening it
+        // takes one down and puts the other up with the settings or the
+        // schedule still open.
         //
         // Closed or not is judged by the layout as it is when the system
         // says one went (`layoutNow`), not as it was when the binding was
@@ -185,21 +260,17 @@ struct LobbyView: View {
         // schedule sheet was said to go with the binding of the outer
         // display, upright and compact, and closed the schedule, and the
         // inner display opened on the lobby's home.
-        .sheet(isPresented: Binding(get: { state.settings && !sideways },
+        .sheet(isPresented: Binding(get: { state.settings && !drawn.sideways },
                                     set: { shown in if !shown && !layoutNow().sideways { state.settings = false } })) {
             SettingsView(app: app)
-        }
-        .fullScreenCover(isPresented: Binding(get: { state.settings && sideways },
-                                              set: { shown in if !shown && layoutNow().sideways { state.settings = false } })) {
-            SettingsView(app: app)
-                .presentationBackground(Theme.background)
+                .handedOver(turning)
         }
         // The phone's schedule is a sheet; the sidebar's is a section beside
         // it, with the same draft. Taken down by the layout changing, not by
         // somebody closing it, it leaves the section where it was: only the
         // phone's own binding closes the section, and only while the phone's
         // layout is drawn.
-        .sheet(isPresented: Binding(get: { !wide && !sideways && state.place == .scheduled },
+        .sheet(isPresented: Binding(get: { !drawn.wide && !drawn.sideways && state.place == .scheduled },
                                     set: { shown in
                                         let now = layoutNow()
                                         if !shown && !now.wide && !now.sideways && state.place == .scheduled { state.place = .home }
@@ -208,13 +279,7 @@ struct LobbyView: View {
             ScheduleView(app: app, account: account, draft: state.schedule, close: { state.place = .home })
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Theme.background)
-        }
-        .fullScreenCover(isPresented: Binding(get: { sideways && state.place == .scheduled },
-                                              set: { shown in
-                                                  if !shown && layoutNow().sideways && state.place == .scheduled { state.place = .home }
-                                              })) {
-            ScheduleView(app: app, account: account, draft: state.schedule, close: { state.place = .home })
-                .presentationBackground(Theme.background)
+                .handedOver(turning)
         }
         #endif
     }
@@ -235,6 +300,122 @@ struct LobbyView: View {
     }
     #endif
 }
+
+#if os(iOS)
+/// Which of the lobby's layouts the window has: the sidebar's (`wide`), the
+/// outer display's on the inner display on its side (`sideways`), or the
+/// phone's, neither.
+struct LobbyLayout: Hashable {
+    var wide: Bool
+    var sideways: Bool
+
+    /// How long a turn with the settings or the schedule open holds the
+    /// layout it came from once the system has finished turning the
+    /// window: as long as what arrives takes to come in over it, the
+    /// cover's fade (Theme.settle) or the sheet's, and a little more.
+    static let handover: Double = 0.45
+    /// The longest the system is waited for to finish a turn, for a change
+    /// of size it says nothing about.
+    static let longestTurn: Double = 1.5
+}
+
+/// When the system last finished changing the size of the lobby's window
+/// (TurnWatcher). Not observed: it is read by the lobby's wait for a turn,
+/// and nothing is drawn from it.
+final class TurnClock {
+    var finished = Date.distantPast
+}
+
+/// Tells `clock` when the system has finished changing the window's size,
+/// by the end of the transition it hands the window's view controllers: a
+/// phone turned, or moved between the displays of an iPhone Duo.
+struct TurnWatcher: UIViewControllerRepresentable {
+    let clock: TurnClock
+
+    func makeUIViewController(context: Context) -> Watcher {
+        Watcher(clock: clock)
+    }
+
+    func updateUIViewController(_ controller: Watcher, context: Context) {}
+
+    final class Watcher: UIViewController {
+        let clock: TurnClock
+
+        init(clock: TurnClock) {
+            self.clock = clock
+            super.init(nibName: nil, bundle: nil)
+        }
+
+        @available(*, unavailable)
+        required init?(coder: NSCoder) { nil }
+
+        override func loadView() {
+            view = UIView()
+            view.isUserInteractionEnabled = false
+        }
+
+        override func viewWillTransition(to size: CGSize, with coordinator: any UIViewControllerTransitionCoordinator) {
+            super.viewWillTransition(to: size, with: coordinator)
+            coordinator.animate(alongsideTransition: nil) { [clock] _ in
+                clock.finished = Date()
+                if FoldDebug.logsGeometry {
+                    Logger(subsystem: "app.tomoshibi", category: "geometry").notice("GEOMETRY turn finished \(size.debugDescription, privacy: .public)")
+                }
+            }
+        }
+    }
+}
+
+/// Whether the lobby's covers (`lobbyCover`) come and go by fading where
+/// they stand, set by the lobby as it draws them. A reference rather than a
+/// value, because a view keeps the transition it was inserted with: given as
+/// a value, a cover opened by somebody went with the turn as it had come,
+/// down to the foot of the screen.
+final class CoverMotion {
+    var fading = false
+}
+
+/// A cover coming up from the foot of the screen and going down to it, as
+/// the full screen cover it was did, or fading where it stands, as
+/// `motion` says at the moment it comes or goes.
+struct CoverTransition: Transition {
+    let motion: CoverMotion
+
+    func body(content: Content, phase: TransitionPhase) -> some View {
+        let away = !phase.isIdentity
+        let fading = motion.fading
+        content
+            .opacity(away && fading ? 0 : 1)
+            .visualEffect { effect, proxy in
+                effect.offset(y: away && !fading ? proxy.size.height : 0)
+            }
+    }
+}
+
+extension View {
+    /// The settings or the schedule over the whole of the inner display on
+    /// its side, in the lobby's own layers, on the room's ground
+    /// (CoverTransition).
+    func lobbyCover(_ motion: CoverMotion) -> some View {
+        background(Theme.background.ignoresSafeArea())
+            .transition(CoverTransition(motion: motion))
+    }
+
+    /// A sheet put up or taken down by a turn of the phone fades, in place
+    /// over the cover it takes over from or hands back to (`LobbyView`),
+    /// rather than sliding up from the foot or down to it; opened and closed
+    /// by somebody, it slides as a sheet does. The system's fade is iOS
+    /// 27's; before it, where there is no iPhone Duo, a sheet slides.
+    @ViewBuilder
+    func handedOver(_ turning: Bool) -> some View {
+        if #available(iOS 27.0, *) {
+            navigationTransition(turning ? AnyNavigationTransition(.crossFade) : AnyNavigationTransition(.automatic))
+        } else {
+            self
+        }
+    }
+}
+#endif
 
 // MARK: - The mark and small pieces
 

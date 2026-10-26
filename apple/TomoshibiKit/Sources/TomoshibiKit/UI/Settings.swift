@@ -233,6 +233,17 @@ final class CallPreferences {
 
 // MARK: - The view
 
+/// What closes the settings where they are drawn in place rather than
+/// presented (SettingsView `closeSettings`).
+struct CloseSettings {
+    let action: () -> Void
+}
+
+extension EnvironmentValues {
+    /// Nil where dismissing closes the settings.
+    @Entry var closeSettings: CloseSettings?
+}
+
 /// The settings: on the Mac the Settings window, on the phone a sheet from
 /// the home's account button.
 public struct SettingsView: View {
@@ -245,6 +256,11 @@ public struct SettingsView: View {
     @State private var localization = Localization.shared
     @Namespace private var highlight
     @Environment(\.dismiss) private var dismiss
+    /// How the settings close where they are not presented: over the
+    /// lobby on the inner display of an iPhone Duo on its side they are
+    /// drawn in the lobby's own layers (LobbyView), where dismissing does
+    /// nothing, and their close would leave them open.
+    @Environment(\.closeSettings) private var closeSettings
     /// The close, or on a section the way back to the list, stands in the
     /// system's column down the side of an iPhone Duo's outer display
     /// (SystemColumn), under the clock as the system's own back button
@@ -253,6 +269,10 @@ public struct SettingsView: View {
     /// The sheet is a sidebar beside a page (`wide`), where a section has no
     /// list to go back to.
     @State private var beside = false
+
+    private func close() {
+        if let closeSettings { closeSettings.action() } else { dismiss() }
+    }
 
     public init(app: AppModel) {
         self.app = app
@@ -378,7 +398,7 @@ public struct SettingsView: View {
                     }
                     .transition(Theme.arrive)
                 } else {
-                    ColumnHeadButton(symbol: "xmark", label: t("Close")) { dismiss() }
+                    ColumnHeadButton(symbol: "xmark", label: t("Close")) { close() }
                         .transition(Theme.arrive)
                 }
             }
@@ -470,7 +490,7 @@ public struct SettingsView: View {
                 Text(t("Settings")).font(.system(size: 21, weight: .bold))
                 Spacer(minLength: 8)
                 if !inColumn {
-                    Button { dismiss() } label: {
+                    Button { close() } label: {
                         Image(systemName: "xmark").font(.system(size: 13, weight: .bold))
                     }
                     .buttonStyle(.glassCircle(36))
@@ -538,7 +558,7 @@ public struct SettingsView: View {
                     Text(t("Settings")).font(.system(size: 32, weight: .bold))
                     Spacer()
                     if !inColumn {
-                        Button { dismiss() } label: {
+                        Button { close() } label: {
                             Image(systemName: "xmark").font(.system(size: 13, weight: .bold))
                         }
                         .buttonStyle(.glassCircle(36))
