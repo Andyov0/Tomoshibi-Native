@@ -157,7 +157,7 @@ private struct NameLabel: View {
             }
             Text(marks.label)
                 .font(.system(size: compact ? 10.5 : 12.5, weight: .medium))
-                .foregroundStyle(marks.speaking ? Theme.tally : Theme.foreground)
+                .foregroundStyle(marks.speaking ? Theme.tallyInk : Theme.foreground)
                 .lineLimit(1)
                 .truncationMode(.tail)
             if marks.proven {
@@ -183,7 +183,7 @@ private struct NameLabel: View {
             if marks.silenced {
                 Image(systemName: "speaker.slash.fill")
                     .font(.system(size: compact ? 9 : 10.5, weight: .semibold))
-                    .foregroundStyle(Theme.danger)
+                    .foregroundStyle(Theme.dangerInk)
                     .help(t("Muted by you"))
                     .accessibilityLabel(t("Muted by you"))
                     .transition(.scale.combined(with: .opacity))
@@ -367,7 +367,7 @@ struct MyShareFace: View {
                     Circle().fill(Theme.tally.opacity(0.18)).frame(width: compact ? 34 : 64, height: compact ? 34 : 64)
                     Image(systemName: "rectangle.on.rectangle")
                         .font(.system(size: compact ? 14 : 24, weight: .semibold))
-                        .foregroundStyle(Theme.tally)
+                        .foregroundStyle(Theme.tallyInk)
                 }
                 Text(t("You are sharing your screen"))
                     .font(.system(size: compact ? 11 : 14, weight: .semibold))

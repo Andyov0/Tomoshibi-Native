@@ -237,7 +237,7 @@ struct GlassChoice<Value: Hashable>: View {
 
 // MARK: - Fields
 
-/// A field on the app's dark glass: a symbol that lights while there is
+/// A field sunk into the app's glass: a symbol that lights while there is
 /// something in it, and for a secret an eye that shows it once there is
 /// something to show (Identity.tsx: "an eye beside an empty field is a
 /// control offering to reveal nothing").
@@ -261,7 +261,7 @@ struct GlassField: View {
             if let symbol {
                 Image(systemName: symbol)
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(lights && !text.isEmpty ? Theme.tally : Theme.muted)
+                    .foregroundStyle(lights && !text.isEmpty ? Theme.tallyInk : Theme.muted)
                     .frame(width: 18)
                     .animation(Theme.settle, value: text.isEmpty)
             }
@@ -298,8 +298,8 @@ struct GlassField: View {
         }
         .padding(.horizontal, 14)
         .frame(height: height)
-        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.black.opacity(0.24)))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.white.opacity(0.10)))
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.sunk(0.24)))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.ink.opacity(0.10)))
         .animation(Theme.settle, value: text.isEmpty)
     }
 }
@@ -320,12 +320,12 @@ struct SealControl: View {
             HStack(spacing: 10) {
                 Image(systemName: sealed ? "lock.fill" : "lock")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(sealed ? Theme.tally : Theme.muted)
+                    .foregroundStyle(sealed ? Theme.tallyInk : Theme.muted)
                     .frame(width: 18)
                     .contentTransition(.symbolEffect(.replace))
                 Text(sealed ? t("This call is sealed") : t("Seal this call"))
                     .font(.system(size: 14, weight: sealed ? .semibold : .regular))
-                    .foregroundStyle(sealed ? Theme.tally : Theme.foreground)
+                    .foregroundStyle(sealed ? Theme.tallyInk : Theme.foreground)
                     .contentTransition(.opacity)
                 Spacer(minLength: 8)
                 Toggle("", isOn: $on).labelsHidden().toggleStyle(.glassSwitch)
@@ -369,7 +369,7 @@ struct CopyLinkButton: View {
         } label: {
             Image(systemName: copied ? "checkmark" : "doc.on.doc")
                 .font(.system(size: size * 0.38, weight: .semibold))
-                .foregroundStyle(copied ? Theme.tally : Theme.foreground)
+                .foregroundStyle(copied ? Theme.tallyInk : Theme.foreground)
                 .contentTransition(.symbolEffect(.replace))
         }
         .buttonStyle(.glassCircle(size))
@@ -415,7 +415,7 @@ struct AccountAvatar: View {
             }
         }
         .frame(width: size, height: size)
-        .overlay(Circle().stroke(Color.white.opacity(0.12), lineWidth: 1))
+        .overlay(Circle().stroke(Theme.ink.opacity(0.12), lineWidth: 1))
         .accessibilityHidden(true)
     }
 }
@@ -452,7 +452,7 @@ struct Chip: View {
         HStack(spacing: 5) {
             if let symbol {
                 Image(systemName: symbol).font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(lit ? Theme.tally : withheld ? Theme.muted.opacity(0.7) : Theme.muted)
+                    .foregroundStyle(lit ? Theme.tallyInk : withheld ? Theme.faint(0.7) : Theme.muted)
             }
             Text(title)
                 .font(mono ? .system(size: 11.5, design: .monospaced) : .system(size: 12))
@@ -460,8 +460,8 @@ struct Chip: View {
                 .lineLimit(1)
         }
         .padding(.horizontal, 9).padding(.vertical, 5)
-        .background(Capsule().fill(withheld ? Color.clear : lit ? Theme.tally.opacity(0.14) : Color.white.opacity(0.08)))
-        .overlay(Capsule().strokeBorder(withheld ? Color.white.opacity(0.18) : lit ? Theme.tally.opacity(0.4) : Color.white.opacity(0.08),
+        .background(Capsule().fill(withheld ? Color.clear : lit ? Theme.tally.opacity(0.14) : Theme.ink.opacity(0.08)))
+        .overlay(Capsule().strokeBorder(withheld ? Theme.ink.opacity(0.18) : lit ? Theme.tally.opacity(0.4) : Theme.ink.opacity(0.08),
                                          style: StrokeStyle(lineWidth: 1, dash: withheld ? [3, 3] : [])))
     }
 }
@@ -619,7 +619,7 @@ struct MonthCalendar: View {
         } label: {
             Text("\(calendar.component(.day, from: date))")
                 .font(.system(size: 12.5, weight: chosen || today ? .semibold : .regular).monospacedDigit())
-                .foregroundStyle(chosen ? Theme.tallyForeground : allowed ? Theme.foreground : Theme.muted.opacity(0.45))
+                .foregroundStyle(chosen ? Theme.tallyForeground : allowed ? Theme.foreground : Theme.faint(0.45))
                 .frame(maxWidth: .infinity, minHeight: 30)
                 .background {
                     if chosen {
@@ -682,7 +682,7 @@ private struct ClockCapsule: View {
     var body: some View {
         Button(action: press) {
             Text(String(format: "%02d", value)).font(.system(size: 14, weight: .semibold).monospacedDigit())
-                .foregroundStyle(lit ? Theme.tally : Theme.foreground)
+                .foregroundStyle(lit ? Theme.tallyInk : Theme.foreground)
                 .frame(minWidth: 26)
         }
         .buttonStyle(.glassCapsule(32))
@@ -710,7 +710,7 @@ private struct ClockGrid: View {
                         .foregroundStyle(value == chosen ? Theme.tallyForeground : Theme.foreground)
                         .frame(maxWidth: .infinity, minHeight: 30)
                         .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(value == chosen ? Theme.tally : Color.white.opacity(0.06)))
+                            .fill(value == chosen ? Theme.tally : Theme.ink.opacity(0.06)))
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -886,9 +886,10 @@ struct SectionTile: View {
             .frame(width: size, height: size)
             .background {
                 RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
-                    .fill(lit ? Theme.tally : Color.white.opacity(0.10))
+                    .fill(lit ? Theme.tally : Theme.ink.opacity(0.10))
             }
-            .overlay(RoundedRectangle(cornerRadius: size * 0.28, style: .continuous).stroke(Color.white.opacity(lit ? 0.22 : 0.06)))
+            .overlay(RoundedRectangle(cornerRadius: size * 0.28, style: .continuous)
+                .stroke(lit ? Color.white.opacity(0.22) : Theme.ink.opacity(0.06)))
             .animation(Theme.settle, value: lit)
     }
 }

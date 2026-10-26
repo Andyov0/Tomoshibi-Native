@@ -37,8 +37,8 @@ struct GlassSlider: View {
             let x = thumb / 2 + CGFloat(min(1, max(0, value))) * travel
             ZStack(alignment: .leading) {
                 Capsule()
-                    .fill(Color.black.opacity(0.28))
-                    .overlay(Capsule().stroke(Color.white.opacity(0.10), lineWidth: 1))
+                    .fill(Theme.sunk(0.28))
+                    .overlay(Capsule().stroke(Theme.ink.opacity(0.10), lineWidth: 1))
                     .frame(height: lit ? 6 : 5)
                 // One flat tone, as the web's range input fills: it faded in
                 // from the left until the owner asked for fewer gradients
@@ -121,7 +121,7 @@ struct RoundButton: View {
                 .foregroundStyle(ink)
                 .frame(width: size, height: size)
                 .background(Circle().fill(fill))
-                .overlay(Circle().stroke(Color.white.opacity(hovering && enabled ? 0.12 : 0), lineWidth: 1))
+                .overlay(Circle().stroke(Theme.ink.opacity(hovering && enabled ? 0.12 : 0), lineWidth: 1))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -134,12 +134,12 @@ struct RoundButton: View {
 
     private var ink: Color {
         guard hovering && enabled else { return Theme.muted }
-        return role == .destructive ? Theme.danger : Theme.foreground
+        return role == .destructive ? Theme.dangerInk : Theme.foreground
     }
 
     private var fill: Color {
-        guard hovering && enabled else { return Color.white.opacity(0.0) }
-        return role == .destructive ? Theme.danger.opacity(0.16) : Color.white.opacity(0.10)
+        guard hovering && enabled else { return Theme.ink.opacity(0.0) }
+        return role == .destructive ? Theme.danger.opacity(0.16) : Theme.ink.opacity(0.10)
     }
 }
 
@@ -175,7 +175,7 @@ struct PillButton: View {
             .padding(.horizontal, height * 0.42)
             .frame(maxWidth: wide ? .infinity : nil, minHeight: height)
             .background(Capsule().fill(fill))
-            .overlay(Capsule().stroke(Color.white.opacity(role == .normal ? 0.08 : 0.18), lineWidth: 1))
+            .overlay(Capsule().stroke(role == .normal ? Theme.ink.opacity(0.08) : Color.white.opacity(0.18), lineWidth: 1))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -196,7 +196,7 @@ struct PillButton: View {
     private var fill: Color {
         let lift = hovering && enabled
         switch role {
-        case .normal: return Color.white.opacity(lift ? 0.16 : 0.10)
+        case .normal: return Theme.ink.opacity(lift ? 0.16 : 0.10)
         case .prominent: return Theme.tally.opacity(lift ? 0.88 : 1)
         case .destructive: return Theme.danger.opacity(lift ? 0.88 : 1)
         }
@@ -221,7 +221,7 @@ struct PanelHeading<Trailing: View>: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(symbolTint)
                     .frame(width: 26, height: 26)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.white.opacity(0.09)))
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.ink.opacity(0.09)))
             }
             Text(title)
                 .font(.system(size: 14, weight: .semibold))
@@ -262,9 +262,9 @@ extension View {
     /// happening (the door) or about to (ending the meeting).
     func panelCard(tint: Color? = nil) -> some View {
         background(RoundedRectangle(cornerRadius: 16, style: .continuous)
-            .fill(tint.map { $0.opacity(0.10) } ?? Color.white.opacity(0.05)))
+            .fill(tint.map { $0.opacity(0.10) } ?? Theme.ink.opacity(0.05)))
             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(tint.map { $0.opacity(0.35) } ?? Color.white.opacity(0.07), lineWidth: 1))
+                .stroke(tint.map { $0.opacity(0.35) } ?? Theme.ink.opacity(0.07), lineWidth: 1))
     }
 }
 

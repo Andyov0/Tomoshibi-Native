@@ -150,7 +150,7 @@ private struct Detail: View {
         HStack(alignment: .firstTextBaseline, spacing: 16) {
             Text(label).foregroundStyle(Theme.muted)
             Spacer(minLength: 8)
-            Text(value).monospacedDigit().foregroundStyle(warn ? Theme.tally : Theme.foreground)
+            Text(value).monospacedDigit().foregroundStyle(warn ? Theme.tallyInk : Theme.foreground)
                 .lineLimit(1)
                 .animation(.easeOut(duration: 0.3), value: warn)
         }

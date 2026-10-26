@@ -33,9 +33,9 @@ final class MessagesViewController: MSMessagesAppViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         // The ground under SwiftUI, so that the moment before it draws, and
-        // the edge Messages animates when the view grows, are the room's dark
-        // rather than the system's white.
-        view.backgroundColor = UIColor(Theme.background)
+        // the edge Messages animates when the view grows, are the room's
+        // ground rather than the system's, in either appearance.
+        view.backgroundColor = Theme.backgroundUIColor
         let hosting = UIHostingController(rootView: InviteRoot(model: model))
         hosting.view.backgroundColor = .clear
         addChild(hosting)

@@ -323,7 +323,7 @@ private struct MicrophoneMeterRow: View {
                 .onChange(of: shown > MicrophoneLevel.heard) { _, loud in
                     if loud && !heard { heard = true }
                 }
-                Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
+                Rectangle().fill(Theme.ink.opacity(0.06)).frame(height: 1)
                     .padding(.leading, 52)
             }
         }
@@ -343,7 +343,7 @@ private struct CloseButton: View {
                 .font(.system(size: 10.5, weight: .bold))
                 .foregroundStyle(hovering ? Theme.foreground : Theme.muted)
                 .frame(width: 26, height: 26)
-                .background(Circle().fill(Color.white.opacity(hovering ? 0.16 : 0.08)))
+                .background(Circle().fill(Theme.ink.opacity(hovering ? 0.16 : 0.08)))
                 .contentShape(Circle())
         }
         .buttonStyle(BarPress())

@@ -54,7 +54,7 @@ struct WatchersCard: View {
                         // the useful reading is that nobody has opened it.
                         Text(t("Nobody has this open yet."))
                             .font(.system(size: 11.5))
-                            .foregroundStyle(Theme.muted.opacity(0.85))
+                            .foregroundStyle(Theme.faint(0.85))
                             .fixedSize(horizontal: false, vertical: true)
                             .transition(.opacity)
                     } else {

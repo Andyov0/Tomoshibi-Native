@@ -219,7 +219,10 @@ public struct RoomView: View {
             }
         }
         .environment(\.popovers, popovers)
-        .preferredColorScheme(.dark)
+        // Dark in either appearance, all through: the room, its bar, and
+        // every panel and popover opened inside it (Theme.meeting). The
+        // window takes the same while the call is the screen (AppRoot).
+        .meetingAppearance()
     }
 
     // MARK: The room

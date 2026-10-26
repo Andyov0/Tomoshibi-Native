@@ -7,8 +7,9 @@ import TomoshibiBasics
 /// view Messages opens for it.
 ///
 /// Drawn as the app draws its lobby's sheets, the schedule's above all, since
-/// this is the schedule's list seen from Messages: the room's dark ground,
-/// the content as plain surfaces with a hairline, the primary action in the
+/// this is the schedule's list seen from Messages: the room's ground, light
+/// or dark as the system is and as Messages is around it, the content as
+/// plain surfaces with a hairline, the primary action in the
 /// person's colour, and glass only for what floats over the content, the
 /// sentence at the foot (Glass.swift, which is the app's own file compiled in
 /// here). Everything that comes or goes does so with the app's arrival and
@@ -44,7 +45,6 @@ struct InviteRoot: View {
         .animation(Theme.settle, value: model.opened)
         .animation(Theme.settle, value: model.style)
         .animation(Theme.settle, value: model.problem)
-        .preferredColorScheme(.dark)
         .tint(appearance.accent.color)
         .environment(\.locale, localization.language.locale)
     }
@@ -176,7 +176,7 @@ private struct Composer: View {
                         VStack(spacing: 0) {
                             row(one)
                             if one.id != model.meetings.last?.id {
-                                Divider().overlay(Color.white.opacity(0.06)).padding(.leading, 60)
+                                Divider().overlay(Theme.ink.opacity(0.06)).padding(.leading, 60)
                             }
                         }
                         .transition(.asymmetric(
@@ -200,10 +200,10 @@ private struct Composer: View {
             HStack(spacing: 12) {
                 Image(systemName: one.started ? "video.fill" : "calendar")
                     .font(.system(size: 15))
-                    .foregroundStyle(one.started ? Theme.tally : Theme.muted)
+                    .foregroundStyle(one.started ? Theme.tallyInk : Theme.muted)
                     .frame(width: 34, height: 34)
                     .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(one.started ? Theme.tally.opacity(0.18) : Color.white.opacity(0.08)))
+                        .fill(one.started ? Theme.tally.opacity(0.18) : Theme.ink.opacity(0.08)))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(one.room).font(.system(size: 14, weight: .semibold)).lineLimit(1).truncationMode(.middle)
                     Text(one.instant.map(MeetingTimes.short) ?? one.at)
@@ -216,7 +216,7 @@ private struct Composer: View {
                     } else {
                         Image(systemName: "arrow.up.circle.fill")
                             .font(.system(size: 22))
-                            .foregroundStyle(Theme.tally)
+                            .foregroundStyle(Theme.tallyInk)
                             .transition(.opacity)
                     }
                 }
@@ -234,11 +234,12 @@ private struct Composer: View {
     }
 }
 
-/// A row pressed: lit a little, as the app's plain surfaces are.
+/// A row pressed: lit a little by night and shaded a little by day, as the
+/// app's plain surfaces are.
 private struct RowPress: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .background(Color.white.opacity(configuration.isPressed ? 0.06 : 0))
+            .background(Theme.ink.opacity(configuration.isPressed ? 0.06 : 0))
             .animation(Theme.settle, value: configuration.isPressed)
     }
 }

@@ -173,8 +173,8 @@ struct BarButton: View {
                 .foregroundStyle(lit ? Theme.tallyForeground : alarm ? Theme.dangerForeground : (quiet ? Theme.muted : Theme.foreground))
                 .frame(width: size, height: size)
                 .background(Circle().fill(lit ? Theme.tally : alarm ? Theme.danger
-                                          : Color.white.opacity(pressed ? 0.24 : hovering && enabled ? 0.18 : 0.12)))
-                .overlay(Circle().stroke(Color.white.opacity(lit || alarm ? 0.3 : pressed ? 0.2 : 0.08), lineWidth: 1))
+                                          : Theme.ink.opacity(pressed ? 0.24 : hovering && enabled ? 0.18 : 0.12)))
+                .overlay(Circle().stroke(lit || alarm ? Color.white.opacity(0.3) : Theme.ink.opacity(pressed ? 0.2 : 0.08), lineWidth: 1))
                 .contentShape(Circle())
         }
         .buttonStyle(BarPress())
@@ -231,7 +231,7 @@ struct ChoiceRow: View {
                     if let symbol {
                         Image(systemName: symbol)
                             .font(.system(size: 12.5, weight: .semibold))
-                            .foregroundStyle(checked ? Theme.tally : Theme.foreground.opacity(0.75))
+                            .foregroundStyle(checked ? Theme.tallyInk : Theme.foreground.opacity(0.75))
                             // As wide as a settings row's symbol tile, so the
                             // words of both kinds of row start in one line.
                             .frame(width: 26)
@@ -245,13 +245,13 @@ struct ChoiceRow: View {
                     if checked {
                         Image(systemName: "checkmark")
                             .font(.system(size: 11.5, weight: .bold))
-                            .foregroundStyle(Theme.tally)
+                            .foregroundStyle(Theme.tallyInk)
                             .transition(.scale(scale: 0.5).combined(with: .opacity))
                     }
                 }
                 .padding(.horizontal, 14)
                 .frame(minHeight: 40)
-                .background(Color.white.opacity(hovering && enabled ? 0.06 : 0))
+                .background(Theme.ink.opacity(hovering && enabled ? 0.06 : 0))
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -261,7 +261,7 @@ struct ChoiceRow: View {
             .animation(Theme.settle, value: checked)
             .accessibilityAddTraits(checked ? .isSelected : [])
             if !last {
-                Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
+                Rectangle().fill(Theme.ink.opacity(0.06)).frame(height: 1)
                     .padding(.leading, symbol == nil ? 14 : 52)
             }
         }

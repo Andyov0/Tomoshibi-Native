@@ -197,7 +197,7 @@ private struct VideoRow: View {
                           t("Added by {name}", ["name": video.by]),
                           video.duration > 0 ? musicClock(seconds: video.duration) : nil].compactMap { $0 }.joined(separator: " · "))
                         .font(.system(size: 10.5))
-                        .foregroundStyle(playing ? Theme.tally : Theme.muted)
+                        .foregroundStyle(playing ? Theme.tallyInk : Theme.muted)
                         .lineLimit(1)
                 }
                 Spacer(minLength: 0)

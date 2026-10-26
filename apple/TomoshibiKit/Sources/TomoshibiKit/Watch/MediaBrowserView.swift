@@ -169,7 +169,7 @@ private struct ItemRow: View {
                         } else if hovering, item.playable || item.folder {
                             Image(systemName: item.folder ? "chevron.right" : "play.circle.fill")
                                 .font(.system(size: item.folder ? 12 : 17, weight: .semibold))
-                                .foregroundStyle(item.folder ? Theme.muted : Theme.tally)
+                                .foregroundStyle(item.folder ? Theme.muted : Theme.tallyInk)
                                 .transition(Theme.arrive)
                         }
                     }

@@ -34,7 +34,7 @@ struct HostPanelView: View {
 
     private var panel: some View {
         VStack(alignment: .leading, spacing: 0) {
-            PanelHeading(title: t("Running this room"), symbol: "crown.fill", symbolTint: Theme.tally,
+            PanelHeading(title: t("Running this room"), symbol: "crown.fill", symbolTint: Theme.tallyInk,
                          closeLabel: t("Close"), close: close)
             PanelRule()
             ViewThatFits(in: .vertical) {
@@ -65,7 +65,7 @@ struct HostPanelView: View {
                     ? t("You can do this because you administer this server. Removing somebody ends their call; it does not stop them rejoining.")
                     : t("Removing somebody ends their call. It does not stop them rejoining with the same name."))
                     .font(.system(size: 11))
-                    .foregroundStyle(Theme.muted.opacity(0.85))
+                    .foregroundStyle(Theme.faint(0.85))
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 6)
             } else {
@@ -112,8 +112,8 @@ struct HostPanelView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 10).padding(.vertical, 8)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.black.opacity(0.25)))
-                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Color.white.opacity(0.07)))
+                        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.sunk(0.25)))
+                        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.ink.opacity(0.07)))
                     Text(t("Anybody with this link can join, until you end the meeting. No passphrase needed.") + " " + t("It stops working after a day either way."))
                         .font(.system(size: 11))
                         .foregroundStyle(Theme.muted)
@@ -239,7 +239,7 @@ struct HostPanelView: View {
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: "door.left.hand.closed")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Theme.danger)
+                        .foregroundStyle(Theme.dangerInk)
                         .frame(width: 18)
                     Text(feature.scoped
                         ? t("Everybody will be disconnected and told the room has closed. Links made in the call stop working; links made on an account page do not.")
@@ -327,7 +327,7 @@ private struct PersonRow: View {
         .padding(.leading, 8)
         .padding(.trailing, 6)
         .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(hovering ? 0.06 : 0)))
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.ink.opacity(hovering ? 0.06 : 0)))
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.12), value: hovering)
         .animation(Theme.settle, value: feature.busy)
@@ -360,7 +360,7 @@ private struct QuietButton: View {
             }
             .foregroundStyle(hovering ? Theme.foreground : Theme.muted)
             .padding(.horizontal, 10).padding(.vertical, 5)
-            .background(Capsule().fill(hovering ? Theme.danger.opacity(0.14) : Color.white.opacity(0.05)))
+            .background(Capsule().fill(hovering ? Theme.danger.opacity(0.14) : Theme.ink.opacity(0.05)))
             .contentShape(Capsule())
         }
         .buttonStyle(.plain)

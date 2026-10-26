@@ -16,7 +16,7 @@ struct StrainCard: View {
             HStack(alignment: .top, spacing: 10) {
                 Image(systemName: "gauge.with.dots.needle.33percent")
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Theme.tally)
+                    .foregroundStyle(Theme.tallyInk)
                     .frame(width: 20)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(t("Your connection is sending about {have} Mbps, and this share needs about {need} Mbps, so it stutters.",

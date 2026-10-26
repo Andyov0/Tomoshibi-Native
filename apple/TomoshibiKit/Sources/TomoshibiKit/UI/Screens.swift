@@ -13,6 +13,21 @@ public struct AppRoot: View {
     @State private var appearance = Appearance.shared
     @State private var localization = Localization.shared
     @Environment(\.scenePhase) private var scenePhase
+    /// The appearance the window is drawn in: the system's, or the call's
+    /// while there is a call (`windowInMeeting`).
+    @Environment(\.colorScheme) private var windowScheme
+    /// The same, kept where a task can read it as it is now.
+    @State private var windowNow: ColorScheme?
+    /// The system's appearance as last seen outside a call, which the screens
+    /// around a call are drawn in where the system cannot be asked
+    /// (`outside`).
+    @State private var systemScheme: ColorScheme?
+    /// The window has taken the call's appearance, once the room has arrived
+    /// (`inMeeting`).
+    @State private var windowInMeeting = false
+    /// The page under the screens keeps the call's appearance while the
+    /// screen after a call fades in over it.
+    @State private var pageInMeeting = false
     #if os(macOS)
     @Environment(\.openSettings) private var openSettings
     #endif
@@ -21,9 +36,53 @@ public struct AppRoot: View {
         self.app = app
     }
 
+    /// The call is on the screen and is drawn in an appearance of its own
+    /// (Theme.meeting). Not the join screen drawn in the call's place when
+    /// there is no call, which is a screen in front of one.
+    private var inMeeting: Bool {
+        Theme.meeting != nil && app.screen == .call && (app.call != nil || app.movingTo != nil)
+    }
+
+    /// The appearance of every screen but the call. The window takes the
+    /// call's appearance while a call is the screen, for the system's own
+    /// furniture over it (the clock, a menu, the keyboard), and a screen
+    /// told nothing takes the window's: the screen arriving after a call was
+    /// drawn in the call's appearance for a moment before the window let go,
+    /// and in the one the system had when the call began if the system had
+    /// changed since. Told the system's appearance as it is now, it is drawn
+    /// in that from its first frame.
+    private var outside: ColorScheme {
+        Self.systemNow ?? systemScheme ?? windowScheme
+    }
+
+    /// The system's appearance now, where it can be asked: on the iPhone the
+    /// screen's, which what a window is told to take does not reach. The Mac
+    /// keeps what the window last showed outside a call (`systemScheme`).
+    @MainActor
+    private static var systemNow: ColorScheme? {
+        #if os(iOS)
+        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
+        switch scene?.screen.traitCollection.userInterfaceStyle {
+        case .dark: return .dark
+        case .light: return .light
+        default: return nil
+        }
+        #else
+        return nil
+        #endif
+    }
+
+    /// The page under the screens: the call's while the window is the call's,
+    /// and while the screen after a call fades in, so that it fades in from
+    /// the call's ground rather than appearing on its own at once.
+    private var pageScheme: ColorScheme {
+        (windowInMeeting || pageInMeeting) ? (Theme.meeting ?? outside) : outside
+    }
+
     public var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Theme.page.ignoresSafeArea()
+                .environment(\.colorScheme, pageScheme)
                 // The whole window, for a rehearsed fold to be drawn down its
                 // middle (FoldDebug).
                 .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { frame in
@@ -36,17 +95,17 @@ public struct AppRoot: View {
                 }
             switch app.screen {
             case .starting:
-                StartingScreen().transition(Theme.arrive)
+                StartingScreen().environment(\.colorScheme, outside).transition(Theme.arrive)
             case .unreachable:
-                UnreachableScreen(app: app).transition(Theme.arrive)
+                UnreachableScreen(app: app).environment(\.colorScheme, outside).transition(Theme.arrive)
             case .lobby:
-                LobbyView(app: app).transition(Theme.arrive)
+                LobbyView(app: app).environment(\.colorScheme, outside).transition(Theme.arrive)
             case .prejoin:
-                PreJoinScreen(app: app).transition(Theme.arrive)
+                PreJoinScreen(app: app).environment(\.colorScheme, outside).transition(Theme.arrive)
             case .knocking:
-                KnockingScreen(app: app).transition(Theme.arrive)
+                KnockingScreen(app: app).environment(\.colorScheme, outside).transition(Theme.arrive)
             case .waiting:
-                WaitingScreen(app: app).transition(Theme.arrive)
+                WaitingScreen(app: app).environment(\.colorScheme, outside).transition(Theme.arrive)
             case .call:
                 if let call = app.call {
                     RoomView(model: call)
@@ -61,16 +120,16 @@ public struct AppRoot: View {
                             Task { await app.ended(because: reason, in: call) }
                         }
                 } else if let to = app.movingTo {
-                    MovingOverlay(to: to).transition(Theme.arrive)
+                    MovingOverlay(to: to).meetingAppearance().transition(Theme.arrive)
                 } else {
                     // Never nothing. A call screen with no call and no move in
                     // progress was a black window after a rejoin that failed;
                     // the join screen, with the reason on it, is where that
                     // person can do something.
-                    PreJoinScreen(app: app).transition(Theme.arrive)
+                    PreJoinScreen(app: app).environment(\.colorScheme, outside).transition(Theme.arrive)
                 }
             case .ended:
-                EndedScreen(app: app).transition(Theme.arrive)
+                EndedScreen(app: app).environment(\.colorScheme, outside).transition(Theme.arrive)
             }
             // Over everything while an update is put in place.
             if let updates = app.updates { UpdateInstalling(updates: updates) }
@@ -78,7 +137,38 @@ public struct AppRoot: View {
         .animation(Theme.settle, value: app.screen)
         .animation(Theme.settle, value: app.account?.name)
         .animation(Theme.settle, value: app.call == nil)
-        .preferredColorScheme(.dark)
+        // The window in the call's appearance while the call is the screen,
+        // and in the system's otherwise, following it as it changes.
+        .preferredColorScheme(windowInMeeting ? Theme.meeting : nil)
+        .onChange(of: windowScheme, initial: true) {
+            windowNow = windowScheme
+            if !windowInMeeting { systemScheme = windowScheme }
+        }
+        .onChange(of: inMeeting) {
+            if inMeeting {
+                // The room arrives in its own appearance already
+                // (`meetingAppearance`); the window takes it once the room
+                // has arrived. Taken at once, every view in the window was
+                // drawn again in the new appearance in the same moment as
+                // the screen changed, and the window stood black for a
+                // quarter of a second between a light screen and the call.
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(Theme.settleSeconds))
+                    if inMeeting { windowInMeeting = true }
+                }
+            } else {
+                windowInMeeting = false
+                pageInMeeting = true
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(Theme.settleSeconds))
+                    guard !inMeeting else { return }
+                    pageInMeeting = false
+                    // Where the system cannot be asked, what it is now is
+                    // what the window shows once it has let the call's go.
+                    if Self.systemNow == nil, let windowNow { systemScheme = windowNow }
+                }
+            }
+        }
         // A page that fits stays put. The sign-in, the join screens and the
         // cards around a call are in scroll views so that a phone on its side
         // can still reach the foot of them, and left to the default every one
@@ -147,6 +237,21 @@ public struct AppRoot: View {
         if let received, received.url == url, Date().timeIntervalSince(received.at) < 2 { return }
         received = (url, Date())
         Task { await app.open(url) }
+    }
+}
+
+extension View {
+    /// Drawn in the call's appearance (Theme.meeting) whatever the system's
+    /// is: the room and everything opened inside it, and the small pictures
+    /// of a call the settings show. Nothing where the call follows the
+    /// system.
+    @ViewBuilder
+    func meetingAppearance() -> some View {
+        if let scheme = Theme.meeting {
+            environment(\.colorScheme, scheme)
+        } else {
+            self
+        }
     }
 }
 
@@ -375,7 +480,7 @@ private struct Note: View {
     var body: some View {
         Text(text)
             .font(.system(size: 12.5))
-            .foregroundStyle(danger ? Theme.danger : Theme.muted)
+            .foregroundStyle(danger ? Theme.dangerInk : Theme.muted)
             .multilineTextAlignment(.center)
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: .infinity)
@@ -625,15 +730,15 @@ private struct OptionsCard: View {
                         ServerMenu(app: app, compact: true, id: server)
                     }
                     .padding(.horizontal, 14).frame(minHeight: 48)
-                    Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
+                    Rectangle().fill(Theme.ink.opacity(0.06)).frame(height: 1)
                 }
                 .transition(Theme.arrive)
             }
             SealControl(on: $sealing, word: $app.sealingWord)
                 .padding(.horizontal, 14).padding(.vertical, 12)
         }
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.22)))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.08)))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.sunk(0.22)))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.ink.opacity(0.08)))
         .animation(Theme.settle, value: app.offersRelayChoiceAtTheDoor)
     }
 }
@@ -654,7 +759,7 @@ private struct IdentityBox: View {
         VStack(spacing: 0) {
             HStack(spacing: 12) {
                 Image(systemName: fixed ? "person.fill.checkmark" : "person").font(.system(size: 15))
-                    .foregroundStyle(fixed ? Theme.tally : Theme.muted).frame(width: 18)
+                    .foregroundStyle(fixed ? Theme.tallyInk : Theme.muted).frame(width: 18)
                 if fixed {
                     Text(name).font(.system(size: 15)).foregroundStyle(Theme.muted)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -667,10 +772,10 @@ private struct IdentityBox: View {
             }
             .modifier(IdentityRow())
             if !nameOnly {
-                Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1)
+                Rectangle().fill(Theme.ink.opacity(0.07)).frame(height: 1)
                 HStack(spacing: 12) {
                     Image(systemName: "key").font(.system(size: 15))
-                        .foregroundStyle(passphrase.isEmpty ? Theme.muted : Theme.tally)
+                        .foregroundStyle(passphrase.isEmpty ? Theme.muted : Theme.tallyInk)
                         .frame(width: 18)
                     Group {
                         if shown {
@@ -695,8 +800,8 @@ private struct IdentityBox: View {
                 .transition(Theme.arrive)
             }
         }
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.22)))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.10)))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.sunk(0.22)))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.ink.opacity(0.10)))
         .animation(Theme.settle, value: passphrase.isEmpty)
         .animation(Theme.settle, value: nameOnly)
     }
@@ -735,7 +840,7 @@ private struct ProblemLine: View {
                 .accessibilityLabel(t("Close"))
             }
         }
-        .foregroundStyle(Theme.danger)
+        .foregroundStyle(Theme.dangerInk)
         .multilineTextAlignment(.leading)
         .padding(.horizontal, 12).padding(.vertical, 9)
         .frame(maxWidth: .infinity)

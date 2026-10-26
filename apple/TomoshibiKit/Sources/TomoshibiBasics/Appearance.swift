@@ -104,9 +104,12 @@ public enum ConnectionBadge: String, CaseIterable, Identifiable, Sendable {
 
 /// The colours on offer, each with the colour drawn on top of it.
 ///
-/// Apple's own dark-appearance system colours apart from the first, which is
-/// the product's: they are what a person already recognises from the system's
-/// accent setting, and they were tuned to sit on dark grey.
+/// Apple's own system colours apart from the first, which is the product's:
+/// they are what a person already recognises from the system's accent
+/// setting. Each comes in the system's dark-appearance shade, tuned to sit on
+/// dark grey, and its light-appearance one, tuned to sit on white; the
+/// product's amber has a deeper shade for the day of its own. The four
+/// clients draw the same values.
 public enum Accent: String, CaseIterable, Identifiable, Sendable {
     case amber, orange, pink, purple, indigo, blue, teal, green, graphite
 
@@ -114,20 +117,51 @@ public enum Accent: String, CaseIterable, Identifiable, Sendable {
 
     public var color: Color {
         switch self {
-        case .amber: Color(red: 1.0, green: 0.635, blue: 0.231)
-        case .orange: Color(red: 1.0, green: 0.624, blue: 0.039)
-        case .pink: Color(red: 1.0, green: 0.216, blue: 0.373)
-        case .purple: Color(red: 0.749, green: 0.353, blue: 0.949)
-        case .indigo: Color(red: 0.369, green: 0.361, blue: 0.902)
-        case .blue: Color(red: 0.039, green: 0.518, blue: 1.0)
-        case .teal: Color(red: 0.251, green: 0.784, blue: 0.878)
-        case .green: Color(red: 0.188, green: 0.820, blue: 0.345)
-        case .graphite: Color(red: 0.596, green: 0.596, blue: 0.616)
+        case .amber: Self.shade(dark: (1.0, 0.635, 0.231), light: (242, 144, 30))
+        case .orange: Self.shade(dark: (1.0, 0.624, 0.039), light: (255, 149, 0))
+        case .pink: Self.shade(dark: (1.0, 0.216, 0.373), light: (255, 45, 85))
+        case .purple: Self.shade(dark: (0.749, 0.353, 0.949), light: (175, 82, 222))
+        case .indigo: Self.shade(dark: (0.369, 0.361, 0.902), light: (88, 86, 214))
+        case .blue: Self.shade(dark: (0.039, 0.518, 1.0), light: (0, 122, 255))
+        case .teal: Self.shade(dark: (0.251, 0.784, 0.878), light: (48, 176, 199))
+        case .green: Self.shade(dark: (0.188, 0.820, 0.345), light: (52, 199, 89))
+        case .graphite: Self.shade(dark: (0.596, 0.596, 0.616), light: (142, 142, 147))
         }
     }
 
+    /// The colour as words and thin symbols are drawn in it, on the page
+    /// rather than as a fill: a link, a tick, the colour's own name, a
+    /// latency. At night the colour itself; by day a deeper shade, since the
+    /// day's shades are for filling and several read at under 3 to 1 as words
+    /// on the day's grey (amber at about 2.3), where these read at 4.5 or
+    /// better. A fill keeps `color` in either appearance.
+    public var ink: Color {
+        switch self {
+        case .amber: Self.shade(dark: (1.0, 0.635, 0.231), light: (163, 92, 9))
+        case .orange: Self.shade(dark: (1.0, 0.624, 0.039), light: (161, 94, 0))
+        case .pink: Self.shade(dark: (1.0, 0.216, 0.373), light: (223, 0, 43))
+        case .purple: Self.shade(dark: (0.749, 0.353, 0.949), light: (163, 56, 217))
+        case .indigo: Self.shade(dark: (0.369, 0.361, 0.902), light: (88, 86, 214))
+        case .blue: Self.shade(dark: (0.039, 0.518, 1.0), light: (0, 107, 224))
+        case .teal: Self.shade(dark: (0.251, 0.784, 0.878), light: (33, 121, 137))
+        case .green: Self.shade(dark: (0.188, 0.820, 0.345), light: (33, 126, 56))
+        case .graphite: Self.shade(dark: (0.596, 0.596, 0.616), light: (110, 110, 115))
+        }
+    }
+
+    /// The night's components as they always were, the day's out of 255 as
+    /// the palette gives them.
+    private static func shade(dark: (Double, Double, Double), light: (Double, Double, Double)) -> Color {
+        Theme.adaptive(dark: Theme.Shade(dark.0, dark.1, dark.2),
+                       light: Theme.Shade(light.0 / 255, light.1 / 255, light.2 / 255))
+    }
+
     /// Text and symbols on the colour: dark on the light ones, white on the
-    /// deep ones, whichever reads at 4.5 to 1.
+    /// deep ones, whichever reads better. The same in both appearances: the
+    /// day's shades are a little deeper, which costs the dark words on the
+    /// light colours a little (amber's 9.1 to 1 becomes 7.7) and gains the
+    /// white on the deep ones a little (blue's 3.6 becomes 4.0), and none of
+    /// them would read better the other way.
     public var onColor: Color {
         switch self {
         case .amber, .orange: Color(red: 0.122, green: 0.071, blue: 0.0)

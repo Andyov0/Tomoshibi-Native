@@ -236,7 +236,7 @@ private struct ToastCard: View {
     /// taking the stage or anything still happening, red for a failure.
     private var edge: Color {
         switch toast.kind {
-        case .info: Color.white.opacity(0.22)
+        case .info: Theme.ink.opacity(0.22)
         case .signal, .warning: Theme.tally
         case .failure: Theme.danger
         }
@@ -308,7 +308,7 @@ private struct CloseDot: View {
                 .font(.system(size: 8.5, weight: .bold))
                 .foregroundStyle(hovering ? Theme.foreground : Theme.muted)
                 .frame(width: 20, height: 20)
-                .background(Circle().fill(Color.white.opacity(hovering ? 0.12 : 0)))
+                .background(Circle().fill(Theme.ink.opacity(hovering ? 0.12 : 0)))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)

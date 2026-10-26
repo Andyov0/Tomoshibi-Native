@@ -183,7 +183,7 @@ struct HandControl: View {
                     .foregroundStyle(model.handUp ? Theme.tallyForeground : Theme.foreground)
                     .frame(width: 40, height: 44)
                     .background(UnevenRoundedRectangle(topLeadingRadius: 22, bottomLeadingRadius: 22)
-                        .fill(model.handUp ? Theme.tally : Color.white.opacity(0.12)))
+                        .fill(model.handUp ? Theme.tally : Theme.ink.opacity(0.12)))
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -200,7 +200,7 @@ struct HandControl: View {
                     .rotationEffect(.degrees(open ? 180 : 0))
                     .frame(width: 20, height: 44)
                     .background(UnevenRoundedRectangle(bottomTrailingRadius: 22, topTrailingRadius: 22)
-                        .fill(open ? Color.white.opacity(0.2) : Color.white.opacity(0.12)))
+                        .fill(open ? Theme.ink.opacity(0.2) : Theme.ink.opacity(0.12)))
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)

@@ -35,6 +35,7 @@ struct UpdateBanner: View {
     /// The edge's light, which comes up once and goes as the card arrives,
     /// so that something new at the edge of the eye is seen.
     @State private var lit = false
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ZStack {
@@ -78,11 +79,13 @@ struct UpdateBanner: View {
             // Flat, as the screens are drawn: the surface colour with the
             // theme's edge, and a shadow because it floats over the stage.
             // Not glass: it is something to read, not a control.
-            .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(inSidebar ? Theme.surfaceHigh : Theme.surface))
+            .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(inSidebar ? Theme.floating : Theme.surface))
             .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Theme.border, lineWidth: 1))
             .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).strokeBorder(Theme.tally.opacity(lit ? 0.85 : 0), lineWidth: 1.5))
-            .shadow(color: Theme.tally.opacity(lit ? 0.35 : 0), radius: 14)
-            .shadow(color: .black.opacity(inSidebar ? 0 : 0.35), radius: 18, y: 8)
+            // The light's glow at night; by day the edge alone, flat, as the
+            // day draws everything that glows at night.
+            .shadow(color: Theme.tally.opacity(lit && scheme == .dark ? 0.35 : 0), radius: 14)
+            .shadow(color: Theme.shadow(inSidebar ? 0 : 0.35), radius: 18, y: 8)
             .padding(.horizontal, inSidebar ? 0 : sides)
             .padding(.top, inSidebar ? 0 : top)
             .accessibilityElement(children: .contain)
@@ -200,7 +203,7 @@ struct UpdateInstalling: View {
         .padding(20)
         .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Theme.surface))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Theme.border, lineWidth: 1))
-        .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
+        .shadow(color: Theme.shadow(0.35), radius: 18, y: 8)
         .accessibilityElement(children: .combine)
         .accessibilityIdentifier("update.installing")
     }
@@ -222,12 +225,14 @@ private struct Said<Buttons: View>: View {
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             let tint = warning ? Theme.danger : Theme.tally
+            // The symbol on the plate is drawn as words are (Theme.tallyInk).
+            let glyph = warning ? Theme.dangerInk : Theme.tallyInk
             ZStack {
                 Circle().fill(tint.opacity(0.18))
                 if let badge {
-                    Image(systemName: badge).font(.system(size: 13, weight: .semibold)).foregroundStyle(tint)
+                    Image(systemName: badge).font(.system(size: 13, weight: .semibold)).foregroundStyle(glyph)
                 } else {
-                    MediaSpinner(size: 14, tint: tint)
+                    MediaSpinner(size: 14, tint: glyph)
                 }
             }
             .frame(width: 30, height: 30)
@@ -238,7 +243,7 @@ private struct Said<Buttons: View>: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 if let problem {
-                    Text(problem).font(.system(size: 12.5)).foregroundStyle(Theme.danger).fixedSize(horizontal: false, vertical: true)
+                    Text(problem).font(.system(size: 12.5)).foregroundStyle(Theme.dangerInk).fixedSize(horizontal: false, vertical: true)
                 }
                 if let progress { ProgressTrack(fraction: progress).padding(.top, 4) }
                 HStack(spacing: 8) {

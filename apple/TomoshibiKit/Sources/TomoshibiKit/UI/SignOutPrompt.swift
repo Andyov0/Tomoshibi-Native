@@ -49,7 +49,7 @@ struct SignOutPrompt: ViewModifier {
                 Circle().fill(Theme.danger.opacity(0.16))
                 Image(systemName: "rectangle.portrait.and.arrow.right")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(Theme.danger)
+                    .foregroundStyle(Theme.dangerInk)
             }
             .frame(width: 46, height: 46)
             VStack(spacing: 6) {
@@ -76,7 +76,7 @@ struct SignOutPrompt: ViewModifier {
         .frame(maxWidth: 340)
         .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Theme.surface))
         .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).strokeBorder(Theme.border, lineWidth: 1))
-        .shadow(color: .black.opacity(0.4), radius: 28, y: 12)
+        .shadow(color: Theme.shadow(0.4), radius: 28, y: 12)
         .padding(.horizontal, 24)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("signout.prompt")

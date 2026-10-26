@@ -134,7 +134,7 @@ private struct Empty: View {
         VStack(spacing: 12) {
             ZStack {
                 Circle()
-                    .fill(Color.white.opacity(0.08))
+                    .fill(Theme.ink.opacity(0.08))
                     .frame(width: 56, height: 56)
                 Image(systemName: "bubble.left.and.text.bubble.right")
                     .font(.system(size: 26, weight: .light))
@@ -184,7 +184,7 @@ private struct Composer: View {
                         }
                     }
                     .frame(width: 28, height: 28)
-                    .background(Circle().fill(sendable || model.sending ? Theme.tally : Color.white.opacity(0.08)))
+                    .background(Circle().fill(sendable || model.sending ? Theme.tally : Theme.ink.opacity(0.08)))
                     .contentShape(Circle())
                 }
                 .buttonStyle(.plain)
@@ -196,9 +196,9 @@ private struct Composer: View {
             .padding(.leading, 12)
             .padding(.trailing, 5)
             .padding(.vertical, 5)
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.22)))
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.sunk(0.22)))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(focused && !offline ? Theme.tally.opacity(0.55) : Color.white.opacity(0.09), lineWidth: 1))
+                .stroke(focused && !offline ? Theme.tally.opacity(0.55) : Theme.ink.opacity(0.09), lineWidth: 1))
             .opacity(offline ? 0.6 : 1)
 
             if model.chatFailed || nearLimit {
@@ -206,7 +206,7 @@ private struct Composer: View {
                     if model.chatFailed {
                         Label(t("That could not be sent."), systemImage: "exclamationmark.circle.fill")
                             .font(.system(size: 11))
-                            .foregroundStyle(Theme.danger)
+                            .foregroundStyle(Theme.dangerInk)
                             .transition(Theme.arrive)
                     }
                     Spacer(minLength: 0)
@@ -215,7 +215,7 @@ private struct Composer: View {
                         // otherwise stops taking characters without a word.
                         Text(verbatim: "\(model.chatDraft.utf16.count)/\(ChatRules.longest)")
                             .font(.system(size: 10.5).monospacedDigit())
-                            .foregroundStyle(model.chatDraft.utf16.count >= ChatRules.longest ? Theme.tally : Theme.muted)
+                            .foregroundStyle(model.chatDraft.utf16.count >= ChatRules.longest ? Theme.tallyInk : Theme.muted)
                             .transition(.opacity)
                     }
                 }
@@ -330,8 +330,8 @@ struct LinkedText: View {
                 var link = AttributedString(href)
                 if let url = URL(string: href) {
                     link.link = url
-                    link.foregroundColor = Theme.tally
-                    link.underlineStyle = Text.LineStyle(pattern: .solid, color: Theme.tally.opacity(0.45))
+                    link.foregroundColor = Theme.tallyInk
+                    link.underlineStyle = Text.LineStyle(pattern: .solid, color: Theme.tallyInk.opacity(0.45))
                 }
                 out.append(link)
             }

@@ -53,7 +53,7 @@ struct MediaSlider: View {
             let track: CGFloat = lifted ? 6 : 4
             let knob: CGFloat = 14
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.14)).frame(height: track)
+                Capsule().fill(Theme.ink.opacity(0.14)).frame(height: track)
                 Capsule().fill(tint.opacity(enabled ? 1 : 0.5))
                     .frame(width: max(track, (width - knob) * fraction + knob / 2), height: track)
                 Circle()
@@ -158,7 +158,7 @@ struct MediaProgress: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.12))
+                Capsule().fill(Theme.ink.opacity(0.12))
                 Capsule().fill(tint).frame(width: geometry.size.width * min(1, max(0, fraction)))
             }
         }
@@ -170,7 +170,7 @@ struct MediaProgress: View {
 
 // MARK: - Typing
 
-/// A field in a capsule of dark glass, whose edge takes the chosen colour
+/// A field in a sunk capsule, whose edge takes the chosen colour
 /// while it is being typed in. `limit` holds it to as many UTF-16 units as
 /// the web's field takes (`maxLength`).
 struct MediaField: View {
@@ -204,8 +204,8 @@ struct MediaField: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 34)
-        .background(Capsule().fill(Color.black.opacity(0.24)))
-        .overlay(Capsule().stroke(focused ? Theme.tally.opacity(0.75) : Color.white.opacity(0.09), lineWidth: focused ? 1.5 : 1))
+        .background(Capsule().fill(Theme.sunk(0.24)))
+        .overlay(Capsule().stroke(focused ? Theme.tally.opacity(0.75) : Theme.ink.opacity(0.09), lineWidth: focused ? 1.5 : 1))
         .contentShape(Capsule())
         .onTapGesture { focused = true }
         .animation(Theme.settle, value: focused)
@@ -263,7 +263,7 @@ extension View {
 /// A hairline between the parts of a panel.
 struct MediaRule: View {
     var body: some View {
-        Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1)
+        Rectangle().fill(Theme.ink.opacity(0.07)).frame(height: 1)
     }
 }
 
@@ -287,7 +287,7 @@ struct MediaIconButton: View {
                 .foregroundStyle(lit || prominent ? Theme.tallyForeground : hovering ? Theme.foreground : Theme.muted)
                 .contentTransition(.symbolEffect(.replace))
                 .frame(width: size, height: size)
-                .background(Circle().fill(lit || prominent ? Theme.tally : Color.white.opacity(hovering && enabled ? 0.12 : 0)))
+                .background(Circle().fill(lit || prominent ? Theme.tally : Theme.ink.opacity(hovering && enabled ? 0.12 : 0)))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -315,8 +315,8 @@ struct MediaButtonStyle: ButtonStyle {
             .foregroundStyle(prominent ? Theme.tallyForeground : quiet ? Theme.muted : Theme.foreground)
             .padding(.horizontal, 12)
             .frame(minHeight: height)
-            .background(Capsule().fill(prominent ? Theme.tally : quiet ? Color.clear : Color.white.opacity(configuration.isPressed ? 0.16 : 0.10)))
-            .overlay(Capsule().stroke(Color.white.opacity(prominent || quiet ? 0 : 0.08)))
+            .background(Capsule().fill(prominent ? Theme.tally : quiet ? Color.clear : Theme.ink.opacity(configuration.isPressed ? 0.16 : 0.10)))
+            .overlay(Capsule().stroke(Theme.ink.opacity(prominent || quiet ? 0 : 0.08)))
             .contentShape(Capsule())
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .opacity(enabled ? 1 : 0.4)
@@ -342,7 +342,7 @@ struct MediaEmpty: View {
                 .font(.system(size: 17, weight: .medium))
                 .foregroundStyle(Theme.muted)
                 .frame(width: 44, height: 44)
-                .background(Circle().fill(Color.white.opacity(0.07)))
+                .background(Circle().fill(Theme.ink.opacity(0.07)))
             Text(text)
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.muted)
@@ -364,7 +364,7 @@ struct MediaProblem: View {
             Image(systemName: "exclamationmark.circle.fill").font(.system(size: 11))
             Text(text).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true)
         }
-        .foregroundStyle(Theme.danger)
+        .foregroundStyle(Theme.dangerInk)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
@@ -383,7 +383,7 @@ struct MediaRow<Content: View>: View {
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.white.opacity(lit ? 0.09 : hovering ? 0.06 : 0)))
+                .fill(Theme.ink.opacity(lit ? 0.09 : hovering ? 0.06 : 0)))
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .onHover { hovering = $0 }
             .animation(.easeOut(duration: 0.12), value: hovering)
@@ -422,7 +422,7 @@ struct MediaArtwork: View {
             }
         }
         .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: corner, style: .continuous).stroke(Color.white.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: corner, style: .continuous).stroke(Theme.ink.opacity(0.08)))
         .accessibilityHidden(true)
     }
 }
@@ -438,10 +438,10 @@ struct MediaBadge: View {
             if let symbol { Image(systemName: symbol).font(.system(size: 8.5, weight: .bold)) }
             Text(text).font(.system(size: 10.5, weight: .semibold)).lineLimit(1)
         }
-        .foregroundStyle(lit ? Theme.tally : Theme.foreground.opacity(0.75))
+        .foregroundStyle(lit ? Theme.tallyInk : Theme.foreground.opacity(0.75))
         .padding(.horizontal, 7)
         .padding(.vertical, 3)
-        .background(Capsule().fill(lit ? Theme.tally.opacity(0.16) : Color.white.opacity(0.09)))
+        .background(Capsule().fill(lit ? Theme.tally.opacity(0.16) : Theme.ink.opacity(0.09)))
         .overlay(Capsule().stroke(lit ? Theme.tally.opacity(0.35) : .clear))
     }
 }

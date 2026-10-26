@@ -52,7 +52,7 @@ struct LobbyNoticeCard: View {
                 Circle().fill(tint.opacity(0.18))
                 Image(systemName: notice.warning ? "exclamationmark.circle.fill" : "megaphone.fill")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(tint)
+                    .foregroundStyle(notice.warning ? Theme.dangerInk : Theme.tallyInk)
             }
             .frame(width: 30, height: 30)
             .accessibilityHidden(true)
@@ -72,7 +72,7 @@ struct LobbyNoticeCard: View {
         .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Theme.surface))
         .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
             .strokeBorder(notice.warning ? Theme.danger.opacity(0.45) : Theme.border, lineWidth: 1))
-        .shadow(color: .black.opacity(0.35), radius: 18, y: 8)
+        .shadow(color: Theme.shadow(0.35), radius: 18, y: 8)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("lobby.notice")
     }

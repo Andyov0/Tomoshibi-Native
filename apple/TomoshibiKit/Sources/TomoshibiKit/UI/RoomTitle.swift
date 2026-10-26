@@ -76,7 +76,7 @@ struct EmptyRoomCard: View {
                                     .transition(.scale.combined(with: .opacity))
                             } else {
                                 Image(systemName: copied ? "checkmark" : linkWorks ? "doc.on.doc" : "link")
-                                    .foregroundStyle(copied ? Theme.tally : Theme.foreground)
+                                    .foregroundStyle(copied ? Theme.tallyInk : Theme.foreground)
                                     .transition(.scale.combined(with: .opacity))
                             }
                         }
@@ -99,7 +99,7 @@ struct EmptyRoomCard: View {
             // with the card's picture rather than as a bare address
             // (LinkShare); copying is still the button beside it.
             if !notHost {
-                Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1, height: 16)
+                Rectangle().fill(Theme.ink.opacity(0.12)).frame(width: 1, height: 16)
                     .transition(.opacity)
                 LinkShareButton(room: model.room, link: shareable) {
                     Image(systemName: "square.and.arrow.up")
@@ -114,7 +114,7 @@ struct EmptyRoomCard: View {
                 .transition(Theme.arrive)
             }
             #endif
-            Rectangle().fill(Color.white.opacity(0.12)).frame(width: 1, height: 16)
+            Rectangle().fill(Theme.ink.opacity(0.12)).frame(width: 1, height: 16)
             Button(action: dismiss) {
                 Image(systemName: "xmark")
                     .font(.system(size: 10.5, weight: .bold))

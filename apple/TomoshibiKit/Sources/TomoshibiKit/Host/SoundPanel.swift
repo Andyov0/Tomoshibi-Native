@@ -78,7 +78,7 @@ private struct PersonSounds: View {
                         .font(.system(size: 10.5, weight: .medium))
                         .foregroundStyle(Theme.muted)
                         .padding(.horizontal, 7).padding(.vertical, 2)
-                        .background(Capsule().fill(Color.white.opacity(0.07)))
+                        .background(Capsule().fill(Theme.ink.opacity(0.07)))
                         .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 }
                 Spacer(minLength: 0)
@@ -130,7 +130,7 @@ private struct SoundRow: View {
                         .font(.system(size: 11.5, weight: .medium))
                         .lineLimit(1)
                 }
-                .foregroundStyle(setting.silenced ? Theme.muted.opacity(0.7) : Theme.muted)
+                .foregroundStyle(setting.silenced ? Theme.faint(0.7) : Theme.muted)
                 .padding(.leading, 2)
             }
             HStack(spacing: 10) {
@@ -144,8 +144,8 @@ private struct SoundRow: View {
                         .foregroundStyle(setting.blocked ? Theme.foreground : Theme.muted)
                         .contentTransition(.symbolEffect(.replace))
                         .frame(width: 28, height: 28)
-                        .background(Circle().fill(setting.blocked ? Color.white.opacity(0.16) : Color.white.opacity(0.06)))
-                        .overlay(Circle().stroke(Color.white.opacity(setting.blocked ? 0.16 : 0.06), lineWidth: 1))
+                        .background(Circle().fill(setting.blocked ? Theme.ink.opacity(0.16) : Theme.ink.opacity(0.06)))
+                        .overlay(Circle().stroke(Theme.ink.opacity(setting.blocked ? 0.16 : 0.06), lineWidth: 1))
                         .contentShape(Circle())
                 }
                 .buttonStyle(.plain)

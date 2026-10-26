@@ -256,7 +256,7 @@ struct ToastModifier: ViewModifier {
                     HStack(spacing: 10) {
                         Image(systemName: app.problemStays ? "exclamationmark.circle.fill" : "info.circle")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(app.problemStays ? Theme.tally : Theme.muted)
+                            .foregroundStyle(app.problemStays ? Theme.tallyInk : Theme.muted)
                         Text(text)
                             .font(.system(size: 13))
                             .foregroundStyle(Theme.foreground)
@@ -298,11 +298,13 @@ extension View {
 /// The camera, live, where somebody has it on; a flat ground otherwise.
 ///
 /// Framed (a corner given), it is a card on a page, the lobby's or the start
-/// sheet's, and with the camera off it is the grey of a camera-off tile in
-/// the call (Theme.surface), which is what the person will look like when
-/// they join: the call's own darkest ground there vanished into the black
-/// page round the iPhone's lobby card. Filling the screen it is the screen's
-/// ground (Backdrop), so the glass card over it stands out of it.
+/// sheet's, and with the camera off it is the surface colour (Theme.surface):
+/// at night the grey of a camera-off tile in the call, which is what the
+/// person will look like when they join (the call's own darkest ground
+/// there vanished into the black page round the iPhone's lobby card), and by
+/// day the white of the day's cards, since the page round it is light.
+/// Filling the screen it is the screen's ground (Backdrop), so the glass card
+/// over it stands out of it.
 struct CameraStage: View {
     @Bindable var app: AppModel
     var cornerRadius: CGFloat = 0
@@ -421,7 +423,7 @@ struct RecentForget: View {
                 .font(.system(size: size * 0.36, weight: .bold))
                 .foregroundStyle(Theme.muted)
                 .frame(width: size, height: size)
-                .background(Circle().fill(Color.white.opacity(0.07)))
+                .background(Circle().fill(Theme.ink.opacity(0.07)))
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
@@ -491,6 +493,17 @@ struct SignInView: View {
     /// taken out of the corner and the foot while they do.
     @State private var inColumn = false
     #if os(iOS)
+    @Environment(\.colorScheme) private var scheme
+
+    /// The paste control's colour. The system writes its words in white
+    /// whatever colour it is given, which at night on the raised grey is a
+    /// quiet control; on the day's raised grey the white could not be read
+    /// (1.2 to 1), so by day it is a deeper grey, which the white reads on at
+    /// 6 to 1.
+    private var pasteTint: Color {
+        scheme == .dark ? Theme.surfaceHigh : Color(red: 99 / 255, green: 99 / 255, blue: 102 / 255)
+    }
+
     /// A phone on its side, and the Duo's outer display on its side or as a
     /// tent: the heading, the card and the paste control stacked were taller
     /// than the screen, and the paste control at its foot sat over the
@@ -530,7 +543,7 @@ struct SignInView: View {
                     layout {
                         VStack(spacing: 12) {
                             Mark(size: 76)
-                                .shadow(color: .black.opacity(0.45), radius: 18, y: 8)
+                                .shadow(color: Theme.shadow(0.45), radius: 18, y: 8)
                             Text(t("Sign in")).font(.system(size: 28, weight: .bold))
                             Text(t("Meetings here are started by the people who belong here. If somebody sent you a link, open that instead."))
                                 .font(.system(size: 14)).foregroundStyle(Theme.muted)
@@ -566,8 +579,8 @@ struct SignInView: View {
                                         .onSubmit(openLink)
                                 }
                                 .padding(.horizontal, 14).frame(height: 38)
-                                .background(Capsule().fill(Color.black.opacity(0.22)))
-                                .overlay(Capsule().stroke(Color.white.opacity(0.12)))
+                                .background(Capsule().fill(Theme.sunk(0.22)))
+                                .overlay(Capsule().stroke(Theme.ink.opacity(0.12)))
                                 Button(t("Join"), action: openLink)
                                     .buttonStyle(.glassCapsule(38))
                                     .fixedSize()
@@ -642,7 +655,7 @@ struct SignInView: View {
                 Task { await app.open(url) }
             }
             .buttonBorderShape(.capsule)
-            .tint(Theme.surfaceHigh)
+            .tint(pasteTint)
         }
     }
 
@@ -658,7 +671,7 @@ struct SignInView: View {
         .labelStyle(.iconOnly)
         .buttonBorderShape(.circle)
         .controlSize(.large)
-        .tint(Theme.surfaceHigh)
+        .tint(pasteTint)
     }
     #endif
 
@@ -669,7 +682,7 @@ struct SignInView: View {
                 TextField("", text: $name, prompt: Text(t("Name")).foregroundStyle(Theme.muted))
                     .textContentType(.username)
             }
-            Rectangle().fill(Color.white.opacity(0.07)).frame(height: 1)
+            Rectangle().fill(Theme.ink.opacity(0.07)).frame(height: 1)
             row(symbol: "key", lit: !passphrase.isEmpty) {
                 HStack {
                     Group {
@@ -693,14 +706,14 @@ struct SignInView: View {
                 .animation(Theme.settle, value: passphrase.isEmpty)
             }
         }
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.22)))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.10)))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.sunk(0.22)))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.ink.opacity(0.10)))
     }
 
     private func row<Field: View>(symbol: String, lit: Bool, @ViewBuilder field: () -> Field) -> some View {
         HStack(spacing: 12) {
             Image(systemName: symbol).font(.system(size: 15))
-                .foregroundStyle(lit ? Theme.tally : Theme.muted)
+                .foregroundStyle(lit ? Theme.tallyInk : Theme.muted)
                 .frame(width: 18)
             field()
                 .textFieldStyle(.plain)
@@ -931,7 +944,7 @@ extension LobbySidebar {
         Label {
             Text(title)
         } icon: {
-            Image(systemName: symbol).foregroundStyle(Theme.tally)
+            Image(systemName: symbol).foregroundStyle(Theme.tallyInk)
         }
     }
 }
@@ -1000,9 +1013,9 @@ private struct HomeStage: View {
                 .backgroundExtended()
             VStack(alignment: .leading, spacing: 6) {
                 Text(t("Hello, {name}", ["name": account.name])).font(.system(size: 34, weight: .bold))
-                Text(t("Start one from the sidebar when you are ready.")).font(.system(size: 15)).foregroundStyle(Color.white.opacity(0.78))
+                Text(t("Start one from the sidebar when you are ready.")).font(.system(size: 15)).foregroundStyle(Theme.ink.opacity(0.78))
             }
-            .shadow(color: .black.opacity(0.45), radius: 16, y: 2)
+            .shadow(color: Theme.shadow(0.45), radius: 16, y: 2)
             .padding(.leading, 36).padding(.top, 56)
             .frame(maxWidth: .infinity, alignment: .leading)
             // On the page beside the sidebar's of a Duo held as a book: the
@@ -1160,7 +1173,7 @@ struct PhoneLobby: View {
             // The page is content; the join bar below floats over it as a
             // toolbar does, and stays glass.
             .contentLayer()
-            .background(Color.black.ignoresSafeArea())
+            .background(Theme.page.ignoresSafeArea())
             .navigationTitle("Tomoshibi")
             .toolbar {
                 AccountItem(name: account.name, address: app.avatarAddress) { state.settings = true }
@@ -1234,7 +1247,7 @@ struct PhoneLobby: View {
                 HStack {
                     Text(t("Upcoming")).font(.system(size: 20, weight: .bold))
                     Spacer()
-                    Button(t("All of them")) { state.place = .scheduled }.foregroundStyle(Theme.tally)
+                    Button(t("All of them")) { state.place = .scheduled }.foregroundStyle(Theme.tallyInk)
                 }
                 .padding(.horizontal, 6)
                 VStack(spacing: 0) {
@@ -1310,7 +1323,7 @@ struct PhoneLobby: View {
                 HStack(spacing: 12) {
                     Image(systemName: "server.rack").font(.system(size: 16)).foregroundStyle(Theme.muted)
                         .frame(width: 36, height: 36)
-                        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.white.opacity(0.08)))
+                        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Theme.ink.opacity(0.08)))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(t("Server")).font(.system(size: 16, weight: .semibold))
                         FleetLine(app: app)
@@ -1361,6 +1374,9 @@ struct PhoneLobby: View {
                 .transition(Theme.arrive)
             }
         }
+        // The card is a surface of its own, for the buttons on it to be
+        // told apart from it by day (Theme.lifted).
+        .lifted()
     }
 
     /// Joining by the name you were given, from the foot of the screen where a
@@ -1614,20 +1630,20 @@ struct MeetingSheet: View {
                         ServerMenu(app: app, compact: true, id: "sheet.server")
                     }
                     .padding(.horizontal, 14).frame(minHeight: 48)
-                    Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
+                    Rectangle().fill(Theme.ink.opacity(0.06)).frame(height: 1)
                 }
                 SealControl(on: $sealing, word: $app.sealingWord)
                     .padding(.horizontal, 14).padding(.vertical, 12)
             }
-            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.22)))
-            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.08)))
+            .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.sunk(0.22)))
+            .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.ink.opacity(0.08)))
         }
     }
 
     private var footer: some View {
         VStack(spacing: 10) {
             if let problem = app.problem {
-                Text(problem).font(.system(size: 12.5)).foregroundStyle(Theme.danger)
+                Text(problem).font(.system(size: 12.5)).foregroundStyle(Theme.dangerInk)
                     .multilineTextAlignment(.center).transition(Theme.arrive)
             }
             HStack(spacing: 10) {
@@ -1756,7 +1772,7 @@ struct ScopedRoomField: View {
             if strange {
                 Text(t("You are not in {scope}, so this room will not let you in.", ["scope": typedScope]))
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.danger)
+                    .foregroundStyle(Theme.dangerInk)
                     .padding(.horizontal, 6)
                     .fixedSize(horizontal: false, vertical: true)
                     .transition(Theme.arrive)
@@ -1836,7 +1852,7 @@ struct ScopedRoomField: View {
                     .font(.system(size: 13.5, design: .monospaced))
                     .padding(.horizontal, 10).frame(minHeight: 32)
                     .background(RoundedRectangle(cornerRadius: 9, style: .continuous)
-                        .fill(Color.white.opacity(index == chosen ? 0.10 : 0)))
+                        .fill(Theme.ink.opacity(index == chosen ? 0.10 : 0)))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -1844,7 +1860,7 @@ struct ScopedRoomField: View {
             }
         }
         .padding(5)
-        .glassPane(cornerRadius: 14)
+        .floatingPane(cornerRadius: 14)
         .accessibilityLabel(t("Your scopes"))
     }
 
@@ -1870,8 +1886,8 @@ private struct FieldGround: ViewModifier {
             content.glassSurface(Capsule())
         } else {
             content
-                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.black.opacity(0.24)))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.10)))
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.sunk(0.24)))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Theme.ink.opacity(0.10)))
         }
     }
 }
@@ -1944,10 +1960,10 @@ struct ServerMenu: View {
 }
 
 /// ServerPicker.tsx `Latency`: green to 150 ms, the signal colour to 400,
-/// red beyond.
+/// red beyond. Written as words, so in the colours' inks (Theme.tallyInk).
 @MainActor
 func latencyColour(_ ms: Double) -> Color {
-    ms <= 150 ? Theme.good : ms <= 400 ? Theme.tally : Theme.danger
+    ms <= 150 ? Theme.goodInk : ms <= 400 ? Theme.tallyInk : Theme.dangerInk
 }
 
 /// One arranged meeting as a row.
@@ -1959,9 +1975,9 @@ struct MeetingRow: View {
         HStack(spacing: 12) {
             Image(systemName: one.started ? "video.fill" : "calendar")
                 .font(.system(size: 15))
-                .foregroundStyle(one.started ? Theme.tally : Theme.muted)
+                .foregroundStyle(one.started ? Theme.tallyInk : Theme.muted)
                 .frame(width: 34, height: 34)
-                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(one.started ? Theme.tally.opacity(0.18) : Color.white.opacity(0.08)))
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(one.started ? Theme.tally.opacity(0.18) : Theme.ink.opacity(0.08)))
             VStack(alignment: .leading, spacing: 2) {
                 Text(one.room).font(.system(size: 14, weight: .semibold)).lineLimit(1)
                 Text(when).font(.system(size: 12)).foregroundStyle(Theme.muted).lineLimit(1)
@@ -2052,7 +2068,7 @@ struct ScheduleView: View {
     // yet." floating at the top of an empty column on a Mac), and nothing on
     // it moved: a meeting arranged or called off appeared and vanished, as
     // did the summary's warnings (the owner, 2026-10-17). Now it is drawn as
-    // the start and join sheet is, on the room's evening ground with a close
+    // the start and join sheet is, on the room's ground with a close
     // of its own on a phone; the time sits at the end of its row and the
     // summary has the card's width above a button that has it too; the list
     // is a card at the height of the form's, empty or not; and what comes and
@@ -2156,7 +2172,7 @@ struct ScheduleView: View {
                 // sixty dimmed (Schedule.tsx offers no further ahead).
                 MonthCalendar(day: $draft.day, earliest: Date(), latest: Date().addingTimeInterval(Self.ahead))
                     .padding(12)
-                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.black.opacity(0.18)))
+                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.sunk(0.18)))
                 HStack(spacing: 8) {
                     rowLabel(t("Time"), "clock")
                     Spacer(minLength: 8)
@@ -2169,7 +2185,7 @@ struct ScheduleView: View {
                         ServerMenu(app: app, compact: true, id: "schedule.server")
                     }
                 }
-                Divider().overlay(Color.white.opacity(0.06))
+                Divider().overlay(Theme.ink.opacity(0.06))
                 HStack(alignment: .firstTextBaseline, spacing: 7) {
                     Image(systemName: problem ? "exclamationmark.circle" : "calendar.badge.clock")
                         .font(.system(size: 12, weight: .semibold))
@@ -2178,7 +2194,7 @@ struct ScheduleView: View {
                         .fixedSize(horizontal: false, vertical: true)
                         .contentTransition(.opacity)
                 }
-                .foregroundStyle(problem ? Theme.danger : Theme.muted)
+                .foregroundStyle(problem ? Theme.dangerInk : Theme.muted)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .animation(Theme.settle, value: verdict)
                 Button(action: plan) {
@@ -2254,7 +2270,7 @@ struct ScheduleView: View {
                     ForEach(app.lobby.arrangements, id: \.id) { one in
                         VStack(spacing: 0) {
                             row(one)
-                            if one.id != app.lobby.arrangements.last?.id { Divider().overlay(Color.white.opacity(0.06)) }
+                            if one.id != app.lobby.arrangements.last?.id { Divider().overlay(Theme.ink.opacity(0.06)) }
                         }
                         .transition(.asymmetric(
                             insertion: .move(edge: .top).combined(with: .opacity).animation(Theme.settle),
@@ -2283,7 +2299,7 @@ struct ScheduleView: View {
                 row(one, cancel: false)
                     .frame(height: Self.meetingRow)
                     .overlay(alignment: .bottom) {
-                        if one.id != shown.last?.id { Divider().overlay(Color.white.opacity(0.06)).padding(.leading, 60) }
+                        if one.id != shown.last?.id { Divider().overlay(Theme.ink.opacity(0.06)).padding(.leading, 60) }
                     }
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
@@ -2377,7 +2393,7 @@ struct ScheduleView: View {
         #else
         Button(action: action) {
             Image(systemName: symbol).font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(destructive ? Theme.danger : Theme.foreground)
+                .foregroundStyle(destructive ? Theme.dangerInk : Theme.foreground)
         }
         .buttonStyle(.glassCircle(32))
         .accessibilityLabel(label)
@@ -2390,10 +2406,10 @@ struct ScheduleView: View {
     /// layer are drawn: a light fill and a hairline.
     static func rowCircle(_ symbol: String, destructive: Bool = false) -> some View {
         Image(systemName: symbol).font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(destructive ? Theme.danger : Theme.foreground)
+            .foregroundStyle(destructive ? Theme.dangerInk : Theme.foreground)
             .frame(width: 32, height: 32)
-            .background(Circle().fill(Color.white.opacity(0.07)))
-            .overlay(Circle().stroke(Color.white.opacity(0.09), lineWidth: 1))
+            .background(Circle().fill(Theme.lifted(0.07, nested: true)))
+            .overlay(Circle().stroke(Theme.ink.opacity(0.09), lineWidth: 1))
             .contentShape(Circle())
     }
     #endif
@@ -2539,10 +2555,10 @@ struct ServersView: View {
                         } else if let value = ms ?? nil {
                             Text("\(Int(value.rounded())) ms").monospacedDigit().font(.system(size: 13)).foregroundStyle(latencyColour(value))
                         } else if !off {
-                            Text(t("Timeout")).font(.system(size: 12)).foregroundStyle(Theme.danger)
+                            Text(t("Timeout")).font(.system(size: 12)).foregroundStyle(Theme.dangerInk)
                         }
                     }
-                    Image(systemName: "checkmark.circle.fill").font(.system(size: 15)).foregroundStyle(Theme.tally)
+                    Image(systemName: "checkmark.circle.fill").font(.system(size: 15)).foregroundStyle(Theme.tallyInk)
                         .opacity(chosen ? 1 : 0).scaleEffect(chosen ? 1 : 0.6)
                 }
             }

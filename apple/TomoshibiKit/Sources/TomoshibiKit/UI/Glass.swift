@@ -71,17 +71,56 @@ extension EnvironmentValues {
         get { self[ContentLayerKey.self] }
         set { self[ContentLayerKey.self] = newValue }
     }
+
+    /// Whether what is drawn here already stands on a surface lifted off the
+    /// page: glass, a plain surface, a card. The night lifts a surface by
+    /// whitening it a little more each time, which shows at any depth; the
+    /// day lifts it to white, and white on a white card is no surface at
+    /// all, so a surface on a surface is a faint grey by day (Theme.lifted).
+    @Entry var onLifted = false
+}
+
+extension View {
+    /// What is drawn inside stands on a lifted surface (`onLifted`).
+    func lifted() -> some View {
+        environment(\.onLifted, true)
+    }
 }
 
 /// A content-layer surface: what `glassSurface` draws inside `contentLayer()`.
 private struct PlainSurface<S: Shape>: ViewModifier {
     let shape: S
     let tint: Color?
+    @Environment(\.onLifted) private var nested
 
     func body(content: Content) -> some View {
         content
-            .background(shape.fill(tint ?? Color.white.opacity(0.07)))
-            .overlay(shape.stroke(Color.white.opacity(tint == nil ? 0.09 : 0), lineWidth: 1))
+            .lifted()
+            .background(shape.fill(tint ?? Theme.lifted(0.07, nested: nested)))
+            .overlay(shape.stroke(Theme.ink.opacity(tint == nil ? 0.09 : 0), lineWidth: 1))
+    }
+}
+
+/// `floatingPane`, deciding by the layer it is drawn in.
+private struct FloatingSurface<S: Shape>: ViewModifier {
+    let shape: S
+    @Environment(\.inContentLayer) private var inContent
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        if inContent && !GlassSupport.everywhere {
+            let surface = content
+                .lifted()
+                .background(shape.fill(Theme.adaptive(dark: Theme.Shade(1, 1, 1, 0.07), light: Theme.Shade(1, 1, 1))))
+                .overlay(shape.stroke(Theme.ink.opacity(0.09), lineWidth: 1))
+            if scheme == .dark {
+                surface
+            } else {
+                surface.shadow(color: Theme.shadow(0.2), radius: 12, y: 4)
+            }
+        } else {
+            content.liquidGlass(shape, tint: nil, interactive: false)
+        }
     }
 }
 
@@ -137,20 +176,26 @@ extension View {
             // the glass says something it is filled with the colour, and the
             // glass gives it its edge and its light.
             if let tint {
-                background(shape.fill(tint))
+                lifted()
+                    .background(shape.fill(tint))
                     .glassEffect(Glass.regular.tint(tint).interactive(interactive), in: shape)
             } else {
-                glassEffect(Glass.regular.interactive(interactive), in: shape)
+                lifted()
+                    .glassEffect(Glass.regular.interactive(interactive), in: shape)
             }
         } else {
-            background {
-                ZStack {
-                    shape.fill(.ultraThinMaterial)
-                    if let tint { shape.fill(tint) }
+            lifted()
+                .background {
+                    ZStack {
+                        shape.fill(.ultraThinMaterial)
+                        if let tint { shape.fill(tint) }
+                    }
                 }
-            }
-            .overlay(shape.stroke(Color.white.opacity(tint == nil ? 0.16 : 0.28), lineWidth: 1))
-            .shadow(color: .black.opacity(0.28), radius: 14, y: 6)
+                // The material's light edge at night; by day, where the
+                // material is itself near white, a faint dark one, and white
+                // on a coloured one either way.
+                .overlay(shape.stroke(tint == nil ? Self.fallbackEdge : Color.white.opacity(0.28), lineWidth: 1))
+                .shadow(color: Theme.shadow(0.28), radius: 14, y: 6)
         }
     }
 
@@ -170,9 +215,23 @@ extension View {
         modifier(GlassBacking(shape: shape))
     }
 
+    /// The stand-in glass's edge where it says nothing (`liquidGlassDrawn`).
+    fileprivate static var fallbackEdge: Color {
+        Theme.adaptive(dark: Theme.Shade(1, 1, 1, 0.16), light: Theme.Shade(0, 0, 0, 0.08))
+    }
+
     /// A larger pane of glass: a sidebar, a sheet, a panel beside a call.
     func glassPane(cornerRadius: CGFloat = 22) -> some View {
         glassSurface(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+
+    /// A pane that floats over what is beside it, a list dropped from a
+    /// field: glass where glass is drawn, and in the content layer a plain
+    /// surface that by day is white, edged and softly shadowed, as anything
+    /// floating is by day. A plain surface by day is a faint grey on the
+    /// surface it stands on, which a list over that surface is not.
+    func floatingPane(cornerRadius: CGFloat = 14) -> some View {
+        modifier(FloatingSurface(shape: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)))
     }
 
     /// A panel, sheet or menu floating over the content: glass itself, and
@@ -224,7 +283,7 @@ private struct GlassBacking<S: Shape>: ViewModifier {
         if inContent && !GlassSupport.everywhere {
             content.modifier(PlainSurface(shape: shape, tint: nil))
         } else if #available(macOS 26.0, iOS 26.0, *), !GlassSupport.forcedFallback {
-            content.background { Color.clear.glassEffect(Glass.regular, in: shape) }
+            content.lifted().background { Color.clear.glassEffect(Glass.regular, in: shape) }
         } else {
             content.liquidGlass(shape, tint: nil, interactive: false)
         }
@@ -260,6 +319,7 @@ struct GlassButtonStyle: ButtonStyle {
     var destructive = false
     @Environment(\.isEnabled) private var enabled
     @Environment(\.inContentLayer) private var inContent
+    @Environment(\.colorScheme) private var scheme
 
     func makeBody(configuration: Configuration) -> some View {
         let tint: Color? = destructive ? Theme.danger : prominent ? Theme.tally : nil
@@ -283,9 +343,10 @@ struct GlassButtonStyle: ButtonStyle {
         .foregroundStyle(ink)
         .font(.system(size: 13.5, weight: .semibold))
         // Glass answers a press itself; a plain surface (no glass, or the
-        // content layer) is pressed down a little instead.
+        // content layer) is pressed down a little instead, and lit a little
+        // by night or shaded a little by day: brighter than white is white.
         .scaleEffect(configuration.isPressed && (!GlassSupport.available || inContent) ? 0.96 : 1)
-        .brightness(configuration.isPressed && inContent ? 0.06 : 0)
+        .brightness(configuration.isPressed && inContent ? (scheme == .dark ? 0.06 : -0.04) : 0)
         .opacity(enabled ? 1 : 0.45)
         .animation(Theme.settle, value: configuration.isPressed)
         .animation(Theme.settle, value: enabled)
@@ -308,11 +369,12 @@ extension ButtonStyle where Self == GlassButtonStyle {
 /// It was an evening room, a dark blue wash with three coloured glows in it,
 /// on the argument that glass needs something under it to be glass. The
 /// owner found the gradients cheap (2026-10-20) and asked for fewer of them;
-/// the glow behind the sign-in card and the lobby was the largest. The
-/// darkest colour of the palette is what the call itself stands on, so the
-/// screens before it and the call now read as one place, and the panes over
-/// it are told apart by their own fill and edge rather than by what they
-/// blur. Android's Backdrop (ui/kit/Glass.kt) is the same colour.
+/// the glow behind the sign-in card and the lobby was the largest. At night
+/// the darkest colour of the palette is what the call itself stands on, so
+/// the screens before it and the call read as one place; by day it is the
+/// day's grey, which the call does not take (Theme.meeting). Either way the
+/// panes over it are told apart by their own fill and edge rather than by
+/// what they blur. Android's Backdrop (ui/kit/Glass.kt) is the same colour.
 struct Backdrop: View {
     var body: some View {
         Theme.background

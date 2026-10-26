@@ -173,7 +173,7 @@ struct MenuHeading: View {
 
 struct MenuRule: View {
     var body: some View {
-        Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1)
+        Rectangle().fill(Theme.ink.opacity(0.08)).frame(height: 1)
             .padding(.horizontal, 8).padding(.vertical, 4)
     }
 }
@@ -200,12 +200,12 @@ struct MenuItem: View {
                     Image(systemName: symbol)
                         .font(.system(size: 13, weight: .medium))
                         .frame(width: 18)
-                        .foregroundStyle(role == .destructive ? Theme.danger : role == .prominent ? Theme.tally : Theme.foreground.opacity(0.85))
+                        .foregroundStyle(role == .destructive ? Theme.dangerInk : role == .prominent ? Theme.tallyInk : Theme.foreground.opacity(0.85))
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title)
                         .font(.system(size: 13.5, weight: role == .normal ? .regular : .semibold))
-                        .foregroundStyle(role == .destructive ? Theme.danger : Theme.foreground)
+                        .foregroundStyle(role == .destructive ? Theme.dangerInk : Theme.foreground)
                     if let detail {
                         Text(detail).font(.system(size: 11.5)).foregroundStyle(Theme.muted)
                             .fixedSize(horizontal: false, vertical: true)
@@ -217,7 +217,7 @@ struct MenuItem: View {
                 } else if checked {
                     Image(systemName: "checkmark")
                         .font(.system(size: 11.5, weight: .bold))
-                        .foregroundStyle(Theme.tally)
+                        .foregroundStyle(Theme.tallyInk)
                         .transition(.scale.combined(with: .opacity))
                 }
             }
@@ -225,7 +225,7 @@ struct MenuItem: View {
             .padding(.vertical, detail == nil ? 7 : 6)
             .frame(minHeight: 34)
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.white.opacity(hovering && enabled ? 0.09 : 0)))
+                .fill(Theme.ink.opacity(hovering && enabled ? 0.09 : 0)))
             .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         }
         .buttonStyle(.plain)
@@ -277,8 +277,8 @@ struct GlassSwitchStyle: ToggleStyle {
                 configuration.label
                 ZStack(alignment: configuration.isOn ? .trailing : .leading) {
                     Capsule()
-                        .fill(configuration.isOn ? Theme.tally : Color.white.opacity(0.14))
-                        .overlay(Capsule().stroke(Color.white.opacity(configuration.isOn ? 0 : 0.1)))
+                        .fill(configuration.isOn ? Theme.tally : Theme.ink.opacity(0.14))
+                        .overlay(Capsule().stroke(Theme.ink.opacity(configuration.isOn ? 0 : 0.1)))
                     Circle()
                         .fill(Color.white)
                         .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
@@ -322,8 +322,10 @@ struct SegmentedChoice<Value: Hashable>: View {
                         .frame(maxWidth: .infinity, minHeight: height - 4)
                         .background {
                             if chosen {
-                                Capsule().fill(Color.white.opacity(0.16))
-                                    .overlay(Capsule().stroke(Color.white.opacity(0.10)))
+                                // By day the chosen one is white on the
+                                // track's grey, as the system's own are.
+                                Capsule().fill(Theme.lifted(0.16))
+                                    .overlay(Capsule().stroke(Theme.ink.opacity(0.10)))
                                     .matchedGeometryEffect(id: "pill", in: pill)
                             }
                         }
@@ -334,8 +336,8 @@ struct SegmentedChoice<Value: Hashable>: View {
             }
         }
         .padding(2)
-        .background(Capsule().fill(Color.black.opacity(0.22)))
-        .overlay(Capsule().stroke(Color.white.opacity(0.07)))
+        .background(Capsule().fill(Theme.sunk(0.22)))
+        .overlay(Capsule().stroke(Theme.ink.opacity(0.07)))
     }
 }
 
@@ -346,6 +348,7 @@ struct SettingsSection<Content: View>: View {
     let title: String
     var footer: String?
     @ViewBuilder var content: Content
+    @Environment(\.onLifted) private var nested
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -354,8 +357,9 @@ struct SettingsSection<Content: View>: View {
                 .foregroundStyle(Theme.muted)
                 .padding(.leading, 6)
             VStack(spacing: 0) { content }
-                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.05)))
-                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.07)))
+                .lifted()
+                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.lifted(0.05, nested: nested)))
+                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Theme.ink.opacity(0.07)))
             if let footer {
                 Text(footer).font(.system(size: 11.5)).foregroundStyle(Theme.muted)
                     .padding(.horizontal, 6)
@@ -381,7 +385,7 @@ struct SettingsRow<Control: View>: View {
                         .font(.system(size: 12.5, weight: .semibold))
                         .foregroundStyle(Theme.foreground)
                         .frame(width: 26, height: 26)
-                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.10)))
+                        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.ink.opacity(0.10)))
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title).font(.system(size: 13.5))
@@ -397,7 +401,7 @@ struct SettingsRow<Control: View>: View {
             .padding(.vertical, 9)
             .frame(minHeight: 48)
             if !last {
-                Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
+                Rectangle().fill(Theme.ink.opacity(0.06)).frame(height: 1)
                     .padding(.leading, symbol == nil ? 14 : 52)
             }
         }
@@ -417,7 +421,7 @@ struct LevelMeter: View {
             ForEach(0..<segments, id: \.self) { index in
                 let lit = Double(index) / Double(segments) < level
                 Capsule()
-                    .fill(lit ? Theme.tally : Color.white.opacity(0.12))
+                    .fill(lit ? Theme.tally : Theme.ink.opacity(0.12))
                     .frame(width: 4, height: 14)
             }
         }

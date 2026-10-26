@@ -265,7 +265,6 @@ public struct SettingsView: View {
         content
             .floatingPopoverLayer(popovers)
             .signOutPrompt(app, at: .settings)
-            .preferredColorScheme(.dark)
             .tint(Theme.tally)
             .environment(\.locale, localization.language.locale)
             .onChange(of: section) { popovers.close() }
@@ -417,7 +416,7 @@ public struct SettingsView: View {
                 }
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.05)))
+                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.ink.opacity(0.05)))
                 .transition(Theme.arrive)
             }
         }
@@ -444,8 +443,8 @@ public struct SettingsView: View {
             .background {
                 if chosen {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.white.opacity(0.11))
-                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.white.opacity(0.07)))
+                        .fill(Theme.ink.opacity(0.11))
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.ink.opacity(0.07)))
                         .matchedGeometryEffect(id: "chosen", in: highlight)
                 }
             }
@@ -499,8 +498,8 @@ public struct SettingsView: View {
                             .background {
                                 if chosen {
                                     RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                        .fill(Color.white.opacity(0.11))
-                                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Color.white.opacity(0.07)))
+                                        .fill(Theme.ink.opacity(0.11))
+                                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.ink.opacity(0.07)))
                                         .matchedGeometryEffect(id: "chosen", in: highlight)
                                 }
                             }
@@ -522,7 +521,7 @@ public struct SettingsView: View {
                 }
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.05)))
+                .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.ink.opacity(0.05)))
                 .transition(Theme.arrive)
             }
         }
@@ -594,7 +593,7 @@ public struct SettingsView: View {
                         }
                         .buttonStyle(.plain)
                         if one != rows.last {
-                            Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1).padding(.leading, 59)
+                            Rectangle().fill(Theme.ink.opacity(0.06)).frame(height: 1).padding(.leading, 59)
                         }
                     }
                 }
@@ -720,7 +719,7 @@ private struct AdaptiveRow<Control: View>: View {
                     .padding(.trailing, 14)
                     .padding(.bottom, 12)
                 if !last {
-                    Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1).padding(.leading, symbol == nil ? 14 : 52)
+                    Rectangle().fill(Theme.ink.opacity(0.06)).frame(height: 1).padding(.leading, symbol == nil ? 14 : 52)
                 }
             }
         }
@@ -788,7 +787,7 @@ private struct LanguageTiles: View {
             HStack(spacing: 10) {
                 if let symbol {
                     Image(systemName: symbol).font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(chosen ? Theme.tally : Theme.muted)
+                        .foregroundStyle(chosen ? Theme.tallyInk : Theme.muted)
                 }
                 VStack(alignment: .leading, spacing: 1) {
                     Text(title).font(.system(size: 14, weight: chosen ? .semibold : .regular)).foregroundStyle(Theme.foreground)
@@ -798,16 +797,16 @@ private struct LanguageTiles: View {
                 Spacer(minLength: 4)
                 Image(systemName: "checkmark.circle.fill")
                     .font(.system(size: 15))
-                    .foregroundStyle(Theme.tally)
+                    .foregroundStyle(Theme.tallyInk)
                     .opacity(chosen ? 1 : 0)
                     .scaleEffect(chosen ? 1 : 0.6)
             }
             .padding(.horizontal, 12)
             .frame(minHeight: 50)
             .background(RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .fill(chosen ? Theme.tally.opacity(0.13) : Color.white.opacity(0.05)))
+                .fill(chosen ? Theme.tally.opacity(0.13) : Theme.ink.opacity(0.05)))
             .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous)
-                .stroke(chosen ? Theme.tally.opacity(0.55) : Color.white.opacity(0.07), lineWidth: chosen ? 1.5 : 1))
+                .stroke(chosen ? Theme.tally.opacity(0.55) : Theme.ink.opacity(0.07), lineWidth: chosen ? 1.5 : 1))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -894,7 +893,7 @@ private struct AccentPreview: View {
             }
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.black.opacity(0.22)))
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.sunk(0.22)))
         .accessibilityHidden(true)
         .animation(Theme.settle, value: Appearance.shared.accent)
     }
@@ -903,7 +902,7 @@ private struct AccentPreview: View {
     private var name: some View {
         Text(Appearance.shared.accent.name)
             .font(.system(size: 17, weight: .semibold))
-            .foregroundStyle(Theme.tally)
+            .foregroundStyle(Theme.tallyInk)
             .lineLimit(1)
             .fixedSize()
             .contentTransition(.opacity)
@@ -919,7 +918,7 @@ private struct AccentPreview: View {
                 Initial(name: "Mika", size: 30)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 HStack(spacing: 4) {
-                    Image(systemName: "waveform").font(.system(size: 8, weight: .bold)).foregroundStyle(Theme.tally)
+                    Image(systemName: "waveform").font(.system(size: 8, weight: .bold)).foregroundStyle(Theme.tallyInk)
                     Text(verbatim: "Mika").font(.system(size: 9, weight: .semibold))
                 }
                 .padding(.horizontal, 6).padding(.vertical, 3)
@@ -928,6 +927,8 @@ private struct AccentPreview: View {
             }
             .frame(width: 104, height: 66)
             .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(Theme.tally, lineWidth: 2))
+            // The tile as it is in a call, which is dark in either appearance.
+            .meetingAppearance()
             VStack(alignment: .leading, spacing: 10) {
                 HStack(spacing: 10) {
                     Text(t("Join"))
@@ -943,7 +944,7 @@ private struct AccentPreview: View {
                         .overlay(alignment: .topTrailing) {
                             Circle().fill(Theme.tally).frame(width: 7, height: 7).offset(x: 3, y: -2)
                         }
-                    Image(systemName: "hand.raised.fill").font(.system(size: 14)).foregroundStyle(Theme.tally)
+                    Image(systemName: "hand.raised.fill").font(.system(size: 14)).foregroundStyle(Theme.tallyInk)
                 }
             }
         }
@@ -961,7 +962,7 @@ private struct BadgePreview: View {
             HStack(spacing: 6) {
                 ForEach(0..<3) { index in
                     RoundedRectangle(cornerRadius: 7, style: .continuous)
-                        .fill(Color.white.opacity(index == 1 ? 0.13 : 0.08))
+                        .fill(Theme.ink.opacity(index == 1 ? 0.13 : 0.08))
                 }
             }
             .padding(.horizontal, 14).padding(.top, 46).padding(.bottom, 14)
@@ -978,7 +979,10 @@ private struct BadgePreview: View {
         }
         .frame(height: 132)
         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.white.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Theme.ink.opacity(0.08)))
+        // A picture of a call, drawn as the call is: dark in either
+        // appearance, since that is how the badge will be seen.
+        .meetingAppearance()
         .animation(Theme.settle, value: mode)
         .allowsHitTesting(false)
     }
@@ -1011,9 +1015,9 @@ private struct PlacementCards: View {
                     .padding(8)
                     .frame(maxHeight: .infinity, alignment: .top)
                     .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(chosen ? Theme.tally.opacity(0.12) : Color.white.opacity(0.04)))
+                        .fill(chosen ? Theme.tally.opacity(0.12) : Theme.ink.opacity(0.04)))
                     .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .stroke(chosen ? Theme.tally.opacity(0.6) : Color.white.opacity(0.07), lineWidth: chosen ? 1.5 : 1))
+                        .stroke(chosen ? Theme.tally.opacity(0.6) : Theme.ink.opacity(0.07), lineWidth: chosen ? 1.5 : 1))
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -1034,7 +1038,7 @@ private struct PlacementCards: View {
                 let size = geometry.size
                 let side = placement == .side
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.black.opacity(0.35))
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.sunk(0.35))
                     // Four pictures, narrower where the controls take a strip of width.
                     let width = size.width - (side ? 26 : 12)
                     let height = size.height - (side ? 12 : 24)
@@ -1050,12 +1054,12 @@ private struct PlacementCards: View {
         }
 
         private var tile: some View {
-            RoundedRectangle(cornerRadius: 3, style: .continuous).fill(Color.white.opacity(0.13))
+            RoundedRectangle(cornerRadius: 3, style: .continuous).fill(Theme.ink.opacity(0.13))
         }
 
         @ViewBuilder
         private func bar(size: CGSize) -> some View {
-            let colour = lit ? Theme.tally : Color.white.opacity(0.55)
+            let colour = lit ? Theme.tally : Theme.ink.opacity(0.55)
             switch placement {
             case .always:
                 Capsule().fill(colour).frame(width: size.width * 0.42, height: 7)
@@ -1239,7 +1243,8 @@ private struct MediaSettings: View {
     /// this is where they are chosen ahead of any call.
     private var preview: some View {
         ZStack {
-            // A camera-off tile's grey, as CameraStage's framed preview is.
+            // The surface colour, as CameraStage's framed preview is: a
+            // camera-off tile's grey at night, the day's card white by day.
             Theme.surface
             if check.cameraRunning {
                 SelfView(session: check.session)
@@ -1254,12 +1259,12 @@ private struct MediaSettings: View {
         .aspectRatio(16 / 9, contentMode: .fit)
         .frame(maxWidth: .infinity)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color.white.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Theme.ink.opacity(0.08)))
         .overlay(alignment: .bottomLeading) {
             HStack(spacing: 9) {
                 Image(systemName: check.microphoneRefused ? "mic.slash.fill" : "mic.fill")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(check.level > 0.08 ? Theme.tally : Theme.foreground)
+                    .foregroundStyle(check.level > 0.08 ? Theme.tallyInk : Theme.foreground)
                 Text(t("Hearing you")).font(.system(size: 12, weight: .medium))
                 LevelMeter(level: check.level, segments: 12)
             }
@@ -1503,12 +1508,15 @@ private struct WatchPreview: View {
         .aspectRatio(2.6, contentMode: .fit)
         .frame(maxWidth: .infinity)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.ink.opacity(0.08)))
         .overlay(alignment: .bottomTrailing) {
             Chip(title: watchLabel(quality), symbol: "sparkles.tv", lit: quality != "auto")
                 .padding(12)
                 .contentTransition(.opacity)
         }
+        // A film as the call shows one, and the quality on it: dark in
+        // either appearance.
+        .meetingAppearance()
         .animation(Theme.settle, value: quality)
         .accessibilityHidden(true)
     }
@@ -1588,11 +1596,11 @@ private struct DuckPreview: View {
             } colour: { _ in Theme.tally }
             row(symbol: "person.wave.2.fill") { index in
                 speaking(index) ? 0.3 + 0.6 * abs(sin(Double(index) * 1.3)) : 0.05
-            } colour: { index in speaking(index) ? Theme.foreground.opacity(0.85) : Color.white.opacity(0.18) }
+            } colour: { index in speaking(index) ? Theme.foreground.opacity(0.85) : Theme.ink.opacity(0.18) }
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.black.opacity(0.22)))
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.08)))
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Theme.sunk(0.22)))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.ink.opacity(0.08)))
         .accessibilityHidden(true)
     }
 
@@ -1642,7 +1650,7 @@ private struct AccountSettings: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             if let said {
-                Text(said).font(.system(size: 12.5)).foregroundStyle(Theme.danger)
+                Text(said).font(.system(size: 12.5)).foregroundStyle(Theme.dangerInk)
                     .transition(Theme.arrive)
                     .onTapGesture { self.said = nil }
             }
@@ -1669,7 +1677,7 @@ private struct AccountSettings: View {
             HStack(spacing: 16) {
                 ZStack(alignment: .bottomTrailing) {
                     AccountAvatar(name: account.name, address: app.avatarAddress, size: 72)
-                        .shadow(color: .black.opacity(0.35), radius: 10, y: 4)
+                        .shadow(color: Theme.shadow(0.35), radius: 10, y: 4)
                     choosePicture {
                         Image(systemName: picturing ? "hourglass" : "camera.fill").font(.system(size: 11, weight: .bold))
                     }
@@ -1688,7 +1696,7 @@ private struct AccountSettings: View {
                 Spacer(minLength: 0)
             }
             .padding(16)
-            Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
+            Rectangle().fill(Theme.ink.opacity(0.06)).frame(height: 1)
             VStack(alignment: .leading, spacing: 10) {
                 Text(t("Shown beside your name in a call. Scaled down before it is sent."))
                     .font(.system(size: 11.5)).foregroundStyle(Theme.muted)
@@ -1724,8 +1732,9 @@ private struct AccountSettings: View {
             }
             .padding(14)
         }
-        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white.opacity(0.05)))
-        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Color.white.opacity(0.07)))
+        .lifted()
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Theme.lifted(0.05)))
+        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(Theme.ink.opacity(0.07)))
         .disabled(picturing)
     }
 
@@ -1795,7 +1804,7 @@ private struct AccountSettings: View {
                     }
                 }
                 if !account.scopes.isEmpty || account.created != nil {
-                    Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1)
+                    Rectangle().fill(Theme.ink.opacity(0.06)).frame(height: 1)
                     Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 14, verticalSpacing: 9) {
                         if !account.scopes.isEmpty {
                             GridRow {
@@ -1871,7 +1880,7 @@ private struct AccountSettings: View {
                     if changed {
                         Label(t("Changed."), systemImage: "checkmark.circle.fill")
                             .font(.system(size: 12))
-                            .foregroundStyle(Theme.good)
+                            .foregroundStyle(Theme.goodInk)
                             .transition(Theme.arrive)
                     }
                 }
@@ -1969,8 +1978,8 @@ private struct GuestLinksCard: View {
                         .foregroundStyle(Theme.foreground.opacity(0.85))
                         .padding(.horizontal, 14).padding(.vertical, 8)
                         .frame(minHeight: 34)
-                        .background(Capsule().fill(Color.white.opacity(0.06)))
-                        .overlay(Capsule().stroke(Color.white.opacity(0.10)))
+                        .background(Capsule().fill(Theme.ink.opacity(0.06)))
+                        .overlay(Capsule().stroke(Theme.ink.opacity(0.10)))
                         .contentShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -1986,7 +1995,7 @@ private struct GuestLinksCard: View {
                                 .textSelection(.enabled)
                                 .padding(10)
                                 .frame(maxWidth: .infinity, alignment: .leading)
-                                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Color.black.opacity(0.25)))
+                                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Theme.sunk(0.25)))
                             CopyLinkButton(link: made.link)
                         }
                         Text(describe(made)).font(.system(size: 11.5)).foregroundStyle(Theme.muted)
@@ -1995,7 +2004,7 @@ private struct GuestLinksCard: View {
                     .transition(Theme.arrive)
                 }
                 if let said {
-                    Text(said).font(.system(size: 12)).foregroundStyle(saidIsGood ? Theme.good : Theme.danger)
+                    Text(said).font(.system(size: 12)).foregroundStyle(saidIsGood ? Theme.goodInk : Theme.dangerInk)
                         .transition(Theme.arrive)
                 }
             }
@@ -2130,7 +2139,7 @@ private struct AboutSettings: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
             HStack(spacing: 18) {
-                Mark(size: 76).shadow(color: .black.opacity(0.4), radius: 14, y: 6)
+                Mark(size: 76).shadow(color: Theme.shadow(0.4), radius: 14, y: 6)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(verbatim: "Tomoshibi").font(.system(size: 26, weight: .bold))
                     Text(version).font(.system(size: 13, design: .monospaced)).foregroundStyle(Theme.muted)
@@ -2169,7 +2178,7 @@ private struct AboutSettings: View {
                                 Image(systemName: "chevron.left.forwardslash.chevron.right")
                                     .font(.system(size: 12.5, weight: .semibold))
                                     .frame(width: 26, height: 26)
-                                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.10)))
+                                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.ink.opacity(0.10)))
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(verbatim: "AGPL-3.0 · source").font(.system(size: 13.5))
                                     Text(info.source).font(.system(size: 11.5)).foregroundStyle(Theme.muted).lineLimit(1)
@@ -2210,13 +2219,13 @@ private struct UpdateRow: View {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 12.5, weight: .semibold))
                     .frame(width: 26, height: 26)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Color.white.opacity(0.10)))
+                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.ink.opacity(0.10)))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(t("Updates")).font(.system(size: 13.5))
                     if let line {
                         Text(line)
                             .font(.system(size: 11.5))
-                            .foregroundStyle(problem ? Theme.danger : Theme.muted)
+                            .foregroundStyle(problem ? Theme.dangerInk : Theme.muted)
                             .fixedSize(horizontal: false, vertical: true)
                             .id(line)
                             .transition(.asymmetric(insertion: .opacity.animation(Theme.settle), removal: .opacity.animation(Theme.leave)))
@@ -2229,7 +2238,7 @@ private struct UpdateRow: View {
             }
             .padding(.horizontal, 14).padding(.vertical, 9)
             .frame(minHeight: 48)
-            Rectangle().fill(Color.white.opacity(0.06)).frame(height: 1).padding(.leading, 52)
+            Rectangle().fill(Theme.ink.opacity(0.06)).frame(height: 1).padding(.leading, 52)
         }
         .accessibilityIdentifier("settings.updates")
     }

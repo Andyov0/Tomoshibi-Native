@@ -95,7 +95,7 @@ private struct DeskTab: View {
                                    setVolume: { desk.setVolume(of: player.id, $0) },
                                    setBlocked: { desk.setBlocked(of: player.id, $0) })
                             .padding(12)
-                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.white.opacity(0.05)))
+                            .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.ink.opacity(0.05)))
                             .transition(Theme.arrive)
                     } else {
                         Idle(desk: desk)
@@ -319,7 +319,7 @@ private struct NowPlaying: View {
                 }
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         }
-        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color.white.opacity(0.09)))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Theme.ink.opacity(0.09)))
         .animation(Theme.settle, value: desk.mine)
         .animation(Theme.settle, value: state.paused)
         // The badge saying what the file is arrives once the song is
@@ -567,7 +567,7 @@ private struct PlaylistTab: View {
                             .disabled(found.tracks.isEmpty)
                         }
                         .padding(10)
-                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Color.white.opacity(0.05)))
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Theme.ink.opacity(0.05)))
                         .padding(.bottom, 6)
                         .transition(Theme.arrive)
                         ForEach(found.tracks, id: \.id) { track in
@@ -616,7 +616,7 @@ private struct TrackRow: View {
                         } else if hovering {
                             Image(systemName: "plus.circle.fill")
                                 .font(.system(size: 17))
-                                .foregroundStyle(Theme.tally)
+                                .foregroundStyle(Theme.tallyInk)
                                 .transition(Theme.arrive)
                         } else {
                             Text(musicClock(seconds: track.duration))
