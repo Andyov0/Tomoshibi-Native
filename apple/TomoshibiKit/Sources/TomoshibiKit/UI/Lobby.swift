@@ -308,11 +308,24 @@ extension View {
 struct CameraStage: View {
     @Bindable var app: AppModel
     var cornerRadius: CGFloat = 0
+    /// With the camera off, a pane of glass with people drawn on it instead
+    /// of the grey (PreviewGlass): the phone lobby's card, and only that.
+    var glassWhenOff = false
+    /// The card is covered, and its drawing holds still.
+    var glassHeld = false
     @State private var preview = CameraCapture()
 
     var body: some View {
         ZStack {
-            if cornerRadius > 0 {
+            if cornerRadius > 0 && glassWhenOff {
+                // The glass and its people go as the camera comes on, and the
+                // grey a picture stands on comes with it.
+                if app.startWithCamera {
+                    Theme.surface.transition(.opacity)
+                } else {
+                    PreviewGlass(cornerRadius: cornerRadius, held: glassHeld).transition(.opacity)
+                }
+            } else if cornerRadius > 0 {
                 Theme.surface
             } else {
                 Backdrop()
@@ -1345,7 +1358,8 @@ struct PhoneLobby: View {
     /// lists, or as tall as the space beside them.
     private func hero(height: CGFloat?) -> some View {
         ZStack {
-            CameraStage(app: app, cornerRadius: 30)
+            CameraStage(app: app, cornerRadius: 30, glassWhenOff: true,
+                        glassHeld: state.sheet != nil || state.settings || state.place == .scheduled)
         }
         .frame(height: height)
         .frame(maxWidth: .infinity, maxHeight: height == nil ? .infinity : nil)
