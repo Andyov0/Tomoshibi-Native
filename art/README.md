@@ -116,18 +116,23 @@ On Apple platforms with Liquid Glass (iOS and macOS 26 and later):
 
 | | night | day |
 | --- | --- | --- |
-| line | Liquid Glass (regular) in the lines' shape, tinted with the text colour at 16 % | same |
-| highlight | the strokes' centre lines again, white at 62 %, width `max(0.16 w, 0.8 pt)`, moved by `(-0.17 w, -0.2 w)` (up and to the left), clipped to the lines' shape | same |
+| line | Liquid Glass, the clear kind, in the lines' shape, tinted with the text colour at 16 % | the same at 20 % |
+| highlight | the strokes' centre lines again, white at 60 %, width `max(0.16 w, 0.8 pt)`, moved by `(-0.17 w, -0.2 w)` (up and to the left), clipped to the lines' shape | white at 90 %, otherwise the same |
 | card | Liquid Glass (regular) in the card's rounded rectangle | same |
+
+The clear glass rather than the regular: the regular casts a soft grey
+shadow round everything drawn in it, and round a face's worth of lines on
+the day's white pane that shadow was a grey haze that made the drawing look
+dirty. Wherever the glass is imitated, draw no shadow under the lines.
 
 Everywhere else (Android, Windows, and Apple before 26), which draws the
 glass the way it looks without its depth:
 
 | | night | day |
 | --- | --- | --- |
-| line fill | text colour at 12 % | text colour at 12 % |
-| line edge | 0.75 pt stroke of the lines' shape, text colour at 34 % | same |
-| highlight | as above: white at 62 %, `max(0.16 w, 0.8 pt)` wide, moved `(-0.17 w, -0.2 w)`, clipped to the lines' shape | same |
+| line fill | text colour at 12 % | text colour at 14 % |
+| line edge | 0.75 pt stroke round the lines' united shape (so that crossings draw no edge), text colour at 30 % | same |
+| highlight | as above: white at 60 % by night and 90 % by day, `max(0.16 w, 0.8 pt)` wide, moved `(-0.17 w, -0.2 w)`, clipped to the lines' shape | same |
 | shadow | none | none |
 | card | the system's thinnest blur material, a 1 pt border of the text colour at 16 % | same |
 
