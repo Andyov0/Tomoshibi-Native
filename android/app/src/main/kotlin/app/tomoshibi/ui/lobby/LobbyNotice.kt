@@ -105,6 +105,7 @@ internal fun noticeShown(app: AppModel): Boolean = app.remote.notice?.text?.get(
 private fun Card(remote: Remote, notice: LobbyNotice, text: String, floating: Boolean) {
     val shape = ContinuousShape(20.dp)
     val tint = if (notice.warning) Theme.danger else Theme.tally
+    val ink = if (notice.warning) Theme.danger else Theme.tallyInk
     Row(
         Modifier
             .widthIn(max = 560.dp)
@@ -118,7 +119,7 @@ private fun Card(remote: Remote, notice: LobbyNotice, text: String, floating: Bo
         verticalAlignment = Alignment.Top,
     ) {
         Box(Modifier.size(30.dp).background(tint.copy(alpha = 0.18f), CircleShape), contentAlignment = Alignment.Center) {
-            Symbol(if (notice.warning) "exclamationmark.circle.fill" else "megaphone.fill", size = 13f, weight = Font.Semibold, tint = tint)
+            Symbol(if (notice.warning) "exclamationmark.circle.fill" else "megaphone.fill", size = 13f, weight = Font.Semibold, tint = ink)
         }
         // New words for the same notice fade over the old rather than cut.
         AnimatedContent(

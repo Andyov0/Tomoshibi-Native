@@ -211,11 +211,12 @@ private fun Said(
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
         val tint = if (warning) Theme.danger else Theme.tally
+        val ink = if (warning) Theme.danger else Theme.tallyInk
         Box(
             Modifier.size(30.dp).background(tint.copy(alpha = 0.18f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            if (badge != null) Symbol(badge, size = 13f, weight = Font.Semibold, tint = tint) else MediaSpinner(size = 14f, tint = tint)
+            if (badge != null) Symbol(badge, size = 13f, weight = Font.Semibold, tint = ink) else MediaSpinner(size = 14f, tint = ink)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             KitText(title, font = Font(14f, Font.Semibold))

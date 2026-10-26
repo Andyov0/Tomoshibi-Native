@@ -89,7 +89,7 @@ fun HostPanel(feature: HostFeature, close: () -> Unit, modifier: Modifier = Modi
     }
     LaunchedEffect(feature) { feature.loadRelays() }
     Column(modifier.fillMaxWidth().glassPane(22.dp)) {
-        PanelHeading(t("Running this room"), t("Close"), close, symbol = "crown.fill", symbolTint = Theme.tally)
+        PanelHeading(t("Running this room"), t("Close"), close, symbol = "crown.fill", symbolTint = Theme.tallyInk)
         PanelRule()
         AnimatedContent(
             feature.standing.yours,

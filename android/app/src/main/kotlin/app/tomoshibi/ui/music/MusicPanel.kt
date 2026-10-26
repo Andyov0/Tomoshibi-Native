@@ -615,7 +615,7 @@ private fun TrackRow(track: MusicTrack, added: Boolean, modifier: Modifier = Mod
             ) { face ->
                 when (face) {
                     1 -> MediaBadge(t("Added"), symbol = "checkmark", lit = true)
-                    2 -> Symbol("plus.circle.fill", size = 17f, tint = Theme.tally)
+                    2 -> Symbol("plus.circle.fill", size = 17f, tint = Theme.tallyInk)
                     else -> KitText(clockOf(track.duration), font = Font(11f, Font.Medium, digits = true), color = Theme.muted, lines = 1)
                 }
             }

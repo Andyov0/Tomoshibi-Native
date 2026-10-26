@@ -106,7 +106,7 @@ fun MenuItem(
                     weight = Font.Medium,
                     tint = when (role) {
                         MenuRole.Destructive -> Theme.danger
-                        MenuRole.Prominent -> Theme.tally
+                        MenuRole.Prominent -> Theme.tallyInk
                         MenuRole.Normal -> Theme.foreground.copy(alpha = 0.85f)
                     },
                 )
@@ -132,7 +132,7 @@ fun MenuItem(
                 visible = checked && !busy,
                 enter = fadeIn(Theme.settle()) + scaleIn(Theme.settle()),
                 exit = fadeOut(Theme.leave()) + scaleOut(Theme.leave()),
-            ) { Symbol("checkmark", Modifier.padding(start = 10.dp), size = 11.5f, weight = Font.Bold, tint = Theme.tally) }
+            ) { Symbol("checkmark", Modifier.padding(start = 10.dp), size = 11.5f, weight = Font.Bold, tint = Theme.tallyInk) }
         }
     }
 }

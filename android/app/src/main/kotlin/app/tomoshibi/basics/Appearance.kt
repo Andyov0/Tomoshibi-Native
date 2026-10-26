@@ -77,23 +77,29 @@ class Appearance private constructor(private val preferences: SharedPreferences?
 }
 
 /**
- * The colours on offer, each with its light-appearance variant and the
- * colour drawn on top of it: Apple's system colours of either appearance
- * apart from the first, which is the product's, the same on every platform
- * so that somebody's choice looks the same on their phone and their Mac
- * (the daylight palette, 2026-10-26). What is drawn on top is the same in
- * either: each one's words read on the light variant as well as on the dark.
+ * The colours on offer, each with its light-appearance variant, the ink it
+ * is written in in the light, and the colour drawn on top of it: Apple's
+ * system colours of either appearance apart from the first, which is the
+ * product's, the same on every platform so that somebody's choice looks the
+ * same on their phone and their Mac (the daylight palette, 2026-10-26).
+ *
+ * `light` is the colour as a fill: a button, a switch, a bar. As words or a
+ * thin symbol on the light page several of the light fills are under three
+ * to one, amber about 2.3, and are read as a smudge; there the colour is
+ * `ink`, a step darker, at least 4.5 to one on the page (the palette's
+ * addendum). The dark uses its one colour for both. What is drawn on top of
+ * a fill is the same in either appearance.
  */
-enum class Accent(val key: String, val color: Color, val light: Color, val onColor: Color) {
-    Amber("amber", Color(1.0f, 0.635f, 0.231f), Color(0xFFF2901E), Color(0.122f, 0.071f, 0.0f)),
-    Orange("orange", Color(1.0f, 0.624f, 0.039f), Color(0xFFFF9500), Color(0.122f, 0.071f, 0.0f)),
-    Pink("pink", Color(1.0f, 0.216f, 0.373f), Color(0xFFFF2D55), Color.White),
-    Purple("purple", Color(0.749f, 0.353f, 0.949f), Color(0xFFAF52DE), Color.White),
-    Indigo("indigo", Color(0.369f, 0.361f, 0.902f), Color(0xFF5856D6), Color.White),
-    Blue("blue", Color(0.039f, 0.518f, 1.0f), Color(0xFF007AFF), Color.White),
-    Teal("teal", Color(0.251f, 0.784f, 0.878f), Color(0xFF30B0C7), Color(0.0f, 0.15f, 0.18f)),
-    Green("green", Color(0.188f, 0.820f, 0.345f), Color(0xFF34C759), Color(0.0f, 0.17f, 0.055f)),
-    Graphite("graphite", Color(0.596f, 0.596f, 0.616f), Color(0xFF8E8E93), Color(0.07f, 0.07f, 0.08f));
+enum class Accent(val key: String, val color: Color, val light: Color, val ink: Color, val onColor: Color) {
+    Amber("amber", Color(1.0f, 0.635f, 0.231f), Color(0xFFF2901E), Color(0xFFA35C09), Color(0.122f, 0.071f, 0.0f)),
+    Orange("orange", Color(1.0f, 0.624f, 0.039f), Color(0xFFFF9500), Color(0xFFA15E00), Color(0.122f, 0.071f, 0.0f)),
+    Pink("pink", Color(1.0f, 0.216f, 0.373f), Color(0xFFFF2D55), Color(0xFFDF002B), Color.White),
+    Purple("purple", Color(0.749f, 0.353f, 0.949f), Color(0xFFAF52DE), Color(0xFFA338D9), Color.White),
+    Indigo("indigo", Color(0.369f, 0.361f, 0.902f), Color(0xFF5856D6), Color(0xFF5856D6), Color.White),
+    Blue("blue", Color(0.039f, 0.518f, 1.0f), Color(0xFF007AFF), Color(0xFF006BE0), Color.White),
+    Teal("teal", Color(0.251f, 0.784f, 0.878f), Color(0xFF30B0C7), Color(0xFF217989), Color(0.0f, 0.15f, 0.18f)),
+    Green("green", Color(0.188f, 0.820f, 0.345f), Color(0xFF34C759), Color(0xFF217E38), Color(0.0f, 0.17f, 0.055f)),
+    Graphite("graphite", Color(0.596f, 0.596f, 0.616f), Color(0xFF8E8E93), Color(0xFF6E6E73), Color(0.07f, 0.07f, 0.08f));
 
     val displayName: String
         get() = when (this) {

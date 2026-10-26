@@ -102,7 +102,7 @@ fun MeetingRow(one: Meeting, app: AppModel, modifier: Modifier = Modifier) {
                 .size(34.dp)
                 .background(if (one.started) Theme.tally.copy(alpha = 0.18f) else Theme.wash.copy(alpha = 0.08f), rounded(10f)),
             contentAlignment = Alignment.Center,
-        ) { Symbol(if (one.started) "video.fill" else "calendar", size = 15f, tint = if (one.started) Theme.tally else Theme.muted) }
+        ) { Symbol(if (one.started) "video.fill" else "calendar", size = 15f, tint = if (one.started) Theme.tallyInk else Theme.muted) }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             KitText(one.room, font = Font(14f, Font.Semibold), lines = 1)
             // When, and where, on two lines where a phone or the cover screen

@@ -65,8 +65,15 @@ class Palette private constructor(
     /** Whether this is (mostly) the dark appearance, for a choice that cannot be blended. */
     val dark: Boolean get() = daylight < 0.5f
 
-    /** The person's colour in this appearance: Apple's light variant of the same colour in the light. */
+    /** The person's colour in this appearance, as a fill: Apple's light variant of the same colour in the light. */
     fun tally(accent: Accent): Color = mix(accent.color, accent.light, daylight)
+
+    /**
+     * The person's colour as words or a thin symbol: the fill itself in the
+     * dark, the darker ink in the light (Accent.ink), so that a link, a
+     * tick or a figure in it reads on the page.
+     */
+    fun tallyInk(accent: Accent): Color = mix(accent.color, accent.ink, daylight)
 
     /**
      * A recess in a surface (a field, a track, the ground of a segmented
@@ -206,8 +213,11 @@ object Theme {
     /** Whether the view is drawn in the dark, for a choice that cannot be blended. */
     val dark: Boolean @Composable @ReadOnlyComposable get() = LocalPalette.current.dark
 
-    /** The colour the person chose, read where it is drawn, in the appearance it is drawn in. */
+    /** The colour the person chose, read where it is drawn, in the appearance it is drawn in: as a fill. */
     val tally: Color @Composable @ReadOnlyComposable get() = LocalPalette.current.tally(Appearance.shared.accent)
+
+    /** The colour the person chose as words or a thin symbol on the page ([Palette.tallyInk]). */
+    val tallyInk: Color @Composable @ReadOnlyComposable get() = LocalPalette.current.tallyInk(Appearance.shared.accent)
     val tallyForeground: Color get() = Appearance.shared.accent.onColor
 
     /** A recess at the strength it has in the dark ([Palette.recess]). */

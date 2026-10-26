@@ -539,7 +539,7 @@ fun ScopedRoomField(
                     },
                 textStyle = font.style(Theme.foreground),
                 singleLine = true,
-                cursorBrush = SolidColor(Theme.tally),
+                cursorBrush = SolidColor(Theme.tallyInk),
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.None,
                     autoCorrectEnabled = false,

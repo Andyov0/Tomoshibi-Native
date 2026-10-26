@@ -337,7 +337,7 @@ private fun LinkField(text: String, onText: (String) -> Unit, modifier: Modifier
             modifier = Modifier.weight(1f).semantics { contentDescription = t("Paste the link you were sent.") },
             textStyle = font.style(Theme.foreground),
             singleLine = true,
-            cursorBrush = SolidColor(Theme.tally),
+            cursorBrush = SolidColor(Theme.tallyInk),
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.None,
                 autoCorrectEnabled = false,

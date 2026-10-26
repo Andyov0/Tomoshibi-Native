@@ -242,7 +242,7 @@ private fun ItemRow(item: MediaItem, adding: Boolean, open: () -> Unit, modifier
                     2 -> Symbol(
                         if (item.folder) "chevron.right" else "play.circle.fill",
                         size = if (item.folder) 12f else 17f, weight = Font.Semibold,
-                        tint = if (item.folder) Theme.muted else Theme.tally,
+                        tint = if (item.folder) Theme.muted else Theme.tallyInk,
                     )
                     else -> {}
                 }

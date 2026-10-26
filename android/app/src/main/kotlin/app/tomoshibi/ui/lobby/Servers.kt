@@ -202,7 +202,7 @@ private fun RelayRow(
                 !off -> KitText(t("Timeout"), font = Font(12f), color = Theme.danger, lines = 1)
             }
         }
-        Symbol("checkmark.circle.fill", Modifier.alpha(tick).scale(0.6f + 0.4f * tick), size = 15f, tint = Theme.tally)
+        Symbol("checkmark.circle.fill", Modifier.alpha(tick).scale(0.6f + 0.4f * tick), size = 15f, tint = Theme.tallyInk)
     }
 }
 

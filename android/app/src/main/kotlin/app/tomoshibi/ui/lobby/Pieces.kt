@@ -220,7 +220,7 @@ fun ProblemToast(app: AppModel, modifier: Modifier = Modifier, clearance: Dp = 2
             ) {
                 Symbol(
                     if (stays) "exclamationmark.circle.fill" else "info.circle",
-                    size = 14f, weight = Font.Semibold, tint = if (stays) Theme.tally else Theme.muted,
+                    size = 14f, weight = Font.Semibold, tint = if (stays) Theme.tallyInk else Theme.muted,
                 )
                 KitText(said ?: "", Modifier.weight(1f, fill = false), font = Font(13f))
                 if (stays) {
@@ -300,9 +300,12 @@ object RoomNames {
 /** A name typed where a room goes is one only once it is something; nothing typed is no room, and asks the core nothing. */
 fun validTyped(text: String): Boolean = text.isNotBlank() && RoomNames.valid(RoomNames.normalise(text))
 
-/** ServerPicker.tsx `Latency`: green to 150 ms, the signal colour to 400, red beyond (`latencyColour`). */
+/**
+ * ServerPicker.tsx `Latency`: green to 150 ms, the signal colour to 400, red
+ * beyond (`latencyColour`). A figure, so the signal colour is its ink.
+ */
 @Composable
-fun latencyColour(ms: Double): Color = if (ms <= 150) Theme.good else if (ms <= 400) Theme.tally else Theme.danger
+fun latencyColour(ms: Double): Color = if (ms <= 150) Theme.good else if (ms <= 400) Theme.tallyInk else Theme.danger
 
 /**
  * What the top bar of a page lays over the page where it runs up under the

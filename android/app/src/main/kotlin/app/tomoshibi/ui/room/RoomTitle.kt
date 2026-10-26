@@ -150,7 +150,7 @@ internal fun EmptyRoomCard(
                 )
             } else {
                 val press = rememberPress()
-                val ink by animateColorAsState(if (copied) Theme.tally else Theme.foreground, Theme.settle(), label = "copied")
+                val ink by animateColorAsState(if (copied) Theme.tallyInk else Theme.foreground, Theme.settle(), label = "copied")
                 Row(
                     Modifier
                         .height(34.dp)

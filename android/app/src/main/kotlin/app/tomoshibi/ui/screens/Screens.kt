@@ -505,7 +505,7 @@ internal fun IdentityBox(
             .border(1.dp, Theme.wash.copy(alpha = 0.10f), shape)
             .animateContentSize(Theme.settle()),
     ) {
-        IdentityRow(if (fixed) "person.fill.checkmark" else "person", if (fixed) Theme.tally else Theme.muted) {
+        IdentityRow(if (fixed) "person.fill.checkmark" else "person", if (fixed) Theme.tallyInk else Theme.muted) {
             if (fixed) {
                 SelectionContainer { KitText(name, font = Font(15f), color = Theme.muted, lines = 1) }
             } else {
@@ -524,7 +524,7 @@ internal fun IdentityBox(
 @Composable
 internal fun PassphraseRow(passphrase: String, onPassphrase: (String) -> Unit, onSubmit: () -> Unit) {
     var shown by rememberSaveable { mutableStateOf(false) }
-    val key by animateColorAsState(if (passphrase.isEmpty()) Theme.muted else Theme.tally, Theme.settle(), label = "key")
+    val key by animateColorAsState(if (passphrase.isEmpty()) Theme.muted else Theme.tallyInk, Theme.settle(), label = "key")
     IdentityRow("key", key) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) { IdentityField(passphrase, onPassphrase, t("Passphrase"), secret = !shown, password = true, onSubmit = onSubmit) }
@@ -575,7 +575,7 @@ internal fun IdentityField(
         modifier = Modifier.fillMaxWidth().semantics { contentDescription = prompt },
         textStyle = font.style(Theme.foreground),
         singleLine = true,
-        cursorBrush = SolidColor(Theme.tally),
+        cursorBrush = SolidColor(Theme.tallyInk),
         visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(
             capitalization = KeyboardCapitalization.None,

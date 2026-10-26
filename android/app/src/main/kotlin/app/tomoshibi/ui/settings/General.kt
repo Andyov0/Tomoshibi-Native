@@ -151,7 +151,7 @@ private fun LanguageTile(chosen: Boolean, symbol: String?, title: String, detail
     val edge by animateColorAsState(if (chosen) tally.copy(alpha = 0.55f) else Theme.wash.copy(alpha = 0.07f), Theme.settle(), label = "edge")
     val line by animateDpAsState(if (chosen) 1.5.dp else 1.dp, Theme.settle(), label = "line")
     val tick by animateFloatAsState(if (chosen) 1f else 0f, Theme.settle(), label = "tick")
-    val ink by animateColorAsState(if (chosen) tally else Theme.muted, Theme.settle(), label = "symbol")
+    val ink by animateColorAsState(if (chosen) Theme.tallyInk else Theme.muted, Theme.settle(), label = "symbol")
     val shape = rounded(13f)
     Row(
         Modifier
@@ -178,7 +178,7 @@ private fun LanguageTile(chosen: Boolean, symbol: String?, title: String, detail
                 scaleY = 0.6f + 0.4f * tick
             },
             size = 15f,
-            tint = tally,
+            tint = Theme.tallyInk,
         )
     }
 }
@@ -323,7 +323,7 @@ private fun AccentPreview(accent: Accent) {
 @Composable
 private fun AccentName(accent: Accent, modifier: Modifier = Modifier) {
     Crossfade(accent, modifier, animationSpec = Theme.settle(), label = "name") { shown ->
-        KitText(shown.displayName, font = Font(17f, Font.Semibold), color = Theme.tally, lines = 1)
+        KitText(shown.displayName, font = Font(17f, Font.Semibold), color = Theme.tallyInk, lines = 1)
     }
 }
 
@@ -372,7 +372,7 @@ private fun AccentScene() {
                             .background(tally, CircleShape),
                     )
                 }
-                Symbol("hand.raised.fill", size = 14f, tint = tally)
+                Symbol("hand.raised.fill", size = 14f, tint = Theme.tallyInk)
             }
         }
     }

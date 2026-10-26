@@ -31,6 +31,8 @@ class PaletteTest {
         assertEquals(0.45f, dark.shade(0.45f))
         assertEquals(Color.White.copy(alpha = 0.07f), dark.plate(0.07f))
         for (accent in Accent.entries) assertEquals(accent.color, dark.tally(accent))
+        // The dark writes in its one colour.
+        for (accent in Accent.entries) assertEquals(accent.color, dark.tallyInk(accent))
     }
 
     @Test
@@ -51,6 +53,38 @@ class PaletteTest {
             Accent.Teal to 0xFF30B0C7, Accent.Green to 0xFF34C759, Accent.Graphite to 0xFF8E8E93,
         )
         for ((accent, value) in accents) assertEquals(accent.name, Color(value), light.tally(accent))
+    }
+
+    /**
+     * The palette's addendum: the person's colour as words or a thin symbol
+     * in the light is a darker ink, at least 4.5 to one on the light page
+     * (#F2F2F7), where several of the light fills were under three and
+     * amber about 2.3. Worked out as WCAG works out contrast.
+     */
+    @Test
+    fun theLightInksReadOnThePage() {
+        val inks = mapOf(
+            Accent.Amber to 0xFFA35C09, Accent.Orange to 0xFFA15E00, Accent.Pink to 0xFFDF002B,
+            Accent.Purple to 0xFFA338D9, Accent.Indigo to 0xFF5856D6, Accent.Blue to 0xFF006BE0,
+            Accent.Teal to 0xFF217989, Accent.Green to 0xFF217E38, Accent.Graphite to 0xFF6E6E73,
+        )
+        val page = Palette.Light.background
+        assertEquals(Color(0xFFF2F2F7), page)
+        for ((accent, value) in inks) {
+            val ink = Palette.Light.tallyInk(accent)
+            assertEquals(accent.name, Color(value), ink)
+            val ratio = contrast(ink, page)
+            assertTrue("${accent.name}'s ink is ${"%.2f".format(ratio)} to one on the page", ratio >= 4.5)
+        }
+        // The fill is what failed: the guard is not passing for want of anything to catch.
+        assertTrue(contrast(Palette.Light.tally(Accent.Amber), page) < 3.0)
+    }
+
+    private fun contrast(a: Color, b: Color): Double {
+        fun channel(c: Float): Double = if (c <= 0.04045f) c / 12.92 else Math.pow((c + 0.055) / 1.055, 2.4)
+        fun luminance(c: Color) = 0.2126 * channel(c.red) + 0.7152 * channel(c.green) + 0.0722 * channel(c.blue)
+        val (light, dark) = listOf(luminance(a), luminance(b)).sortedDescending()
+        return (light + 0.05) / (dark + 0.05)
     }
 
     @Test

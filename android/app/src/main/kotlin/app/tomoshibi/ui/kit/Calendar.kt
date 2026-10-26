@@ -202,7 +202,7 @@ private fun DayCell(
             ) { choose(date) },
         contentAlignment = Alignment.Center,
     ) {
-        if (isToday && !chosen) Box(Modifier.size(30.dp).border(1.dp, Theme.tally.copy(alpha = 0.7f), CircleShape))
+        if (isToday && !chosen) Box(Modifier.size(30.dp).border(1.dp, Theme.tallyInk.copy(alpha = 0.7f), CircleShape))
         AnimatedVisibility(chosen, enter = fadeIn(Theme.settle()) + scaleIn(Theme.settle()), exit = fadeOut(Theme.leave()) + scaleOut(Theme.leave())) {
             Box(Modifier.size(30.dp).background(Theme.tally, CircleShape))
         }
@@ -259,7 +259,7 @@ fun ClockChoice(
 /** One half of a time, as the capsule that opens its grid (`ClockCapsule`). */
 @Composable
 fun ClockCapsule(value: Int, label: String, modifier: Modifier = Modifier, lit: Boolean = false, onClick: () -> Unit) {
-    val ink by animateColorAsState(if (lit) Theme.tally else Theme.foreground, Theme.settle(), label = "ink")
+    val ink by animateColorAsState(if (lit) Theme.tallyInk else Theme.foreground, Theme.settle(), label = "ink")
     GlassButton(onClick, modifier, shape = GlassButtonShape.Capsule(32.dp), label = label) {
         KitText(
             "%02d".format(value),

@@ -197,8 +197,9 @@ private class FocusRingNode(private val source: InteractionSource, private val s
         val gap = 3.dp.toPx()
         val ring = Size(size.width + gap * 2, size.height + gap * 2)
         translate(-gap, -gap) {
-            // The person's colour in the palette the control is drawn in.
-            val tally = currentValueOf(LocalPalette).tally(Appearance.shared.accent)
+            // The person's colour in the palette the control is drawn in, as
+            // a thin line: its ink.
+            val tally = currentValueOf(LocalPalette).tallyInk(Appearance.shared.accent)
             drawOutline(shape.createOutline(ring, layoutDirection, this), tally.copy(alpha = 0.9f),
                 style = Stroke(width = 2.dp.toPx()))
         }

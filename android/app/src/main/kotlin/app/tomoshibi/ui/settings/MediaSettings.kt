@@ -221,7 +221,7 @@ private fun DevicePreview(check: DeviceCheck) {
                 if (check.microphoneRefused) "mic.slash.fill" else "mic.fill",
                 size = 12f,
                 weight = Font.Semibold,
-                tint = if (check.level > 0.08f) Theme.tally else Theme.foreground,
+                tint = if (check.level > 0.08f) Theme.tallyInk else Theme.foreground,
             )
             KitText(t("Hearing you"), font = Font(12f, Font.Medium), lines = 1)
             LevelMeter(check.level, segments = 12)

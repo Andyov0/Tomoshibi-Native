@@ -201,7 +201,7 @@ private fun Figure(shown: Boolean, order: Float, label: String, value: String, w
     val spec = tween<Float>(320, (order * 30).toInt(), Theme.settleEasing)
     val alpha by animateFloatAsState(if (shown) 1f else 0f, spec, label = "figure")
     val drop by animateFloatAsState(if (shown) 0f else -4f, spec, label = "drop")
-    val ink by animateColorAsState(if (warn) Theme.tally else Theme.foreground, tween(300, easing = Motion.easeOut), label = "warn")
+    val ink by animateColorAsState(if (warn) Theme.tallyInk else Theme.foreground, tween(300, easing = Motion.easeOut), label = "warn")
     Row(
         Modifier
             .fillMaxWidth()

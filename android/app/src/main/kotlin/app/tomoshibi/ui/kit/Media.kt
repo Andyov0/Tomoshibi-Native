@@ -428,7 +428,7 @@ fun MediaArtwork(url: String, modifier: Modifier = Modifier, symbol: String = "m
 /** A few words in a small capsule: what a song is, that it is paused (`MediaBadge`). */
 @Composable
 fun MediaBadge(text: String, modifier: Modifier = Modifier, symbol: String? = null, lit: Boolean = false) {
-    val ink = if (lit) Theme.tally else Theme.foreground.copy(alpha = 0.75f)
+    val ink = if (lit) Theme.tallyInk else Theme.foreground.copy(alpha = 0.75f)
     Row(
         modifier
             .background(if (lit) Theme.tally.copy(alpha = 0.16f) else Theme.wash.copy(alpha = 0.09f), Capsule)

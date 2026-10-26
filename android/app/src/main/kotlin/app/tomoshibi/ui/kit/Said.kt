@@ -53,7 +53,8 @@ fun LinkedText(
     color: Color = LocalInk.current,
     lines: Int = Int.MAX_VALUE,
 ) {
-    val tally = Theme.tally
+    // Words, and so the colour's ink.
+    val tally = Theme.tallyInk
     val linked: AnnotatedString = remember(text, tally) {
         val style = TextLinkStyles(SpanStyle(color = tally, textDecoration = TextDecoration.Underline))
         buildAnnotatedString {

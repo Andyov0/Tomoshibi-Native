@@ -196,7 +196,7 @@ fun Chip(
                 symbol,
                 size = 10.5f,
                 weight = Font.Semibold,
-                tint = if (lit) tally else if (withheld) Theme.muted.copy(alpha = Theme.muted.alpha * 0.7f) else Theme.muted,
+                tint = if (lit) Theme.tallyInk else if (withheld) Theme.muted.copy(alpha = Theme.muted.alpha * 0.7f) else Theme.muted,
             )
         }
         KitText(

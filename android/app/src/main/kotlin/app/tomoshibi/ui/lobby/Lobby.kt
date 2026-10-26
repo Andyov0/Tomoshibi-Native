@@ -418,7 +418,7 @@ private fun Upcoming(app: AppModel, state: LobbyState, modifier: Modifier = Modi
             // words it was pressed over twenty points, with the first meeting
             // eight below.
             Box(Modifier.heightIn(min = fingertip(0.dp)).plainPress({ state.place = Place.Scheduled }), contentAlignment = Alignment.CenterEnd) {
-                KitText(t("All of them"), font = Font(16f), color = Theme.tally, lines = 1)
+                KitText(t("All of them"), font = Font(16f), color = Theme.tallyInk, lines = 1)
             }
         }) {
             for (one in upcoming) {
@@ -888,7 +888,7 @@ private fun SidebarItem(title: String, symbol: String, selected: Boolean, badge:
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(20.dp), contentAlignment = Alignment.Center) { Symbol(symbol, size = 14f, tint = Theme.tally) }
+        Box(Modifier.width(20.dp), contentAlignment = Alignment.Center) { Symbol(symbol, size = 14f, tint = Theme.tallyInk) }
         KitText(title, Modifier.weight(1f), font = Font(13.5f, if (selected) Font.Semibold else Font.Regular), lines = 1)
         if (badge > 0) KitText("$badge", font = Font(12f, Font.Medium, digits = true), color = Theme.muted, lines = 1)
     }

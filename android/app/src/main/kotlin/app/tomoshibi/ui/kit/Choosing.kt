@@ -223,7 +223,7 @@ fun ChoiceRow(
     val on = enabled && LocalEnabled.current
     val press = rememberPress()
     val light by animateFloatAsState(if (press.lit && on) 0.06f else 0f, Motion.hover(), label = "light")
-    val tint by animateColorAsState(if (checked) Theme.tally else Theme.foreground.copy(alpha = 0.75f), Theme.settle(), label = "tint")
+    val tint by animateColorAsState(if (checked) Theme.tallyInk else Theme.foreground.copy(alpha = 0.75f), Theme.settle(), label = "tint")
     Column(modifier.fillMaxWidth()) {
         Row(
             Modifier
@@ -261,7 +261,7 @@ fun ChoiceRow(
                     enter = fadeIn(Theme.settle()) + scaleIn(Theme.settle(), initialScale = 0.5f),
                     exit = fadeOut(Theme.leave()) + scaleOut(Theme.leave(), targetScale = 0.5f),
                 ) {
-                    Symbol("checkmark", Modifier.padding(start = 12.dp), size = 11.5f, weight = Font.Bold, tint = Theme.tally)
+                    Symbol("checkmark", Modifier.padding(start = 12.dp), size = 11.5f, weight = Font.Bold, tint = Theme.tallyInk)
                 }
             }
         }

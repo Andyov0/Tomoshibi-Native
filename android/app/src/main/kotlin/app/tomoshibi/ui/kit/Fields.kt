@@ -82,7 +82,7 @@ fun GlassField(
     onSubmit: () -> Unit = {},
 ) {
     var shown by rememberSaveable { mutableStateOf(false) }
-    val symbolInk by animateColorAsState(if (lights && text.isNotEmpty()) Theme.tally else Theme.muted, Theme.settle(), label = "symbol")
+    val symbolInk by animateColorAsState(if (lights && text.isNotEmpty()) Theme.tallyInk else Theme.muted, Theme.settle(), label = "symbol")
     val shape = rounded(14f)
     val font = if (mono) Font(14f, mono = true) else Font(14f)
     Row(
@@ -110,7 +110,7 @@ fun GlassField(
                     modifier = Modifier.fillMaxWidth(),
                     textStyle = font.style(Theme.foreground),
                     singleLine = true,
-                    cursorBrush = SolidColor(Theme.tally),
+                    cursorBrush = SolidColor(Theme.tallyInk),
                     visualTransformation = if (secret && !shown) PasswordVisualTransformation() else VisualTransformation.None,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.None,
@@ -159,8 +159,8 @@ fun SealControl(
     modifier: Modifier = Modifier,
 ) {
     val sealed = on && word.isNotEmpty()
-    val ink by animateColorAsState(if (sealed) Theme.tally else Theme.foreground, Theme.settle(), label = "title")
-    val lock by animateColorAsState(if (sealed) Theme.tally else Theme.muted, Theme.settle(), label = "lock")
+    val ink by animateColorAsState(if (sealed) Theme.tallyInk else Theme.foreground, Theme.settle(), label = "title")
+    val lock by animateColorAsState(if (sealed) Theme.tallyInk else Theme.muted, Theme.settle(), label = "lock")
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.width(18.dp), contentAlignment = Alignment.Center) {
@@ -208,7 +208,7 @@ fun CopyLinkButton(link: String, modifier: Modifier = Modifier, size: Dp = 32.dp
             copied = false
         }
     }
-    val ink by animateColorAsState(if (copied) Theme.tally else Theme.foreground, Theme.settle(), label = "ink")
+    val ink by animateColorAsState(if (copied) Theme.tallyInk else Theme.foreground, Theme.settle(), label = "ink")
     GlassButton(
         onClick = {
             scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(t("Copy link"), link))) }
@@ -242,7 +242,7 @@ fun MediaField(
     val source = remember { MutableInteractionSource() }
     val focused by source.collectIsFocusedAsState()
     val focus = remember { FocusRequester() }
-    val edge by animateColorAsState(if (focused) Theme.tally.copy(alpha = 0.75f) else Theme.wash.copy(alpha = 0.09f), Theme.settle(), label = "edge")
+    val edge by animateColorAsState(if (focused) Theme.tallyInk.copy(alpha = 0.75f) else Theme.wash.copy(alpha = 0.09f), Theme.settle(), label = "edge")
     val width by animateDpAsState(if (focused) 1.5.dp else 1.dp, Theme.settle(), label = "width")
     val symbolInk by animateColorAsState(if (focused) Theme.foreground else Theme.muted, Theme.settle(), label = "symbol")
     val font = Font(13f)
@@ -264,7 +264,7 @@ fun MediaField(
             modifier = Modifier.weight(1f).focusRequester(focus),
             textStyle = font.style(Theme.foreground),
             singleLine = true,
-            cursorBrush = SolidColor(Theme.tally),
+            cursorBrush = SolidColor(Theme.tallyInk),
             interactionSource = source,
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.None,

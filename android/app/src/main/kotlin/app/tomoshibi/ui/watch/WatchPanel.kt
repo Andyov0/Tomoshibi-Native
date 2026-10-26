@@ -240,7 +240,7 @@ private fun VideoRow(engine: WatchEngine, video: WatchVideo, playing: Boolean, r
                         t("Added by {name}", mapOf("name" to video.by)),
                         if (video.duration > 0) clockOf(video.duration) else null,
                     ).joinToString(" · "),
-                    font = Font(10.5f), color = if (playing) Theme.tally else Theme.muted, lines = 1,
+                    font = Font(10.5f), color = if (playing) Theme.tallyInk else Theme.muted, lines = 1,
                 )
             }
             // Always there on a touch screen, which has no pointer to bring it.

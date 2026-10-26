@@ -271,7 +271,7 @@ private fun Composer(call: CallModel, modifier: Modifier = Modifier) {
                     .semantics { contentDescription = t("Say something") },
                 enabled = !offline,
                 textStyle = style,
-                cursorBrush = SolidColor(Theme.tally),
+                cursorBrush = SolidColor(Theme.tallyInk),
                 minLines = 1,
                 maxLines = 5,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
@@ -305,7 +305,7 @@ private fun Composer(call: CallModel, modifier: Modifier = Modifier) {
                     KitText(
                         "${draft.length}/${ChatRules.LONGEST}",
                         font = Font(10.5f, digits = true),
-                        color = if (draft.length >= ChatRules.LONGEST) Theme.tally else Theme.muted,
+                        color = if (draft.length >= ChatRules.LONGEST) Theme.tallyInk else Theme.muted,
                         lines = 1,
                     )
                 }
