@@ -35,6 +35,7 @@ import UIKit
 ///                                or application delegate (Mac)
 ///     forget-server              Change server
 ///     mic                        the menu's ⌘D
+///     camera on|off              the lobby's camera switch, before a call
 ///     leave                      the menu's Leave
 ///     relay <name>|auto          the server picker
 ///     move <relay>               the server moving the call, as the call
@@ -150,6 +151,10 @@ enum AppDebug {
         case "mic":
             Task { await app.toggleMicrophone() }
             return "pressed"
+        case "camera":
+            guard let said = rest.first, said == "on" || said == "off" else { return "camera \(app.startWithCamera ? "on" : "off")" }
+            app.startWithCamera = said == "on"
+            return "camera \(said)"
         case "leave":
             Task { await app.leave() }
             return "leaving"
