@@ -29,6 +29,10 @@ public struct AppRoot: View {
     /// The page under the screens keeps the call's appearance while the
     /// screen after a call fades in over it.
     @State private var pageInMeeting = false
+    #if os(iOS)
+    /// The system's appearance as this window reports it (WindowLookReader).
+    @State private var look = WindowLook()
+    #endif
     #if os(macOS)
     @Environment(\.openSettings) private var openSettings
     #endif
@@ -51,25 +55,14 @@ public struct AppRoot: View {
     /// drawn in the call's appearance for a moment before the window let go,
     /// and in the one the system had when the call began if the system had
     /// changed since. Told the system's appearance as it is now, it is drawn
-    /// in that from its first frame.
+    /// in that from its first frame. On the iPhone the window reports the
+    /// system's appearance as it changes (WindowLook); the Mac keeps what the
+    /// window last showed outside a call (`systemScheme`).
     private var outside: ColorScheme {
-        Self.systemNow ?? systemScheme ?? windowScheme
-    }
-
-    /// The system's appearance now, where it can be asked: on the iPhone the
-    /// screen's, which what a window is told to take does not reach. The Mac
-    /// keeps what the window last showed outside a call (`systemScheme`).
-    @MainActor
-    private static var systemNow: ColorScheme? {
         #if os(iOS)
-        let scene = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first
-        switch scene?.screen.traitCollection.userInterfaceStyle {
-        case .dark: return .dark
-        case .light: return .light
-        default: return nil
-        }
+        look.outside(window: windowScheme)
         #else
-        return nil
+        systemScheme ?? windowScheme
         #endif
     }
 
@@ -159,8 +152,14 @@ public struct AppRoot: View {
         .readsVerticalBarEdge { VerticalBarWindow.shared.reported = $0 }
         #endif
         // The window in the call's appearance while the call is the screen,
-        // and in the system's otherwise, following it as it changes.
+        // and in the system's otherwise, following it as it changes. On the
+        // iPhone through the window itself (WindowLookReader), which also
+        // reports the system's appearance for `outside`.
+        #if os(iOS)
+        .background(WindowLookReader(look: look, told: WindowLook.window(holdsCall: windowInMeeting, meeting: Theme.meeting)))
+        #else
         .preferredColorScheme(windowInMeeting ? Theme.meeting : nil)
+        #endif
         .onChange(of: windowScheme, initial: true) {
             windowNow = windowScheme
             if !windowInMeeting { systemScheme = windowScheme }
@@ -186,7 +185,9 @@ public struct AppRoot: View {
                     pageInMeeting = false
                     // Where the system cannot be asked, what it is now is
                     // what the window shows once it has let the call's go.
-                    if Self.systemNow == nil, let windowNow { systemScheme = windowNow }
+                    #if os(macOS)
+                    if let windowNow { systemScheme = windowNow }
+                    #endif
                 }
             }
         }
