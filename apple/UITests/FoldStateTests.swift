@@ -69,22 +69,29 @@ final class FoldStateTests: XCTestCase {
         sleep(3)
     }
 
-    func testTheJoinBarKeepsWhatIsTyped() throws {
+    /// On the outer display the lobby has no join bar: its Join stands in the
+    /// system's column and opens the join sheet (PhoneLobby), since a field
+    /// does not fit a column 84 points wide. What is half typed into that
+    /// sheet, opened from the column, stays through the phone opening out
+    /// into the sidebar's layout and closing again.
+    func testTheJoinSheetFromTheColumnKeepsWhatIsTyped() throws {
         try XCTSkipUnless(driven, "needs the fold driver")
         continueAfterFailure = false
         let app = launch([:])
+        let join = app.buttons["Join a meeting"]
+        XCTAssertTrue(join.waitForExistence(timeout: 30), "the lobby's Join, in the column")
+        join.tap()
         let field = app.textFields.firstMatch
-        XCTAssertTrue(field.waitForExistence(timeout: 30), "the lobby's join bar")
+        XCTAssertTrue(field.waitForExistence(timeout: 10), "the join sheet's room")
         field.tap()
         pastTheKeyboardTip(app)
         field.typeText("half-typed-room")
         open(app)
-        // Opened, the lobby is the window with a sidebar.
-        XCTAssertTrue(app.buttons["Start"].waitForExistence(timeout: 10), "the sidebar's Start")
+        XCTAssertEqual(app.textFields.firstMatch.value as? String, "half-typed-room", "the room, opened out")
         close(app)
         let again = app.textFields.firstMatch
-        XCTAssertTrue(again.waitForExistence(timeout: 10), "the join bar, back")
-        XCTAssertEqual(again.value as? String, "half-typed-room", "what was typed into the join bar")
+        XCTAssertTrue(again.waitForExistence(timeout: 10), "the join sheet, back")
+        XCTAssertEqual(again.value as? String, "half-typed-room", "what was typed into the join sheet")
     }
 
     func testTheSettingsKeepTheirSectionAndWhatIsTyped() throws {
