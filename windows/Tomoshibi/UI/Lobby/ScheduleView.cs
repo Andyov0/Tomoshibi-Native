@@ -40,9 +40,8 @@ internal sealed class ScheduleView : Grid, IRestyles
         _app = app;
         _account = account;
         _wide = wide;
-        var next = NextQuarter(DateTimeOffset.Now);
-        _day = next.Date;
-        _time = next.TimeOfDay;
+        (var day, _time) = ScheduleClock.Start(DateTimeOffset.Now, TimeZoneInfo.Local);
+        _day = day;
         _close = close;
         _ = app.Lobby.RefreshArrangements();
         Build();
@@ -120,14 +119,8 @@ internal sealed class ScheduleView : Grid, IRestyles
         Fill();
     }
 
-    /// <summary>The next quarter of an hour strictly after now.</summary>
-    private static DateTimeOffset NextQuarter(DateTimeOffset now)
-    {
-        var start = new DateTimeOffset(now.Year, now.Month, now.Day, now.Hour, now.Minute / 15 * 15, 0, now.Offset);
-        return start.AddMinutes(15);
-    }
-
-    private DateTimeOffset At => new DateTimeOffset(_day.Year, _day.Month, _day.Day, 0, 0, 0, DateTimeOffset.Now.Offset).Add(_time);
+    /// <summary>The day and time chosen, in the offset this zone has on that day (ScheduleClock).</summary>
+    private DateTimeOffset At => ScheduleClock.Instant(_day.Date, _time, TimeZoneInfo.Local, _now);
 
     private string? Problem()
     {
