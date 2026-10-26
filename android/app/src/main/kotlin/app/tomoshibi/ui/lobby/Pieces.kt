@@ -302,10 +302,10 @@ fun validTyped(text: String): Boolean = text.isNotBlank() && RoomNames.valid(Roo
 
 /**
  * ServerPicker.tsx `Latency`: green to 150 ms, the signal colour to 400, red
- * beyond (`latencyColour`). A figure, so the signal colour is its ink.
+ * beyond (`latencyColour`). A figure, so each colour is its ink.
  */
 @Composable
-fun latencyColour(ms: Double): Color = if (ms <= 150) Theme.good else if (ms <= 400) Theme.tallyInk else Theme.danger
+fun latencyColour(ms: Double): Color = if (ms <= 150) Theme.goodInk else if (ms <= 400) Theme.tallyInk else Theme.dangerInk
 
 /**
  * What the top bar of a page lays over the page where it runs up under the

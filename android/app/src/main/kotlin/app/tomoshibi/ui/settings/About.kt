@@ -156,7 +156,7 @@ private fun UpdateRow(updates: Updates) {
                     label = "said",
                 ) { (now, _) ->
                     if (now != null) {
-                        KitText(now, font = Font(11.5f), color = if (step is Step.Offered && step.problem != null) Theme.danger else Theme.muted)
+                        KitText(now, font = Font(11.5f), color = if (step is Step.Offered && step.problem != null) Theme.dangerInk else Theme.muted)
                     }
                 }
             }

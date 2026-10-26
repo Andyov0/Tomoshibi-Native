@@ -105,7 +105,7 @@ internal fun noticeShown(app: AppModel): Boolean = app.remote.notice?.text?.get(
 private fun Card(remote: Remote, notice: LobbyNotice, text: String, floating: Boolean) {
     val shape = ContinuousShape(20.dp)
     val tint = if (notice.warning) Theme.danger else Theme.tally
-    val ink = if (notice.warning) Theme.danger else Theme.tallyInk
+    val ink = if (notice.warning) Theme.dangerInk else Theme.tallyInk
     Row(
         Modifier
             .widthIn(max = 560.dp)

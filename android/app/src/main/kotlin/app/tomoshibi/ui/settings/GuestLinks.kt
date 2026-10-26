@@ -174,7 +174,7 @@ internal fun GuestLinksCard(app: AppModel, account: Account) {
                 shownLink?.let { link -> MadeLink(link) }
             }
             Arriving(said != null) {
-                KitText(shownSaid, font = Font(12f), color = if (saidIsGood) Theme.good else Theme.danger)
+                KitText(shownSaid, font = Font(12f), color = if (saidIsGood) Theme.goodInk else Theme.dangerInk)
             }
         }
     }

@@ -193,7 +193,7 @@ private fun Question(progress: State<Float>, arriving: Boolean, asked: Boolean, 
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 Box(Modifier.size(46.dp).background(Theme.danger.copy(alpha = 0.16f), CircleShape), contentAlignment = Alignment.Center) {
-                    Symbol("rectangle.portrait.and.arrow.right", size = 17f, weight = Font.Semibold, tint = Theme.danger)
+                    Symbol("rectangle.portrait.and.arrow.right", size = 17f, weight = Font.Semibold, tint = Theme.dangerInk)
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     KitText(t("Sign out of Tomoshibi?"), font = Font(17f, Font.Semibold), color = Theme.foreground, align = TextAlign.Center)

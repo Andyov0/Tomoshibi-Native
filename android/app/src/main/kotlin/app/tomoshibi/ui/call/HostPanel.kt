@@ -325,7 +325,7 @@ private fun Ending(feature: HostFeature) {
             Column(Modifier.fillMaxWidth().panelCard(tint = Theme.danger).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Box(Modifier.width(18.dp), contentAlignment = Alignment.Center) {
-                        Symbol("door.left.hand.closed", size = 13f, weight = Font.Semibold, tint = Theme.danger)
+                        Symbol("door.left.hand.closed", size = 13f, weight = Font.Semibold, tint = Theme.dangerInk)
                     }
                     KitText(
                         if (feature.scoped) {

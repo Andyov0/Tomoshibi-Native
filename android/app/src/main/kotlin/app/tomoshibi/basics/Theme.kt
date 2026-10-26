@@ -50,6 +50,15 @@ class Palette private constructor(
     val danger: Color,
     val dangerForeground: Color,
     /**
+     * `good` and `danger` as words or a thin symbol on the page (a latency
+     * figure, an error line): themselves in the dark, a step darker in the
+     * light, where the connection green was about 2.2 to one on the page
+     * and the red about 3.3 (the palette's addendum). The light, the dot,
+     * the red button keep `good` and `danger`.
+     */
+    val goodInk: Color,
+    val dangerInk: Color,
+    /**
      * What a screen stands on under its cards: black in the dark, where the
      * phone's lobby and its sheets have always stood on black, and the
      * page's own grey in the light, the cards white on it.
@@ -117,6 +126,8 @@ class Palette private constructor(
             good = Color(0.188f, 0.820f, 0.345f),
             danger = Color(1.0f, 0.271f, 0.227f),
             dangerForeground = Color.White,
+            goodInk = Color(0.188f, 0.820f, 0.345f),
+            dangerInk = Color(1.0f, 0.271f, 0.227f),
             ground = Color.Black,
             wash = Color.White,
         )
@@ -133,6 +144,8 @@ class Palette private constructor(
             good = Color(0xFF34C759),
             danger = Color(0xFFFF3B30),
             dangerForeground = Color.White,
+            goodInk = Color(0xFF217E38),
+            dangerInk = Color(0xFFD70015),
             ground = Color(0xFFF2F2F7),
             wash = Color.Black,
         )
@@ -157,6 +170,8 @@ class Palette private constructor(
                 lerp(Dark.good, Light.good, daylight),
                 lerp(Dark.danger, Light.danger, daylight),
                 lerp(Dark.dangerForeground, Light.dangerForeground, daylight),
+                lerp(Dark.goodInk, Light.goodInk, daylight),
+                lerp(Dark.dangerInk, Light.dangerInk, daylight),
                 lerp(Dark.ground, Light.ground, daylight),
                 lerp(Dark.wash, Light.wash, daylight),
             )
@@ -200,6 +215,8 @@ object Theme {
     val good: Color @Composable @ReadOnlyComposable get() = LocalPalette.current.good
     val danger: Color @Composable @ReadOnlyComposable get() = LocalPalette.current.danger
     val dangerForeground: Color @Composable @ReadOnlyComposable get() = LocalPalette.current.dangerForeground
+    val goodInk: Color @Composable @ReadOnlyComposable get() = LocalPalette.current.goodInk
+    val dangerInk: Color @Composable @ReadOnlyComposable get() = LocalPalette.current.dangerInk
     val ground: Color @Composable @ReadOnlyComposable get() = LocalPalette.current.ground
     val wash: Color @Composable @ReadOnlyComposable get() = LocalPalette.current.wash
 

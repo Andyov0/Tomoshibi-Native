@@ -211,7 +211,7 @@ fun RoundButton(
     val press = rememberPress()
     val lit = press.lit && on
     val ink by animateColorAsState(
-        if (!lit) Theme.muted else if (role == RoundRole.Destructive) Theme.danger else Theme.foreground,
+        if (!lit) Theme.muted else if (role == RoundRole.Destructive) Theme.dangerInk else Theme.foreground,
         Motion.hover(), label = "ink",
     )
     val fill by animateColorAsState(

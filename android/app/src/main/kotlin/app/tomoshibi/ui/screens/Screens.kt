@@ -275,7 +275,7 @@ private fun BackButton(action: () -> Unit) {
 /** A line under the room saying something about it, in the muted voice (`Note`). */
 @Composable
 private fun Note(text: String, danger: Boolean = false) {
-    KitText(text, Modifier.fillMaxWidth(), font = Font(12.5f), color = if (danger) Theme.danger else Theme.muted, align = TextAlign.Center)
+    KitText(text, Modifier.fillMaxWidth(), font = Font(12.5f), color = if (danger) Theme.dangerInk else Theme.muted, align = TextAlign.Center)
 }
 
 /** The main button's words, or a spinner while what it asked is out. */
@@ -611,8 +611,8 @@ private fun ProblemSlot(app: AppModel) {
                 .padding(horizontal = 12.dp, vertical = 9.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Symbol("exclamationmark.circle.fill", Modifier.padding(top = 1.dp), size = 12.5f, tint = Theme.danger)
-            KitText(said ?: "", Modifier.weight(1f), font = Font(12.5f), color = Theme.danger)
+            Symbol("exclamationmark.circle.fill", Modifier.padding(top = 1.dp), size = 12.5f, tint = Theme.dangerInk)
+            KitText(said ?: "", Modifier.weight(1f), font = Font(12.5f), color = Theme.dangerInk)
             if (app.problemStays) {
                 val press = rememberPress()
                 Box(

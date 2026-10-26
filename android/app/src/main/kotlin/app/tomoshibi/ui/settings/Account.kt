@@ -116,7 +116,7 @@ internal fun AccountSettings(app: AppModel) {
                 kept,
                 Modifier.clickable(interactionSource = null, indication = null) { said = null }.testTag("settings.account.said"),
                 font = Font(12.5f),
-                color = Theme.danger,
+                color = Theme.dangerInk,
             )
         }
     }
@@ -413,8 +413,8 @@ private fun Passphrase(app: AppModel, say: (String?) -> Unit) {
                 }
                 AnimatedVisibility(changed, enter = Theme.arrive, exit = Theme.depart) {
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Symbol("checkmark.circle.fill", size = 12f, tint = Theme.good)
-                        KitText(t("Changed."), font = Font(12f), color = Theme.good, lines = 1)
+                        Symbol("checkmark.circle.fill", size = 12f, tint = Theme.goodInk)
+                        KitText(t("Changed."), font = Font(12f), color = Theme.goodInk, lines = 1)
                     }
                 }
             }

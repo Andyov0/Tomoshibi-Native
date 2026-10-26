@@ -369,8 +369,8 @@ fun MediaProblem(text: String, modifier: Modifier = Modifier) {
             .padding(horizontal = 10.dp, vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
-        Symbol("exclamationmark.circle.fill", Modifier.padding(top = 2.dp), size = 11f, tint = Theme.danger)
-        KitText(text, font = Font(12f), color = Theme.danger)
+        Symbol("exclamationmark.circle.fill", Modifier.padding(top = 2.dp), size = 11f, tint = Theme.dangerInk)
+        KitText(text, font = Font(12f), color = Theme.dangerInk)
     }
 }
 

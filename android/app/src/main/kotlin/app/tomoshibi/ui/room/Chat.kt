@@ -294,8 +294,8 @@ private fun Composer(call: CallModel, modifier: Modifier = Modifier) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 AnimatedVisibility(call.chatFailed, enter = Theme.arrive, exit = Theme.depart) {
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Symbol("exclamationmark.circle.fill", size = 11f, tint = Theme.danger)
-                        KitText(t("That could not be sent."), font = Font(11f), color = Theme.danger, lines = 1)
+                        Symbol("exclamationmark.circle.fill", size = 11f, tint = Theme.dangerInk)
+                        KitText(t("That could not be sent."), font = Font(11f), color = Theme.dangerInk, lines = 1)
                     }
                 }
                 Spacer(Modifier.weight(1f))

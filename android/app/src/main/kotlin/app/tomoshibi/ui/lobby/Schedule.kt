@@ -318,7 +318,7 @@ private fun Form(app: AppModel, account: Account, draft: ScheduleDraft, modifier
         }
         Box(Modifier.fillMaxWidth().height(1.dp).background(Theme.wash.copy(alpha = 0.06f)))
         val problem = draft.problem()
-        val ink by animateColorAsState(if (problem) Theme.danger else Theme.muted, Theme.settle(), label = "verdict")
+        val ink by animateColorAsState(if (problem) Theme.dangerInk else Theme.muted, Theme.settle(), label = "verdict")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             SwappingSymbol(if (problem) "exclamationmark.circle" else "calendar.badge.clock", Modifier.padding(top = 1.dp), size = 12f, weight = Font.Semibold, tint = ink)
             Crossfade(draft.verdict(), Modifier.weight(1f), animationSpec = Theme.settle(), label = "verdict") { said ->
@@ -521,7 +521,7 @@ private fun RowCircle(symbol: String, label: String, destructive: Boolean = fals
                 .background(Theme.wash.copy(alpha = if (press.pressed) 0.14f else 0.07f), CircleShape)
                 .border(1.dp, Theme.wash.copy(alpha = 0.09f), CircleShape),
             contentAlignment = Alignment.Center,
-        ) { SwappingSymbol(symbol, size = 12f, weight = Font.Semibold, tint = if (destructive) Theme.danger else Theme.foreground) }
+        ) { SwappingSymbol(symbol, size = 12f, weight = Font.Semibold, tint = if (destructive) Theme.dangerInk else Theme.foreground) }
     }
 }
 

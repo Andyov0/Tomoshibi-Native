@@ -105,7 +105,7 @@ fun MenuItem(
                     size = 13f,
                     weight = Font.Medium,
                     tint = when (role) {
-                        MenuRole.Destructive -> Theme.danger
+                        MenuRole.Destructive -> Theme.dangerInk
                         MenuRole.Prominent -> Theme.tallyInk
                         MenuRole.Normal -> Theme.foreground.copy(alpha = 0.85f)
                     },
@@ -116,7 +116,7 @@ fun MenuItem(
             KitText(
                 title,
                 font = Font(13.5f, if (role == MenuRole.Normal) Font.Regular else Font.Semibold),
-                color = if (role == MenuRole.Destructive) Theme.danger else Theme.foreground,
+                color = if (role == MenuRole.Destructive) Theme.dangerInk else Theme.foreground,
             )
             if (detail != null) KitText(detail, font = Font(11.5f), color = Theme.muted)
         }

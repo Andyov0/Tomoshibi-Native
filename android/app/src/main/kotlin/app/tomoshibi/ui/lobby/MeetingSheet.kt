@@ -403,7 +403,7 @@ private fun Footer(app: AppModel, draft: MeetingDraft, go: () -> Unit, cancel: (
         var said by remember { mutableStateOf(app.problem) }
         app.problem?.let { said = it }
         Appear(app.problem != null) {
-            KitText(said ?: "", font = Font(12.5f), color = Theme.danger, align = TextAlign.Center)
+            KitText(said ?: "", font = Font(12.5f), color = Theme.dangerInk, align = TextAlign.Center)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             val knock = app.problem != null && app.canKnock
@@ -565,7 +565,7 @@ fun ScopedRoomField(
                 t("You are not in {scope}, so this room will not let you in.", mapOf("scope" to typedScope)),
                 Modifier.padding(horizontal = 6.dp),
                 font = Font(12f),
-                color = Theme.danger,
+                color = Theme.dangerInk,
             )
         }
     }

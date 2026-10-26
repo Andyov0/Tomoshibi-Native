@@ -211,7 +211,7 @@ private fun Said(
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
         val tint = if (warning) Theme.danger else Theme.tally
-        val ink = if (warning) Theme.danger else Theme.tallyInk
+        val ink = if (warning) Theme.dangerInk else Theme.tallyInk
         Box(
             Modifier.size(30.dp).background(tint.copy(alpha = 0.18f), CircleShape),
             contentAlignment = Alignment.Center,
@@ -221,7 +221,7 @@ private fun Said(
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             KitText(title, font = Font(14f, Font.Semibold))
             for (line in lines) KitText(line, font = Font(12.5f), color = Theme.muted, lines = 6)
-            if (problem != null) KitText(problem, font = Font(12.5f), color = Theme.danger)
+            if (problem != null) KitText(problem, font = Font(12.5f), color = Theme.dangerInk)
             above?.invoke()
             Row(
                 Modifier.fillMaxWidth().padding(top = 6.dp),

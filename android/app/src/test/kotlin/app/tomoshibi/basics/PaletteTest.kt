@@ -1,6 +1,7 @@
 package app.tomoshibi.basics
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -31,7 +32,9 @@ class PaletteTest {
         assertEquals(0.45f, dark.shade(0.45f))
         assertEquals(Color.White.copy(alpha = 0.07f), dark.plate(0.07f))
         for (accent in Accent.entries) assertEquals(accent.color, dark.tally(accent))
-        // The dark writes in its one colour.
+        // The dark writes in its one colour, the green and the red as well.
+        assertEquals(dark.good, dark.goodInk)
+        assertEquals(dark.danger, dark.dangerInk)
         for (accent in Accent.entries) assertEquals(accent.color, dark.tallyInk(accent))
     }
 
@@ -78,6 +81,29 @@ class PaletteTest {
         }
         // The fill is what failed: the guard is not passing for want of anything to catch.
         assertTrue(contrast(Palette.Light.tally(Accent.Amber), page) < 3.0)
+    }
+
+    /**
+     * The same for the connection green and the red as words in the light: a
+     * latency figure, an error line on the page and on the light red ground
+     * an error sits on (danger at ten per cent over the white card, the
+     * lightest red ground the screens give one). The light and the red
+     * button keep `good` and `danger`, which fail as words.
+     */
+    @Test
+    fun theLightGreenAndRedReadAsWords() {
+        val light = Palette.Light
+        val page = light.background
+        assertEquals(Color(0xFF217E38), light.goodInk)
+        assertEquals(Color(0xFFD70015), light.dangerInk)
+        assertTrue("the green's ink is ${"%.2f".format(contrast(light.goodInk, page))} to one", contrast(light.goodInk, page) >= 4.5)
+        assertTrue("the red's ink is ${"%.2f".format(contrast(light.dangerInk, page))} to one", contrast(light.dangerInk, page) >= 4.5)
+        val errorGround = light.danger.copy(alpha = 0.10f).compositeOver(light.surface)
+        assertTrue("the red's ink on its own ground is ${"%.2f".format(contrast(light.dangerInk, errorGround))} to one", contrast(light.dangerInk, errorGround) >= 4.5)
+        assertTrue(contrast(light.good, page) < 3.0)
+        assertTrue(contrast(light.danger, page) < 4.5)
+        assertEquals(Color(0xFF34C759), light.good)
+        assertEquals(Color(0xFFFF3B30), light.danger)
     }
 
     private fun contrast(a: Color, b: Color): Double {
