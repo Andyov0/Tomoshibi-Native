@@ -29,6 +29,10 @@ public enum VerticalBar {
     /// stand on (the kit's ColumnCapsule), forty-four point plates in seven
     /// points of glass either side.
     public static let leastWidth: CGFloat = 58
+    /// Where the head of the system's column starts at the least, when the
+    /// system says nothing covers it (`column`): below the clock and the
+    /// signal the inner display on its side stands there.
+    public static let systemHeadroom: CGFloat = 100
 
     /// The edge the system lays its bars down, for a window `window` big.
     ///
@@ -52,6 +56,23 @@ public enum VerticalBar {
         guard window.width > window.height else { return nil }
         if let rehearsed { return rehearsed }
         return divided ? (rightToLeft ? .leading : .trailing) : nil
+    }
+
+    /// Whether the screens lay themselves out as the outer display's are, a
+    /// column down the side and no sidebar: a window `window` big at a
+    /// `regular` width, wider than tall, whose system lays its bars down
+    /// `edge`. That is the inner display on its side.
+    ///
+    /// The inner display on its side was given the lobby an iPad has, a
+    /// sidebar holding Start, Join, the server and the account, with the
+    /// column beside its stage holding only the microphone and the camera;
+    /// the owner found it did not look right beside the outer display, whose
+    /// column holds everything, and chose the outer display's screens for it
+    /// (2026-10-26). A compact width is the outer display whichever way it is
+    /// held, which has those screens already, and taller than wide is the
+    /// inner display upright, whose bars are an ordinary iPhone's.
+    public static func sideways(edge: HorizontalEdge?, regular: Bool, window: CGSize) -> Bool {
+        regular && edge != nil && window.width > window.height
     }
 
     /// Whether a view whose frame in its window is `frame`, `inset` short of
@@ -105,17 +126,29 @@ public enum VerticalBar {
     /// across it, and this is for whatever else a fold may do. Nil where
     /// what is left is not `least` tall. The column starts eight points
     /// below its head, as the call's bar does.
+    ///
+    /// `headroom` is how far down the head starts at the least where nothing
+    /// is said to occlude it: the system's own column on the inner display
+    /// on its side has its clock and signal at the head, some hundred points
+    /// of it (the owner's photograph of a phone, 2026-10-26), and a column
+    /// whose head the system did not report covered would have stood the
+    /// first control over the clock. Nothing where something is reported
+    /// there, which then says where the head is.
     public static func column(x: CGFloat, width: CGFloat, height: CGFloat, top: CGFloat,
-                              occlusions: [CGRect], creases: [CGRect], least: CGFloat) -> CGRect? {
+                              occlusions: [CGRect], creases: [CGRect], least: CGFloat,
+                              headroom: CGFloat = 0) -> CGRect? {
         var head = top
         var foot = height
+        var covered = false
         for region in occlusions where region.maxX > x && region.minX < x + width {
             if region.midY < height / 2 {
                 head = max(head, region.maxY)
+                covered = true
             } else {
                 foot = min(foot, region.minY)
             }
         }
+        if !covered { head = max(head, headroom) }
         var column = CGRect(x: x, y: head + 8, width: width, height: max(0, foot - head - 8))
         for crease in creases where crease.intersects(column) {
             if crease.width >= crease.height {

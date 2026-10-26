@@ -41,6 +41,22 @@ final class VerticalBarTests: XCTestCase {
                      "nothing before the window is measured")
     }
 
+    // MARK: The outer display's screens on the inner display
+
+    /// The inner display on its side is laid out as the outer display is,
+    /// with no sidebar; upright, and the outer display either way, are as
+    /// they were.
+    func testOnlyTheInnerDisplayOnItsSideTakesTheOuterDisplaysScreens() {
+        XCTAssertTrue(VerticalBar.sideways(edge: .trailing, regular: true, window: side), "the inner display on its side")
+        XCTAssertFalse(VerticalBar.sideways(edge: nil, regular: true, window: side),
+                       "a wide window whose bars are across the top, an iPad's")
+        XCTAssertFalse(VerticalBar.sideways(edge: .trailing, regular: true, window: upright), "the inner display upright")
+        XCTAssertFalse(VerticalBar.sideways(edge: .trailing, regular: false, window: outer), "the outer display upright")
+        XCTAssertFalse(VerticalBar.sideways(edge: .trailing, regular: false, window: CGSize(width: 678, height: 466)),
+                       "the outer display on its side, which has the phone's screens already")
+        XCTAssertFalse(VerticalBar.sideways(edge: .trailing, regular: true, window: .zero), "before the window is measured")
+    }
+
     // MARK: A column of the screen's own
 
     func testNoColumnIsKeptWhereTheSystemKeepsOne() {
@@ -113,6 +129,28 @@ final class VerticalBarTests: XCTestCase {
         XCTAssertEqual(column?.maxY ?? 0, 629, accuracy: 0.01)
         let off = VerticalBar.column(x: 867, width: 84, height: 629, top: 0, occlusions: [], creases: [], least: 0)
         XCTAssertEqual(off?.minY, 8, "with the camera off, from the head of the view")
+    }
+
+    /// The system's column on the inner display on its side has its clock
+    /// at the head: where nothing is reported over it the head starts below
+    /// where the clock stands, and where something is, that says where.
+    func testTheSystemsColumnKeepsClearOfAClockItDoesNotReport() {
+        let bare = VerticalBar.column(x: 867, width: 84, height: 649, top: 0, occlusions: [], creases: [], least: 0,
+                                      headroom: VerticalBar.systemHeadroom)
+        XCTAssertEqual(bare?.minY, VerticalBar.systemHeadroom + 8)
+        let clock = CGRect(x: 867, y: 0, width: 84, height: 132)
+        let reported = VerticalBar.column(x: 867, width: 84, height: 649, top: 0, occlusions: [clock], creases: [], least: 0,
+                                          headroom: VerticalBar.systemHeadroom)
+        XCTAssertEqual(reported?.minY, clock.maxY + 8, "what the system reports, even nearer the head than the least")
+        let low = CGRect(x: 880, y: 560, width: 40, height: 40)
+        XCTAssertEqual(VerticalBar.column(x: 867, width: 84, height: 649, top: 0, occlusions: [low], creases: [], least: 0,
+                                          headroom: VerticalBar.systemHeadroom)?.minY,
+                       VerticalBar.systemHeadroom + 8, "something at the foot says nothing of the head")
+        // The outer display's head, which the system reports, is where it was.
+        let occlusions = [CGRect(x: 399.67, y: 29.33, width: 37, height: 37), CGRect(x: 382, y: 0, width: 84, height: 174)]
+        XCTAssertEqual(VerticalBar.column(x: 382, width: 84, height: 644, top: 0, occlusions: occlusions, creases: [], least: 0,
+                                          headroom: VerticalBar.systemHeadroom),
+                       CGRect(x: 382, y: 182, width: 84, height: 462))
     }
 
     func testAnOcclusionAtTheFootLiftsIt() {
