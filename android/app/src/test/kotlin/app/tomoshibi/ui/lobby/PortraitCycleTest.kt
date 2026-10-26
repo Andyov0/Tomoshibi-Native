@@ -13,10 +13,11 @@ import org.junit.Test
 /**
  * The camera card's frame loop (PreviewGlass `CycleState.run`) against a
  * display of its own, on the test's virtual clock: it moves the drawing with
- * the frames, no more than sixty times a second on a display of 125, asks
- * for no frames at all while nothing moves, and goes on from where it was
- * stopped. The first of these is what the card on an emulator showed to be
- * missing: the loop ran every frame and drew nothing.
+ * the frames, thirty times a second on a display of 125, asks for no frames
+ * between those nor at all while nothing moves, and goes on from where it
+ * was stopped. A first version on an emulator ran every frame and drew
+ * nothing; a later one drew at sixty, and the window drawn again sixty times
+ * a second took a third of a core.
  */
 class PortraitCycleTest {
     /** The book of PortraitArtTest: first's stroke from 0.25 to 1.25 after a 0.5 gap, held from 2.0 to 3.0 after it. */
@@ -61,20 +62,20 @@ class PortraitCycleTest {
     }
 
     @Test
-    fun theDrawingMovesWithTheFramesAtSixtyASecond() = runTest {
+    fun theDrawingMovesWithTheFramesAtThirtyASecond() = runTest {
         val (cycle, display) = cycleOnADisplay()
         val job = launch(display) { cycle.run() }
         // 1.108 seconds after the first frame at 8: 0.6 after the gap.
         advanceTimeBy(1_116)
         assertEquals(0, cycle.person)
-        assertEquals(0.6, cycle.written, 0.02)
+        assertEquals(0.6, cycle.written, 0.04)
         job.cancel()
         // While the first stroke is drawn (0.75 to 1.75 into the cycle), each
-        // frame the display draws shows the drawing further on, sixty times a
-        // second and no more: a display at 125 a second draws every other one.
+        // frame shows the drawing further on, about thirty a second: the
+        // display at 125 is asked for one frame in four.
         val drawing = display.frames.filter { (ms, _) -> ms in 850..1_100 }.map { it.second }
         val moves = drawing.zipWithNext().count { (a, b) -> b != a }
-        assertTrue("$moves moves in a quarter of a second", moves in 13..16)
+        assertTrue("$moves moves in a quarter of a second", moves in 5..9)
     }
 
     @Test
@@ -87,8 +88,10 @@ class PortraitCycleTest {
         // and the pen is lifted between their strokes from 1.75 to 2.0.
         assertTrue(display.frames.count { (ms, _) -> ms in 2_560..3_480 } <= 1)
         assertTrue(display.frames.count { (ms, _) -> ms in 1_800..1_990 } <= 1)
-        // While the first stroke is drawn, every frame is asked for.
-        assertTrue(display.frames.count { (ms, _) -> ms in 900..1_100 } >= 20)
+        // While the first stroke is drawn, a frame is asked for about thirty
+        // times a second, and none of the display's frames between those.
+        val asked = display.frames.count { (ms, _) -> ms in 900..1_100 }
+        assertTrue("$asked frames in a fifth of a second", asked in 4..8)
     }
 
     @Test
@@ -103,6 +106,6 @@ class PortraitCycleTest {
         job = launch(display) { cycle.run() }
         advanceTimeBy(216)
         job.cancel()
-        assertEquals(stopped + 0.2, cycle.written, 0.03)
+        assertEquals(stopped + 0.2, cycle.written, 0.06)
     }
 }

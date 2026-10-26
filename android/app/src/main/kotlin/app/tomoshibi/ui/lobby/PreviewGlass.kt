@@ -88,7 +88,8 @@ import kotlin.math.min
 // front, while the card is scrolled out of sight or covered by a sheet, and
 // in the gap and the hold nothing on it is drawn again at all: the owner
 // found an Android phone hot in a call (2026-10-17), and a lobby left open on
-// a desk should cost nothing while nothing moves.
+// a desk should cost nothing while nothing moves. While it moves it is drawn
+// thirty times a second (CycleState `run`).
 
 /**
  * The camera card's glass with the children on it, filling what it is put
@@ -199,8 +200,16 @@ internal class CycleState(
 
     /**
      * Moves the drawing on by the display's frames while something on it
-     * moves, at no more than sixty a second, and sleeps through the moments
-     * when nothing does; carries on from where it stopped when started again.
+     * moves, thirty a second, and sleeps through the moments when nothing
+     * does; carries on from where it stopped when started again.
+     *
+     * Thirty, not the display's rate: every frame of the drawing is a frame
+     * of the whole window, and on an emulator a lobby drawing at sixty took
+     * a third of a core and its inner screen half of one, where at thirty
+     * they took six and eight per cent. A line growing for a fraction of a
+     * second is not seen to move any less smoothly at thirty. Between frames
+     * it waits rather than letting the display's frames go by unused: each
+     * of those woke the app to do nothing.
      *
      * Its frames are an infinite animation's, which a test of the screens
      * around the card stops at once (the test's InfiniteAnimationPolicy): with
@@ -210,28 +219,17 @@ internal class CycleState(
     suspend fun run() {
         val from = stoppedAt
         val began = withInfiniteAnimationFrameNanos { it }
-        // When a frame was last shown; none yet. Not Long.MIN_VALUE: a frame
-        // time less that overflowed below nought, every frame counted as too
-        // soon after the last, and the card stood empty while the loop ran.
-        var lastShown: Long? = null
         var at = from
         try {
             while (true) {
                 val frame = withInfiniteAnimationFrameNanos { it }
                 at = from + (frame - began) / 1e9
-                // A phone drawing 120 frames a second draws this at sixty, as
-                // the iPhone's timeline does: a line growing by a hair a frame
-                // is not seen to move any more smoothly, and every frame is
-                // the lines worked out again.
-                if (lastShown != null && frame - lastShown < MIN_FRAME_NANOS) continue
-                lastShown = frame
                 val moment = timeline.at(at)
                 show(moment)
-                if (!moment.moving) {
-                    // The settled frame is the one just shown; nothing changes
-                    // until the next stroke, the fade or the next child.
-                    delay(((moment.until - at) * 1000).toLong().coerceAtLeast(0) + 1)
-                }
+                // The settled frame, when nothing moves, is the one just
+                // shown; nothing changes until the next stroke, the fade or
+                // the next child.
+                delay(if (moment.moving) FRAME_WAIT_MS else ((moment.until - at) * 1000).toLong().coerceAtLeast(0) + 1)
             }
         } finally {
             // Counting the still moment it was stopped in, as far as it got:
@@ -241,8 +239,12 @@ internal class CycleState(
     }
 
     companion object {
-        /** Sixty a second, less a little, so that a display at exactly sixty is not held to thirty. */
-        const val MIN_FRAME_NANOS = 15_500_000L
+        /**
+         * The wait after a frame while something moves: the next frame the
+         * display draws after it is a thirtieth of a second after the last
+         * at sixty, ninety or a hundred and twenty a second.
+         */
+        const val FRAME_WAIT_MS = 28L
     }
 }
 
