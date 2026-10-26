@@ -836,7 +836,7 @@ struct SidebarLobby: View {
                 // lay half on either page.
                 case .scheduled: ScheduleView(app: app, account: account, draft: state.schedule, close: { state.place = .home })
                     .keptToOnePage(.reading)
-                case .servers: ServersView(app: app).keptToOnePage(.reading)
+                case .servers: ServersView(app: app, ownColumn: true).keptToOnePage(.reading)
                 }
             }
             // One identity for each section: the same Group switching what
@@ -1018,6 +1018,14 @@ struct AccountMenu: View {
 private struct HomeStage: View {
     @Bindable var app: AppModel
     let account: Account
+    /// The microphone and the camera, and the server, stand in the column
+    /// down the right of an iPhone Duo's inner display on its side
+    /// (SystemColumn), where the system lays its bars on that display and
+    /// the outer one alike, and leave the foot and the corner of the stage
+    /// while they do. Only the stage beside the sidebar: Apple keeps a split
+    /// view's sidebar under bars across its top, and its Start and Join stay
+    /// at its head.
+    @State private var inColumn = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -1038,24 +1046,43 @@ private struct HomeStage: View {
             .rise()
         }
         .overlay(alignment: .bottom) {
-            DeviceSwitches(app: app)
-                .padding(8)
-                .glassSurface(Capsule())
-                .keptToOnePage(.reading)
-                .padding(.bottom, 28)
-                .rise(0.08)
+            if !inColumn {
+                DeviceSwitches(app: app)
+                    .padding(8)
+                    .glassSurface(Capsule())
+                    .keptToOnePage(.reading)
+                    .padding(.bottom, 28)
+                    .rise(0.08)
+                    .transition(Theme.arrive)
+            }
         }
         // In the stage's corner rather than the toolbar: a toolbar item is
         // drawn apart from the window's content, and the app's popover could
         // not reach out of it. Only where there is a machine to choose.
         .overlay(alignment: .topTrailing) {
-            if app.offersRelayChoice {
+            if app.offersRelayChoice && !inColumn {
                 ServerMenu(app: app)
                     .padding(.top, 12).padding(.trailing, 16)
                     .transition(Theme.arrive)
             }
         }
         .animation(Theme.settle, value: app.offersRelayChoice)
+        .animation(Theme.settle, value: inColumn)
+        #if os(iOS)
+        // The server under the column's head, where the system stands a
+        // page's own items, and the microphone and the camera at its foot,
+        // as the outer display's lobby has them.
+        .systemColumn($inColumn, least: 200) {
+            ZStack {
+                if app.offersRelayChoice {
+                    ServerMenu(app: app, inColumn: true).transition(Theme.arrive)
+                }
+            }
+            .animation(Theme.settle, value: app.offersRelayChoice)
+        } foot: {
+            ColumnCapsule { ColumnDeviceSwitches(app: app) }
+        }
+        #endif
     }
 }
 
@@ -1223,7 +1250,11 @@ struct PhoneLobby: View {
                         ColumnRule()
                         BarButton(symbol: "calendar", label: t("Schedule a meeting")) { state.place = .scheduled }
                         BarButton(symbol: "link", label: t("Join a meeting")) { state.sheet = .join("") }
-                        BarButton(symbol: "video.fill", label: t("Start a meeting"), lit: true) { state.sheet = .start }
+                        // A plus rather than the camera the button starts
+                        // a call with: just under the camera switch, the
+                        // owner took the camera's picture on it for another
+                        // camera switch (2026-10-26).
+                        BarButton(symbol: "plus", label: t("Start a meeting"), lit: true) { state.sheet = .start }
                     }
                     .transition(Theme.arrive)
                 }
@@ -1913,23 +1944,41 @@ struct ServerMenu: View {
     @Bindable var app: AppModel
     var compact = false
     var id = "server"
+    /// Under the head of the column down the side of an iPhone Duo's inner
+    /// display (HomeStage): the symbol alone, on a circle the size of the
+    /// system's own items there, since the column is 84 points wide. The
+    /// choice and its round trip are said by the button's label and shown
+    /// by the menu it opens.
+    var inColumn = false
     @Environment(\.popovers) private var popovers
 
     var body: some View {
         if let popovers {
-            Button { popovers.toggle(id) } label: {
-                HStack(spacing: 6) {
-                    if !compact { Image(systemName: "server.rack").font(.system(size: 12)) }
-                    Text(app.relayChoice.map { app.lobby.label($0) } ?? t("Automatic")).lineLimit(1)
-                    if let ms = current {
-                        Text("\(Int(ms)) ms").monospacedDigit().foregroundStyle(latencyColour(ms))
+            Group {
+                if inColumn {
+                    Button { popovers.toggle(id) } label: {
+                        Image(systemName: "server.rack").font(.system(size: 16, weight: .semibold))
                     }
-                    Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Theme.muted)
+                    .buttonStyle(.glassCircle(48))
+                    .accessibilityLabel(t("Server"))
+                    .accessibilityValue(app.relayChoice.map { app.lobby.label($0) } ?? t("Automatic"))
+                    .help(t("Server"))
+                } else {
+                    Button { popovers.toggle(id) } label: {
+                        HStack(spacing: 6) {
+                            if !compact { Image(systemName: "server.rack").font(.system(size: 12)) }
+                            Text(app.relayChoice.map { app.lobby.label($0) } ?? t("Automatic")).lineLimit(1)
+                            if let ms = current {
+                                Text("\(Int(ms)) ms").monospacedDigit().foregroundStyle(latencyColour(ms))
+                            }
+                            Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(Theme.muted)
+                        }
+                        .font(.system(size: 12.5))
+                    }
+                    .buttonStyle(.glassCapsule(compact ? 30 : 34))
+                    .fixedSize()
                 }
-                .font(.system(size: 12.5))
             }
-            .buttonStyle(.glassCapsule(compact ? 30 : 34))
-            .fixedSize()
             .floatingPopover(id, in: popovers, width: 290) {
                 ScrollView {
                     MenuCard {
@@ -2474,8 +2523,38 @@ struct ServersView: View {
     /// iPhone Duo's outer display (PhoneLobby), and leaves the page's head
     /// while it is.
     var measureInColumn = false
+    /// The page is the section beside the lobby's sidebar (SidebarLobby),
+    /// and stands its own Measure again at the foot of the column down the
+    /// right of an iPhone Duo's inner display on its side, as the phone's
+    /// lobby stands it in the outer display's. Not inside the phone's lobby,
+    /// whose column already holds it.
+    var ownColumn = false
+    @State private var columnShown = false
 
     var body: some View {
+        #if os(iOS)
+        if ownColumn {
+            page
+                .animation(Theme.settle, value: columnShown)
+                .systemColumn($columnShown, least: 120) {
+                    EmptyView()
+                } foot: {
+                    ColumnCapsule {
+                        BarButton(symbol: "arrow.clockwise", label: t("Measure again")) {
+                            Task { await app.lobby.measure() }
+                        }
+                        .disabled(app.lobby.measuring)
+                    }
+                }
+        } else {
+            page
+        }
+        #else
+        page
+        #endif
+    }
+
+    private var page: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 HStack(alignment: .center) {
@@ -2488,7 +2567,7 @@ struct ServersView: View {
                     FleetLine(app: app)
                     #endif
                     Spacer()
-                    if !measureInColumn {
+                    if !measureInColumn && !columnShown {
                         Button {
                             Task { await app.lobby.measure() }
                         } label: {
@@ -2503,6 +2582,7 @@ struct ServersView: View {
                 }
                 .frame(minHeight: 32)
                 .animation(Theme.settle, value: measureInColumn)
+                .animation(Theme.settle, value: columnShown)
                 .rise()
                 SettingsSection(title: t("Automatic")) {
                     row(title: t("Automatic"), detail: automaticDetail, symbol: "wand.and.stars", chosen: app.relayChoice == nil,

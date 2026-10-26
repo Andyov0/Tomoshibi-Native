@@ -136,11 +136,34 @@ extension Fold {
 /// Device Hub's buttons and SpringBoard refuses a pose from anything else on a
 /// build that is not Apple's own. TOMOSHIBI_DEBUG_GEOMETRY=1 logs what the
 /// system says about the room's edges under the app's `geometry` category.
+///
+/// TOMOSHIBI_DEBUG_VERTICAL_EDGE=trailing|leading, under the same two
+/// conditions, stands in for the system saying it lays its bars down that
+/// edge, on a window wider than tall where it says nothing (VerticalBar
+/// `edge`): the inner display on its side does say so, and the simulator's
+/// stand-in for it, the resizable display the app is moved to with
+/// `devicectl device appResize`, says nothing either way up and reports no
+/// fold. The real inner display turns and opens only from Device Hub's
+/// buttons. A release build never reads it.
 enum FoldDebug {
     static let posture: String? = {
         #if DEBUG
         let all = ProcessInfo.processInfo.environment
         return all["TOMOSHIBI_BASE"] == nil ? nil : all["TOMOSHIBI_DEBUG_FOLD"]
+        #else
+        return nil
+        #endif
+    }()
+
+    static let verticalEdge: HorizontalEdge? = {
+        #if DEBUG
+        let all = ProcessInfo.processInfo.environment
+        guard all["TOMOSHIBI_BASE"] != nil else { return nil }
+        switch all["TOMOSHIBI_DEBUG_VERTICAL_EDGE"] {
+        case "trailing": return .trailing
+        case "leading": return .leading
+        default: return nil
+        }
         #else
         return nil
         #endif
@@ -201,6 +224,8 @@ extension View {
     /// and of the inner display held on its side; the leading edge of an app
     /// in the left half of Split View. Nil where the system keeps its bars
     /// across the top and the foot, which is everywhere before iOS 27.1.
+    /// The system's word alone: the screens take the window's
+    /// (VerticalBarWindow) where this says nothing.
     @ViewBuilder
     func readsVerticalBarEdge(_ report: @escaping (HorizontalEdge?) -> Void) -> some View {
         #if os(iOS)
