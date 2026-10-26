@@ -245,6 +245,14 @@ public struct SettingsView: View {
     @State private var localization = Localization.shared
     @Namespace private var highlight
     @Environment(\.dismiss) private var dismiss
+    /// The close, or on a section the way back to the list, stands in the
+    /// system's column down the side of an iPhone Duo's outer display
+    /// (SystemColumn), under the clock as the system's own back button
+    /// stands, and leaves the page's head while it does.
+    @State private var inColumn = false
+    /// The sheet is a sidebar beside a page (`wide`), where a section has no
+    /// list to go back to.
+    @State private var beside = false
 
     public init(app: AppModel) {
         self.app = app
@@ -360,6 +368,24 @@ public struct SettingsView: View {
             }
             .animation(Theme.settle, value: wide)
             .animation(Theme.settle, value: book)
+            .onChange(of: wide, initial: true) { beside = wide }
+        }
+        .animation(Theme.settle, value: inColumn)
+        .systemColumn($inColumn, least: 120) {
+            ZStack {
+                if open != nil && !beside {
+                    ColumnHeadButton(symbol: "chevron.left", label: t("Settings")) {
+                        withAnimation(Theme.settle) { open = nil }
+                    }
+                    .transition(Theme.arrive)
+                } else {
+                    ColumnHeadButton(symbol: "xmark", label: t("Close")) { dismiss() }
+                        .transition(Theme.arrive)
+                }
+            }
+            .animation(Theme.settle, value: open != nil && !beside)
+        } foot: {
+            EmptyView()
         }
         .presentationDragIndicator(.visible)
         .presentationCornerRadius(34)
@@ -444,12 +470,16 @@ public struct SettingsView: View {
             HStack {
                 Text(t("Settings")).font(.system(size: 21, weight: .bold))
                 Spacer(minLength: 8)
-                Button { dismiss() } label: {
-                    Image(systemName: "xmark").font(.system(size: 13, weight: .bold))
+                if !inColumn {
+                    Button { dismiss() } label: {
+                        Image(systemName: "xmark").font(.system(size: 13, weight: .bold))
+                    }
+                    .buttonStyle(.glassCircle(36))
+                    .accessibilityLabel(t("Close"))
+                    .transition(Theme.arrive)
                 }
-                .buttonStyle(.glassCircle(36))
-                .accessibilityLabel(t("Close"))
             }
+            .frame(minHeight: 36)
             .padding(.leading, 10).padding(.top, 14).padding(.bottom, 10)
             ScrollView {
                 VStack(alignment: .leading, spacing: 3) {
@@ -508,11 +538,14 @@ public struct SettingsView: View {
                 HStack {
                     Text(t("Settings")).font(.system(size: 32, weight: .bold))
                     Spacer()
-                    Button { dismiss() } label: {
-                        Image(systemName: "xmark").font(.system(size: 13, weight: .bold))
+                    if !inColumn {
+                        Button { dismiss() } label: {
+                            Image(systemName: "xmark").font(.system(size: 13, weight: .bold))
+                        }
+                        .buttonStyle(.glassCircle(36))
+                        .accessibilityLabel(t("Close"))
+                        .transition(Theme.arrive)
                     }
-                    .buttonStyle(.glassCircle(36))
-                    .accessibilityLabel(t("Close"))
                 }
                 .padding(.top, 22)
                 .rise()
@@ -597,7 +630,7 @@ public struct SettingsView: View {
         ScrollView {
             ScrollViewReader { reader in
             VStack(alignment: .leading, spacing: 0) {
-                if back {
+                if back && !inColumn {
                     Button { withAnimation(Theme.settle) { open = nil } } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "chevron.left").font(.system(size: 13, weight: .bold))

@@ -154,6 +154,10 @@ struct BarButton: View {
     /// Off, and drawn quieter for it: a muted microphone is a choice, not a
     /// fault, so it is unlit rather than red (ControlBar.tsx `Toggle`).
     var quiet = false
+    /// Off before a call, where the screens draw a microphone or a camera
+    /// that is off in red (DeviceSwitches): the last moment to notice before
+    /// everybody else does. Not in a call, where off is `quiet`.
+    var alarm = false
     /// Its popover is open.
     var pressed = false
     var size: CGFloat = 44
@@ -166,15 +170,17 @@ struct BarButton: View {
             Image(systemName: symbol)
                 .font(.system(size: size * 0.36, weight: .semibold))
                 .contentTransition(.symbolEffect(.replace))
-                .foregroundStyle(lit ? Theme.tallyForeground : (quiet ? Theme.muted : Theme.foreground))
+                .foregroundStyle(lit ? Theme.tallyForeground : alarm ? Theme.dangerForeground : (quiet ? Theme.muted : Theme.foreground))
                 .frame(width: size, height: size)
-                .background(Circle().fill(lit ? Theme.tally : Color.white.opacity(pressed ? 0.24 : hovering && enabled ? 0.18 : 0.12)))
-                .overlay(Circle().stroke(Color.white.opacity(lit ? 0.3 : pressed ? 0.2 : 0.08), lineWidth: 1))
+                .background(Circle().fill(lit ? Theme.tally : alarm ? Theme.danger
+                                          : Color.white.opacity(pressed ? 0.24 : hovering && enabled ? 0.18 : 0.12)))
+                .overlay(Circle().stroke(Color.white.opacity(lit || alarm ? 0.3 : pressed ? 0.2 : 0.08), lineWidth: 1))
                 .contentShape(Circle())
         }
         .buttonStyle(BarPress())
         .onHover { hovering = $0 }
         .animation(Theme.settle, value: lit)
+        .animation(Theme.settle, value: alarm)
         .animation(.easeOut(duration: 0.12), value: hovering)
         .animation(Theme.settle, value: pressed)
         .accessibilityLabel(label)

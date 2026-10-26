@@ -486,6 +486,10 @@ struct SignInView: View {
     @State private var shown = false
     @State private var link = ""
     @State private var popovers = Popovers()
+    /// The language and the paste control stand in the system's column down
+    /// the side of an iPhone Duo's outer display (SystemColumn), and are
+    /// taken out of the corner and the foot while they do.
+    @State private var inColumn = false
     #if os(iOS)
     /// A phone on its side, and the Duo's outer display on its side or as a
     /// tent: the heading, the card and the paste control stacked were taller
@@ -532,7 +536,7 @@ struct SignInView: View {
                                 .font(.system(size: 14)).foregroundStyle(Theme.muted)
                                 .multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
                             #if os(iOS)
-                            if short { pasteLink.padding(.top, 6).transition(.opacity) }
+                            if short && !inColumn { pasteLink.padding(.top, 6).transition(.opacity) }
                             #endif
                         }
                         .frame(maxWidth: short ? 280 : nil)
@@ -596,7 +600,7 @@ struct SignInView: View {
         }
         #if os(iOS)
         .safeAreaInset(edge: .bottom) {
-            if !short {
+            if !short && !inColumn {
                 pasteLink
                     .keptToOnePage(.reading)
                     .padding(.bottom, 8)
@@ -605,7 +609,20 @@ struct SignInView: View {
         }
         #endif
         .overlay(alignment: .topTrailing) {
-            LanguageMenu().padding(16)
+            if !inColumn {
+                LanguageMenu().padding(16).transition(Theme.arrive)
+            }
+        }
+        .animation(Theme.settle, value: inColumn)
+        // The language under the clock, where the system stands a screen's
+        // own items, and the paste control at the column's foot, where the
+        // thumb is; the words that mention a link stay on the card.
+        .systemColumn($inColumn, least: 160) {
+            LanguageMenu(size: 48, glyph: 18)
+        } foot: {
+            #if os(iOS)
+            columnPaste
+            #endif
         }
         .toast(app)
         .floatingPopoverLayer(popovers)
@@ -627,6 +644,21 @@ struct SignInView: View {
             .buttonBorderShape(.capsule)
             .tint(Theme.surfaceHigh)
         }
+    }
+
+    /// The same control in the system's column: the system's own paste
+    /// button, its symbol alone on a circle, since a column 84 points wide
+    /// has no room for the word beside it.
+    private var columnPaste: some View {
+        PasteButton(payloadType: String.self) { strings in
+            guard let text = strings.first?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  let url = URL(string: text), url.host() != nil else { return }
+            Task { await app.open(url) }
+        }
+        .labelStyle(.iconOnly)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
+        .tint(Theme.surfaceHigh)
     }
     #endif
 
@@ -702,15 +734,19 @@ struct SignInView: View {
 /// The language, before a call as on every web page; following the system
 /// until somebody chooses. A popover of the screen's (`floatingPopoverLayer`).
 struct LanguageMenu: View {
+    /// 36 points in a screen's corner, 48 under the clock in the system's
+    /// column, the size of the system's own items there.
+    var size: CGFloat = 36
+    var glyph: CGFloat = 14
     @Environment(\.popovers) private var popovers
     @State private var localization = Localization.shared
 
     var body: some View {
         if let popovers {
             Button { popovers.toggle("language") } label: {
-                Image(systemName: "globe").font(.system(size: 14, weight: .medium))
+                Image(systemName: "globe").font(.system(size: glyph, weight: .medium))
             }
-            .buttonStyle(.glassCircle(36))
+            .buttonStyle(.glassCircle(size))
             .accessibilityLabel(t("Language"))
             .help(t("Language"))
             .floatingPopover("language", in: popovers, width: 230) {
@@ -1053,6 +1089,15 @@ struct PhoneLobby: View {
     private var saying: Bool {
         app.remote.notice != nil || app.updates?.shown == true
     }
+    /// The lobby's controls stand in the system's column down the side of an
+    /// iPhone Duo's outer display (SystemColumn): the microphone and the
+    /// camera, arranging, joining and starting at its foot, the account under
+    /// the clock. The preview's buttons and the join bar leave the page while
+    /// they do, which then holds the preview and the lists alone; the join
+    /// bar's field could not stand in a column 84 points wide, and Join there
+    /// opens the join sheet, whose field takes the keyboard, as the sidebar's
+    /// Join does.
+    @State private var inColumn = false
 
     var body: some View {
         NavigationStack {
@@ -1118,15 +1163,46 @@ struct PhoneLobby: View {
             .background(Color.black.ignoresSafeArea())
             .navigationTitle("Tomoshibi")
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { state.settings = true } label: { AccountAvatar(name: account.name, address: app.avatarAddress, size: 30) }
-                        .accessibilityLabel(t("Settings"))
+                AccountItem(name: account.name, address: app.avatarAddress) { state.settings = true }
+            }
+            .safeAreaInset(edge: .bottom) {
+                if !inColumn { joinBar.transition(Theme.arrive) }
+            }
+            .navigationDestination(isPresented: serversShown) {
+                ServersView(app: app, measureInColumn: inColumn)
+            }
+        }
+        .animation(Theme.settle, value: inColumn)
+        // On the stack rather than on its home page, so that the column
+        // changes with the page: the server page's own control takes the
+        // place of the lobby's as the page is pushed, and the lobby's come
+        // back with the swipe that pops it. The head is left to the system,
+        // which stands the account there, and the back button in its place
+        // on the server page.
+        .systemColumn($inColumn, least: 300) {
+            EmptyView()
+        } foot: {
+            ZStack(alignment: .bottom) {
+                if state.place == .servers {
+                    ColumnCapsule {
+                        BarButton(symbol: "arrow.clockwise", label: t("Measure again")) {
+                            Task { await app.lobby.measure() }
+                        }
+                        .disabled(app.lobby.measuring)
+                    }
+                    .transition(Theme.arrive)
+                } else {
+                    ColumnCapsule {
+                        ColumnDeviceSwitches(app: app)
+                        ColumnRule()
+                        BarButton(symbol: "calendar", label: t("Schedule a meeting")) { state.place = .scheduled }
+                        BarButton(symbol: "link", label: t("Join a meeting")) { state.sheet = .join("") }
+                        BarButton(symbol: "video.fill", label: t("Start a meeting"), lit: true) { state.sheet = .start }
+                    }
+                    .transition(Theme.arrive)
                 }
             }
-            .safeAreaInset(edge: .bottom) { joinBar }
-            .navigationDestination(isPresented: serversShown) {
-                ServersView(app: app)
-            }
+            .animation(Theme.settle, value: state.place == .servers)
         }
         .toast(app)
         .floatingPopoverLayer(state.popovers)
@@ -1261,24 +1337,29 @@ struct PhoneLobby: View {
         .frame(height: height)
         .frame(maxWidth: .infinity, maxHeight: height == nil ? .infinity : nil)
         .overlay(alignment: .topTrailing) {
-            DeviceSwitches(app: app, size: 40).padding(12)
+            if !inColumn {
+                DeviceSwitches(app: app, size: 40).padding(12).transition(Theme.arrive)
+            }
         }
         .overlay(alignment: .bottom) {
-            GlassGroup(spacing: 8) {
-                HStack(spacing: 8) {
-                    Button { state.sheet = .start } label: {
-                        Label(t("Start a meeting"), systemImage: "video.fill").frame(maxWidth: .infinity)
+            if !inColumn {
+                GlassGroup(spacing: 8) {
+                    HStack(spacing: 8) {
+                        Button { state.sheet = .start } label: {
+                            Label(t("Start a meeting"), systemImage: "video.fill").frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.glassCapsule(52, prominent: true))
+                        Button { state.place = .scheduled } label: {
+                            Label(t("Schedule a meeting"), systemImage: "calendar").labelStyle(.iconOnly)
+                        }
+                        .buttonStyle(.glassCircle(52))
+                        .accessibilityLabel(t("Schedule a meeting"))
                     }
-                    .buttonStyle(.glassCapsule(52, prominent: true))
-                    Button { state.place = .scheduled } label: {
-                        Label(t("Schedule a meeting"), systemImage: "calendar").labelStyle(.iconOnly)
-                    }
-                    .buttonStyle(.glassCircle(52))
-                    .accessibilityLabel(t("Schedule a meeting"))
                 }
+                .font(.system(size: 16, weight: .semibold))
+                .padding(12)
+                .transition(Theme.arrive)
             }
-            .font(.system(size: 16, weight: .semibold))
-            .padding(12)
         }
     }
 
@@ -1310,6 +1391,35 @@ struct PhoneLobby: View {
         guard validRoomName(name: room) else { return }
         state.sheet = .join(room)
         state.typed = ""
+    }
+}
+
+/// The phone lobby's account button, in its navigation bar. The system
+/// judges an item whose label is a picture of the app's own (the avatar) to
+/// fit only across the top, and on an iPhone Duo's outer display it was left
+/// at the head of the page beside the title while the column beside it stood
+/// empty under the clock. Marked as preferring the system's column
+/// (`axisBehavior`, iOS 27.1) it stands there under the clock, as the server
+/// page's back button does; where the system lays no bar down the side the
+/// mark changes nothing.
+private struct AccountItem: ToolbarContent {
+    let name: String
+    let address: URL?
+    let open: () -> Void
+
+    var body: some ToolbarContent {
+        if #available(iOS 27.1, *) {
+            item.axisBehavior(.verticalPreferred)
+        } else {
+            item
+        }
+    }
+
+    private var item: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button(action: open) { AccountAvatar(name: name, address: address, size: 30) }
+                .accessibilityLabel(t("Settings"))
+        }
     }
 }
 #endif
@@ -1358,6 +1468,11 @@ struct MeetingSheet: View {
     /// card was 680 points long and as tall as the screen.
     private var wide: Bool { sizeClass == .regular || heightClass == .compact }
     #endif
+    /// The close and the microphone and camera stand in the system's column
+    /// down the side of an iPhone Duo's outer display (SystemColumn), and
+    /// leave the card while they do, which keeps the choice, the form and
+    /// Start: a field and the button that answers it are the card's.
+    @State private var inColumn = false
 
     init(app: AppModel, mode: Mode) {
         self.app = app
@@ -1412,7 +1527,9 @@ struct MeetingSheet: View {
                 ZStack(alignment: wide ? .center : .bottom) {
                     VStack(spacing: 16) {
                         header
-                        DeviceSwitches(app: app, size: 52)
+                        if !inColumn {
+                            DeviceSwitches(app: app, size: 52).transition(Theme.arrive)
+                        }
                         form
                         footer
                     }
@@ -1427,6 +1544,12 @@ struct MeetingSheet: View {
             }
             .putsKeyboardAway()
             .animation(Theme.settle, value: wide)
+            .animation(Theme.settle, value: inColumn)
+            .systemColumn($inColumn, least: 220) {
+                ColumnHeadButton(symbol: "xmark", label: t("Cancel")) { cancel() }
+            } foot: {
+                ColumnCapsule { ColumnDeviceSwitches(app: app) }
+            }
             #endif
         }
         .animation(Theme.settle, value: sealing)
@@ -1450,9 +1573,12 @@ struct MeetingSheet: View {
 
     private var header: some View {
         HStack {
-            Button { cancel() } label: { Image(systemName: "xmark").font(.system(size: 13, weight: .bold)) }
-                .buttonStyle(.glassCircle(32))
-                .accessibilityLabel(t("Cancel"))
+            if !inColumn {
+                Button { cancel() } label: { Image(systemName: "xmark").font(.system(size: 13, weight: .bold)) }
+                    .buttonStyle(.glassCircle(32))
+                    .accessibilityLabel(t("Cancel"))
+                    .transition(Theme.arrive)
+            }
             #if os(macOS)
             Spacer()
             choice.frame(maxWidth: 300)
@@ -1895,6 +2021,10 @@ struct ScheduleView: View {
     @State private var copied: String?
     @State private var now = Date()
     @State private var popovers = Popovers()
+    /// The close stands in the system's column down the side of an iPhone
+    /// Duo's outer display (SystemColumn), under the clock, and leaves the
+    /// heading while it does.
+    @State private var inColumn = false
 
     private static let ahead: TimeInterval = 60 * 24 * 60 * 60
 
@@ -1940,9 +2070,12 @@ struct ScheduleView: View {
                 HStack(alignment: .top, spacing: 12) {
                     heading(size: 22)
                     Spacer(minLength: 0)
-                    Button(action: close) { Image(systemName: "xmark").font(.system(size: 13, weight: .bold)) }
-                        .buttonStyle(.glassCircle(32))
-                        .accessibilityLabel(t("Close"))
+                    if !inColumn {
+                        Button(action: close) { Image(systemName: "xmark").font(.system(size: 13, weight: .bold)) }
+                            .buttonStyle(.glassCircle(32))
+                            .accessibilityLabel(t("Close"))
+                            .transition(Theme.arrive)
+                    }
                 }
                 // Clear of the sheet's grabber, which it sat against.
                 .padding(.top, 22)
@@ -1957,6 +2090,12 @@ struct ScheduleView: View {
         #if os(iOS)
         .background(Backdrop().opacity(0.6).ignoresSafeArea())
         .putsKeyboardAway()
+        .animation(Theme.settle, value: inColumn)
+        .systemColumn($inColumn, least: 120) {
+            ColumnHeadButton(symbol: "xmark", label: t("Close"), action: close)
+        } foot: {
+            EmptyView()
+        }
         #else
         .background(Backdrop().opacity(0.6))
         #endif
@@ -2301,6 +2440,10 @@ struct ScheduleView: View {
 /// cards rather than the system's grouped list.
 struct ServersView: View {
     @Bindable var app: AppModel
+    /// Measuring again is the column's beside the phone's lobby on an
+    /// iPhone Duo's outer display (PhoneLobby), and leaves the page's head
+    /// while it is.
+    var measureInColumn = false
 
     var body: some View {
         ScrollView {
@@ -2315,16 +2458,21 @@ struct ServersView: View {
                     FleetLine(app: app)
                     #endif
                     Spacer()
-                    Button {
-                        Task { await app.lobby.measure() }
-                    } label: {
-                        Label(t("Measure again"), systemImage: "arrow.clockwise")
-                            .labelStyle(.titleAndIcon)
-                            .font(.system(size: 12.5, weight: .semibold))
+                    if !measureInColumn {
+                        Button {
+                            Task { await app.lobby.measure() }
+                        } label: {
+                            Label(t("Measure again"), systemImage: "arrow.clockwise")
+                                .labelStyle(.titleAndIcon)
+                                .font(.system(size: 12.5, weight: .semibold))
+                        }
+                        .buttonStyle(.glassCapsule(32))
+                        .disabled(app.lobby.measuring)
+                        .transition(Theme.arrive)
                     }
-                    .buttonStyle(.glassCapsule(32))
-                    .disabled(app.lobby.measuring)
                 }
+                .frame(minHeight: 32)
+                .animation(Theme.settle, value: measureInColumn)
                 .rise()
                 SettingsSection(title: t("Automatic")) {
                     row(title: t("Automatic"), detail: automaticDetail, symbol: "wand.and.stars", chosen: app.relayChoice == nil,

@@ -188,17 +188,29 @@ enum DebugWindow {
 }
 #endif
 
-/// A screen that is a single card of glass over the backdrop.
+/// A screen that is a single card of glass over the backdrop, with the way
+/// back at its foot where it has one.
 private struct CardScreen<Content: View>: View {
     var width: CGFloat = 420
+    var back: (() -> Void)?
     @ViewBuilder var content: Content
     @State private var popovers = Popovers()
+    /// The way back and the language stand in the system's column down the
+    /// side of an iPhone Duo's outer display (SystemColumn), under the clock
+    /// where the system stands a back button, and leave the card and the
+    /// corner while they do.
+    @State private var inColumn = false
 
     var body: some View {
         ZStack {
             Backdrop()
             ScrollView {
-                VStack(spacing: 18) { content }
+                VStack(spacing: 18) {
+                    content
+                    if let back, !inColumn {
+                        BackButton(action: back).transition(Theme.arrive)
+                    }
+                }
                     .contentLayer()
                     .padding(22)
                     .frame(maxWidth: width)
@@ -213,7 +225,18 @@ private struct CardScreen<Content: View>: View {
             // keeps to the page it is read on, or above a fold across it.
             .keptToOneSide(.reading)
         }
-        .overlay(alignment: .topTrailing) { LanguageMenu().padding(16) }
+        .overlay(alignment: .topTrailing) {
+            if !inColumn { LanguageMenu().padding(16).transition(Theme.arrive) }
+        }
+        .animation(Theme.settle, value: inColumn)
+        .systemColumn($inColumn, least: 120) {
+            VStack(spacing: 12) {
+                if let back { ColumnHeadButton(symbol: "chevron.left", label: t("Back"), action: back) }
+                LanguageMenu(size: 48, glyph: 18)
+            }
+        } foot: {
+            EmptyView()
+        }
         .floatingPopoverLayer(popovers)
         .onAppear { popovers.openFromDebug() }
     }
@@ -226,9 +249,16 @@ private struct CardScreen<Content: View>: View {
 /// on a short screen.
 private struct PaneScreen<Heading: View, Content: View>: View {
     @Bindable var app: AppModel
+    /// The way back, at the pane's foot.
+    let back: () -> Void
     @ViewBuilder var heading: Heading
     @ViewBuilder var content: Content
     @State private var popovers = Popovers()
+    /// The way back and the microphone and camera stand in the system's
+    /// column down the side of an iPhone Duo's outer display (SystemColumn),
+    /// as a back button and a bar stand there, and leave the pane while they
+    /// do; the name, the options and Join are the pane's.
+    @State private var inColumn = false
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(\.verticalSizeClass) private var heightClass
@@ -261,9 +291,19 @@ private struct PaneScreen<Heading: View, Content: View>: View {
                         let layout = short ? AnyLayout(HStackLayout(alignment: .center, spacing: 24))
                                            : AnyLayout(VStackLayout(spacing: 16))
                         layout {
-                            VStack(spacing: 16) { heading }
-                                .frame(maxWidth: short ? 260 : nil)
-                            VStack(spacing: 16) { content }
+                            VStack(spacing: 16) {
+                                heading
+                                if !inColumn {
+                                    DeviceSwitches(app: app, size: 52).transition(Theme.arrive)
+                                }
+                            }
+                            .frame(maxWidth: short ? 260 : nil)
+                            VStack(spacing: 16) {
+                                content
+                                if !inColumn {
+                                    BackButton(action: back).transition(Theme.arrive)
+                                }
+                            }
                         }
                         .padding(18)
                         .concentricGlassShell(minimum: 34)
@@ -282,6 +322,12 @@ private struct PaneScreen<Heading: View, Content: View>: View {
             }
             .rise()
             .keptToOneSide(.reading)
+        }
+        .animation(Theme.settle, value: inColumn)
+        .systemColumn($inColumn, least: 220) {
+            ColumnHeadButton(symbol: "chevron.left", label: t("Back"), action: back)
+        } foot: {
+            ColumnCapsule { ColumnDeviceSwitches(app: app) }
         }
         .floatingPopoverLayer(popovers)
         .onAppear { popovers.openFromDebug() }
@@ -384,11 +430,14 @@ struct PreJoinScreen: View {
             animated
         }
         #else
-        PaneScreen(app: app) { heading } content: { animated }
+        // The way back calls off a join that is out (AppModel `cancelJoin`).
+        PaneScreen(app: app, back: { app.backToLobby() }) { heading } content: { animated }
         #endif
     }
 
-    /// What you are invited to, and the picture and the sound you go in with.
+    /// What you are invited to, and the picture and the sound you go in with
+    /// (on the phone the pane draws the microphone and the camera, which
+    /// move to the system's column where there is one).
     @ViewBuilder
     private var heading: some View {
         RoomHeading(app: app, room: app.room, door: door)
@@ -398,8 +447,6 @@ struct PreJoinScreen: View {
             .overlay(alignment: .bottom) {
                 DeviceSwitches(app: app, size: 38).padding(6).glassSurface(Capsule()).padding(.bottom, 12)
             }
-        #else
-        DeviceSwitches(app: app, size: 52)
         #endif
     }
 
@@ -456,8 +503,10 @@ struct PreJoinScreen: View {
                 .disabled(app.busy || app.joiningName.isEmpty)
                 .transition(Theme.arrive)
         }
+        #if os(macOS)
         // Calls off a join that is out (AppModel `cancelJoin`).
         BackButton { app.backToLobby() }
+        #endif
     }
 
     private func join() {
@@ -701,14 +750,13 @@ struct KnockingScreen: View {
     @Bindable var app: AppModel
 
     var body: some View {
-        CardScreen {
+        CardScreen(back: { app.stopKnocking() }) {
             Heading(title: app.room, mono: true)
             HStack(spacing: 12) {
                 ProgressView().controlSize(.small)
                 Text(t("Waiting for somebody to let you in.")).font(.system(size: 14))
             }
             .padding(.vertical, 8)
-            BackButton { app.stopKnocking() }
         }
     }
 }
@@ -736,11 +784,12 @@ struct WaitingScreen: View {
             animated
         }
         #else
-        PaneScreen(app: app) { heading } content: { animated }
+        PaneScreen(app: app, back: { app.stopWaiting() }) { heading } content: { animated }
         #endif
     }
 
-    /// The meeting's room, and the picture and the sound you will go in with.
+    /// The meeting's room, and the picture and the sound you will go in with
+    /// (on the phone the pane draws the microphone and the camera).
     @ViewBuilder
     private var heading: some View {
         Heading(title: app.room, mono: true)
@@ -750,8 +799,6 @@ struct WaitingScreen: View {
             .overlay(alignment: .bottom) {
                 DeviceSwitches(app: app, size: 38).padding(6).glassSurface(Capsule()).padding(.bottom, 12)
             }
-        #else
-        DeviceSwitches(app: app, size: 52)
         #endif
     }
 
@@ -782,7 +829,9 @@ struct WaitingScreen: View {
         if let problem = app.problem {
             ProblemLine(app: app, text: problem)
         }
+        #if os(macOS)
         BackButton { app.stopWaiting() }
+        #endif
     }
 
     @ViewBuilder
@@ -844,7 +893,7 @@ struct EndedScreen: View {
     @Bindable var app: AppModel
 
     var body: some View {
-        CardScreen {
+        CardScreen(back: { app.backToLobby() }) {
             Image(systemName: symbol).font(.system(size: 26, weight: .medium))
                 .foregroundStyle(app.ending == .left ? Theme.muted : Theme.foreground)
                 .frame(width: 64, height: 64)
@@ -869,7 +918,6 @@ struct EndedScreen: View {
             if let problem = app.problem {
                 ProblemLine(app: app, text: problem)
             }
-            BackButton { app.backToLobby() }
         }
         .animation(Theme.settle, value: app.problem)
         .animation(Theme.settle, value: app.problemStays)

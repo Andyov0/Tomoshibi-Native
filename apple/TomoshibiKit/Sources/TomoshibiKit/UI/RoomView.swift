@@ -80,7 +80,8 @@ public struct RoomView: View {
             // ignores the safe area, the safe area it ignores reads as nothing.
             #if os(iOS)
             let inset = filled ? deviceInsets : EdgeInsets()
-            let column = filled ? nil : Self.systemColumn(geometry, edge: barEdge)
+            let column = filled ? nil : SystemColumn.frame(geometry, edge: barEdge,
+                                                           least: CGSize(width: ControlBar.columnWidth, height: ControlBar.columnHeight))
             #else
             let inset = EdgeInsets()
             let column: CGRect? = nil
@@ -553,39 +554,6 @@ public struct RoomView: View {
         case .table: return .table(upper: fold.pane(.first, in: size), lower: fold.pane(.second, in: size))
         }
     }
-
-    #if os(iOS)
-    /// The column the system lays its own bars down, outside the room's safe
-    /// area on `edge` and below whatever occludes its top (the status bar
-    /// and the camera of an iPhone Duo's outer display, which the system
-    /// reports as occlusion regions), in the room's coordinates; nil where
-    /// the system lays no bars down the side, or leaves too little room
-    /// there for the bar (the app's languages are all read left to right, so
-    /// the column's side is the side the edge names).
-    ///
-    /// Laid inside the safe area instead, the bar took the foot of a screen
-    /// that the Duo's outer display has little of, and the column beside it,
-    /// a quarter of the width, stood empty below the clock.
-    @MainActor
-    static func systemColumn(_ proxy: GeometryProxy, edge: HorizontalEdge?) -> CGRect? {
-        guard let edge else { return nil }
-        let insets = proxy.safeAreaInsets
-        let width = edge == .trailing ? insets.trailing : insets.leading
-        guard width >= ControlBar.columnWidth else { return nil }
-        let x = edge == .trailing ? proxy.size.width : -width
-        var top = insets.top
-        if #available(iOS 27.1, *) {
-            for region in proxy.reservedRegions(kind: .occlusion) where region.isActive {
-                let frame = region.frame
-                if frame.maxX > x, frame.minX < x + width, frame.midY < proxy.size.height / 2 {
-                    top = max(top, frame.maxY)
-                }
-            }
-        }
-        let column = CGRect(x: x, y: top + 8, width: width, height: max(0, proxy.size.height - top - 8))
-        return column.height >= ControlBar.columnHeight ? column : nil
-    }
-    #endif
 
     // MARK: Arrangement
 
