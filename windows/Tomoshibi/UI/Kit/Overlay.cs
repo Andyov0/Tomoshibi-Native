@@ -14,6 +14,34 @@ internal enum Edge { Below, Above, Left }
 internal enum Align { Start, Centre, End }
 
 /// <summary>
+/// What a dialog holds that draws itself again when the system goes light or
+/// dark while it is open (Overlay.Repaint), keeping what was typed and
+/// chosen in it.
+/// </summary>
+internal interface IRestyles
+{
+    void Restyle();
+}
+
+/// <summary>A dialog's content made by a function, made again in the new scheme when it changes.</summary>
+internal sealed class Redrawn : Grid, IRestyles
+{
+    private readonly Func<UIElement> _make;
+
+    public Redrawn(Func<UIElement> make)
+    {
+        _make = make;
+        Children.Add(make());
+    }
+
+    public void Restyle()
+    {
+        Children.Clear();
+        Children.Add(_make());
+    }
+}
+
+/// <summary>
 /// What lies over the screen: one popover at a time, and the dialogs and
 /// sheets (Android's FloatingPopoverLayer, DialogHost and SheetHost). Drawn
 /// in the window's own tree rather than in Popup windows, so that each
@@ -30,7 +58,7 @@ internal sealed class Overlay : Grid
     private readonly List<Held> _dialogs = new();
 
     private sealed record Pop(string Id, Border Catcher, FrameworkElement Panel, Action? Closed);
-    private sealed record Held(Border Dim, FrameworkElement Panel, Action Dismiss, bool Sheet);
+    private sealed record Held(Border Dim, FrameworkElement Panel, Action Dismiss, bool Sheet, Border Body, bool Frosted, Func<Brush> Ground, UIElement Content);
 
     public Overlay()
     {
@@ -92,8 +120,11 @@ internal sealed class Overlay : Grid
             HorizontalScrollMode = ScrollMode.Disabled,
             MaxHeight = Math.Max(120, ActualHeight - 20),
         };
-        var glass = K.Glass(scroller, 18);
+        var glass = K.Floating(scroller, 18);
         glass.Width = limit;
+        // In the scheme of the screen it opens over, for the Windows controls
+        // inside as well as for the kit's colours.
+        glass.RequestedTheme = Ink.Element;
         glass.TabFocusNavigation = KeyboardNavigationMode.Cycle;
         var panel = K.Holding(glass);
         panel.Measure(new Windows.Foundation.Size(limit, ActualHeight - 20));
@@ -174,21 +205,7 @@ internal sealed class Overlay : Grid
     /// </param>
     public Action ShowDialog(UIElement content, double width, double? maxHeight, Action dismiss, bool sheet = false, bool scrolls = true, bool cover = false, bool frosted = false)
     {
-        var dim = new Border
-        {
-            Background = frosted
-                ? new AcrylicBrush
-                {
-                    TintColor = Microsoft.UI.Colors.Black,
-                    // Luminosity near full: thin, the red of the microphone
-                    // and camera switches under it came through as a ring of
-                    // the acrylic's grain.
-                    TintOpacity = 0.12,
-                    TintLuminosityOpacity = 0.62,
-                    FallbackColor = Ink.Of(Shade.Black.WithAlpha(0.6f)),
-                }
-                : Ink.Black(0.45f),
-        };
+        var dim = new Border { Background = DimFor(frosted) };
         dim.PointerPressed += (_, e) =>
         {
             e.Handled = true;
@@ -200,22 +217,26 @@ internal sealed class Overlay : Grid
         UIElement Held() => scrolls
             ? new ScrollViewer { Content = content, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollMode = ScrollMode.Disabled }
             : content;
+        Border chrome;
+        Func<Brush> ground;
         if (sheet && cover)
         {
-            panel = new Border
+            ground = () => Ink.Background;
+            panel = chrome = new Border
             {
                 Child = content,
-                Background = Ink.Background,
+                Background = ground(),
                 VerticalAlignment = VerticalAlignment.Stretch,
                 HorizontalAlignment = HorizontalAlignment.Stretch,
             };
         }
         else if (sheet)
         {
+            ground = () => Ink.Background;
             var body = new Border
             {
                 Child = Held(),
-                Background = Ink.Background,
+                Background = ground(),
                 CornerRadius = new CornerRadius(22, 22, 0, 0),
                 // A page that scrolls itself takes the sheet's whole height.
                 VerticalAlignment = scrolls ? VerticalAlignment.Bottom : VerticalAlignment.Stretch,
@@ -224,14 +245,15 @@ internal sealed class Overlay : Grid
                 Translation = new Vector3(0, 0, 32),
             };
             if (maxHeight is { } most) body.MaxHeight = most;
-            panel = body;
+            panel = chrome = body;
         }
         else
         {
+            ground = () => Ink.Surface;
             var body = new Border
             {
                 Child = Held(),
-                Background = Ink.Surface,
+                Background = ground(),
                 CornerRadius = new CornerRadius(26),
                 MaxWidth = width,
                 Margin = new Thickness(24, 56, 24, 24),
@@ -250,8 +272,11 @@ internal sealed class Overlay : Grid
                 Fit();
                 SizeChanged += (_, _) => Fit();
             }
-            panel = body;
+            panel = chrome = body;
         }
+        // In the scheme of the screen it opens over: the call's settings dark
+        // in a light system, the lobby's light.
+        panel.RequestedTheme = Ink.Element;
         panel.TabFocusNavigation = KeyboardNavigationMode.Cycle;
         // Presses inside are the dialog's own.
         panel.PointerPressed += (_, e) => e.Handled = true;
@@ -261,7 +286,7 @@ internal sealed class Overlay : Grid
         panel = K.Holding(inside);
         _dialogLayer.Children.Add(dim);
         _dialogLayer.Children.Add(panel);
-        var held = new Held(dim, panel, dismiss, sheet);
+        var held = new Held(dim, panel, dismiss, sheet, chrome, frosted, ground, content);
         _dialogs.Add(held);
         Motion.Hide(dim);
         Motion.FadeTo(dim, 1);
@@ -278,6 +303,44 @@ internal sealed class Overlay : Grid
         }
         inside.Loaded += (_, _) => FocusInside(inside);
         return () => CloseDialog(held);
+    }
+
+    /// <summary>
+    /// The ground behind a dialog: black, dimmed (lighter over the light
+    /// scheme, Ink.Dim), or frosted.
+    /// </summary>
+    private static Brush DimFor(bool frosted) => frosted
+        ? new AcrylicBrush
+        {
+            // Over the light scheme the page's own grey, frosted, and only a
+            // little dimmed: the dark scheme's black luminosity turned a light
+            // window behind the question a dull grey.
+            TintColor = Ink.Light ? Ink.Of(Ink.Palette.Background) : Microsoft.UI.Colors.Black,
+            // Luminosity near full: thin, the red of the microphone
+            // and camera switches under it came through as a ring of
+            // the acrylic's grain.
+            TintOpacity = Ink.Light ? 0.3 : 0.12,
+            TintLuminosityOpacity = Ink.Light ? 0.5 : 0.62,
+            FallbackColor = Ink.Of(Ink.Light ? Ink.Palette.Background.WithAlpha(0.85f) : Shade.Black.WithAlpha(0.6f)),
+        }
+        : Ink.Dim(0.45f);
+
+    /// <summary>
+    /// The system went light or dark while dialogs were open over a screen
+    /// that follows it: their grounds and the Windows controls in them take
+    /// the new scheme (what they hold draws itself again, as for the
+    /// language), and a popover, which is quick to open again, is closed.
+    /// </summary>
+    public void Repaint()
+    {
+        ClosePopover();
+        foreach (var held in _dialogs)
+        {
+            held.Dim.Background = DimFor(held.Frosted);
+            held.Body.Background = held.Ground();
+            held.Body.RequestedTheme = Ink.Element;
+            (held.Content as IRestyles)?.Restyle();
+        }
     }
 
     private void CloseDialog(Held held)

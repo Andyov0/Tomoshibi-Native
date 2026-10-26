@@ -50,6 +50,8 @@ internal sealed class LobbyScreen : Screen
     private Grid? _sidebarFoot;
     private Grid? _servers;
     private Tap? _joinTyped;
+    private (TextBlock Title, TextBlock Line, Grid TitleShadow, Grid LineShadow)? _greeting;
+    private bool? _greetingOverPicture;
 
     public LobbyScreen(AppModel app, Account account) : base(app)
     {
@@ -137,6 +139,7 @@ internal sealed class LobbyScreen : Screen
     {
         _toast?.Update();
         _stage?.Update();
+        PaintGreeting();
         if (!App.OffersRelayChoice && _place == Place.Servers) Go(Place.Home);
         var said = Said();
         if (said != _listsSaid)
@@ -370,9 +373,14 @@ internal sealed class LobbyScreen : Screen
     private Grid HomeStage()
     {
         var grid = new Grid();
-        var greeting = K.Column(6,
-            Shadowed.Text(K.Text(T("Hello, {name}", ("name", _account.Name)), 34, K.Bold)),
-            Shadowed.Text(K.Text(T("Start one from the sidebar when you are ready."), 15, ink: Ink.White(0.78f))));
+        var hello = K.Text(T("Hello, {name}", ("name", _account.Name)), 34, K.Bold);
+        var helloLine = K.Text(T("Start one from the sidebar when you are ready."), 15, ink: Ink.White(0.78f));
+        var helloShadow = Shadowed.Text(hello);
+        var helloLineShadow = Shadowed.Text(helloLine);
+        _greeting = (hello, helloLine, helloShadow, helloLineShadow);
+        _greetingOverPicture = null;
+        PaintGreeting();
+        var greeting = K.Column(6, helloShadow, helloLineShadow);
         // A newer build, at the top of the content beside the sidebar
         // (Lobby.kt puts it there), opening a space above the greeting rather
         // than lying over it; clear of the server menu at the corner.
@@ -396,6 +404,35 @@ internal sealed class LobbyScreen : Screen
             grid.Children.Add(server);
         }
         return grid;
+    }
+
+    /// <summary>
+    /// The greeting reads over the camera, which fills the stage behind it on
+    /// the home: in the dark ink over a soft shadow, as words over a picture
+    /// are, always in the dark scheme and in the light one while the camera
+    /// shows. Over the light ground with no picture it is the scheme's own ink
+    /// with no shadow, where near-white words were lost on the grey. Its
+    /// colour moves over the settle curve as the camera comes and goes.
+    /// </summary>
+    private void PaintGreeting()
+    {
+        if (_greeting is not { } g) return;
+        var overPicture = !Ink.Light || _stage?.Showing == true;
+        if (overPicture == _greetingOverPicture) return;
+        var first = _greetingOverPicture == null;
+        _greetingOverPicture = overPicture;
+        var title = Ink.Of(overPicture ? Theme.Dark.Foreground : Ink.Palette.Foreground);
+        var line = Ink.Of(overPicture ? Shade.White.WithAlpha(0.78f) : Ink.Palette.Muted);
+        foreach (var (text, colour) in new[] { (g.Title, title), (g.Line, line) })
+        {
+            if (first) text.Foreground = new SolidColorBrush(colour);
+            else Motion.Recolour(text, colour);
+        }
+        foreach (var shadow in new[] { g.TitleShadow.Children[0], g.LineShadow.Children[0] })
+        {
+            if (first && !overPicture) Motion.Hide(shadow);
+            else if (!first) Motion.FadeTo(shadow, overPicture ? 1 : 0);
+        }
     }
 
     /// <summary>The sidebar (Lobby.kt <c>Sidebar</c>): start and join, the sections, what is coming and where they have been, and who is signed in.</summary>
@@ -495,7 +532,7 @@ internal sealed class LobbyScreen : Screen
         var selected = _place == place;
         var parts = new List<(UIElement, double)>
         {
-            K.Fixed(new Border { Width = 20, Child = K.Symbol(symbol, 14, Ink.Tally) }),
+            K.Fixed(new Border { Width = 20, Child = K.Symbol(symbol, 14, Ink.TallyText) }),
             K.Flex(K.Text(title, 13.5, selected ? K.Semibold : K.Regular, lines: 1).At(HorizontalAlignment.Left, VerticalAlignment.Center)),
         };
         if (badge > 0) parts.Add(K.Fixed(K.Text(badge.ToString(), 12, K.Medium, Ink.Muted, tabular: true).At(HorizontalAlignment.Right, VerticalAlignment.Center)));
@@ -581,7 +618,9 @@ internal sealed class LobbyScreen : Screen
 
     private void BuildNarrow()
     {
-        Background = Ink.Brush(Shade.Black);
+        // The phone's lobby: black under its cards in the dark scheme, the
+        // light one's grey under white cards, as the phones' grouped lists are.
+        Background = Ink.Light ? Ink.Background : Ink.Brush(Shade.Black);
         var content = K.Column(22);
         content.Padding = new Thickness(16, 0, 16, 0);
         var title = K.Text("Tomoshibi", 34, K.Bold, lines: 1).Pad(0, 0, 0, -12);
@@ -606,11 +645,7 @@ internal sealed class LobbyScreen : Screen
         var settings = new Tap(Faces.AccountAvatar(_account.Name, AvatarAddress, 30), Look.Plain, 40, circle: true, label: T("Settings"));
         settings.Click += (_, _) => OpenSettings();
         var barGround = new Border { Opacity = 0 };
-        var fade = new LinearGradientBrush { StartPoint = new Windows.Foundation.Point(0.5, 0), EndPoint = new Windows.Foundation.Point(0.5, 1) };
-        fade.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.Black.WithAlpha(0.92f)), Offset = 0 });
-        fade.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.Black.WithAlpha(0.6f)), Offset = 0.6 });
-        fade.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.Black.WithAlpha(0f)), Offset = 1 });
-        barGround.Background = fade;
+        barGround.Background = BarGround();
         var bar = new Grid { Height = Shared.TitleBar + 52, VerticalAlignment = VerticalAlignment.Top };
         bar.Children.Add(barGround);
         var barRow = new Grid { Margin = new Thickness(16, Shared.TitleBar, 16, 0) };
@@ -634,6 +669,22 @@ internal sealed class LobbyScreen : Screen
         if (_place == Place.Scheduled) OpenSchedule();
     }
 
+    /// <summary>
+    /// What the bar over the narrow lobby lies on once the list has scrolled
+    /// under it: black fading out down its height in the dark scheme; in the
+    /// light one the ground itself, flat and nearly opaque, since the day mode
+    /// has no gradients and a black fade over a light list was a smudge.
+    /// </summary>
+    private static Brush BarGround()
+    {
+        if (Ink.Light) return Ink.BackgroundAt(0.94f);
+        var fade = new LinearGradientBrush { StartPoint = new Windows.Foundation.Point(0.5, 0), EndPoint = new Windows.Foundation.Point(0.5, 1) };
+        fade.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.Black.WithAlpha(0.92f)), Offset = 0 });
+        fade.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.Black.WithAlpha(0.6f)), Offset = 0.6 });
+        fade.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.Black.WithAlpha(0f)), Offset = 1 });
+        return fade;
+    }
+
     /// <summary>The picture of yourself with the way to start and to schedule (Lobby.kt <c>Hero</c>).</summary>
     private Grid Hero()
     {
@@ -646,7 +697,7 @@ internal sealed class LobbyScreen : Screen
         var actions = K.Line(8, K.Flex(start), K.Fixed(Shared.OnGlass(schedule)));
         actions.VerticalAlignment = VerticalAlignment.Bottom;
         actions.Margin = new Thickness(12);
-        var switches = Shared.DeviceSwitches(App, 40);
+        var switches = Shared.DeviceSwitches(App, 40, onPicture: true);
         switches.HorizontalAlignment = HorizontalAlignment.Right;
         switches.VerticalAlignment = VerticalAlignment.Top;
         switches.Margin = new Thickness(12);
@@ -659,7 +710,7 @@ internal sealed class LobbyScreen : Screen
         var upcoming = App.Lobby.Upcoming.Take(4).ToList();
         if (upcoming.Count > 0)
         {
-            var all = new Tap(K.Text(T("All of them"), 16, ink: Ink.Tally), Look.Clear, 36, padding: 8);
+            var all = new Tap(K.Text(T("All of them"), 16, ink: Ink.TallyText), Look.Clear, 36, padding: 8);
             all.Click += (_, _) => Go(Place.Scheduled);
             var rows = upcoming.Select((one, i) => (UIElement)K.Column(0, MeetingButton(one, compact: false), i < upcoming.Count - 1 ? K.Rule(62, 0.12f) : K.Spacer())).ToArray();
             lists.Children.Add(Section(T("Upcoming"), all, rows).Arrives());
@@ -740,7 +791,7 @@ internal sealed class LobbyScreen : Screen
         var subtitle = K.Column(2, K.Text(T("Server"), 16, K.Semibold));
         if (Shared.FleetLine(App) is { } fleet) subtitle.Children.Add(fleet);
         var line = K.Line(12,
-            K.Fixed(new Border { Width = 36, Height = 36, CornerRadius = new CornerRadius(11), Background = Ink.White(0.08f), Child = K.Symbol("server.rack", 16, Ink.Muted) }),
+            K.Fixed(new Border { Width = 36, Height = 36, CornerRadius = new CornerRadius(11), Background = Ink.Wash(0.08f), Child = K.Symbol("server.rack", 16, Ink.Muted) }),
             K.Flex(subtitle),
             K.Fixed(K.Words(App.RelayChoice != null ? App.Lobby.Label(App.RelayChoice) : T("Automatic"), 14, ink: Ink.Muted, lines: 1).At(HorizontalAlignment.Right, VerticalAlignment.Center)),
             K.Fixed(K.Symbol("chevron.right", 13, Ink.MutedAt(0.6f))));
@@ -749,7 +800,7 @@ internal sealed class LobbyScreen : Screen
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             CornerRadius = new CornerRadius(24),
-            Resting = Theme.Surface,
+            Resting = Ink.Palette.Surface,
         };
         tap.Named(T("Server"));
         tap.Click += (_, _) => Go(Place.Servers);

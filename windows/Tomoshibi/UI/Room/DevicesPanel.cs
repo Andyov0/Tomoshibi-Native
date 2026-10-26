@@ -293,11 +293,11 @@ internal sealed class DeviceRows : StackPanel
     private static Grid RowContent(string title, string? symbol, bool chosen)
     {
         var parts = new List<(UIElement, double)>();
-        if (symbol != null) parts.Add(K.Fixed(new Border { Width = 26, Child = K.Symbol(symbol, 12.5, chosen ? Ink.Tally : Ink.ForegroundAt(0.75f)) }));
+        if (symbol != null) parts.Add(K.Fixed(new Border { Width = 26, Child = K.Symbol(symbol, 12.5, chosen ? Ink.TallyText : Ink.ForegroundAt(0.75f)) }));
         var text = K.Text(title, 13.5, chosen ? K.Medium : K.Regular, lines: 1);
         text.TextTrimming = TextTrimming.CharacterEllipsis;
         parts.Add(K.Flex(text.At(HorizontalAlignment.Left, VerticalAlignment.Center)));
-        var tick = K.Symbol("checkmark", 11.5, Ink.Tally);
+        var tick = K.Symbol("checkmark", 11.5, Ink.TallyText);
         tick.Opacity = chosen ? 1 : 0;
         parts.Add(K.Fixed(tick));
         return K.Line(12, parts.ToArray());

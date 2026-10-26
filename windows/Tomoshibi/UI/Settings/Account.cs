@@ -181,7 +181,7 @@ internal static class GuestLinks
                 made.Children.Clear();
                 var text = K.Text(link.Link, 11.5, mono: true, ink: Ink.ForegroundAt(0.85f));
                 text.IsTextSelectionEnabled = true;
-                var box = new Border { Child = text, Background = Ink.Black(0.25f), CornerRadius = new CornerRadius(11), Padding = new Thickness(10) };
+                var box = new Border { Child = text, Background = Ink.Well(0.25f), CornerRadius = new CornerRadius(11), Padding = new Thickness(10) };
                 made.Children.Add(K.Line(8, K.Flex(box), K.Fixed(Screens.PreJoinScreen.CopyLink(link.Link))));
                 made.Children.Add(K.Text(Describe(link), 11.5, ink: Ink.Muted));
                 made.Visibility = Visibility.Visible;
@@ -189,7 +189,7 @@ internal static class GuestLinks
             else
             {
                 result.Text = refusal ?? "";
-                result.Foreground = Ink.Danger;
+                result.Foreground = Ink.DangerText;
                 result.Visibility = Visibility.Visible;
             }
         };
@@ -204,12 +204,12 @@ internal static class GuestLinks
             {
                 made.Visibility = Visibility.Collapsed;
                 result.Text = stopped == 1 ? T("One link stopped working.") : T("{count} links stopped working.", ("count", stopped));
-                result.Foreground = Ink.Good;
+                result.Foreground = Ink.GoodText;
             }
             else
             {
                 result.Text = refusal ?? "";
-                result.Foreground = Ink.Danger;
+                result.Foreground = Ink.DangerText;
             }
             result.Visibility = Visibility.Visible;
         };

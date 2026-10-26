@@ -20,6 +20,17 @@ internal abstract class Screen : Grid
     protected Screen(AppModel app)
     {
         App = app;
+        Repaint();
+    }
+
+    /// <summary>
+    /// The screen's own ground and the Windows controls' theme, in the scheme
+    /// it is drawn in (Ink.Scheme, set for it by the host before it is made):
+    /// the meeting's pinned dark, the rest the system's.
+    /// </summary>
+    public void Repaint()
+    {
+        RequestedTheme = Ink.Element;
         Background = Ink.Background;
     }
 
@@ -92,21 +103,19 @@ internal static class Frames
 {
     /// <summary>
     /// The pane a form sits on over the evening room: the surface grey let
-    /// through by the room behind it, a rim of light along its top. No
+    /// through by the room behind it, a rim of light along its top; in the
+    /// light scheme the surface's white with the palette's border. No
     /// material: it is content, and the room behind it is a gradient a blur
     /// would not change.
     /// </summary>
     public static Border Pane(UIElement child, double radius, Thickness padding)
     {
-        var rim = new LinearGradientBrush { StartPoint = new Windows.Foundation.Point(0.5, 0), EndPoint = new Windows.Foundation.Point(0.5, 1) };
-        rim.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.White.WithAlpha(0.20f)), Offset = 0 });
-        rim.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.White.WithAlpha(0.06f)), Offset = 1 });
         return new Border
         {
             Child = child,
             CornerRadius = new CornerRadius(radius),
-            Background = Ink.Brush(new Shade(0.13f, 0.14f, 0.16f, 0.62f)),
-            BorderBrush = rim,
+            Background = Ink.Light ? Ink.Surface : Ink.Brush(new Shade(0.13f, 0.14f, 0.16f, 0.62f)),
+            BorderBrush = K.Rim(0.20f, 0.06f),
             BorderThickness = new Thickness(1),
             Padding = padding,
         };

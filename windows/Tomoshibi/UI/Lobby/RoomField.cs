@@ -89,7 +89,7 @@ internal sealed class RoomField : StackPanel
             if (e.ChosenSuggestion is string chosen) Accept(chosen);
             else Submitted?.Invoke();
         };
-        _strange = K.Text("", 12, ink: Ink.Danger).Pad(6, 0, 6, 0);
+        _strange = K.Text("", 12, ink: Ink.DangerText).Pad(6, 0, 6, 0);
         _strange.Arrives();
         _strange.Visibility = Visibility.Collapsed;
         // What the field is for, before the words, as the other apps have

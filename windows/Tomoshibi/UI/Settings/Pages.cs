@@ -57,9 +57,9 @@ internal static class General
     private static Tap Choice(string title, string detail, string? symbol, bool chosen, Action pick)
     {
         var parts = new List<(UIElement, double)>();
-        if (symbol != null) parts.Add(K.Fixed(K.Symbol(symbol, 15, chosen ? Ink.Tally : Ink.Muted)));
+        if (symbol != null) parts.Add(K.Fixed(K.Symbol(symbol, 15, chosen ? Ink.TallyText : Ink.Muted)));
         parts.Add(K.Flex(K.Column(1, K.Text(title, 14, chosen ? K.Semibold : K.Regular, lines: 1), K.Text(detail, 11, ink: Ink.Muted, lines: 1)).At(HorizontalAlignment.Left, VerticalAlignment.Center)));
-        var tick = K.Symbol("checkmark.circle.fill", 15, Ink.Tally);
+        var tick = K.Symbol("checkmark.circle.fill", 15, Ink.TallyText);
         tick.Opacity = chosen ? 1 : 0;
         parts.Add(K.Fixed(tick));
         var tap = new Tap(K.Line(10, parts.ToArray()), Look.Plain, 50, padding: 12)
@@ -87,11 +87,11 @@ internal static class General
         foreach (var accent in Accents.All)
         {
             var chosen = accent == appearance.Accent;
-            var colour = accent.Color();
+            var colour = accent.Color(Ink.Scheme);
             var bead = new Grid { Width = 42, Height = 42 };
             // The colour, flat, with a fine light edge (General.kt `Swatch`):
             // a bead of glass, lit and shaded, until the gradients went.
-            bead.Children.Add(new Ellipse { Width = 34, Height = 34, Fill = Ink.Brush(colour), Stroke = Ink.White(0.25f), StrokeThickness = 0.5 });
+            bead.Children.Add(new Ellipse { Width = 34, Height = 34, Fill = Ink.Brush(colour), Stroke = Ink.Wash(0.25f), StrokeThickness = 0.5 });
             if (chosen)
             {
                 bead.Children.Add(new Ellipse { Width = 42, Height = 42, Stroke = Ink.Brush(colour), StrokeThickness = 2 });
@@ -112,7 +112,7 @@ internal static class General
             Margin = new Thickness(6),
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Bottom,
-            Child = K.Row(4, K.Symbol("waveform", 8, Ink.Tally), K.Text("Mika", 9, K.Semibold, lines: 1)),
+            Child = K.Row(4, K.Symbol("waveform", 8, Ink.Tally), K.Text("Mika", 9, K.Semibold, Ink.OnPicture, lines: 1)),
         };
         var tile = new Border
         {
@@ -136,13 +136,13 @@ internal static class General
             Child = new Ellipse { Width = 18, Height = 18, Fill = Ink.Brush(Shade.White), HorizontalAlignment = HorizontalAlignment.Right },
         };
         scene.Children.Add(tile);
-        scene.Children.Add(K.Column(10, K.Row(10, join, switchOn), K.Row(6, K.Symbol("bubble.left.fill", 14, Ink.ForegroundAt(0.85f)), K.Symbol("hand.raised.fill", 14, Ink.Tally))));
+        scene.Children.Add(K.Column(10, K.Row(10, join, switchOn), K.Row(6, K.Symbol("bubble.left.fill", 14, Ink.ForegroundAt(0.85f)), K.Symbol("hand.raised.fill", 14, Ink.TallyText))));
         var preview = new Border
         {
-            Background = Ink.Black(0.22f),
+            Background = Ink.Well(0.22f),
             CornerRadius = new CornerRadius(16),
             Padding = new Thickness(12),
-            Child = K.Line(12, K.Fixed(scene), K.Flex(K.Text(appearance.Accent.DisplayName(), 17, K.Semibold, Ink.Tally, lines: 1).At(HorizontalAlignment.Right, VerticalAlignment.Center))),
+            Child = K.Line(12, K.Fixed(scene), K.Flex(K.Text(appearance.Accent.DisplayName(), 17, K.Semibold, Ink.TallyText, lines: 1).At(HorizontalAlignment.Right, VerticalAlignment.Center))),
         }.Quiet();
         return K.Card(K.Column(16, beads, preview), 16, padding: new Thickness(14));
     }
@@ -162,7 +162,7 @@ internal static class General
         for (var i = 0; i < 3; i++)
         {
             tiles.ColumnDefinitions.Add(new ColumnDefinition());
-            var block = new Border { CornerRadius = new CornerRadius(7), Background = Ink.White(i == 1 ? 0.13f : 0.08f) };
+            var block = new Border { CornerRadius = new CornerRadius(7), Background = Ink.Wash(i == 1 ? 0.13f : 0.08f) };
             Grid.SetColumn(block, i);
             tiles.Children.Add(block);
         }
@@ -275,7 +275,7 @@ internal static class General
     /// <summary>A call in miniature with its bar where the choice puts it (General.kt <c>PlacementCard</c>).</summary>
     private static Grid Schematic(ControlsPlacement placement, bool chosen)
     {
-        var grid = new Grid { Height = 72, CornerRadius = new CornerRadius(8), Background = Ink.Black(0.35f) };
+        var grid = new Grid { Height = 72, CornerRadius = new CornerRadius(8), Background = Ink.Well(0.35f) };
         var tiles = new Grid { RowSpacing = 3, ColumnSpacing = 3, Margin = new Thickness(6, 6, placement == ControlsPlacement.Side ? 20 : 6, placement == ControlsPlacement.Side ? 6 : 18) };
         tiles.RowDefinitions.Add(new RowDefinition());
         tiles.RowDefinitions.Add(new RowDefinition());
@@ -283,13 +283,13 @@ internal static class General
         tiles.ColumnDefinitions.Add(new ColumnDefinition());
         for (var i = 0; i < 4; i++)
         {
-            var block = new Border { CornerRadius = new CornerRadius(3), Background = Ink.White(0.13f) };
+            var block = new Border { CornerRadius = new CornerRadius(3), Background = Ink.Wash(0.13f) };
             Grid.SetRow(block, i / 2);
             Grid.SetColumn(block, i % 2);
             tiles.Children.Add(block);
         }
         grid.Children.Add(tiles);
-        var colour = chosen ? Ink.Tally : Ink.White(0.55f);
+        var colour = chosen ? Ink.Tally : Ink.Wash(0.55f);
         var bar = placement == ControlsPlacement.Side
             ? new Rectangle { Width = 7, Height = 36, RadiusX = 3.5, RadiusY = 3.5, HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) }
             : new Rectangle { Height = 7, Width = 44, RadiusX = 3.5, RadiusY = 3.5, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 5.5) };
@@ -358,7 +358,7 @@ internal sealed class DeviceCheck : Grid
     {
         _app = app;
         CornerRadius = new CornerRadius(20);
-        BorderBrush = Ink.White(0.08f);
+        BorderBrush = Ink.Wash(0.08f);
         BorderThickness = new Thickness(1);
         // A camera-off tile's grey, as the call's framed preview is.
         Background = Ink.Surface;
@@ -402,7 +402,7 @@ internal sealed class DeviceCheck : Grid
         if (_painted == loud) return;
         _painted = loud;
         _symbol.Children.Clear();
-        _symbol.Children.Add(K.Symbol("mic.fill", 12, _loud ? Ink.Tally : Ink.Foreground));
+        _symbol.Children.Add(K.Symbol("mic.fill", 12, _loud ? Ink.TallyText : Ink.Foreground));
     }
 }
 
@@ -562,7 +562,7 @@ internal static class AccountSettings
             page.Children.Add(K.Text(T("Sign in to change your passphrase or picture."), 12.5, ink: Ink.Muted));
             return page;
         }
-        var said = K.Text("", 12.5, ink: Ink.Danger);
+        var said = K.Text("", 12.5, ink: Ink.DangerText);
         said.Visibility = Visibility.Collapsed;
         said.Arrives();
         void Say(string? text)
@@ -646,7 +646,7 @@ internal static class AccountSettings
     private static Border Chip(string text, string? symbol, bool lit = false, bool withheld = false, bool mono = false)
     {
         var row = K.Row(5);
-        if (symbol != null) row.Children.Add(K.Symbol(symbol, 10.5, lit ? Ink.Tally : withheld ? Ink.MutedAt(0.7f) : Ink.Muted));
+        if (symbol != null) row.Children.Add(K.Symbol(symbol, 10.5, lit ? Ink.TallyText : withheld ? Ink.MutedAt(0.7f) : Ink.Muted));
         row.Children.Add(K.Text(text, mono ? 11.5 : 12, mono: mono, ink: withheld ? Ink.Muted : Ink.Foreground, lines: 1));
         foreach (var child in row.Children) ((FrameworkElement)child).VerticalAlignment = VerticalAlignment.Center;
         return new Border
@@ -655,8 +655,8 @@ internal static class AccountSettings
             Padding = new Thickness(9, 5, 9, 5),
             CornerRadius = new CornerRadius(12),
             Margin = new Thickness(0, 0, 6, 6),
-            Background = withheld ? null : lit ? Ink.TallyAt(0.14f) : Ink.White(0.08f),
-            BorderBrush = lit ? Ink.TallyAt(0.4f) : Ink.White(withheld ? 0.18f : 0.08f),
+            Background = withheld ? null : lit ? Ink.TallyAt(0.14f) : Ink.Wash(0.08f),
+            BorderBrush = lit ? Ink.TallyAt(0.4f) : Ink.Wash(withheld ? 0.18f : 0.08f),
             BorderThickness = new Thickness(1),
         };
     }
@@ -665,7 +665,7 @@ internal static class AccountSettings
     private static StackPanel Passphrase(AppModel app, Action<string?> say)
     {
         string current = "", next = "";
-        var changed = K.Row(6, K.Symbol("checkmark.circle.fill", 12, Ink.Good), K.Text(T("Changed."), 12, ink: Ink.Good));
+        var changed = K.Row(6, K.Symbol("checkmark.circle.fill", 12, Ink.GoodText), K.Text(T("Changed."), 12, ink: Ink.GoodText));
         changed.Visibility = Visibility.Collapsed;
         changed.Arrives();
         var change = new Shared.Pressing(T("Change it"), 32, 12.5) { HorizontalAlignment = HorizontalAlignment.Left };
@@ -807,7 +807,7 @@ internal static class About
                 }
                 else
                 {
-                    line = K.Text(text ?? "", 11.5, ink: problem ? Ink.Danger : Ink.Muted);
+                    line = K.Text(text ?? "", 11.5, ink: problem ? Ink.DangerText : Ink.Muted);
                     lineHolder.Show(text == null ? null : line);
                 }
             }

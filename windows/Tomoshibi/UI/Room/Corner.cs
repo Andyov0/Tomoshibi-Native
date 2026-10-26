@@ -143,7 +143,7 @@ internal sealed class ToastStack : Canvas
             Margin = new Thickness(0, 1, 0, 1),
             Background = toast.Kind switch
             {
-                CallToast.Kinds.Info => Ink.White(0.22f),
+                CallToast.Kinds.Info => Ink.Wash(0.22f),
                 CallToast.Kinds.Failure => Ink.Danger,
                 _ => Ink.Tally,
             },
@@ -160,7 +160,7 @@ internal sealed class ToastStack : Canvas
         if (toast.ActionTitle != null)
         {
             var action = new Tap(K.Text(toast.ActionTitle, 11.5, K.Semibold, Ink.Background, lines: 1), Look.Plain, 26, padding: 10);
-            action.Resting = Theme.Foreground;
+            action.Resting = Ink.Palette.Foreground;
             action.VerticalAlignment = VerticalAlignment.Center;
             action.Click += (_, _) => _call.Act(toast.Id);
             parts.Add(K.Fixed(action));

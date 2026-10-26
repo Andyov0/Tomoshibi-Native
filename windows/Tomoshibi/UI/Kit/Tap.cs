@@ -9,7 +9,7 @@ namespace Tomoshibi.UI.Kit;
 /// <summary>What a button wears (Android's GlassButton, prominent and destructive; the bar's BarButton; a quiet one in a list).</summary>
 internal enum Look
 {
-    /// <summary>The apps' white wash over whatever is behind, with a hairline edge.</summary>
+    /// <summary>The apps' wash over whatever is behind (white in the dark scheme, black in the light), with a hairline edge.</summary>
     Plain,
     /// <summary>The tally, with its own ink: the one thing on the screen to press.</summary>
     Prominent,
@@ -19,6 +19,13 @@ internal enum Look
     Clear,
     /// <summary>The call's bar: a stronger wash, lit in the tally when on.</summary>
     Bar,
+    /// <summary>
+    /// Plain, on a picture (a switch over the camera): the dark scheme's
+    /// white wash and ink in either scheme, as everything laid on a picture
+    /// is, where the light scheme's black wash and dark ink were lost on a
+    /// dark picture.
+    /// </summary>
+    Picture,
 }
 
 /// <summary>
@@ -144,21 +151,27 @@ internal class Tap : Button
     public static Brush InkFor(Look look, bool lit = false) => look switch
     {
         Look.Prominent => Ink.TallyForeground,
-        Look.Destructive => Ink.Brush(Theme.DangerForeground),
+        Look.Destructive => Ink.DangerForeground,
         Look.Bar when lit => Ink.TallyForeground,
+        Look.Picture => Ink.OnPicture,
         _ => Ink.Foreground,
     };
 
     private void Paint()
     {
+        // The washes in the scheme being drawn: white over the dark ground,
+        // black over the light one. A lit bar button's edge is the light
+        // catching it in either, white.
+        var danger = Ink.Palette.Danger;
         var (rest, over, down, edge) = _look switch
         {
             Look.Prominent => (Ink.TallyShade, Mix(Ink.TallyShade, 0.10f), Mix(Ink.TallyShade, -0.10f), (Shade?)null),
-            Look.Destructive => (Theme.Danger, Mix(Theme.Danger, 0.08f), Theme.Danger.WithAlpha(0.86f), (Shade?)null),
-            Look.Clear => (Shade.White.WithAlpha(0f), Shade.White.WithAlpha(0.08f), Shade.White.WithAlpha(0.14f), (Shade?)null),
+            Look.Destructive => (danger, Mix(danger, 0.08f), danger.WithAlpha(0.86f), (Shade?)null),
+            Look.Clear => (Ink.WashShade(0f), Ink.WashShade(0.08f), Ink.WashShade(0.14f), (Shade?)null),
             Look.Bar when _lit => (Ink.TallyShade, Mix(Ink.TallyShade, 0.10f), Mix(Ink.TallyShade, -0.10f), Shade.White.WithAlpha(0.3f)),
-            Look.Bar => (Shade.White.WithAlpha(0.12f), Shade.White.WithAlpha(0.18f), Shade.White.WithAlpha(0.24f), Shade.White.WithAlpha(0.08f)),
-            _ => (Shade.White.WithAlpha(0.07f), Shade.White.WithAlpha(0.13f), Shade.White.WithAlpha(0.16f), Shade.White.WithAlpha(0.09f)),
+            Look.Bar => (Ink.WashShade(0.12f), Ink.WashShade(0.18f), Ink.WashShade(0.24f), Ink.WashShade(0.08f)),
+            Look.Picture => (Shade.White.WithAlpha(0.07f), Shade.White.WithAlpha(0.13f), Shade.White.WithAlpha(0.16f), Shade.White.WithAlpha(0.09f)),
+            _ => (Ink.WashShade(0.07f), Ink.WashShade(0.13f), Ink.WashShade(0.16f), Ink.WashShade(0.09f)),
         };
         if (_resting is { } resting)
         {

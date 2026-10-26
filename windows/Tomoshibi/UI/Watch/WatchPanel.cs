@@ -292,7 +292,7 @@ internal sealed class QueueView : Grid
         if (playing) details.Add(T("Playing"));
         details.Add(T("Added by {name}", ("name", video.By)));
         if (video.Duration > 0) details.Add(WatchWords.Clock(video.Duration));
-        var words = K.Column(2, K.Text(title, 12.5, K.Medium, lines: 1), K.Text(string.Join(" · ", details), 10.5, ink: playing ? Ink.Tally : Ink.Muted, lines: 1));
+        var words = K.Column(2, K.Text(title, 12.5, K.Medium, lines: 1), K.Text(string.Join(" · ", details), 10.5, ink: playing ? Ink.TallyText : Ink.Muted, lines: 1));
         words.VerticalAlignment = VerticalAlignment.Center;
         var parts = new List<(UIElement, double)> { K.Fixed(art), K.Flex(words) };
         if (!playing)
@@ -440,7 +440,7 @@ internal sealed class MediaBrowser : Grid
         words.VerticalAlignment = VerticalAlignment.Center;
         var end = new Grid { Width = 20 };
         if (_adding == item.Id) end.Children.Add(K.Spinner(14));
-        else if (opens) end.Children.Add(K.Symbol(item.Folder ? "chevron.right" : "play.circle.fill", item.Folder ? 12 : 17, item.Folder ? Ink.Muted : Ink.Tally).At(HorizontalAlignment.Right, VerticalAlignment.Center));
+        else if (opens) end.Children.Add(K.Symbol(item.Folder ? "chevron.right" : "play.circle.fill", item.Folder ? 12 : 17, item.Folder ? Ink.Muted : Ink.TallyText).At(HorizontalAlignment.Right, VerticalAlignment.Center));
         var row = MediaKit.Row(K.Line(10, K.Fixed(art), K.Flex(words), K.Fixed(end)), act: opens ? () => Open(item) : null);
         row.Opacity = opens ? 1 : 0.5;
         row.Named(item.Playable ? T("Watch {title}", ("title", item.Name)) : item.Name, "watch.item." + item.Id);

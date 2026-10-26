@@ -90,7 +90,7 @@ internal sealed class SignalBadge : StackPanel
         if (!open) return;
         _detail.Children.Clear();
         void Figure(string label, string value, bool warn = false) =>
-            _detail.Children.Add(K.Line(16, K.Flex(K.Text(label, 11.5, ink: Ink.Muted, lines: 1)), K.Fixed(K.Words(value, 11.5, ink: warn ? Ink.Tally : Ink.Foreground, lines: 1, tabular: true))));
+            _detail.Children.Add(K.Line(16, K.Flex(K.Text(label, 11.5, ink: Ink.Muted, lines: 1)), K.Fixed(K.Words(value, 11.5, ink: warn ? Ink.TallyText : Ink.Foreground, lines: 1, tabular: true))));
         if (_call.Relay is { } relay && _call.Holding is { } holding && holding != relay)
         {
             Figure(T("Relay server"), Say(relay));
@@ -178,13 +178,13 @@ internal static class RoomTitle
                 }
                 if (copy == null) return;
                 Pasteboard.Copy(copy);
-                button.Content = K.Row(7, K.Symbol("checkmark", 13, Ink.Tally), K.Text(T("Link copied"), 13, K.Medium, lines: 1));
+                button.Content = K.Row(7, K.Symbol("checkmark", 13, Ink.TallyText), K.Text(T("Link copied"), 13, K.Medium, lines: 1));
                 await Task.Delay(1600);
                 button.Content = K.Row(7, K.Symbol(linkWorks ? "doc.on.doc" : "link", 13), K.Text(linkWorks ? T("Copy link") : T("Invite somebody"), 13, K.Medium, lines: 1));
             };
             row.Children.Add(button);
         }
-        row.Children.Add(new Border { Width = 1, Height = 16, Background = Ink.White(0.12f), VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(new Border { Width = 1, Height = 16, Background = Ink.Wash(0.12f), VerticalAlignment = VerticalAlignment.Center });
         var close = Tap.Icon("xmark", T("Close"), Look.Clear, 34, 10.5);
         close.Click += (_, _) => dismiss();
         row.Children.Add(close);
@@ -196,7 +196,7 @@ internal static class RoomTitle
     /// <summary>Something still true, as a line over the call ("Reconnecting…").</summary>
     public static Border Notice(string text, bool danger = false)
     {
-        var glass = K.Glass(K.Text(text, 13, K.Medium, danger ? Ink.Brush(Theme.DangerForeground) : Ink.Foreground, lines: 1), 16, new Thickness(14, 8, 14, 8));
+        var glass = K.Glass(K.Text(text, 13, K.Medium, danger ? Ink.DangerForeground : Ink.Foreground, lines: 1), 16, new Thickness(14, 8, 14, 8));
         if (danger) glass.Background = Ink.Danger;
         glass.HorizontalAlignment = HorizontalAlignment.Center;
         glass.VerticalAlignment = VerticalAlignment.Top;

@@ -29,7 +29,8 @@ internal sealed class Backdrop : Grid
 
 /// <summary>
 /// The product's mark (Android's ui/lobby/Pieces.kt <c>Mark</c>): four tiles
-/// of a call on a dark ground, the last one lit, on a 32-unit grid.
+/// of a call on a dark ground, the last one lit, on a 32-unit grid. The same
+/// in either scheme, as the app's icon is.
 /// </summary>
 internal sealed class Mark : Canvas
 {
@@ -120,7 +121,7 @@ internal static class Faces
     public static Grid Monogram(string name, string identity, double size)
     {
         var grid = new Grid { Width = size, Height = size };
-        grid.Children.Add(new Ellipse { Fill = new SolidColorBrush(MonogramPalette[Monograms.Index(identity, MonogramPalette.Length)]), Stroke = Ink.White(0.14f), StrokeThickness = 0.75 });
+        grid.Children.Add(new Ellipse { Fill = new SolidColorBrush(MonogramPalette[Monograms.Index(identity, MonogramPalette.Length)]), Stroke = Ink.Wash(0.14f), StrokeThickness = 0.75 });
         var initials = Initials(string.IsNullOrEmpty(name) ? identity : name);
         grid.Children.Add(K.Text(initials, size * (initials.Length > 1 ? 0.36 : 0.40), K.Semibold, Ink.White(0.94f), align: TextAlignment.Center).At(HorizontalAlignment.Center, VerticalAlignment.Center));
         return grid.Quiet();
@@ -144,7 +145,7 @@ internal static class Faces
             picture.Fill = new ImageBrush { ImageSource = image, Stretch = Stretch.UniformToFill };
             grid.Children.Add(picture);
         }
-        grid.Children.Add(new Ellipse { Stroke = Ink.White(0.12f), StrokeThickness = 1 });
+        grid.Children.Add(new Ellipse { Stroke = Ink.Wash(0.12f), StrokeThickness = 1 });
         return grid.Quiet();
     }
 }

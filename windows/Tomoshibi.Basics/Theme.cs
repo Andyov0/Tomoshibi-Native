@@ -14,20 +14,52 @@ public readonly record struct Shade(float Red, float Green, float Blue, float Al
     public static readonly Shade Black = new(0f, 0f, 0f);
 }
 
+/// <summary>Which of the two palettes something is drawn in.</summary>
+public enum Scheme { Dark, Light }
+
+/// <summary>
+/// The neutrals and the two signal colours of one scheme, under the names
+/// every platform gives them (daylight palette, 2026-10-26), and the wash the
+/// chrome's fills, hairlines and edges are drawn in: white over the dark
+/// ground, black over the light one, at the same strength, as the border is.
+/// The green and the red as words (a latency figure, an error under a form)
+/// are their own ink in the light scheme, deeper than the light and the
+/// button they colour, which read at about 2:1 and 3:1 as words on the light
+/// ground; in the dark scheme they are the colours themselves.
+/// </summary>
+public sealed record Palette(
+    Shade Background,
+    Shade Surface,
+    Shade SurfaceHigh,
+    Shade Border,
+    Shade Foreground,
+    Shade Muted,
+    Shade Good,
+    Shade Danger,
+    Shade DangerForeground,
+    Shade Wash,
+    Shade GoodText,
+    Shade DangerText);
+
 /// <summary>
 /// The apps' palette and motion, the same numbers as Theme.swift and
 /// Android's basics/Theme.kt.
 ///
-/// Dark in every system appearance, on purpose: a call is looked at for an
-/// hour at a stretch and the pictures are the only thing in it that should
-/// be bright. The neutrals are Apple's own dark greys, so that the same app
-/// looks the same on a machine of any kind. One signal colour, the "tally" a
-/// studio camera lights when it is live, chosen by the person (Accent); red
-/// appears on leaving and on errors and nowhere else; green only on a
-/// connection light.
+/// Two palettes, the dark one as it always was and a light one with the same
+/// structure (the owner, 2026-10-26: keep this interface, add a day mode, day
+/// and night following the system). The call itself stays dark in either
+/// (<see cref="Daylight"/>): a call is looked at for an hour at a stretch and
+/// the pictures are the only thing in it that should be bright. The neutrals
+/// are Apple's own greys, so that the same app looks the same on a machine
+/// of any kind. One signal colour, the "tally" a studio camera lights when it
+/// is live, chosen by the person (Accent); red appears on leaving and on
+/// errors and nowhere else; green only on a connection light.
 /// </summary>
 public static class Theme
 {
+    // The dark palette's numbers, unchanged since the apps began: every
+    // picture of a dark screen is to be the same after the day mode as
+    // before it.
     public static readonly Shade Background = new(0.043f, 0.043f, 0.051f);
     public static readonly Shade Surface = new(0.110f, 0.110f, 0.118f);
     public static readonly Shade SurfaceHigh = new(0.173f, 0.173f, 0.180f);
@@ -37,6 +69,34 @@ public static class Theme
     public static readonly Shade Good = new(0.188f, 0.820f, 0.345f);
     public static readonly Shade Danger = new(1.0f, 0.271f, 0.227f);
     public static readonly Shade DangerForeground = Shade.White;
+
+    public static readonly Palette Dark = new(Background, Surface, SurfaceHigh, Border, Foreground, Muted, Good, Danger, DangerForeground, Shade.White, Good, Danger);
+
+    /// <summary>
+    /// The light palette (#F2F2F7, #FFFFFF, #E5E5EA; black at 10 per cent
+    /// for the border; #1C1C1E and rgb(60, 60, 67) at 60 per cent for the
+    /// words; #34C759 and #FF3B30, and #217E38 and #D70015 as words), the
+    /// same numbers on every platform.
+    /// </summary>
+    public static readonly Palette Light = new(
+        Background: Hex(0xF2F2F7),
+        Surface: Hex(0xFFFFFF),
+        SurfaceHigh: Hex(0xE5E5EA),
+        Border: Shade.Black.WithAlpha(0.10f),
+        Foreground: Hex(0x1C1C1E),
+        Muted: Hex(0x3C3C43, 0.6f),
+        Good: Hex(0x34C759),
+        Danger: Hex(0xFF3B30),
+        DangerForeground: Shade.White,
+        Wash: Shade.Black,
+        GoodText: Hex(0x217E38),
+        DangerText: Hex(0xD70015));
+
+    public static Palette Of(Scheme scheme) => scheme == Scheme.Light ? Light : Dark;
+
+    /// <summary>A colour written as the palette writes it, #RRGGBB.</summary>
+    public static Shade Hex(int rgb, float alpha = 1f) =>
+        new(((rgb >> 16) & 0xFF) / 255f, ((rgb >> 8) & 0xFF) / 255f, (rgb & 0xFF) / 255f, alpha);
 
     /// <summary>The tile's corner, 0.5rem.</summary>
     public const float TileRadius = 8f;
@@ -67,6 +127,26 @@ public static class Theme
 }
 
 /// <summary>
+/// Which palette each part of the app is drawn in. Everything follows the
+/// system's light or dark choice for apps, as it changes, except the meeting
+/// itself: the room, its bar and whatever is opened from inside a call stay
+/// dark in either, as FaceTime and Meet do, since the pictures are what a
+/// call is for and a white frame round them outshines them.
+/// </summary>
+public static class Daylight
+{
+    /// <summary>
+    /// The one switch for the meeting's appearance: true keeps the call dark
+    /// whatever the system says; false lets it follow the system like the
+    /// rest of the app. Every piece of the call takes its palette from here.
+    /// </summary>
+    public const bool MeetingStaysDark = true;
+
+    /// <summary>The scheme the meeting is drawn in, given the system's.</summary>
+    public static Scheme ForMeeting(Scheme system) => MeetingStaysDark ? Scheme.Dark : system;
+}
+
+/// <summary>
 /// The colours on offer for the tally, each with the colour drawn on top of
 /// it: Apple's dark-appearance system colours apart from the first, which is
 /// the product's, the same on every platform so that somebody's choice looks
@@ -86,6 +166,44 @@ public static class Accents
 
     public static Accent? Of(string? key) => All.Cast<Accent?>().FirstOrDefault(a => a!.Value.Key() == key);
 
+    /// <summary>The colour in the dark scheme, or in the light one when asked (Apple's light-appearance system colours, the first the product's).</summary>
+    public static Shade Color(this Accent accent, Scheme scheme) => scheme == Scheme.Light ? accent.LightColor() : accent.Color();
+
+    /// <summary>The light scheme's tally: the same hue a step deeper, so that it still reads on a white ground.</summary>
+    public static Shade LightColor(this Accent accent) => accent switch
+    {
+        Accent.Amber => Theme.Hex(0xF2901E),
+        Accent.Orange => Theme.Hex(0xFF9500),
+        Accent.Pink => Theme.Hex(0xFF2D55),
+        Accent.Purple => Theme.Hex(0xAF52DE),
+        Accent.Indigo => Theme.Hex(0x5856D6),
+        Accent.Blue => Theme.Hex(0x007AFF),
+        Accent.Teal => Theme.Hex(0x30B0C7),
+        Accent.Green => Theme.Hex(0x34C759),
+        _ => Theme.Hex(0x8E8E93),
+    };
+
+    /// <summary>
+    /// The tally as words or a thin symbol on the ground (a link, a latency
+    /// figure, a tick on a chosen row, the colour's own name): the colour
+    /// itself in the dark scheme; in the light one a deeper ink of the same
+    /// hue that reads at 4.5:1 on the light ground, where several of the light
+    /// fills read under 3:1 there as words, the lamplight about 2.3:1
+    /// (daylight palette, addendum). Fills keep <see cref="Color(Accent, Scheme)"/>.
+    /// </summary>
+    public static Shade TextColor(this Accent accent, Scheme scheme) => scheme == Scheme.Light ? accent switch
+    {
+        Accent.Amber => Theme.Hex(0xA35C09),
+        Accent.Orange => Theme.Hex(0xA15E00),
+        Accent.Pink => Theme.Hex(0xDF002B),
+        Accent.Purple => Theme.Hex(0xA338D9),
+        Accent.Indigo => Theme.Hex(0x5856D6),
+        Accent.Blue => Theme.Hex(0x006BE0),
+        Accent.Teal => Theme.Hex(0x217989),
+        Accent.Green => Theme.Hex(0x217E38),
+        _ => Theme.Hex(0x6E6E73),
+    } : accent.Color();
+
     public static Shade Color(this Accent accent) => accent switch
     {
         Accent.Amber => new(1.0f, 0.635f, 0.231f),
@@ -99,6 +217,7 @@ public static class Accents
         _ => new(0.596f, 0.596f, 0.616f),
     };
 
+    /// <summary>What is drawn on the tally, in either scheme: each light colour keeps the ink its dark one has, which reads on it as well or better.</summary>
     public static Shade OnColor(this Accent accent) => accent switch
     {
         Accent.Amber or Accent.Orange => new(0.122f, 0.071f, 0.0f),
@@ -189,6 +308,8 @@ public sealed class Appearance
     public bool Keeps { get; set; } = true;
 
     public Shade Tally => Accent.Color();
+    public Shade TallyIn(Scheme scheme) => Accent.Color(scheme);
+    public Shade TallyTextIn(Scheme scheme) => Accent.TextColor(scheme);
     public Shade TallyForeground => Accent.OnColor();
 
     public void Choose(Accent accent)

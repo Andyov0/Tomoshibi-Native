@@ -112,8 +112,8 @@ internal sealed class EndedScreen : Screen
             Width = 64,
             Height = 64,
             CornerRadius = new CornerRadius(32),
-            Background = Ink.White(0.07f),
-            BorderBrush = Ink.White(0.09f),
+            Background = Ink.Wash(0.07f),
+            BorderBrush = Ink.Wash(0.09f),
             BorderThickness = new Thickness(1),
             Child = K.Symbol(symbol, 26, ending == Ending.Left ? Ink.Muted : Ink.Foreground),
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -182,7 +182,7 @@ internal sealed class MovingScreen : Screen
         column.VerticalAlignment = VerticalAlignment.Center;
         column.Margin = new Thickness(24, 0, 24, 0);
         column.Named(title);
-        Background = Ink.Brush(Theme.Background.WithAlpha(0.86f));
+        Background = Ink.BackgroundAt(0.86f);
         Children.Add(column);
     }
 }
@@ -363,7 +363,7 @@ internal sealed class PreJoinScreen : Screen
         tap.Click += async (_, _) =>
         {
             Pasteboard.Copy(link);
-            tap.Content = K.Symbol("checkmark", size * 0.38, Ink.Tally);
+            tap.Content = K.Symbol("checkmark", size * 0.38, Ink.TallyText);
             tap.Tip(T("Link copied"));
             await Task.Delay(1600);
             tap.Content = K.Symbol("doc.on.doc", size * 0.38, Ink.Foreground);

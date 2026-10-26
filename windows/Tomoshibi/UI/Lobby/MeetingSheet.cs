@@ -155,7 +155,7 @@ internal sealed class MeetingSheet : Grid
         // The foot: why the last press did not take, the knock it may offer,
         // and the button: beside Cancel in a dialog, the whole width on a
         // phone's, where the cross is the way out.
-        _problem = K.Text("", 12.5, ink: Ink.Danger, align: TextAlignment.Center);
+        _problem = K.Text("", 12.5, ink: Ink.DangerText, align: TextAlignment.Center);
         _problem.Arrives();
         column.Children.Add(_problem);
         _knock = Tap.Words(T("Ask to be let in"), height: 40, size: 13.5);
@@ -200,7 +200,7 @@ internal sealed class MeetingSheet : Grid
                 Child = column,
                 Background = K.Acrylic(),
                 CornerRadius = new CornerRadius(34),
-                BorderBrush = Ink.White(0.10f),
+                BorderBrush = Ink.Wash(0.10f),
                 BorderThickness = new Thickness(1),
                 Margin = new Thickness(10),
                 VerticalAlignment = VerticalAlignment.Bottom,
