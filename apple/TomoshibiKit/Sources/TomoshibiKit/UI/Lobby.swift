@@ -2258,9 +2258,19 @@ struct MeetingRow: View {
 @Observable
 final class ScheduleDraft {
     var planning = ""
-    var day = Date()
-    var hour = Calendar.current.component(.hour, from: ScheduleView.nextQuarter)
-    var minute = Calendar.current.component(.minute, from: ScheduleView.nextQuarter)
+    /// The next quarter hour's day, hour and minute (ScheduleClock
+    /// `start`): from 23:45 on that is the next day's midnight, which the
+    /// form offered on today's date, already gone.
+    var day: Date
+    var hour: Int
+    var minute: Int
+
+    init(now: Date = Date(), calendar: Calendar = .current) {
+        let start = ScheduleClock.start(now: now, calendar: calendar)
+        day = start.day
+        hour = start.hour
+        minute = start.minute
+    }
 }
 
 /// Schedule.tsx: which name, which day, what time, which machine, and the
@@ -2287,18 +2297,10 @@ struct ScheduleView: View {
 
     private static let ahead: TimeInterval = 60 * 24 * 60 * 60
 
-    /// The next quarter hour from now (Schedule.tsx `nextQuarter`). Worked
-    /// out on the clock rather than by setting fields: setting the seconds
-    /// to zero searches forward for the next such moment, and the minute it
-    /// landed on was one the minute list does not offer, which left the list
-    /// blank.
-    static var nextQuarter: Date {
-        let now = Date().timeIntervalSinceReferenceDate
-        return Date(timeIntervalSinceReferenceDate: ((now / 900).rounded(.down) + 1) * 900)
-    }
-
     private var canArrange: Bool { account.can?.contains("arrange") ?? true }
-    private var at: Date? { Calendar.current.date(bySettingHour: draft.hour, minute: draft.minute, second: 0, of: draft.day) }
+    private var at: Date? {
+        ScheduleClock.instant(day: draft.day, hour: draft.hour, minute: draft.minute, calendar: .current, now: now)
+    }
     private var problem: Bool {
         guard let at else { return true }
         return at < now || at > now.addingTimeInterval(Self.ahead)
@@ -2699,9 +2701,9 @@ struct ScheduleView: View {
     }
 
     private func plan() {
-        guard !arranging, let at else { return }
+        guard !arranging else { return }
         now = Date()
-        guard !problem else { return }
+        guard let at, !problem else { return }
         let wanted = normaliseRoomName(typed: draft.planning)
         let room = validRoomName(name: wanted) ? wanted : generateRoomName()
         arranging = true
