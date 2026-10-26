@@ -58,6 +58,7 @@ public struct RoomView: View {
     /// The edge the system lays its own bars down, where it does (an iPhone
     /// Duo's outer display, its inner one on its side, Split View's halves).
     @State private var barEdge: HorizontalEdge?
+    @Environment(\.layoutDirection) private var direction
     #endif
 
     enum Panel { case messages, sound, watch, music, host, devices }
@@ -71,6 +72,11 @@ public struct RoomView: View {
     }
 
     public var body: some View {
+        #if os(iOS)
+        let rightToLeft = direction == .rightToLeft
+        let window = VerticalBarWindow.shared.size
+        let windowEdge = VerticalBarWindow.shared.edge(rightToLeft: rightToLeft)
+        #endif
         GeometryReader { geometry in
             let whole = geometry.size
             let placement = StageDebug.placement ?? Appearance.shared.controlsPlacement
@@ -80,16 +86,37 @@ public struct RoomView: View {
             // ignores the safe area, the safe area it ignores reads as nothing.
             #if os(iOS)
             let inset = filled ? deviceInsets : EdgeInsets()
-            let column = filled ? nil : SystemColumn.frame(geometry, edge: barEdge,
-                                                           least: CGSize(width: ControlBar.columnWidth, height: ControlBar.columnHeight))
+            // Where the system lays its bars down the side and keeps no
+            // column there (the inner display of an iPhone Duo on its side),
+            // the room keeps one of its own, the outer display's width, and
+            // stands the bar in it as it stands in the outer display's: the
+            // bar was across the foot of a screen whose controls everywhere
+            // else stand down its right side (VerticalBar). Not while the
+            // stage fills the screen, which is the whole screen.
+            // A column too short for the bar is not kept: the bar goes back
+            // across the foot, and the room has the whole width.
+            let edge = barEdge ?? windowEdge
+            let wanted = filled ? 0 : ColumnOutside(geometry).kept(edge, window: window, rightToLeft: rightToLeft)
+            let column = filled ? nil : SystemColumn.frame(geometry, edge: edge,
+                                                           least: CGSize(width: ControlBar.columnWidth, height: ControlBar.columnHeight),
+                                                           kept: wanted)
+            let kept = column == nil ? 0 : wanted
+            let keptLeading = kept > 0 && edge == .leading
             #else
             let inset = EdgeInsets()
             let column: CGRect? = nil
+            let kept: CGFloat = 0
+            let keptLeading = false
             #endif
+            // The room, beside the column it keeps.
+            let beside = CGSize(width: max(0, whole.width - kept), height: whole.height)
             // Held half open, the room is laid out on either side of the fold
-            // rather than across it (Plan.folded).
-            let fold = Fold.of(geometry)
-            let halves = Self.halves(fold, in: whole)
+            // rather than across it (Plan.folded), in the room's own
+            // coordinates: beside a column on the leading edge they start
+            // that much further along.
+            let measuredFold = Fold.of(geometry)
+            let fold = keptLeading ? Fold(crease: measuredFold.crease?.offsetBy(dx: -kept, dy: 0)) : measuredFold
+            let halves = Self.halves(fold, in: beside)
             // Down the side only where the window is tall enough to hold a
             // column (useRoomFor.ts); a shape that does not fit is not the
             // thing somebody chose. Never across a fold, which a column down
@@ -102,7 +129,7 @@ public struct RoomView: View {
             // whole screen. The system's own column, where there is one, is
             // already outside the room.
             let lane = side && !filled ? Plan.sideLane : 0
-            let size = CGSize(width: max(0, whole.width - lane), height: whole.height)
+            let size = CGSize(width: max(0, beside.width - lane), height: whole.height)
             let island = side || column != nil ? Plan.gap : Plan.island
             let pictures = self.pictures
             let folded = halves.map {
@@ -123,7 +150,7 @@ public struct RoomView: View {
 
             content(pictures, room: room, shape: shape, shown: shown, hides: hides)
                 .frame(width: size.width, height: size.height)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: keptLeading ? .topTrailing : .topLeading)
                 // One bar wherever it stands, at the foot, down the side, in
                 // the system's column or at the foot of one half of a fold,
                 // so that it moves there rather than being made again.
@@ -145,6 +172,7 @@ public struct RoomView: View {
                 .animation(shown ? Theme.settle : Theme.leave, value: shown)
                 .animation(Theme.settle, value: side)
                 .animation(Theme.settle, value: filled)
+                .animation(Theme.settle, value: kept)
                 .onChange(of: PinInputs(pictures: pictures.map(\.id), shares: shares), initial: true) { _, now in
                     withAnimation(Theme.settle) { pin.update(pictures: now.pictures, shares: now.shares) }
                 }
@@ -165,6 +193,12 @@ public struct RoomView: View {
                     FoldDebug.log("room insets", geometry)
                 }
                 .onChange(of: geometry.size, initial: true) { FoldDebug.log("room size", geometry) }
+                .onChange(of: kept, initial: true) {
+                    if FoldDebug.logsGeometry {
+                        Logger(subsystem: "app.tomoshibi", category: "geometry").notice(
+                            "GEOMETRY room column kept=\(kept, privacy: .public) edge=\(String(describing: edge), privacy: .public) window=\(window.debugDescription, privacy: .public) frame=\(geometry.frame(in: .global).debugDescription, privacy: .public)")
+                    }
+                }
                 .readsVerticalBarEdge { edge in
                     barEdge = edge
                     if FoldDebug.logsGeometry {

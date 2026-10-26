@@ -1,4 +1,5 @@
 import AVFoundation
+import os
 import SwiftUI
 import TomoshibiBasics
 import TomoshibiCore
@@ -34,6 +35,21 @@ public struct AppRoot: View {
                     DebugTraits.apply()
                     #endif
                 }
+                #if os(iOS)
+                // The window's size and whether a fold divides it, for every
+                // screen to judge the system's vertical bar by, a sheet among
+                // them (VerticalBarWindow).
+                .onGeometryChange(for: WindowShape.self) { proxy in
+                    MainActor.assumeIsolated { WindowShape(size: proxy.size, divided: SystemColumn.divided(proxy)) }
+                } action: { shape in
+                    VerticalBarWindow.shared.size = SystemColumn.windowSize(measured: shape.size)
+                    VerticalBarWindow.shared.divided = shape.divided
+                    if FoldDebug.logsGeometry {
+                        Logger(subsystem: "app.tomoshibi", category: "geometry").notice(
+                            "GEOMETRY window \(VerticalBarWindow.shared.size.debugDescription, privacy: .public) measured \(shape.size.debugDescription, privacy: .public) divided=\(shape.divided, privacy: .public)")
+                    }
+                }
+                #endif
             switch app.screen {
             case .starting:
                 StartingScreen().transition(Theme.arrive)
@@ -78,6 +94,11 @@ public struct AppRoot: View {
         .animation(Theme.settle, value: app.screen)
         .animation(Theme.settle, value: app.account?.name)
         .animation(Theme.settle, value: app.call == nil)
+        #if os(iOS)
+        // The system's word for the window as a whole, for a screen it does
+        // not reach (VerticalBarWindow).
+        .readsVerticalBarEdge { VerticalBarWindow.shared.reported = $0 }
+        #endif
         .preferredColorScheme(.dark)
         // A page that fits stays put. The sign-in, the join screens and the
         // cards around a call are in scroll views so that a phone on its side
