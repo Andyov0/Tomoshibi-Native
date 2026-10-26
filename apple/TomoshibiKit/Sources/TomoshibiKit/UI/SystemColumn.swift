@@ -32,9 +32,13 @@ import UIKit
 // The inner display held on its side lays the system's bars down the same
 // edge, and keeps no column outside the safe area for them; there a screen
 // keeps a column of its own, as wide as the outer display's, and lays its
-// content out beside it (VerticalBar, in TomoshibiBasics). Upright, the inner
-// display has its bars across the top and the foot, and the screens are as
-// they are on any iPhone.
+// content out beside it (VerticalBar, in TomoshibiBasics). The screens there
+// are the outer display's, the lobby without its sidebar and the settings and
+// the schedule over the whole screen, and the lobby draws its account in the
+// column's head itself rather than leaving it to a navigation bar the system
+// may not stand there (PhoneLobby `sideways`). Upright, the inner display has
+// its bars across the top and the foot, and the screens are as they are on
+// any iPhone.
 
 enum SystemColumn {
     /// The width of the capsule the screens' controls stand on in the
@@ -79,8 +83,10 @@ enum SystemColumn {
             occlusions = proxy.reservedRegions(kind: .occlusion).filter(\.isActive).map(\.frame)
             creases = proxy.reservedRegions(kind: .division).filter(\.isActive).map(\.frame)
         }
-        return VerticalBar.column(x: x, width: width, height: proxy.size.height, top: own || kept > 0 ? 0 : insets.top,
-                                  occlusions: occlusions, creases: creases, least: least.height)
+        let ours = own || kept > 0
+        return VerticalBar.column(x: x, width: width, height: proxy.size.height, top: ours ? 0 : insets.top,
+                                  occlusions: occlusions, creases: creases, least: least.height,
+                                  headroom: ours ? 0 : VerticalBar.systemHeadroom)
     }
 
     /// Whether the window `proxy` measures holds a division region, active
@@ -135,6 +141,21 @@ final class VerticalBarWindow {
     func edge(rightToLeft: Bool) -> HorizontalEdge? {
         VerticalBar.edge(reported: reported, rehearsed: FoldDebug.verticalEdge, divided: divided,
                          window: size, rightToLeft: rightToLeft)
+    }
+
+    /// Whether the screens are laid out as the outer display's, with no
+    /// sidebar (VerticalBar `sideways`), at a `regular` width or not.
+    ///
+    /// The window's shape is asked of the window as it is now rather than
+    /// taken from `size`, which the root measures only after the frame it
+    /// changed in. In that frame the size class of a phone being opened is
+    /// already regular, and judged by the outer display's size, upright, the
+    /// lobby would start fading its sidebar in only to fade it out again.
+    func sideways(regular: Bool, rightToLeft: Bool) -> Bool {
+        let now = SystemColumn.windowSize(measured: size)
+        let edge = VerticalBar.edge(reported: reported, rehearsed: FoldDebug.verticalEdge, divided: divided,
+                                    window: now, rightToLeft: rightToLeft)
+        return VerticalBar.sideways(edge: edge, regular: regular, window: now)
     }
 }
 
@@ -193,15 +214,36 @@ extension View {
     /// has shortened since still is (`ColumnSides`). Apply it to a view laid
     /// out inside the safe area, under the screen's popover layer, so that a
     /// popover opened from the column is drawn by it.
+    ///
+    /// `kept`, where it is given, is told the column the screen keeps for
+    /// itself instead of the column being added to this view's safe area,
+    /// for a screen whose content does not take its safe area from this
+    /// view: a navigation stack lays its pages out by the safe area of the
+    /// window, and the phone's lobby on the inner display on its side ran
+    /// its lists under the column with the column added to the stack's.
     func systemColumn<Head: View, Foot: View>(_ shown: Binding<Bool>, least: CGFloat = 200,
+                                              kept: Binding<KeptColumn>? = nil,
                                               @ViewBuilder head: () -> Head,
                                               @ViewBuilder foot: () -> Foot) -> some View {
         #if os(iOS)
-        modifier(SystemColumnBar(shown: shown, least: least, head: head(), foot: foot()))
+        modifier(SystemColumnBar(shown: shown, least: least, keptOut: kept, head: head(), foot: foot()))
         #else
         self
         #endif
     }
+
+    /// Lays this view out beside the column a screen keeps for itself
+    /// (`systemColumn`'s `kept`): that much more safe area on its side.
+    func besideKeptColumn(_ kept: KeptColumn) -> some View {
+        safeAreaPadding(kept.edge == .leading ? .leading : .trailing, kept.width)
+    }
+}
+
+/// The column a screen keeps for itself, where the system keeps none: the
+/// edge it is on and how much of the screen it takes; nothing elsewhere.
+struct KeptColumn: Equatable {
+    var edge: HorizontalEdge = .trailing
+    var width: CGFloat = 0
 }
 
 #if os(iOS)
@@ -263,6 +305,8 @@ private struct ColumnSides: Equatable {
 private struct SystemColumnBar<Head: View, Foot: View>: ViewModifier {
     @Binding var shown: Bool
     let least: CGFloat
+    /// Told the column kept rather than adding it to the safe area here.
+    let keptOut: Binding<KeptColumn>?
     let head: Head
     let foot: Foot
     @State private var sides = ColumnSides()
@@ -291,17 +335,24 @@ private struct SystemColumnBar<Head: View, Foot: View>: ViewModifier {
         let barEdge = edge ?? window.edge(rightToLeft: rightToLeft)
         let kept = outside.kept(barEdge, window: window.size, rightToLeft: rightToLeft)
         let keptEdge: HorizontalEdge? = kept > 0 ? barEdge : nil
+        let inside = keptOut == nil ? 0 : kept
         let column = sides.reach(barEdge) >= least ? sides.on(barEdge) : nil
         content
             .overlay(alignment: .topLeading) {
                 Color.clear
-                    .onGeometryChange(for: ColumnSides.self) { [keptEdge] proxy in
+                    .onGeometryChange(for: ColumnSides.self) { [keptEdge, inside] proxy in
                         MainActor.assumeIsolated {
                             // Any height: the height asked for is judged
                             // against the tallest the column has been.
                             let wide = CGSize(width: SystemColumn.leastWidth, height: 0)
-                            return ColumnSides(leading: SystemColumn.frame(proxy, edge: .leading, least: wide, own: keptEdge == .leading),
-                                               trailing: SystemColumn.frame(proxy, edge: .trailing, least: wide, own: keptEdge == .trailing))
+                            // The column kept, inside this view where it is
+                            // not part of its safe area (`keptOut`).
+                            return ColumnSides(leading: SystemColumn.frame(proxy, edge: .leading, least: wide,
+                                                                           kept: keptEdge == .leading ? inside : 0,
+                                                                           own: keptEdge == .leading),
+                                               trailing: SystemColumn.frame(proxy, edge: .trailing, least: wide,
+                                                                            kept: keptEdge == .trailing ? inside : 0,
+                                                                            own: keptEdge == .trailing))
                         }
                     } action: { now in
                         sides = sides.remeasured(leading: now.leading, trailing: now.trailing)
@@ -338,8 +389,21 @@ private struct SystemColumnBar<Head: View, Foot: View>: ViewModifier {
             // beside the outer display's, and whatever reaches under the
             // safe area (a backdrop, the picture of yourself) reaches under
             // this one too. Nothing anywhere else.
-            .safeAreaPadding(keptEdge == .leading ? .leading : .trailing, kept)
+            .safeAreaPadding(keptEdge == .leading ? .leading : .trailing, keptOut == nil ? kept : 0)
             .animation(Theme.settle, value: kept)
+            .onChange(of: KeptColumn(edge: keptEdge ?? .trailing, width: kept), initial: true) { _, now in
+                guard let keptOut, keptOut.wrappedValue != now else { return }
+                // A column kept as the screen arrives is how it arrives;
+                // one kept or given up afterwards comes and goes with the
+                // column, as the padding here would.
+                if keptOnArrival || !measured {
+                    var arriving = Transaction()
+                    arriving.disablesAnimations = true
+                    withTransaction(arriving) { keptOut.wrappedValue = now }
+                } else {
+                    withAnimation(Theme.settle) { keptOut.wrappedValue = now }
+                }
+            }
             .background {
                 Color.clear
                     .onGeometryChange(for: ColumnOutside.self) { proxy in

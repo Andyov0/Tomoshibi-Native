@@ -110,6 +110,7 @@ struct LobbyView: View {
     @State private var state = LobbyState()
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var sizeClass
+    @Environment(\.layoutDirection) private var direction
     #endif
 
     var body: some View {
@@ -143,17 +144,25 @@ struct LobbyView: View {
                 MeetingSheet(app: app, mode: mode)
             }
         #else
-        let wide = sizeClass == .regular
+        // The inner display of an iPhone Duo on its side is laid out as its
+        // outer display is, the phone's home with everything in the column
+        // down its side (VerticalBar `sideways`), rather than as an iPad.
+        let sideways = VerticalBarWindow.shared.sideways(regular: sizeClass == .regular,
+                                                         rightToLeft: direction == .rightToLeft)
+        let wide = sizeClass == .regular && !sideways
         ZStack {
             if wide {
                 SidebarLobby(app: app, account: account, state: state)
-                    .transition(.opacity.animation(Theme.settle))
+                    .transition(.asymmetric(insertion: .opacity.animation(Theme.settle),
+                                            removal: .opacity.animation(Theme.leave)))
             } else {
-                PhoneLobby(app: app, account: account, state: state)
-                    .transition(.opacity.animation(Theme.settle))
+                PhoneLobby(app: app, account: account, state: state, sideways: sideways)
+                    .transition(.asymmetric(insertion: .opacity.animation(Theme.settle),
+                                            removal: .opacity.animation(Theme.leave)))
             }
         }
         .onChange(of: wide) { state.popovers.close() }
+        .onChange(of: sideways) { state.popovers.close() }
         // Presented above both layouts, so that what they hold outlives a
         // change between them: presented from inside one, a sheet went with
         // it, and a Duo opened with the start sheet up lost the room typed
@@ -161,23 +170,70 @@ struct LobbyView: View {
         .fullScreenCover(item: $state.sheet) { mode in
             MeetingSheet(app: app, mode: mode)
         }
-        .sheet(isPresented: $state.settings) {
+        // The settings and the schedule cover the whole of the inner display
+        // on its side, as a sheet covers the outer display, with their close
+        // in the column down its side: as a sheet there they stood in the
+        // middle of the screen, short of the column, and kept their close on
+        // themselves. Each is one or the other by the layout, and the binding
+        // of the one not drawn neither shows it nor closes it, so that turning
+        // the phone or opening it takes one down and puts the other up with
+        // the settings or the schedule still open.
+        //
+        // Closed or not is judged by the layout as it is when the system
+        // says one went (`layoutNow`), not as it was when the binding was
+        // made: taken down by opening the phone, the outer display's
+        // schedule sheet was said to go with the binding of the outer
+        // display, upright and compact, and closed the schedule, and the
+        // inner display opened on the lobby's home.
+        .sheet(isPresented: Binding(get: { state.settings && !sideways },
+                                    set: { shown in if !shown && !layoutNow().sideways { state.settings = false } })) {
             SettingsView(app: app)
+        }
+        .fullScreenCover(isPresented: Binding(get: { state.settings && sideways },
+                                              set: { shown in if !shown && layoutNow().sideways { state.settings = false } })) {
+            SettingsView(app: app)
+                .presentationBackground(Theme.background)
         }
         // The phone's schedule is a sheet; the sidebar's is a section beside
         // it, with the same draft. Taken down by the layout changing, not by
-        // somebody closing it, it leaves the section where it was: the
-        // binding below is made again with each change of layout, and only
-        // the phone's one closes the section.
-        .sheet(isPresented: Binding(get: { !wide && state.place == .scheduled },
-                                    set: { shown in if !shown && !wide && state.place == .scheduled { state.place = .home } })) {
+        // somebody closing it, it leaves the section where it was: only the
+        // phone's own binding closes the section, and only while the phone's
+        // layout is drawn.
+        .sheet(isPresented: Binding(get: { !wide && !sideways && state.place == .scheduled },
+                                    set: { shown in
+                                        let now = layoutNow()
+                                        if !shown && !now.wide && !now.sideways && state.place == .scheduled { state.place = .home }
+                                    })) {
             // Its close goes home, which takes the sheet down.
             ScheduleView(app: app, account: account, draft: state.schedule, close: { state.place = .home })
                 .presentationDragIndicator(.visible)
                 .presentationBackground(Theme.background)
         }
+        .fullScreenCover(isPresented: Binding(get: { sideways && state.place == .scheduled },
+                                              set: { shown in
+                                                  if !shown && layoutNow().sideways && state.place == .scheduled { state.place = .home }
+                                              })) {
+            ScheduleView(app: app, account: account, draft: state.schedule, close: { state.place = .home })
+                .presentationBackground(Theme.background)
+        }
         #endif
     }
+
+    #if os(iOS)
+    /// The lobby's layout as the window has it now: the sidebar's (`wide`),
+    /// the outer display's on the inner display on its side (`sideways`), or
+    /// the phone's, neither. The window's own size class rather than the
+    /// environment's, which a binding made in an earlier frame still holds.
+    @MainActor
+    private func layoutNow() -> (wide: Bool, sideways: Bool) {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let windows = scenes.flatMap(\.windows)
+        let window = windows.first(where: \.isKeyWindow) ?? windows.first
+        let regular = window.map { $0.traitCollection.horizontalSizeClass == .regular } ?? (sizeClass == .regular)
+        let sideways = VerticalBarWindow.shared.sideways(regular: regular, rightToLeft: direction == .rightToLeft)
+        return (regular && !sideways, sideways)
+    }
+    #endif
 }
 
 // MARK: - The mark and small pieces
@@ -1018,13 +1074,13 @@ struct AccountMenu: View {
 private struct HomeStage: View {
     @Bindable var app: AppModel
     let account: Account
-    /// The microphone and the camera, and the server, stand in the column
-    /// down the right of an iPhone Duo's inner display on its side
-    /// (SystemColumn), where the system lays its bars on that display and
-    /// the outer one alike, and leave the foot and the corner of the stage
-    /// while they do. Only the stage beside the sidebar: Apple keeps a split
-    /// view's sidebar under bars across its top, and its Start and Join stay
-    /// at its head.
+    /// The microphone and the camera, and the server, stand in a column the
+    /// system keeps down the side of the stage (SystemColumn), and leave the
+    /// foot and the corner of the stage while they do. Only the stage beside
+    /// the sidebar: Apple keeps a split view's sidebar under bars across its
+    /// top, and its Start and Join stay at its head. The inner display of an
+    /// iPhone Duo on its side, where this stood its controls first, has no
+    /// sidebar now (PhoneLobby `sideways`).
     @State private var inColumn = false
 
     var body: some View {
@@ -1111,9 +1167,40 @@ struct PhoneLobby: View {
     /// The sheets, the server page and the join bar's words, which outlive
     /// this layout (LobbyState).
     @Bindable var state: LobbyState
+    /// The inner display of an iPhone Duo on its side (VerticalBar
+    /// `sideways`), laid out as the outer display is: the preview beside the
+    /// lists, as on a short screen, and the column down its side holding the
+    /// account and the server at its head as well as everything at its foot.
+    /// The system's bars are not down its side on the simulator's stand-in
+    /// for the inner display, which says nothing of them, so the column's
+    /// head is the app's own there rather than the navigation bar's.
+    var sideways = false
     /// The height of a recent room's row, which the list's own height is
     /// counted in: the list does not scroll, so it is as tall as its rows.
     private static let recentRow: CGFloat = 58
+    /// The lists beside the preview on the inner display on its side: as
+    /// wide as they are on the outer display upright, beside its column, so
+    /// that a row reads the same on either, and the preview has the rest.
+    private static let sideLists: CGFloat = 350
+
+    /// The fold down the inner display on its side held half open as a
+    /// book, across the preview and the lists: the preview keeps to the page
+    /// before it and the lists to the page after it, eight points clear of
+    /// it either side. Laid out as on a flat screen, the preview ran a dozen
+    /// points over the fold. Its band and the width it was measured across,
+    /// in the coordinates of the two together.
+    struct BookFold: Equatable {
+        var crease: CGRect
+        var width: CGFloat
+    }
+    @State private var book: BookFold?
+
+    /// The lists' width beside the preview on the inner display on its side:
+    /// the page after the fold of a book, or the outer display's width.
+    private var sideListsWidth: CGFloat {
+        guard let book else { return Self.sideLists }
+        return max(240, book.width - book.crease.maxX - 8)
+    }
 
     /// The server page, pushed while the lobby is at the servers. Popped by
     /// the system (Back, the swipe from the edge) only while this layout is
@@ -1122,9 +1209,9 @@ struct PhoneLobby: View {
     /// on the servers.
     @Environment(\.horizontalSizeClass) private var sizeClass
     private var serversShown: Binding<Bool> {
-        let compact = sizeClass != .regular
+        let drawn = sizeClass != .regular || sideways
         return Binding(get: { state.place == .servers },
-                       set: { shown in if !shown && compact && state.place == .servers { state.place = .home } })
+                       set: { shown in if !shown && drawn && state.place == .servers { state.place = .home } })
     }
 
     /// A phone on its side, and the iPhone Duo's outer display on its side or
@@ -1135,6 +1222,19 @@ struct PhoneLobby: View {
     /// again; the words in the join bar are the lobby's (LobbyState).
     @Environment(\.verticalSizeClass) private var heightClass
     private var short: Bool { heightClass == .compact }
+    /// The preview beside the lists rather than above them.
+    private var beside: Bool { short || sideways }
+    /// The column's head is the app's: the account and the server, or the
+    /// way back from the server page, which the system stands under the
+    /// clock of the outer display as items of its navigation bar.
+    private var ownHead: Bool { sideways }
+    /// The controls are the column's rather than the page's: where the
+    /// column has been found, and on the inner display on its side from the
+    /// first frame, where it always is. A lobby drawn afresh there, the
+    /// inner display turned from upright, took a frame to find its column,
+    /// and its preview's Start and the join bar showed through the fade
+    /// before going.
+    private var columned: Bool { inColumn || sideways }
     private var listed: Bool {
         !app.lobby.upcoming.isEmpty || !app.lobby.recentHere.isEmpty || app.offersRelayChoice
     }
@@ -1151,17 +1251,21 @@ struct PhoneLobby: View {
     /// opens the join sheet, whose field takes the keyboard, as the sidebar's
     /// Join does.
     @State private var inColumn = false
+    /// The column the lobby keeps for itself on the inner display on its
+    /// side, which its pages are laid out beside: the navigation stack lays
+    /// them out by the window's safe area, not by a column added to its own.
+    @State private var keptColumn = KeptColumn()
 
     var body: some View {
         NavigationStack {
             ZStack {
-                if short {
+                if beside {
                     // At the head of the column beside the preview, above the
                     // lists and scrolling with them: above the preview and
                     // the column both, the two cards took the height the
                     // preview stands in, and its Start was drawn over the
                     // update.
-                    HStack(alignment: .top, spacing: 16) {
+                    HStack(alignment: .top, spacing: sideways ? book.map { $0.crease.width + 16 } ?? 16 : 16) {
                         hero(height: nil).rise()
                         if listed || saying {
                             ScrollView {
@@ -1175,10 +1279,22 @@ struct PhoneLobby: View {
                                 .animation(Theme.settle, value: app.updates?.shown)
                             }
                             .scrollIndicators(.never)
-                            .frame(maxWidth: .infinity)
+                            // Half the width each on a phone on its side; on
+                            // the inner display, half of 870 points would
+                            // stretch a row of the lists to the width of the
+                            // preview.
+                            .frame(maxWidth: sideways ? sideListsWidth : .infinity)
                             .transition(Theme.arrive)
                         }
                     }
+                    .onGeometryChange(for: BookFold?.self) { proxy in
+                        MainActor.assumeIsolated {
+                            let fold = Fold.of(proxy)
+                            guard fold.posture(in: proxy.size) == .book, let crease = fold.crease else { return nil }
+                            return BookFold(crease: crease, width: proxy.size.width)
+                        }
+                    } action: { book = $0 }
+                    .animation(Theme.settle, value: book)
                     .padding(.horizontal, 16)
                     .padding(.bottom, 10)
                     .animation(Theme.settle, value: listed || saying)
@@ -1208,7 +1324,8 @@ struct PhoneLobby: View {
                     .transition(.opacity)
                 }
             }
-            .animation(Theme.settle, value: short)
+            .animation(Theme.settle, value: beside)
+            .besideKeptColumn(keptColumn)
             .putsKeyboardAway()
             // The page is content; the join bar below floats over it as a
             // toolbar does, and stays glass.
@@ -1216,24 +1333,32 @@ struct PhoneLobby: View {
             .background(Theme.page.ignoresSafeArea())
             .navigationTitle("Tomoshibi")
             .toolbar {
-                AccountItem(name: account.name, address: app.avatarAddress) { state.settings = true }
+                if !ownHead {
+                    AccountItem(name: account.name, address: app.avatarAddress) { state.settings = true }
+                }
             }
             .safeAreaInset(edge: .bottom) {
-                if !inColumn { joinBar.transition(Theme.arrive) }
+                if !columned { joinBar.transition(Theme.arrive) }
             }
             .navigationDestination(isPresented: serversShown) {
-                ServersView(app: app, measureInColumn: inColumn)
+                ServersView(app: app, measureInColumn: columned)
+                    .modifier(OnePageWhenSideways(sideways: sideways))
+                    .besideKeptColumn(keptColumn)
+                    // Its way back is the column's (`columnHead`).
+                    .navigationBarBackButtonHidden(ownHead)
             }
         }
-        .animation(Theme.settle, value: inColumn)
+        .animation(Theme.settle, value: columned)
         // On the stack rather than on its home page, so that the column
         // changes with the page: the server page's own control takes the
         // place of the lobby's as the page is pushed, and the lobby's come
-        // back with the swipe that pops it. The head is left to the system,
-        // which stands the account there, and the back button in its place
-        // on the server page.
-        .systemColumn($inColumn, least: 300) {
-            EmptyView()
+        // back with the swipe that pops it. The head is left to the system
+        // on the outer display, which stands the account there, and the
+        // back button in its place on the server page.
+        // The account and the server at the head as well, on the inner
+        // display on its side.
+        .systemColumn($inColumn, least: sideways ? 420 : 300, kept: $keptColumn) {
+            columnHead
         } foot: {
             ZStack(alignment: .bottom) {
                 if state.place == .servers {
@@ -1264,6 +1389,40 @@ struct PhoneLobby: View {
         .toast(app)
         .floatingPopoverLayer(state.popovers)
         .onAppear { state.popovers.openFromDebug() }
+    }
+
+    /// The head of the column on the inner display on its side, where it is
+    /// the app's (`ownHead`): the account, which opens the settings as the
+    /// outer display's does, with the server under it, or on the server page
+    /// the way back. The inner display's column is taller than the outer
+    /// display's, and has room for the server as well as the lists' row for
+    /// it; the server opens the same menu as the start sheet's. Nothing on
+    /// the outer display, whose head the system keeps.
+    @ViewBuilder
+    private var columnHead: some View {
+        if sideways {
+            ZStack(alignment: .top) {
+                if state.place == .servers {
+                    ColumnHeadButton(symbol: "chevron.left", label: t("Back")) { state.place = .home }
+                        .transition(Theme.arrive)
+                } else {
+                    VStack(spacing: 12) {
+                        Button { state.settings = true } label: {
+                            AccountAvatar(name: account.name, address: app.avatarAddress, size: 30)
+                        }
+                        .buttonStyle(.glassCircle(48))
+                        .accessibilityLabel(t("Settings"))
+                        .help(t("Settings"))
+                        if app.offersRelayChoice {
+                            ServerMenu(app: app, inColumn: true).transition(Theme.arrive)
+                        }
+                    }
+                    .transition(Theme.arrive)
+                }
+            }
+            .animation(Theme.settle, value: state.place == .servers)
+            .animation(Theme.settle, value: app.offersRelayChoice)
+        }
     }
 
     /// What the lobby has to say at the head of its page, under the title:
@@ -1395,12 +1554,12 @@ struct PhoneLobby: View {
         .frame(height: height)
         .frame(maxWidth: .infinity, maxHeight: height == nil ? .infinity : nil)
         .overlay(alignment: .topTrailing) {
-            if !inColumn {
+            if !columned {
                 DeviceSwitches(app: app, size: 40).padding(12).transition(Theme.arrive)
             }
         }
         .overlay(alignment: .bottom) {
-            if !inColumn {
+            if !columned {
                 GlassGroup(spacing: 8) {
                     HStack(spacing: 8) {
                         Button { state.sheet = .start } label: {
@@ -1452,6 +1611,24 @@ struct PhoneLobby: View {
         guard validRoomName(name: room) else { return }
         state.sheet = .join(room)
         state.typed = ""
+    }
+}
+
+/// The server page over the whole of the inner display on its side, on the
+/// page of a book after its fold when it is held half open, as the server
+/// section beside the sidebar was: one list of rows down the middle of the
+/// screen was bent down the middle by the fold. Nothing anywhere else, the
+/// outer display's page among them.
+private struct OnePageWhenSideways: ViewModifier {
+    let sideways: Bool
+
+    func body(content: Content) -> some View {
+        if sideways {
+            // The page's ground under both pages, not moved with the list.
+            content.keptToOnePage(.reading).background(Backdrop())
+        } else {
+            content
+        }
     }
 }
 
@@ -1945,8 +2122,9 @@ struct ServerMenu: View {
     var compact = false
     var id = "server"
     /// Under the head of the column down the side of an iPhone Duo's inner
-    /// display (HomeStage): the symbol alone, on a circle the size of the
-    /// system's own items there, since the column is 84 points wide. The
+    /// display on its side (PhoneLobby), or of a system's column beside the
+    /// sidebar's stage (HomeStage): the symbol alone, on a circle the size of
+    /// the system's own items there, since the column is 84 points wide. The
     /// choice and its round trip are said by the button's label and shown
     /// by the menu it opens.
     var inColumn = false
@@ -2099,6 +2277,8 @@ struct ScheduleView: View {
     @State private var arranging = false
     @State private var copied: String?
     @State private var now = Date()
+    /// The fold of a book across the form and the list (`columns`).
+    @State private var book: CGRect?
     @State private var popovers = Popovers()
     /// The close stands in the system's column down the side of an iPhone
     /// Duo's outer display (SystemColumn), under the clock, and leaves the
@@ -2189,17 +2369,43 @@ struct ScheduleView: View {
     /// and its three buttons, as beside a sidebar on a Mac or an opened Duo;
     /// in a narrower window, or a phone's sheet, it was squeezed to "…"
     /// beside the form, so it goes under it.
+    ///
+    /// Over the whole of an iPhone Duo's inner display on its side held
+    /// half open as a book, the form keeps to the page before the fold and
+    /// the list to the page after it: side by side as on a flat screen, the
+    /// list started some seventy points before the fold and its rows were
+    /// bent across it.
+    @ViewBuilder
     private var columns: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 20) {
-                form.frame(width: 360)
-                list.frame(minWidth: 420, maxWidth: .infinity, alignment: .top)
-            }
-            VStack(alignment: .leading, spacing: 20) {
-                form.frame(maxWidth: 560)
-                list.frame(maxWidth: 560)
+        Group {
+            if let book {
+                HStack(alignment: .top, spacing: book.width + 16) {
+                    form.frame(width: max(0, book.minX - 8))
+                    list.frame(maxWidth: .infinity, alignment: .top)
+                }
+            } else {
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .top, spacing: 20) {
+                        form.frame(width: 360)
+                        list.frame(minWidth: 420, maxWidth: .infinity, alignment: .top)
+                    }
+                    VStack(alignment: .leading, spacing: 20) {
+                        form.frame(maxWidth: 560)
+                        list.frame(maxWidth: 560)
+                    }
+                }
             }
         }
+        .onGeometryChange(for: CGRect?.self) { proxy in
+            MainActor.assumeIsolated {
+                let fold = Fold.of(proxy)
+                // A form of its own width at least before the fold, as
+                // the form has on a flat screen.
+                guard fold.posture(in: proxy.size) == .book, let crease = fold.crease, crease.minX >= 368 else { return nil }
+                return crease
+            }
+        } action: { book = $0 }
+        .animation(Theme.settle, value: book)
     }
 
     private func heading(size: CGFloat) -> some View {
@@ -2524,10 +2730,9 @@ struct ServersView: View {
     /// while it is.
     var measureInColumn = false
     /// The page is the section beside the lobby's sidebar (SidebarLobby),
-    /// and stands its own Measure again at the foot of the column down the
-    /// right of an iPhone Duo's inner display on its side, as the phone's
-    /// lobby stands it in the outer display's. Not inside the phone's lobby,
-    /// whose column already holds it.
+    /// and stands its own Measure again at the foot of a column down the side
+    /// of the screen, as the phone's lobby stands it in the outer display's.
+    /// Not inside the phone's lobby, whose column already holds it.
     var ownColumn = false
     @State private var columnShown = false
 
