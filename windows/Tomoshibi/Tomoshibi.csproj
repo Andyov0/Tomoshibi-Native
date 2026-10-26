@@ -56,6 +56,13 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.9169" />
+    <!--
+      Direct2D's paths for the compositor (CompositionPath takes a Direct2D
+      geometry) and its colour matrix as a composition effect: the lobby's
+      camera card draws its people in lines of glass with both
+      (UI/Lobby/PreviewGlass.cs).
+    -->
+    <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.4.0" />
   </ItemGroup>
 
   <!-- The flags drawn in for flag emoji, which Windows has no glyphs for (UI/Kit/Flags.cs). -->
@@ -82,6 +89,18 @@
   <ItemGroup>
     <Content Include="..\..\android\app\src\main\assets\phrases.json">
       <Link>phrases.json</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <!--
+    The people the lobby's camera card draws while the camera is off, from
+    the one file every platform draws them from (art/README.md), carried as
+    it is rather than copied into the app's sources.
+  -->
+  <ItemGroup>
+    <Content Include="..\..\art\portraits.json">
+      <Link>art\portraits.json</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

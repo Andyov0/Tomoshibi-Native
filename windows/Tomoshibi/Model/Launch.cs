@@ -148,6 +148,14 @@ public sealed record Launch
     /// </summary>
     public string? SegmentCheck { get; init; }
 
+    /// <summary>
+    /// One moment of the camera card's drawing, held still, for pictures of
+    /// it (TOMOSHIBI_DEBUG_PORTRAIT): <c>name</c> for that person finished,
+    /// <c>name@seconds</c> that far into their turn, <c>@seconds</c> that far
+    /// into the cycle. The iPhone's switch of the same name.
+    /// </summary>
+    public string? Portrait { get; init; }
+
     /// <summary>A file the measurements are written to (TOMOSHIBI_DEBUG_LOG).</summary>
     public string? LogFile { get; init; }
 
@@ -246,6 +254,7 @@ public sealed record Launch
             RemoteFile = Get("TOMOSHIBI_REMOTE"),
             SegmentCheck = Get("TOMOSHIBI_DEBUG_SEGMENT"),
             KeepIn = Get("TOMOSHIBI_KEEP") is { } keep && keep.All(c => char.IsLetterOrDigit(c) || c == '-') ? keep : null,
+            Portrait = Get("TOMOSHIBI_DEBUG_PORTRAIT"),
             LogFile = logFile,
             QuitAfterSeconds = int.TryParse(Get("TOMOSHIBI_DEBUG_QUIT_AFTER"), out var seconds) && seconds > 0 ? seconds : null,
         };

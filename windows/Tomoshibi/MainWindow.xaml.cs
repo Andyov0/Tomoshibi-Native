@@ -33,6 +33,16 @@ public sealed partial class MainWindow : Window
     /// <summary>The app's one window, for what changes the window itself: the full screen a filled stage takes.</summary>
     internal static MainWindow? Current { get; private set; }
 
+    /// <summary>
+    /// Whether the window can be seen at all: shown, and not minimised. What
+    /// moves only to be looked at (the lobby's camera card) stops while it
+    /// cannot be.
+    /// </summary>
+    internal bool InSight { get; private set; } = true;
+
+    /// <summary>Said when <see cref="InSight"/> has changed.</summary>
+    internal event Action? SightChanged;
+
     internal MainWindow(AppModel app)
     {
         _app = app;
@@ -91,6 +101,16 @@ public sealed partial class MainWindow : Window
             e.Handled = _overlay.Back() || _screens.Back();
         };
 
+        // Minimised is a state of the presenter, which the window's own
+        // visibility does not always follow, so both are listened to.
+        VisibilityChanged += (_, e) =>
+        {
+            _shown = e.Visible;
+            Look();
+        };
+        AppWindow.Changed += (_, _) => Look();
+        Closed += (_, _) => _closed = true;
+
         Localization.Shared.Changed += Refresh;
         // Back at the front, the deployment is asked what it says now (Remote
         // `Refresh`, which holds back a question asked a moment before).
@@ -124,6 +144,30 @@ public sealed partial class MainWindow : Window
             }
             Close();
         };
+    }
+
+    private bool _shown = true;
+    private bool _closed;
+
+    private void Look()
+    {
+        if (_closed) return;
+        bool now;
+        try
+        {
+            var minimised = AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized };
+            now = _shown && AppWindow.IsVisible && !minimised;
+        }
+        catch (Exception)
+        {
+            // Asked while the window is being taken down: the window's
+            // properties throw then (Window.Visible did, closing the app).
+            return;
+        }
+        if (now == InSight) return;
+        InSight = now;
+        Log.Line(now ? "window in sight" : "window out of sight");
+        SightChanged?.Invoke();
     }
 
     private void Refresh()

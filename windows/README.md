@@ -166,7 +166,9 @@ LLVM is there for one reason: ring compiles its C with clang when it targets
 Windows on Arm (its `build.rs`), and `build-core.ps1` puts it on the path.
 
 Per project, not per machine: the NuGet packages `Microsoft.WindowsAppSDK`
-2.5.1 and `Microsoft.Windows.SDK.BuildTools` 10.0.26100.9169 (restored by
+2.5.1, `Microsoft.Windows.SDK.BuildTools` 10.0.26100.9169 and
+`Microsoft.Graphics.Win2D` 1.4.0 (the lobby camera card's paths and colour
+matrix, UI/Lobby/PreviewGlass.cs) (restored by
 `dotnet build`), and the C# binding generator, which `build-core.ps1` builds
 into `windows\.tools` (see below).
 

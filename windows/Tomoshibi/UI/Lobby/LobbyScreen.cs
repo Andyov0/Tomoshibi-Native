@@ -47,6 +47,8 @@ internal sealed class LobbyScreen : Screen
     private string? _footSaid;
     private bool _serverRowShown;
     private Shared.CameraStage? _stage;
+    private Grid? _standing;
+    private PreviewGlass? _stood;
     private Grid? _sidebarFoot;
     private Grid? _servers;
     private Tap? _joinTyped;
@@ -93,6 +95,8 @@ internal sealed class LobbyScreen : Screen
         Children.Clear();
         _section = null;
         _sectionShown = null;
+        _standing = null;
+        _stood = null;
         _sidebarLists = null;
         _homeLists = null;
         _listsSaid = null;
@@ -139,6 +143,7 @@ internal sealed class LobbyScreen : Screen
     {
         _toast?.Update();
         _stage?.Update();
+        Stand();
         PaintGreeting();
         if (!App.OffersRelayChoice && _place == Place.Servers) Go(Place.Home);
         var said = Said();
@@ -357,6 +362,8 @@ internal sealed class LobbyScreen : Screen
     {
         if (_section == null) return;
         _sectionShown = _place;
+        _standing = null;
+        _stood = null;
         foreach (var old in _section.Children.ToList()) _section.Children.Remove(old);
         UIElement chosen = _place switch
         {
@@ -373,6 +380,14 @@ internal sealed class LobbyScreen : Screen
     private Grid HomeStage()
     {
         var grid = new Grid();
+        // The children drawn in glass while the camera is off, standing on
+        // the stage where the picture would be, below the greeting and behind
+        // the switches.
+        _standing = new Grid { IsHitTestVisible = false, VerticalAlignment = VerticalAlignment.Bottom };
+        _stood = null;
+        grid.Children.Add(_standing);
+        grid.SizeChanged += (_, e) => PlaceStanding(e.NewSize);
+        Stand();
         var hello = K.Text(T("Hello, {name}", ("name", _account.Name)), 34, K.Bold);
         var helloLine = K.Text(T("Start one from the sidebar when you are ready."), 15, ink: Ink.White(0.78f));
         var helloShadow = Shadowed.Text(hello);
@@ -404,6 +419,39 @@ internal sealed class LobbyScreen : Screen
             grid.Children.Add(server);
         }
         return grid;
+    }
+
+    /// <summary>
+    /// The wide home's children, while the camera is off: the iPhone's card
+    /// has them on a pane of glass; here the stage beside the sidebar is where
+    /// the picture of yourself is, and they stand on its foot.
+    /// </summary>
+    private void Stand()
+    {
+        if (_standing == null) return;
+        var wanted = _stage?.Showing != true;
+        if (wanted && _stood == null)
+        {
+            _stood = new PreviewGlass(0, pane: false, App.Launch.Portrait).Arrives(1f);
+            _standing.Children.Add(_stood);
+        }
+        else if (!wanted && _stood != null)
+        {
+            _standing.Children.Remove(_stood);
+            _stood = null;
+        }
+    }
+
+    /// <summary>
+    /// How tall the children stand on the wide stage: from a little under
+    /// the greeting to the window's foot, and at most 560 points, so that a
+    /// tall window does not make giants of them over an empty stage.
+    /// </summary>
+    private void PlaceStanding(Windows.Foundation.Size stage)
+    {
+        if (_standing == null) return;
+        var top = Shared.TitleBar + 128;
+        _standing.Height = Math.Max(0, Math.Min(stage.Height - top, 560));
     }
 
     /// <summary>
@@ -688,7 +736,7 @@ internal sealed class LobbyScreen : Screen
     /// <summary>The picture of yourself with the way to start and to schedule (Lobby.kt <c>Hero</c>).</summary>
     private Grid Hero()
     {
-        _stage = new Shared.CameraStage(App, 30);
+        _stage = new Shared.CameraStage(App, 30, glass: true);
         var start = Tap.Words(T("Start a meeting"), "video.fill", Look.Prominent, 52, 16);
         start.HorizontalAlignment = HorizontalAlignment.Stretch;
         start.Click += (_, _) => OpenSheet(start: true, "");

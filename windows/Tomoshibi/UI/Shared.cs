@@ -287,28 +287,63 @@ internal static class Shared
     /// <summary>
     /// The picture of yourself before a call (SelfView.kt <c>CameraStage</c>):
     /// the evening room, and the camera over it while it is to start on.
+    /// With <c>glass</c> (the narrow lobby's card), a pane of glass with
+    /// people drawn on it while the camera is off (Lobby.PreviewGlass, the
+    /// iPhone's card); as the camera comes on the glass fades away and the
+    /// surface a picture stands on fades in under it, and the other way as
+    /// it goes off.
     /// </summary>
     public sealed class CameraStage : Grid
     {
         private readonly AppModel _app;
+        private readonly double _radius;
+        private readonly Border? _ground;
         private SelfView? _self;
+        private Lobby.PreviewGlass? _glass;
 
-        public CameraStage(AppModel app, double radius = 0)
+        public CameraStage(AppModel app, double radius = 0, bool glass = false)
         {
             _app = app;
+            _radius = radius;
             CornerRadius = new CornerRadius(radius);
             // The surface where it sits on a rounded card, as a tile with its
             // camera off is; the background where it fills the screen.
             Background = radius > 0 ? Ink.Surface : Ink.Background;
+            if (glass)
+            {
+                // The glass is over the page itself, so the surface is a
+                // layer of its own that comes and goes with the camera.
+                Background = null;
+                _ground = new Border { Background = Ink.Surface, CornerRadius = new CornerRadius(radius) };
+                Children.Add(_ground);
+                if (!Wanted) Motion.Hide(_ground);
+            }
             Update();
         }
 
         /// <summary>Whether the camera's picture is on the stage, rather than its ground.</summary>
         public bool Showing => _self != null;
 
+        private bool Wanted => _app.StartWithCamera && _app.Call == null && !_app.Joining;
+
         public void Update()
         {
-            var wanted = _app.StartWithCamera && _app.Call == null && !_app.Joining;
+            var wanted = Wanted;
+            if (_ground != null)
+            {
+                if (!wanted && _glass == null)
+                {
+                    _glass = new Lobby.PreviewGlass(_radius, pane: true, _app.Launch.Portrait).Arrives(1f);
+                    Children.Insert(1, _glass);
+                    Motion.FadeTo(_ground, 0);
+                }
+                else if (wanted && _glass != null)
+                {
+                    Children.Remove(_glass);
+                    _glass = null;
+                    Motion.FadeTo(_ground, 1);
+                }
+            }
             if (wanted && _self == null)
             {
                 _self = new SelfView(_app.Media).Arrives(1f);
