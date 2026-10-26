@@ -53,6 +53,7 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import app.tomoshibi.basics.ScheduleClock
 import app.tomoshibi.basics.Theme
 import app.tomoshibi.basics.readingLocale
 import app.tomoshibi.basics.t
@@ -149,7 +150,8 @@ fun meetingSaid(at: Instant, zone: ZoneId = ZoneId.systemDefault()): String {
 @Stable
 class ScheduleDraft {
     var planning by mutableStateOf("")
-    var day by mutableStateOf(LocalDateTime.ofInstant(nextQuarter(), ZoneId.systemDefault()))
+    /** The next quarter hour, day and time read together (ScheduleClock `start`). */
+    var day by mutableStateOf(ScheduleClock.start(Instant.now(), ZoneId.systemDefault()))
     var hour by mutableIntStateOf(day.hour)
     var minute by mutableIntStateOf(day.minute)
     var arranging by mutableStateOf(false)
@@ -159,13 +161,6 @@ class ScheduleDraft {
     companion object {
         /** Sixty days, as far ahead as Schedule.tsx offers. */
         const val AHEAD_SECONDS = 60L * 24 * 60 * 60
-
-        /**
-         * The next quarter hour from now (Schedule.tsx `nextQuarter`),
-         * worked out on the clock rather than by setting fields, which once
-         * landed on a minute the minute list does not offer and left it blank.
-         */
-        fun nextQuarter(now: Instant = Instant.now()): Instant = Instant.ofEpochSecond((now.epochSecond / 900 + 1) * 900)
     }
 }
 
@@ -267,7 +262,7 @@ private fun RowLabel(text: String, symbol: String) {
     }
 }
 
-private fun ScheduleDraft.at(): Instant = day.toLocalDate().atTime(hour, minute).atZone(ZoneId.systemDefault()).toInstant()
+private fun ScheduleDraft.at(): Instant = ScheduleClock.instant(day.toLocalDate(), hour, minute, ZoneId.systemDefault(), now)
 
 private fun ScheduleDraft.problem(): Boolean {
     val at = at()
