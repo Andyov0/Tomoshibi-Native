@@ -1170,7 +1170,7 @@ struct PhoneLobby: View {
     /// The inner display of an iPhone Duo on its side (VerticalBar
     /// `sideways`), laid out as the outer display is: the preview beside the
     /// lists, as on a short screen, and the column down its side holding the
-    /// account and the server at its head as well as everything at its foot.
+    /// account at its head as well as everything at its foot.
     /// The system's bars are not down its side on the simulator's stand-in
     /// for the inner display, which says nothing of them, so the column's
     /// head is the app's own there rather than the navigation bar's.
@@ -1224,9 +1224,9 @@ struct PhoneLobby: View {
     private var short: Bool { heightClass == .compact }
     /// The preview beside the lists rather than above them.
     private var beside: Bool { short || sideways }
-    /// The column's head is the app's: the account and the server, or the
-    /// way back from the server page, which the system stands under the
-    /// clock of the outer display as items of its navigation bar.
+    /// The column's head is the app's: the account, or the way back from
+    /// the server page, which the system stands under the clock of the outer
+    /// display as items of its navigation bar.
     private var ownHead: Bool { sideways }
     /// The controls are the column's rather than the page's: where the
     /// column has been found, and on the inner display on its side from the
@@ -1355,8 +1355,7 @@ struct PhoneLobby: View {
         // back with the swipe that pops it. The head is left to the system
         // on the outer display, which stands the account there, and the
         // back button in its place on the server page.
-        // The account and the server at the head as well, on the inner
-        // display on its side.
+        // The account at the head as well, on the inner display on its side.
         .systemColumn($inColumn, least: sideways ? 420 : 300, kept: $keptColumn) {
             columnHead
         } foot: {
@@ -1393,11 +1392,13 @@ struct PhoneLobby: View {
 
     /// The head of the column on the inner display on its side, where it is
     /// the app's (`ownHead`): the account, which opens the settings as the
-    /// outer display's does, with the server under it, or on the server page
-    /// the way back. The inner display's column is taller than the outer
-    /// display's, and has room for the server as well as the lists' row for
-    /// it; the server opens the same menu as the start sheet's. Nothing on
+    /// outer display's does, or on the server page the way back. Nothing on
     /// the outer display, whose head the system keeps.
+    ///
+    /// The server is chosen from the lists' row for it, as on the outer
+    /// display. It stood under the account here as well, opening the start
+    /// sheet's menu, and the inner display had two ways to the same choice
+    /// where the outer display has one (the owner, 2026-10-27).
     @ViewBuilder
     private var columnHead: some View {
         if sideways {
@@ -1406,22 +1407,16 @@ struct PhoneLobby: View {
                     ColumnHeadButton(symbol: "chevron.left", label: t("Back")) { state.place = .home }
                         .transition(Theme.arrive)
                 } else {
-                    VStack(spacing: 12) {
-                        Button { state.settings = true } label: {
-                            AccountAvatar(name: account.name, address: app.avatarAddress, size: 30)
-                        }
-                        .buttonStyle(.glassCircle(48))
-                        .accessibilityLabel(t("Settings"))
-                        .help(t("Settings"))
-                        if app.offersRelayChoice {
-                            ServerMenu(app: app, inColumn: true).transition(Theme.arrive)
-                        }
+                    Button { state.settings = true } label: {
+                        AccountAvatar(name: account.name, address: app.avatarAddress, size: 30)
                     }
+                    .buttonStyle(.glassCircle(48))
+                    .accessibilityLabel(t("Settings"))
+                    .help(t("Settings"))
                     .transition(Theme.arrive)
                 }
             }
             .animation(Theme.settle, value: state.place == .servers)
-            .animation(Theme.settle, value: app.offersRelayChoice)
         }
     }
 

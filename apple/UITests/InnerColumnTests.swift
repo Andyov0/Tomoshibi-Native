@@ -79,8 +79,8 @@ class ColumnTestCase: XCTestCase {
         app.buttons.matching(NSPredicate(format: "label == %@ OR label == %@", "Turn camera on", "Turn camera off")).firstMatch
     }
 
-    /// The button labelled `label` furthest to the right: the lobby's
-    /// sidebar has a row called Server as well as the column's.
+    /// The button labelled `label` furthest to the right, of two that are:
+    /// the call's bar and the messages both say Hide messages.
     func rightmost(_ label: String, _ app: XCUIApplication) -> XCUIElement {
         let all = app.buttons.matching(NSPredicate(format: "label == %@", label)).allElementsBoundByIndex
         return all.max { $0.frame.midX < $1.frame.midX } ?? app.buttons[label]
@@ -94,23 +94,30 @@ class ColumnTestCase: XCTestCase {
     }
 
     /// The lobby laid out as the outer display's, with no sidebar: its
-    /// controls all in the column, the account and the server at its head
-    /// and the rest at its foot, and the sidebar's Start nowhere.
+    /// controls all in the column, the account at its head and the rest at
+    /// its foot, the server only in the lists beside the column, as on the
+    /// outer display, and the sidebar's Start nowhere.
     func lobbysColumn(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
         inColumn(microphone(app), app, "the microphone", file: file, line: line)
         inColumn(camera(app), app, "the camera", file: file, line: line)
         let account = app.buttons["Settings"]
-        let server = rightmost("Server", app)
         let start = app.buttons["Start a meeting"]
         inColumn(account, app, "the account", file: file, line: line)
-        inColumn(server, app, "the server", file: file, line: line)
         inColumn(app.buttons["Schedule a meeting"], app, "arranging", file: file, line: line)
         inColumn(app.buttons["Join a meeting"], app, "joining", file: file, line: line)
         inColumn(start, app, "starting", file: file, line: line)
         let middle = window(app).midY
         XCTAssertLessThan(account.frame.midY, middle, "the account at the column's head", file: file, line: line)
-        XCTAssertLessThan(account.frame.midY, server.frame.midY, "the server under the account", file: file, line: line)
         XCTAssertGreaterThan(start.frame.midY, middle, "starting at the column's foot", file: file, line: line)
+        // The column's head held a server as well, under the account, and
+        // the inner display had two ways to the same choice where the outer
+        // display has the lists' row alone.
+        let servers = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Server"))
+        XCTAssertTrue(servers.firstMatch.waitForExistence(timeout: 20), "the lists' server row", file: file, line: line)
+        for server in servers.allElementsBoundByIndex {
+            XCTAssertLessThan(server.frame.midX, window(app).maxX - columnWidth(app),
+                              "no server in the column (\(server.label))", file: file, line: line)
+        }
         XCTAssertFalse(app.buttons["Start"].exists, "no sidebar, and no Start at its head", file: file, line: line)
         XCTAssertFalse(app.textFields["Room name or invite link"].exists, "no join bar beside the column",
                        file: file, line: line)
@@ -289,10 +296,10 @@ final class WideColumnTests: ColumnTestCase {
         super.tearDown()
     }
 
-    /// The lobby without its sidebar: everything in the column, the
-    /// microphone turning on and off there, the server under the account
-    /// opening its menu and a choice closing it.
-    func testTheLobbysSwitchesAndServerArePressedInTheColumn() throws {
+    /// The lobby without its sidebar: everything in the column, and the
+    /// microphone turning on and off there. The server is the lists' row
+    /// (testTheServerPageGoesBackFromTheColumn).
+    func testTheLobbysSwitchesArePressedInTheColumn() throws {
         continueAfterFailure = false
         let app = try launchWide([:])
         lobbysColumn(app)
@@ -304,13 +311,6 @@ final class WideColumnTests: ColumnTestCase {
         inColumn(after, app, "the microphone, pressed")
         after.tap()
         XCTAssertTrue(app.buttons[before].waitForExistence(timeout: 5), "and back")
-        let server = rightmost("Server", app)
-        inColumn(server, app, "the server")
-        server.tap()
-        let automatic = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Automatic")).firstMatch
-        XCTAssertTrue(automatic.waitForExistence(timeout: 5), "the server menu, open")
-        automatic.tap()
-        XCTAssertTrue(automatic.waitForNonExistence(timeout: 5), "closed by the choice")
     }
 
     /// Arranging, at the column's foot, opens the scheduled meetings over
