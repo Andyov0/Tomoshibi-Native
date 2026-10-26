@@ -85,6 +85,36 @@ class ColumnTestCase: XCTestCase {
         let all = app.buttons.matching(NSPredicate(format: "label == %@", label)).allElementsBoundByIndex
         return all.max { $0.frame.midX < $1.frame.midX } ?? app.buttons[label]
     }
+
+    /// Where the leftmost of the texts that say `label` starts: the wide
+    /// settings say a section's name in their list and over its page.
+    func leftmost(_ label: String, _ app: XCUIApplication) -> CGFloat {
+        app.staticTexts.matching(NSPredicate(format: "label == %@", label)).allElementsBoundByIndex
+            .map { $0.frame.minX }.min() ?? .infinity
+    }
+
+    /// The lobby laid out as the outer display's, with no sidebar: its
+    /// controls all in the column, the account and the server at its head
+    /// and the rest at its foot, and the sidebar's Start nowhere.
+    func lobbysColumn(_ app: XCUIApplication, file: StaticString = #filePath, line: UInt = #line) {
+        inColumn(microphone(app), app, "the microphone", file: file, line: line)
+        inColumn(camera(app), app, "the camera", file: file, line: line)
+        let account = app.buttons["Settings"]
+        let server = rightmost("Server", app)
+        let start = app.buttons["Start a meeting"]
+        inColumn(account, app, "the account", file: file, line: line)
+        inColumn(server, app, "the server", file: file, line: line)
+        inColumn(app.buttons["Schedule a meeting"], app, "arranging", file: file, line: line)
+        inColumn(app.buttons["Join a meeting"], app, "joining", file: file, line: line)
+        inColumn(start, app, "starting", file: file, line: line)
+        let middle = window(app).midY
+        XCTAssertLessThan(account.frame.midY, middle, "the account at the column's head", file: file, line: line)
+        XCTAssertLessThan(account.frame.midY, server.frame.midY, "the server under the account", file: file, line: line)
+        XCTAssertGreaterThan(start.frame.midY, middle, "starting at the column's foot", file: file, line: line)
+        XCTAssertFalse(app.buttons["Start"].exists, "no sidebar, and no Start at its head", file: file, line: line)
+        XCTAssertFalse(app.textFields["Room name or invite link"].exists, "no join bar beside the column",
+                       file: file, line: line)
+    }
 }
 
 /// On the iPhone Duo, the app moved to the simulator's resizable display at
@@ -124,18 +154,56 @@ final class InnerColumnTests: ColumnTestCase {
         sleep(2)
     }
 
-    /// The stage beside the lobby's sidebar has its microphone and camera
-    /// and the server in the column; the sidebar keeps Start at its head.
-    func testTheLobbysSwitchesAndServerAreInTheColumn() throws {
+    /// The lobby opened on its side is the outer display's, everything in
+    /// the column and no sidebar (VerticalBar `sideways`).
+    func testTheLobbysControlsAreAllInTheColumn() throws {
         continueAfterFailure = false
         let app = try launchDriven([:])
         XCTAssertTrue(app.buttons["Join a meeting"].waitForExistence(timeout: 30), "the lobby, folded")
         open(app)
-        inColumn(microphone(app), app, "the microphone")
-        inColumn(camera(app), app, "the camera")
-        inColumn(rightmost("Server", app), app, "the server")
-        XCTAssertTrue(app.buttons["Start"].exists, "the sidebar's Start")
-        XCTAssertLessThan(app.buttons["Start"].frame.midX, window(app).midX, "Start, at the sidebar's head")
+        lobbysColumn(app)
+        close(app)
+    }
+
+    /// The schedule open on the outer display stays open as the phone is
+    /// opened, over the whole of the inner display with its close in the
+    /// column: it was closed by the opening, and the inner display opened on
+    /// the lobby's home.
+    func testTheScheduleStaysOpenAcrossTheInnerDisplay() throws {
+        continueAfterFailure = false
+        let app = try launchDriven(["TOMOSHIBI_DEBUG_LOBBY": "scheduled"])
+        let arrange = app.buttons["Arrange"]
+        XCTAssertTrue(arrange.waitForExistence(timeout: 30), "the schedule, folded")
+        open(app)
+        XCTAssertTrue(arrange.waitForExistence(timeout: 10), "the schedule, still open")
+        inColumn(app.buttons["Close"], app, "the schedule's close")
+        XCTAssertLessThan(arrange.frame.minX, window(app).midX, "the schedule's form, at the left of the whole screen")
+        close(app)
+    }
+
+    /// The settings over the whole of the inner display on its side, their
+    /// close in the column, rather than a sheet in the middle of it.
+    func testTheSettingsCoverTheInnerDisplay() throws {
+        continueAfterFailure = false
+        let app = try launchDriven(["TOMOSHIBI_DEBUG_LOBBY": "settings"])
+        let general = app.staticTexts["General"].firstMatch
+        XCTAssertTrue(general.waitForExistence(timeout: 30), "the settings, folded")
+        open(app)
+        XCTAssertTrue(general.waitForExistence(timeout: 10), "the settings, still open")
+        inColumn(app.buttons["Close"], app, "the settings' close")
+        XCTAssertLessThan(leftmost("General", app), window(app).width * 0.12, "the settings from the screen's left edge")
+        close(app)
+    }
+
+    /// The server page's way back and Measure again, in the column.
+    func testTheServerPagesWayBackIsInTheColumn() throws {
+        continueAfterFailure = false
+        let app = try launchDriven(["TOMOSHIBI_DEBUG_LOBBY": "servers"])
+        let automatic = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Automatic")).firstMatch
+        XCTAssertTrue(automatic.waitForExistence(timeout: 30), "the server page, folded")
+        open(app)
+        inColumn(app.buttons["Back"], app, "the way back")
+        inColumn(app.buttons["Measure again"], app, "measuring again")
         close(app)
     }
 
@@ -178,14 +246,29 @@ final class InnerColumnTests: ColumnTestCase {
         XCTAssertTrue(app.buttons["Join a meeting"].waitForExistence(timeout: 30), "the lobby, folded")
         open(app, tall: true)
         outOfColumn(microphone(app), app, across: 669, "the microphone, upright")
+        XCTAssertTrue(app.buttons["Start"].waitForExistence(timeout: 10), "the sidebar's Start, upright")
+        close(app)
+    }
+
+    /// Upright, the schedule open on the outer display is the section
+    /// beside the sidebar once the phone is opened, not the lobby's home.
+    func testUprightTheScheduleStaysOpen() throws {
+        continueAfterFailure = false
+        let app = try launchDriven(["TOMOSHIBI_DEBUG_LOBBY": "scheduled"])
+        let arrange = app.buttons["Arrange"]
+        XCTAssertTrue(arrange.waitForExistence(timeout: 30), "the schedule, folded")
+        open(app, tall: true)
+        XCTAssertTrue(app.buttons["Start"].waitForExistence(timeout: 10), "the sidebar, upright")
+        XCTAssertTrue(arrange.waitForExistence(timeout: 10), "the schedule, still open beside it")
         close(app)
     }
 }
 
 /// The same column pressed with a finger, on an iPad held on its side: a
-/// window wider than tall beside a sidebar, as the Duo's inner display on its
-/// side is, with no column of the system's on either side, so the screens
-/// keep their own exactly as they do on the inner display (the switch
+/// window wider than tall at a regular width, as the Duo's inner display on
+/// its side is, with no column of the system's on either side, so the
+/// screens are laid out exactly as they are on the inner display, the lobby
+/// without its sidebar and its controls in a column of its own (the switch
 /// standing in for the system's word). The only place a test can touch it:
 /// on the Duo the app has to be moved to a display the test's touches do not
 /// reach (InnerColumnTests). Only on an iPad, by the simulator's name for
@@ -206,14 +289,14 @@ final class WideColumnTests: ColumnTestCase {
         super.tearDown()
     }
 
-    /// The lobby beside its sidebar: the microphone turns on and off in the
-    /// column, the server there opens its menu and a choice closes it, and
-    /// the sidebar keeps Start.
+    /// The lobby without its sidebar: everything in the column, the
+    /// microphone turning on and off there, the server under the account
+    /// opening its menu and a choice closing it.
     func testTheLobbysSwitchesAndServerArePressedInTheColumn() throws {
         continueAfterFailure = false
         let app = try launchWide([:])
+        lobbysColumn(app)
         let mic = microphone(app)
-        inColumn(mic, app, "the microphone")
         let before = mic.label
         mic.tap()
         let after = app.buttons[before == "Mute microphone" ? "Unmute microphone" : "Mute microphone"]
@@ -221,7 +304,6 @@ final class WideColumnTests: ColumnTestCase {
         inColumn(after, app, "the microphone, pressed")
         after.tap()
         XCTAssertTrue(app.buttons[before].waitForExistence(timeout: 5), "and back")
-        XCTAssertLessThan(app.buttons["Start"].frame.midX, window(app).midX, "Start, at the sidebar's head")
         let server = rightmost("Server", app)
         inColumn(server, app, "the server")
         server.tap()
@@ -231,18 +313,78 @@ final class WideColumnTests: ColumnTestCase {
         XCTAssertTrue(automatic.waitForNonExistence(timeout: 5), "closed by the choice")
     }
 
-    /// The scheduled meetings beside the sidebar close from the column's
-    /// head, back to the stage and its column.
-    func testTheScheduledMeetingsCloseFromTheColumn() throws {
+    /// Arranging, at the column's foot, opens the scheduled meetings over
+    /// the whole screen, and their close at the column's head takes them
+    /// down, back to the lobby and its column.
+    func testTheScheduledMeetingsOpenAndCloseFromTheColumn() throws {
         continueAfterFailure = false
         let app = try launchWide([:])
-        let section = app.staticTexts["Scheduled meetings"]
-        XCTAssertTrue(section.waitForExistence(timeout: 30), "the sidebar's scheduled meetings")
-        section.tap()
+        let arranging = app.buttons["Schedule a meeting"]
+        inColumn(arranging, app, "arranging")
+        arranging.tap()
+        let arrange = app.buttons["Arrange"]
+        XCTAssertTrue(arrange.waitForExistence(timeout: 10), "the scheduled meetings, open")
+        XCTAssertLessThan(arrange.frame.minX, window(app).midX, "over the whole screen, from its left")
         let shut = app.buttons["Close"]
         inColumn(shut, app, "the scheduled meetings' close")
         shut.tap()
+        XCTAssertTrue(arrange.waitForNonExistence(timeout: 10), "the scheduled meetings closed")
         inColumn(microphone(app), app, "home again, its microphone")
+    }
+
+    /// The account, at the column's head, opens the settings over the whole
+    /// screen; their close in the column takes them down.
+    func testTheAccountOpensTheSettingsAndTheyCloseFromTheColumn() throws {
+        continueAfterFailure = false
+        let app = try launchWide([:])
+        let account = app.buttons["Settings"]
+        inColumn(account, app, "the account")
+        account.tap()
+        let general = app.staticTexts["General"].firstMatch
+        XCTAssertTrue(general.waitForExistence(timeout: 10), "the settings, open")
+        XCTAssertLessThan(leftmost("General", app), window(app).width * 0.12, "over the whole screen, from its left")
+        let close = app.buttons["Close"]
+        inColumn(close, app, "the settings' close")
+        close.tap()
+        XCTAssertTrue(general.waitForNonExistence(timeout: 10), "the settings closed by the column's close")
+        inColumn(account, app, "the account, home again")
+    }
+
+    /// Joining and starting, at the column's foot, open the join and start
+    /// sheet, whose close at the column's head takes it down.
+    func testJoiningAndStartingArePressedInTheColumn() throws {
+        continueAfterFailure = false
+        let app = try launchWide([:])
+        for (label, what) in [("Join a meeting", "joining"), ("Start a meeting", "starting")] {
+            let button = app.buttons[label]
+            inColumn(button, app, what)
+            button.tap()
+            let field = app.textFields.firstMatch
+            XCTAssertTrue(field.waitForExistence(timeout: 10), "the sheet, opened by \(what)")
+            let cancel = app.buttons["Cancel"]
+            inColumn(cancel, app, "the sheet's close, after \(what)")
+            cancel.tap()
+            XCTAssertTrue(field.waitForNonExistence(timeout: 10), "the sheet closed, after \(what)")
+        }
+    }
+
+    /// The lists' server row pushes the server page, whose way back and
+    /// Measure again are the column's, and the way back comes home.
+    func testTheServerPageGoesBackFromTheColumn() throws {
+        continueAfterFailure = false
+        let app = try launchWide([:])
+        let rows = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Server")).allElementsBoundByIndex
+        let row = rows.min { $0.frame.midX < $1.frame.midX }
+        XCTAssertNotNil(row, "the lists' server row")
+        guard let row else { return }
+        XCTAssertLessThan(row.frame.maxX, window(app).maxX - columnWidth(app), "the row, beside the column")
+        row.tap()
+        let back = app.buttons["Back"]
+        inColumn(back, app, "the server page's way back")
+        inColumn(app.buttons["Measure again"], app, "measuring again")
+        back.tap()
+        XCTAssertTrue(back.waitForNonExistence(timeout: 10), "the server page left")
+        inColumn(app.buttons["Settings"], app, "home again, the account")
     }
 
     /// The start sheet's close, under the column's head, takes it down.
