@@ -1224,7 +1224,11 @@ struct PhoneLobby: View {
                         ColumnRule()
                         BarButton(symbol: "calendar", label: t("Schedule a meeting")) { state.place = .scheduled }
                         BarButton(symbol: "link", label: t("Join a meeting")) { state.sheet = .join("") }
-                        BarButton(symbol: "video.fill", label: t("Start a meeting"), lit: true) { state.sheet = .start }
+                        // A plus rather than the camera the button starts
+                        // a call with: just under the camera switch, the
+                        // owner took the camera's picture on it for another
+                        // camera switch (2026-10-26).
+                        BarButton(symbol: "plus", label: t("Start a meeting"), lit: true) { state.sheet = .start }
                     }
                     .transition(Theme.arrive)
                 }
