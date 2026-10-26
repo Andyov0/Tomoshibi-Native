@@ -275,7 +275,7 @@ private fun BackButton(action: () -> Unit) {
 /** A line under the room saying something about it, in the muted voice (`Note`). */
 @Composable
 private fun Note(text: String, danger: Boolean = false) {
-    KitText(text, Modifier.fillMaxWidth(), font = Font(12.5f), color = if (danger) Theme.danger else Theme.muted, align = TextAlign.Center)
+    KitText(text, Modifier.fillMaxWidth(), font = Font(12.5f), color = if (danger) Theme.dangerInk else Theme.muted, align = TextAlign.Center)
 }
 
 /** The main button's words, or a spinner while what it asked is out. */
@@ -501,11 +501,11 @@ internal fun IdentityBox(
     Column(
         Modifier
             .fillMaxWidth()
-            .background(Color.Black.copy(alpha = 0.22f), shape)
-            .border(1.dp, Color.White.copy(alpha = 0.10f), shape)
+            .background(Theme.recess(0.22f), shape)
+            .border(1.dp, Theme.wash.copy(alpha = 0.10f), shape)
             .animateContentSize(Theme.settle()),
     ) {
-        IdentityRow(if (fixed) "person.fill.checkmark" else "person", if (fixed) Theme.tally else Theme.muted) {
+        IdentityRow(if (fixed) "person.fill.checkmark" else "person", if (fixed) Theme.tallyInk else Theme.muted) {
             if (fixed) {
                 SelectionContainer { KitText(name, font = Font(15f), color = Theme.muted, lines = 1) }
             } else {
@@ -514,7 +514,7 @@ internal fun IdentityBox(
         }
         AnimatedVisibility(!nameOnly, enter = expandVertically(Theme.settle()) + fadeIn(Theme.settle()), exit = shrinkVertically(Theme.leave()) + fadeOut(Theme.leave())) {
             Column {
-                Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.07f)))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Theme.wash.copy(alpha = 0.07f)))
                 PassphraseRow(passphrase, onPassphrase, onSubmit)
             }
         }
@@ -524,7 +524,7 @@ internal fun IdentityBox(
 @Composable
 internal fun PassphraseRow(passphrase: String, onPassphrase: (String) -> Unit, onSubmit: () -> Unit) {
     var shown by rememberSaveable { mutableStateOf(false) }
-    val key by animateColorAsState(if (passphrase.isEmpty()) Theme.muted else Theme.tally, Theme.settle(), label = "key")
+    val key by animateColorAsState(if (passphrase.isEmpty()) Theme.muted else Theme.tallyInk, Theme.settle(), label = "key")
     IdentityRow("key", key) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f)) { IdentityField(passphrase, onPassphrase, t("Passphrase"), secret = !shown, password = true, onSubmit = onSubmit) }
@@ -575,7 +575,7 @@ internal fun IdentityField(
         modifier = Modifier.fillMaxWidth().semantics { contentDescription = prompt },
         textStyle = font.style(Theme.foreground),
         singleLine = true,
-        cursorBrush = SolidColor(Theme.tally),
+        cursorBrush = SolidColor(Theme.tallyInk),
         visualTransformation = if (secret) PasswordVisualTransformation() else VisualTransformation.None,
         keyboardOptions = KeyboardOptions(
             capitalization = KeyboardCapitalization.None,
@@ -611,8 +611,8 @@ private fun ProblemSlot(app: AppModel) {
                 .padding(horizontal = 12.dp, vertical = 9.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Symbol("exclamationmark.circle.fill", Modifier.padding(top = 1.dp), size = 12.5f, tint = Theme.danger)
-            KitText(said ?: "", Modifier.weight(1f), font = Font(12.5f), color = Theme.danger)
+            Symbol("exclamationmark.circle.fill", Modifier.padding(top = 1.dp), size = 12.5f, tint = Theme.dangerInk)
+            KitText(said ?: "", Modifier.weight(1f), font = Font(12.5f), color = Theme.dangerInk)
             if (app.problemStays) {
                 val press = rememberPress()
                 Box(

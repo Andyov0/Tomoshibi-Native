@@ -23,7 +23,9 @@ import androidx.compose.ui.graphics.drawOutline
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.node.CompositionLocalConsumerModifierNode
 import androidx.compose.ui.node.DelegatableNode
+import androidx.compose.ui.node.currentValueOf
 import androidx.compose.ui.node.DrawModifierNode
 import androidx.compose.ui.node.invalidateDraw
 import androidx.compose.ui.Modifier.Node
@@ -39,7 +41,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import app.tomoshibi.basics.Theme
+import app.tomoshibi.basics.Appearance
+import app.tomoshibi.basics.LocalPalette
 import kotlinx.coroutines.launch
 
 // How the kit's controls answer a finger, a pointer and a keyboard.
@@ -146,14 +149,17 @@ internal fun Modifier.described(label: String?, selected: Boolean?): Modifier =
 
 /**
  * SwiftUI's `.brightness(amount)` within `shape`: the light a plain surface
- * gives when it is pressed, added to whatever is drawn there.
+ * gives when it is pressed, added to whatever is drawn there. In the light
+ * ([dark] false) the same amount of shade is laid over it instead: light
+ * added to a white plate is nothing to see.
  */
-internal fun Modifier.brightened(shape: Shape, amount: () -> Float): Modifier = drawWithContent {
+internal fun Modifier.brightened(shape: Shape, dark: Boolean = true, amount: () -> Float): Modifier = drawWithContent {
     drawContent()
     val light = amount()
     if (light > 0f) {
-        drawOutline(shape.createOutline(size, layoutDirection, this), Color.White.copy(alpha = light),
-            blendMode = BlendMode.Plus)
+        val outline = shape.createOutline(size, layoutDirection, this)
+        if (dark) drawOutline(outline, Color.White.copy(alpha = light), blendMode = BlendMode.Plus)
+        else drawOutline(outline, Color.Black.copy(alpha = light))
     }
 }
 
@@ -164,7 +170,8 @@ internal class FocusRing(private val shape: Shape) : IndicationNodeFactory {
     override fun hashCode() = shape.hashCode()
 }
 
-private class FocusRingNode(private val source: InteractionSource, private val shape: Shape) : Node(), DrawModifierNode {
+private class FocusRingNode(private val source: InteractionSource, private val shape: Shape) :
+    Node(), DrawModifierNode, CompositionLocalConsumerModifierNode {
     private var focused = false
 
     override fun onAttach() {
@@ -190,7 +197,10 @@ private class FocusRingNode(private val source: InteractionSource, private val s
         val gap = 3.dp.toPx()
         val ring = Size(size.width + gap * 2, size.height + gap * 2)
         translate(-gap, -gap) {
-            drawOutline(shape.createOutline(ring, layoutDirection, this), Theme.tally.copy(alpha = 0.9f),
+            // The person's colour in the palette the control is drawn in, as
+            // a thin line: its ink.
+            val tally = currentValueOf(LocalPalette).tallyInk(Appearance.shared.accent)
+            drawOutline(shape.createOutline(ring, layoutDirection, this), tally.copy(alpha = 0.9f),
                 style = Stroke(width = 2.dp.toPx()))
         }
     }

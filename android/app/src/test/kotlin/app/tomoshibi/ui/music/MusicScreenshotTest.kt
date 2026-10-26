@@ -33,6 +33,7 @@ import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.captureRoboImage
 import kotlinx.coroutines.Dispatchers
 import app.tomoshibi.model.host.standInRules
+import app.tomoshibi.ui.InMeeting
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -101,11 +102,14 @@ class MusicScreenshotTest(private val language: Language, private val width: Int
 
     private fun shoot(desk: SongDesk, name: String) {
         compose.setContent {
-            GlassBackdrop {
-                Box(Modifier.fillMaxWidth().testTag("page")) {
-                    Box(Modifier.matchParentSize().background(Theme.background))
-                    Backdrop(Modifier.matchParentSize().glassSource())
-                    Box(Modifier.padding(12.dp)) { MusicPanelContent(desk, close = {}, modifier = Modifier.width(panelWidth)) }
+            // A panel of the call's, drawn as the call is.
+            InMeeting {
+                GlassBackdrop {
+                    Box(Modifier.fillMaxWidth().testTag("page")) {
+                        Box(Modifier.matchParentSize().background(Theme.background))
+                        Backdrop(Modifier.matchParentSize().glassSource())
+                        Box(Modifier.padding(12.dp)) { MusicPanelContent(desk, close = {}, modifier = Modifier.width(panelWidth)) }
+                    }
                 }
             }
         }

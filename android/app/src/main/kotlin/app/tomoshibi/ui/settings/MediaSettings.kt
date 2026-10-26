@@ -24,7 +24,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
@@ -200,7 +199,7 @@ private fun DevicePreview(check: DeviceCheck) {
             .fillMaxWidth()
             .aspectRatio(16f / 9f)
             .clip(shape)
-            .border(1.dp, Color.White.copy(alpha = 0.08f), shape),
+            .border(1.dp, Theme.wash.copy(alpha = 0.08f), shape),
     ) {
         // A camera-off tile's grey, as CameraStage's framed preview is.
         Box(Modifier.matchParentSize().background(Theme.surface))
@@ -222,7 +221,7 @@ private fun DevicePreview(check: DeviceCheck) {
                 if (check.microphoneRefused) "mic.slash.fill" else "mic.fill",
                 size = 12f,
                 weight = Font.Semibold,
-                tint = if (check.level > 0.08f) Theme.tally else Theme.foreground,
+                tint = if (check.level > 0.08f) Theme.tallyInk else Theme.foreground,
             )
             KitText(t("Hearing you"), font = Font(12f, Font.Medium), lines = 1)
             LevelMeter(check.level, segments = 12)

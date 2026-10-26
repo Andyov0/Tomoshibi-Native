@@ -31,6 +31,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
+import app.tomoshibi.basics.Palette
 import app.tomoshibi.basics.Theme
 import app.tomoshibi.basics.t
 import app.tomoshibi.model.AppModel
@@ -99,7 +100,7 @@ private fun WatchPreview(quality: String) {
             .fillMaxWidth()
             .aspectRatio(2.6f)
             .clip(shape)
-            .border(1.dp, Color.White.copy(alpha = 0.08f), shape)
+            .border(1.dp, Theme.wash.copy(alpha = 0.08f), shape)
             .clearAndSetSemantics {},
     ) {
         FilmStill(Modifier.matchParentSize().blur(softness, BlurredEdgeTreatment.Rectangle))
@@ -118,14 +119,16 @@ private fun WatchPreview(quality: String) {
  * (Settings.swift `FilmStill`). It was the screens' glowing backdrop,
  * blurred; once that went flat a blur of it changed nothing that could be
  * seen, and the ceiling's choice was read but no longer seen. Shapes with
- * edges show the softening without a gradient.
+ * edges show the softening without a gradient. A picture, and so in the
+ * dark's greys in either appearance, as a film is.
  */
 @Composable
 private fun FilmStill(modifier: Modifier = Modifier) {
+    val still = Palette.Dark
     Canvas(modifier) {
-        drawRect(Theme.surface)
-        drawRect(Theme.surfaceHigh, topLeft = Offset(0f, size.height * 0.6f), size = Size(size.width, size.height * 0.4f))
-        drawCircle(Theme.foreground.copy(alpha = 0.18f), radius = size.height * 0.14f, center = Offset(size.width * 0.75f, size.height * 0.35f))
+        drawRect(still.surface)
+        drawRect(still.surfaceHigh, topLeft = Offset(0f, size.height * 0.6f), size = Size(size.width, size.height * 0.4f))
+        drawCircle(still.foreground.copy(alpha = 0.18f), radius = size.height * 0.14f, center = Offset(size.width * 0.75f, size.height * 0.35f))
     }
 }
 
@@ -172,12 +175,15 @@ private fun DuckPreview(ducks: Boolean) {
     val sunk by animateFloatAsState(if (ducks) 1f else 0f, Theme.settle(), label = "duck")
     val shape = rounded(18f)
     val tally = Theme.tally
+    // Read here: the bars are drawn by a canvas, outside the composition.
+    val voice = Theme.foreground.copy(alpha = 0.85f)
+    val still = Theme.wash.copy(alpha = 0.18f)
     Column(
         Modifier
             .fillMaxWidth()
             .clearAndSetSemantics {}
-            .background(Color.Black.copy(alpha = 0.22f), shape)
-            .border(1.dp, Color.White.copy(alpha = 0.08f), shape)
+            .background(Theme.recess(0.22f), shape)
+            .border(1.dp, Theme.wash.copy(alpha = 0.08f), shape)
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
@@ -186,7 +192,7 @@ private fun DuckPreview(ducks: Boolean) {
             if (speaking(index)) base * (1 - 0.68 * sunk) else base
         }) { tally }
         Bars("person.wave.2.fill", { index -> if (speaking(index)) 0.3 + 0.6 * abs(sin(index * 1.3)) else 0.05 }) { index ->
-            if (speaking(index)) Theme.foreground.copy(alpha = 0.85f) else Color.White.copy(alpha = 0.18f)
+            if (speaking(index)) voice else still
         }
     }
 }

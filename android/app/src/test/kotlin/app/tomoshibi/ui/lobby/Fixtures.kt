@@ -16,6 +16,7 @@ import app.tomoshibi.model.CallModel
 import app.tomoshibi.model.LobbyModel
 import app.tomoshibi.model.MemoryDefaults
 import app.tomoshibi.model.MemorySecrets
+import app.tomoshibi.ui.InAppearance
 import kotlinx.coroutines.Dispatchers
 import org.json.JSONArray
 import org.json.JSONObject
@@ -220,5 +221,5 @@ fun silentAudio() = CallAudio(NoAudioRouting, muted = true)
  */
 @Composable
 fun TestApp(app: AppModel) {
-    CompositionLocalProvider(LocalRoomPictures provides standInPictures) { TomoshibiApp(app) }
+    InAppearance { CompositionLocalProvider(LocalRoomPictures provides standInPictures) { TomoshibiApp(app) } }
 }

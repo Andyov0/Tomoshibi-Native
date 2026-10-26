@@ -25,7 +25,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
@@ -151,7 +150,7 @@ internal fun EmptyRoomCard(
                 )
             } else {
                 val press = rememberPress()
-                val ink by animateColorAsState(if (copied) Theme.tally else Theme.foreground, Theme.settle(), label = "copied")
+                val ink by animateColorAsState(if (copied) Theme.tallyInk else Theme.foreground, Theme.settle(), label = "copied")
                 Row(
                     Modifier
                         .height(34.dp)
@@ -184,7 +183,7 @@ internal fun EmptyRoomCard(
                 }
             }
         }
-        Box(Modifier.size(1.dp, 16.dp).background(Color.White.copy(alpha = 0.12f)))
+        Box(Modifier.size(1.dp, 16.dp).background(Theme.wash.copy(alpha = 0.12f)))
         val press = rememberPress()
         Box(
             Modifier

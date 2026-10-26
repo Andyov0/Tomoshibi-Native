@@ -35,7 +35,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
@@ -83,15 +82,15 @@ fun GlassField(
     onSubmit: () -> Unit = {},
 ) {
     var shown by rememberSaveable { mutableStateOf(false) }
-    val symbolInk by animateColorAsState(if (lights && text.isNotEmpty()) Theme.tally else Theme.muted, Theme.settle(), label = "symbol")
+    val symbolInk by animateColorAsState(if (lights && text.isNotEmpty()) Theme.tallyInk else Theme.muted, Theme.settle(), label = "symbol")
     val shape = rounded(14f)
     val font = if (mono) Font(14f, mono = true) else Font(14f)
     Row(
         modifier
             .fillMaxWidth()
             .height(height)
-            .background(Color.Black.copy(alpha = 0.24f), shape)
-            .border(1.dp, Color.White.copy(alpha = 0.10f), shape)
+            .background(Theme.recess(0.24f), shape)
+            .border(1.dp, Theme.wash.copy(alpha = 0.10f), shape)
             .padding(horizontal = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -111,7 +110,7 @@ fun GlassField(
                     modifier = Modifier.fillMaxWidth(),
                     textStyle = font.style(Theme.foreground),
                     singleLine = true,
-                    cursorBrush = SolidColor(Theme.tally),
+                    cursorBrush = SolidColor(Theme.tallyInk),
                     visualTransformation = if (secret && !shown) PasswordVisualTransformation() else VisualTransformation.None,
                     keyboardOptions = KeyboardOptions(
                         capitalization = KeyboardCapitalization.None,
@@ -160,8 +159,8 @@ fun SealControl(
     modifier: Modifier = Modifier,
 ) {
     val sealed = on && word.isNotEmpty()
-    val ink by animateColorAsState(if (sealed) Theme.tally else Theme.foreground, Theme.settle(), label = "title")
-    val lock by animateColorAsState(if (sealed) Theme.tally else Theme.muted, Theme.settle(), label = "lock")
+    val ink by animateColorAsState(if (sealed) Theme.tallyInk else Theme.foreground, Theme.settle(), label = "title")
+    val lock by animateColorAsState(if (sealed) Theme.tallyInk else Theme.muted, Theme.settle(), label = "lock")
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.width(18.dp), contentAlignment = Alignment.Center) {
@@ -209,7 +208,7 @@ fun CopyLinkButton(link: String, modifier: Modifier = Modifier, size: Dp = 32.dp
             copied = false
         }
     }
-    val ink by animateColorAsState(if (copied) Theme.tally else Theme.foreground, Theme.settle(), label = "ink")
+    val ink by animateColorAsState(if (copied) Theme.tallyInk else Theme.foreground, Theme.settle(), label = "ink")
     GlassButton(
         onClick = {
             scope.launch { clipboard.setClipEntry(ClipEntry(ClipData.newPlainText(t("Copy link"), link))) }
@@ -243,7 +242,7 @@ fun MediaField(
     val source = remember { MutableInteractionSource() }
     val focused by source.collectIsFocusedAsState()
     val focus = remember { FocusRequester() }
-    val edge by animateColorAsState(if (focused) Theme.tally.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.09f), Theme.settle(), label = "edge")
+    val edge by animateColorAsState(if (focused) Theme.tallyInk.copy(alpha = 0.75f) else Theme.wash.copy(alpha = 0.09f), Theme.settle(), label = "edge")
     val width by animateDpAsState(if (focused) 1.5.dp else 1.dp, Theme.settle(), label = "width")
     val symbolInk by animateColorAsState(if (focused) Theme.foreground else Theme.muted, Theme.settle(), label = "symbol")
     val font = Font(13f)
@@ -251,7 +250,7 @@ fun MediaField(
         modifier
             .fillMaxWidth()
             .height(34.dp)
-            .background(Color.Black.copy(alpha = 0.24f), Capsule)
+            .background(Theme.recess(0.24f), Capsule)
             .border(width, edge, Capsule)
             .clickable(interactionSource = null, indication = null) { focus.requestFocus() }
             .padding(horizontal = 12.dp),
@@ -265,7 +264,7 @@ fun MediaField(
             modifier = Modifier.weight(1f).focusRequester(focus),
             textStyle = font.style(Theme.foreground),
             singleLine = true,
-            cursorBrush = SolidColor(Theme.tally),
+            cursorBrush = SolidColor(Theme.tallyInk),
             interactionSource = source,
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.None,

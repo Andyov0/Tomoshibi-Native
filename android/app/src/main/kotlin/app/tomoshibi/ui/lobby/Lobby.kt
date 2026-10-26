@@ -53,7 +53,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
@@ -238,7 +237,7 @@ private fun PhoneLobby(app: AppModel, account: Account, state: LobbyState) {
         // Back closes the page pushed over the lobby; the sheets close
         // themselves. With nothing open the system's Back leaves the app.
         BackHandler(state.place == Place.Servers) { state.place = Place.Home }
-        BoxWithConstraints(Modifier.fillMaxSize().background(Color.Black)) {
+        BoxWithConstraints(Modifier.fillMaxSize().background(Theme.ground)) {
             val width = constraints.maxWidth.toFloat()
             Box(
                 Modifier
@@ -308,7 +307,7 @@ private fun PhoneLobby(app: AppModel, account: Account, state: LobbyState) {
                     app.cancelJoin()
                 }
                 state.sheet = null
-            }, style = SheetStyle.Cover, background = Color.Black) {
+            }, style = SheetStyle.Cover, background = Theme.ground) {
                 draft?.let { MeetingSheet(app, it, close = { state.sheet = null }, wide = false) }
             }
         }
@@ -334,7 +333,7 @@ private fun NavigationBar(app: AppModel, account: Account, state: LobbyState, sc
             Modifier
                 .matchParentSize()
                 .alpha(title)
-                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.92f), Color.Black.copy(alpha = 0.6f), Color.Transparent))),
+                .barShade(listOf(Color.Black.copy(alpha = 0.92f), Color.Black.copy(alpha = 0.6f), Color.Transparent)),
         )
         Column(Modifier.fillMaxWidth()) {
             Spacer(Modifier.windowInsetsTopHeight(WindowInsets.safeDrawing))
@@ -419,7 +418,7 @@ private fun Upcoming(app: AppModel, state: LobbyState, modifier: Modifier = Modi
             // words it was pressed over twenty points, with the first meeting
             // eight below.
             Box(Modifier.heightIn(min = fingertip(0.dp)).plainPress({ state.place = Place.Scheduled }), contentAlignment = Alignment.CenterEnd) {
-                KitText(t("All of them"), font = Font(16f), color = Theme.tally, lines = 1)
+                KitText(t("All of them"), font = Font(16f), color = Theme.tallyInk, lines = 1)
             }
         }) {
             for (one in upcoming) {
@@ -515,7 +514,7 @@ private fun ServerCard(app: AppModel, state: LobbyState, modifier: Modifier = Mo
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(Modifier.size(36.dp).background(Color.White.copy(alpha = 0.08f), rounded(11f)), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(36.dp).background(Theme.wash.copy(alpha = 0.08f), rounded(11f)), contentAlignment = Alignment.Center) {
                 Symbol("server.rack", size = 16f, tint = Theme.muted)
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -889,7 +888,7 @@ private fun SidebarItem(title: String, symbol: String, selected: Boolean, badge:
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.width(20.dp), contentAlignment = Alignment.Center) { Symbol(symbol, size = 14f, tint = Theme.tally) }
+        Box(Modifier.width(20.dp), contentAlignment = Alignment.Center) { Symbol(symbol, size = 14f, tint = Theme.tallyInk) }
         KitText(title, Modifier.weight(1f), font = Font(13.5f, if (selected) Font.Semibold else Font.Regular), lines = 1)
         if (badge > 0) KitText("$badge", font = Font(12f, Font.Medium, digits = true), color = Theme.muted, lines = 1)
     }
@@ -933,7 +932,7 @@ private fun RecentForget(room: String, action: () -> Unit, modifier: Modifier = 
     Box(
         modifier
             .size(20.dp)
-            .background(Color.White.copy(alpha = 0.07f), Capsule)
+            .background(Theme.wash.copy(alpha = 0.07f), Capsule)
             .plainPress(action, label = t("Remove {room} from recent", mapOf("room" to room)), shape = Capsule),
         contentAlignment = Alignment.Center,
     ) { Symbol("xmark", size = 7.2f, weight = Font.Bold, tint = Theme.muted) }
@@ -998,7 +997,8 @@ private fun HomeStage(app: AppModel, account: Account, onTable: Boolean) {
             ShadowedText(t("Hello, {name}", mapOf("name" to account.name)), Font(34f, Font.Bold), Theme.foreground)
             // On a table the sidebar's contents are below the hinge (DeskLobby).
             val start = if (onTable) t("Start one from below when you are ready.") else t("Start one from the sidebar when you are ready.")
-            ShadowedText(start, Font(15f), Color.White.copy(alpha = 0.78f))
+            // White at 78 per cent in the dark, black at as much in the light.
+            ShadowedText(start, Font(15f), Theme.wash.copy(alpha = 0.78f))
         }
         // The capsule is the glass, and the switches inside it are drawn
         // plain, so that nothing is glass on glass.
@@ -1017,8 +1017,12 @@ private fun HomeStage(app: AppModel, account: Account, onTable: Boolean) {
     }
 }
 
-/** Words over the picture, with the soft shadow that keeps them read over a bright one. */
+/**
+ * Words over the picture, with the soft shadow that keeps them read over a
+ * bright one: a shade of the ground, which is black under the dark's light
+ * words and the page's light grey under the light's dark ones.
+ */
 @Composable
 private fun ShadowedText(text: String, font: Font, color: Color) {
-    BasicText(text, style = font.style(color).copy(shadow = Shadow(Color.Black.copy(alpha = 0.45f), Offset(0f, 4f), 32f)))
+    BasicText(text, style = font.style(color).copy(shadow = Shadow(Theme.ground.copy(alpha = 0.45f), Offset(0f, 4f), 32f)))
 }

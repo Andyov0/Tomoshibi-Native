@@ -118,7 +118,7 @@ private fun Card(updates: Updates, said: Step, modifier: Modifier, floating: Boo
     val shape = ContinuousShape(20.dp)
     Box(
         modifier
-            .then(if (floating) Modifier.dropShadow(shape, Shadow(radius = 18.dp, color = Color.Black, offset = DpOffset(0.dp, 8.dp), alpha = 0.35f)) else Modifier)
+            .then(if (floating) Modifier.dropShadow(shape, Shadow(radius = 18.dp, color = Color.Black, offset = DpOffset(0.dp, 8.dp), alpha = Theme.shade(0.35f))) else Modifier)
             .background(Theme.surface, shape)
             .border(1.dp, Theme.border, shape)
             .padding(14.dp)
@@ -211,16 +211,17 @@ private fun Said(
 ) {
     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.Top) {
         val tint = if (warning) Theme.danger else Theme.tally
+        val ink = if (warning) Theme.dangerInk else Theme.tallyInk
         Box(
             Modifier.size(30.dp).background(tint.copy(alpha = 0.18f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
-            if (badge != null) Symbol(badge, size = 13f, weight = Font.Semibold, tint = tint) else MediaSpinner(size = 14f, tint = tint)
+            if (badge != null) Symbol(badge, size = 13f, weight = Font.Semibold, tint = ink) else MediaSpinner(size = 14f, tint = ink)
         }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             KitText(title, font = Font(14f, Font.Semibold))
             for (line in lines) KitText(line, font = Font(12.5f), color = Theme.muted, lines = 6)
-            if (problem != null) KitText(problem, font = Font(12.5f), color = Theme.danger)
+            if (problem != null) KitText(problem, font = Font(12.5f), color = Theme.dangerInk)
             above?.invoke()
             Row(
                 Modifier.fillMaxWidth().padding(top = 6.dp),

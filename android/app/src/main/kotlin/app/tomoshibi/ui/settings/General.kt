@@ -57,6 +57,7 @@ import app.tomoshibi.basics.Appearance
 import app.tomoshibi.basics.ConnectionBadge
 import app.tomoshibi.basics.ControlsPlacement
 import app.tomoshibi.basics.Language
+import app.tomoshibi.basics.LocalPalette
 import app.tomoshibi.basics.Localization
 import app.tomoshibi.basics.Theme
 import app.tomoshibi.basics.t
@@ -64,6 +65,7 @@ import app.tomoshibi.ui.kit.Backdrop
 import app.tomoshibi.ui.kit.Capsule
 import app.tomoshibi.ui.kit.Font
 import app.tomoshibi.ui.kit.Initial
+import app.tomoshibi.ui.kit.KitPalette
 import app.tomoshibi.ui.kit.KitText
 import app.tomoshibi.ui.kit.Motion
 import app.tomoshibi.ui.kit.SegmentedChoice
@@ -95,7 +97,8 @@ internal fun GeneralSettings() {
         }
         Section(t("Connection badge")) {
             Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                BadgePreview(appearance.connectionBadge)
+                // A picture of a call, drawn as the call is.
+                KitPalette(Theme.meeting(LocalPalette.current)) { BadgePreview(appearance.connectionBadge) }
                 SegmentedChoice(
                     ConnectionBadge.entries.map { it to it.displayName },
                     appearance.connectionBadge,
@@ -144,11 +147,11 @@ private fun LanguageTiles(localization: Localization, modifier: Modifier = Modif
 private fun LanguageTile(chosen: Boolean, symbol: String?, title: String, detail: String, tag: String, pick: () -> Unit) {
     val press = rememberPress()
     val tally = Theme.tally
-    val fill by animateColorAsState(if (chosen) tally.copy(alpha = 0.13f) else Color.White.copy(alpha = 0.05f), Theme.settle(), label = "fill")
-    val edge by animateColorAsState(if (chosen) tally.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.07f), Theme.settle(), label = "edge")
+    val fill by animateColorAsState(if (chosen) tally.copy(alpha = 0.13f) else Theme.plate(0.05f), Theme.settle(), label = "fill")
+    val edge by animateColorAsState(if (chosen) tally.copy(alpha = 0.55f) else Theme.wash.copy(alpha = 0.07f), Theme.settle(), label = "edge")
     val line by animateDpAsState(if (chosen) 1.5.dp else 1.dp, Theme.settle(), label = "line")
     val tick by animateFloatAsState(if (chosen) 1f else 0f, Theme.settle(), label = "tick")
-    val ink by animateColorAsState(if (chosen) tally else Theme.muted, Theme.settle(), label = "symbol")
+    val ink by animateColorAsState(if (chosen) Theme.tallyInk else Theme.muted, Theme.settle(), label = "symbol")
     val shape = rounded(13f)
     Row(
         Modifier
@@ -175,7 +178,7 @@ private fun LanguageTile(chosen: Boolean, symbol: String?, title: String, detail
                 scaleY = 0.6f + 0.4f * tick
             },
             size = 15f,
-            tint = tally,
+            tint = Theme.tallyInk,
         )
     }
 }
@@ -237,6 +240,8 @@ private fun Swatch(accent: Accent, chosen: Boolean, pick: () -> Unit) {
     val press = rememberPress()
     val lit by animateFloatAsState(if (chosen) 1f else 0f, Theme.settle(), label = "chosen")
     val pressed by animateFloatAsState(if (press.hovered && !chosen) 1.08f else 1f, Motion.hover(), label = "hover")
+    // The colour as it will be drawn in this appearance.
+    val colour = LocalPalette.current.tally(accent)
     Box(
         Modifier
             .size(42.dp)
@@ -257,7 +262,7 @@ private fun Swatch(accent: Accent, chosen: Boolean, pick: () -> Unit) {
                     scaleX = 0.8f + 0.2f * lit
                     scaleY = 0.8f + 0.2f * lit
                 }
-                .border(2.dp, accent.color, CircleShape),
+                .border(2.dp, colour, CircleShape),
         )
         // A flat disc with a hairline edge (Settings.swift `Swatches`). It was
         // a lit bead of glass, a highlight at the upper left, a shade at the
@@ -267,7 +272,7 @@ private fun Swatch(accent: Accent, chosen: Boolean, pick: () -> Unit) {
         Box(
             Modifier
                 .size(34.dp)
-                .background(accent.color, CircleShape)
+                .background(colour, CircleShape)
                 .border(0.5.dp, Color.White.copy(alpha = 0.25f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
@@ -293,7 +298,7 @@ private fun AccentPreview(accent: Accent) {
             .fillMaxWidth()
             .testTag("settings.accent.preview")
             .clearAndSetSemantics {}
-            .background(Color.Black.copy(alpha = 0.22f), rounded(16f))
+            .background(Theme.recess(0.22f), rounded(16f))
             .padding(12.dp),
     ) {
         FitsAcross(
@@ -318,7 +323,7 @@ private fun AccentPreview(accent: Accent) {
 @Composable
 private fun AccentName(accent: Accent, modifier: Modifier = Modifier) {
     Crossfade(accent, modifier, animationSpec = Theme.settle(), label = "name") { shown ->
-        KitText(shown.displayName, font = Font(17f, Font.Semibold), color = Theme.tally, lines = 1)
+        KitText(shown.displayName, font = Font(17f, Font.Semibold), color = Theme.tallyInk, lines = 1)
     }
 }
 
@@ -345,7 +350,7 @@ private fun AccentScene() {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Symbol("waveform", size = 8f, weight = Font.Bold, tint = tally)
-                KitText("Mika", font = Font(9f, Font.Semibold), lines = 1)
+                KitText("Mika", font = Font(9f, Font.Semibold), color = Theme.onPicture, lines = 1)
             }
         }
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -367,7 +372,7 @@ private fun AccentScene() {
                             .background(tally, CircleShape),
                     )
                 }
-                Symbol("hand.raised.fill", size = 14f, tint = tally)
+                Symbol("hand.raised.fill", size = 14f, tint = Theme.tallyInk)
             }
         }
     }
@@ -384,7 +389,7 @@ private fun BadgePreview(mode: ConnectionBadge) {
             .fillMaxWidth()
             .height(132.dp)
             .clip(shape)
-            .border(1.dp, Color.White.copy(alpha = 0.08f), shape)
+            .border(1.dp, Theme.wash.copy(alpha = 0.08f), shape)
             .clearAndSetSemantics {},
     ) {
         Backdrop(Modifier.matchParentSize())
@@ -397,7 +402,7 @@ private fun BadgePreview(mode: ConnectionBadge) {
                     Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .background(Color.White.copy(alpha = if (index == 1) 0.13f else 0.08f), rounded(7f)),
+                        .background(Theme.wash.copy(alpha = if (index == 1) 0.13f else 0.08f), rounded(7f)),
                 )
             }
         }
@@ -447,8 +452,8 @@ private fun PlacementCards(appearance: Appearance, modifier: Modifier = Modifier
 private fun PlacementCard(placement: ControlsPlacement, chosen: Boolean, modifier: Modifier, pick: () -> Unit) {
     val press = rememberPress()
     val tally = Theme.tally
-    val fill by animateColorAsState(if (chosen) tally.copy(alpha = 0.12f) else Color.White.copy(alpha = 0.04f), Theme.settle(), label = "fill")
-    val edge by animateColorAsState(if (chosen) tally.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.07f), Theme.settle(), label = "edge")
+    val fill by animateColorAsState(if (chosen) tally.copy(alpha = 0.12f) else Theme.plate(0.04f), Theme.settle(), label = "fill")
+    val edge by animateColorAsState(if (chosen) tally.copy(alpha = 0.6f) else Theme.wash.copy(alpha = 0.07f), Theme.settle(), label = "edge")
     val line by animateDpAsState(if (chosen) 1.5.dp else 1.dp, Theme.settle(), label = "line")
     val ink by animateColorAsState(if (chosen) Theme.foreground else Theme.muted, Theme.settle(), label = "ink")
     val shape = rounded(14f)
@@ -462,7 +467,8 @@ private fun PlacementCard(placement: ControlsPlacement, chosen: Boolean, modifie
         verticalArrangement = Arrangement.spacedBy(9.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Schematic(placement, chosen, Modifier.fillMaxWidth().aspectRatio(1.45f))
+        // A picture of a call, drawn as the call is.
+        KitPalette(Theme.meeting(LocalPalette.current)) { Schematic(placement, chosen, Modifier.fillMaxWidth().aspectRatio(1.45f)) }
         KitText(
             placement.displayName,
             Modifier.fillMaxWidth(),
@@ -476,11 +482,14 @@ private fun PlacementCard(placement: ControlsPlacement, chosen: Boolean, modifie
 /** A call, small: four pictures, narrower where the controls take a strip of width, and the controls. */
 @Composable
 private fun Schematic(placement: ControlsPlacement, lit: Boolean, modifier: Modifier) {
-    val colour by animateColorAsState(if (lit) Theme.tally else Color.White.copy(alpha = 0.55f), Theme.settle(), label = "bar")
+    val colour by animateColorAsState(if (lit) Theme.tally else Theme.wash.copy(alpha = 0.55f), Theme.settle(), label = "bar")
+    // Read here: a canvas draws outside the composition.
+    val ground = Theme.recess(0.35f)
+    val tile = Theme.wash.copy(alpha = 0.13f)
     Canvas(modifier) {
         val unit = 1.dp.toPx()
         val side = placement == ControlsPlacement.Side
-        drawRoundRect(Color.Black.copy(alpha = 0.35f), cornerRadius = CornerRadius(8 * unit))
+        drawRoundRect(ground, cornerRadius = CornerRadius(8 * unit))
         val width = size.width - (if (side) 26 else 12) * unit
         val height = size.height - (if (side) 12 else 24) * unit
         val gap = 3 * unit
@@ -488,7 +497,7 @@ private fun Schematic(placement: ControlsPlacement, lit: Boolean, modifier: Modi
         val tileH = (height - gap) / 2
         for (row in 0 until 2) for (column in 0 until 2) {
             drawRoundRect(
-                Color.White.copy(alpha = 0.13f),
+                tile,
                 Offset(6 * unit + column * (tileW + gap), 6 * unit + row * (tileH + gap)),
                 Size(tileW, tileH),
                 CornerRadius(3 * unit),

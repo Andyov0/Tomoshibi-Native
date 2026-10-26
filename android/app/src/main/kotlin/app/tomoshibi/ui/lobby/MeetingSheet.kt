@@ -42,7 +42,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -369,8 +368,8 @@ internal fun OptionsCard(app: AppModel, sealing: Boolean, onSealing: (Boolean) -
     Column(
         Modifier
             .fillMaxWidth()
-            .background(Color.Black.copy(alpha = 0.22f), shape)
-            .border(1.dp, Color.White.copy(alpha = 0.08f), shape)
+            .background(Theme.recess(0.22f), shape)
+            .border(1.dp, Theme.wash.copy(alpha = 0.08f), shape)
             .animateContentSize(Theme.settle()),
     ) {
         AnimatedVisibility(
@@ -390,7 +389,7 @@ internal fun OptionsCard(app: AppModel, sealing: Boolean, onSealing: (Boolean) -
                     KitText(t("Server"), Modifier.weight(1f), font = Font(14f), lines = 1)
                     ServerMenu(app, compact = true, id = serverId)
                 }
-                Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.06f)))
+                Box(Modifier.fillMaxWidth().height(1.dp).background(Theme.wash.copy(alpha = 0.06f)))
             }
         }
         SealControl(sealing, onSealing, app.sealingWord, { app.sealingWord = it }, Modifier.padding(horizontal = 14.dp, vertical = 12.dp))
@@ -404,7 +403,7 @@ private fun Footer(app: AppModel, draft: MeetingDraft, go: () -> Unit, cancel: (
         var said by remember { mutableStateOf(app.problem) }
         app.problem?.let { said = it }
         Appear(app.problem != null) {
-            KitText(said ?: "", font = Font(12.5f), color = Theme.danger, align = TextAlign.Center)
+            KitText(said ?: "", font = Font(12.5f), color = Theme.dangerInk, align = TextAlign.Center)
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
             val knock = app.problem != null && app.canKnock
@@ -497,7 +496,7 @@ fun ScopedRoomField(
                 .height(if (capsule) 54.dp else 46.dp)
                 .then(
                     if (capsule) Modifier.glassSurface(Capsule)
-                    else Modifier.background(Color.Black.copy(alpha = 0.24f), rounded(16f)).border(1.dp, Color.White.copy(alpha = 0.10f), rounded(16f)),
+                    else Modifier.background(Theme.recess(0.24f), rounded(16f)).border(1.dp, Theme.wash.copy(alpha = 0.10f), rounded(16f)),
                 )
                 // The whole box takes the keyboard, as MediaField's does: the
                 // words in it are twenty points of a box fifty tall.
@@ -540,7 +539,7 @@ fun ScopedRoomField(
                     },
                 textStyle = font.style(Theme.foreground),
                 singleLine = true,
-                cursorBrush = SolidColor(Theme.tally),
+                cursorBrush = SolidColor(Theme.tallyInk),
                 keyboardOptions = KeyboardOptions(
                     capitalization = KeyboardCapitalization.None,
                     autoCorrectEnabled = false,
@@ -566,7 +565,7 @@ fun ScopedRoomField(
                 t("You are not in {scope}, so this room will not let you in.", mapOf("scope" to typedScope)),
                 Modifier.padding(horizontal = 6.dp),
                 font = Font(12f),
-                color = Theme.danger,
+                color = Theme.dangerInk,
             )
         }
     }
@@ -589,7 +588,7 @@ private fun Suggestions(matches: List<String>, chosen: Int, accept: (String) -> 
                 Modifier
                     .fillMaxWidth()
                     .heightIn(min = 32.dp)
-                    .background(Color.White.copy(alpha = if (index == chosen) 0.10f else 0f), rounded(9f))
+                    .background(Theme.wash.copy(alpha = if (index == chosen) 0.10f else 0f), rounded(9f))
                     .pressable(press, rounded(9f), true, Role.Button) { accept(scope) }
                     .padding(horizontal = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,

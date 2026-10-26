@@ -25,7 +25,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.testTag
@@ -175,7 +174,7 @@ internal fun GuestLinksCard(app: AppModel, account: Account) {
                 shownLink?.let { link -> MadeLink(link) }
             }
             Arriving(said != null) {
-                KitText(shownSaid, font = Font(12f), color = if (saidIsGood) Theme.good else Theme.danger)
+                KitText(shownSaid, font = Font(12f), color = if (saidIsGood) Theme.goodInk else Theme.dangerInk)
             }
         }
     }
@@ -214,14 +213,14 @@ private fun Moment(label: String, id: String, value: LocalDateTime?, change: (Lo
 private fun StopButton(busy: Boolean, enabled: Boolean, stop: () -> Unit) {
     val on = enabled && LocalEnabled.current
     val press = rememberPress()
-    val fill by animateColorAsState(Color.White.copy(alpha = if (press.lit && on) 0.10f else 0.06f), Motion.hover(), label = "fill")
+    val fill by animateColorAsState(Theme.wash.copy(alpha = if (press.lit && on) 0.10f else 0.06f), Motion.hover(), label = "fill")
     val alpha by animateFloatAsState(if (on) 1f else 0.45f, Theme.settle(), label = "enabled")
     Row(
         Modifier
             .alpha(alpha)
             .heightIn(min = 34.dp)
             .background(fill, Capsule)
-            .border(1.dp, Color.White.copy(alpha = 0.10f), Capsule)
+            .border(1.dp, Theme.wash.copy(alpha = 0.10f), Capsule)
             .pressable(press, Capsule, on, Role.Button, onClick = stop)
             .padding(horizontal = 14.dp, vertical = 8.dp)
             .testTag("settings.guest.stop"),
@@ -243,7 +242,7 @@ private fun MadeLink(made: MadeInvite) {
             SelectionContainer(
                 Modifier
                     .weight(1f)
-                    .background(Color.Black.copy(alpha = 0.25f), rounded(11f))
+                    .background(Theme.recess(0.25f), rounded(11f))
                     .padding(10.dp),
             ) {
                 KitText(made.link, Modifier.fillMaxWidth(), font = Font(11.5f, mono = true), color = Theme.foreground.copy(alpha = 0.85f))

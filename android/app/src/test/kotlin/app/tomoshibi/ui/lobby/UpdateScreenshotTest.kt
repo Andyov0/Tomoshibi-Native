@@ -20,6 +20,7 @@ import app.tomoshibi.model.UpdateSource
 import app.tomoshibi.model.Updates
 import app.tomoshibi.model.Updates.Said
 import app.tomoshibi.model.Updates.Step
+import app.tomoshibi.ui.InAppearance
 import app.tomoshibi.ui.settings.FakePlatform
 import app.tomoshibi.ui.settings.LocalSettingsPlatform
 import app.tomoshibi.ui.settings.SettingsTopic
@@ -156,7 +157,7 @@ class UpdateScreenshotTest(private val language: Language) {
         updating(app, step, said)
         compose.setContent {
             CompositionLocalProvider(LocalSettingsPlatform provides FakePlatform()) {
-                SettingsView(app, {}, Modifier, SettingsTopic.About)
+                InAppearance { SettingsView(app, {}, Modifier, SettingsTopic.About) }
             }
         }
         settle()

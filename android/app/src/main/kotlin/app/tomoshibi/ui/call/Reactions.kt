@@ -101,9 +101,9 @@ internal fun HandControl(
     val open = popovers.open == TRAY
     val haptics = LocalHapticFeedback.current
     val up = call.handUp
-    val handFill by animateColorAsState(if (up) Theme.tally else Color.White.copy(alpha = 0.12f), Theme.settle(), label = "hand")
+    val handFill by animateColorAsState(if (up) Theme.tally else Theme.wash.copy(alpha = 0.12f), Theme.settle(), label = "hand")
     val handInk by animateColorAsState(if (up) Theme.tallyForeground else Theme.foreground, Theme.settle(), label = "ink")
-    val trayFill by animateColorAsState(Color.White.copy(alpha = if (open) 0.2f else 0.12f), Theme.settle(), label = "tray")
+    val trayFill by animateColorAsState(Theme.wash.copy(alpha = if (open) 0.2f else 0.12f), Theme.settle(), label = "tray")
     val turn by animateFloatAsState(if (open) 180f else 0f, Theme.settle(), label = "turn")
     val raise by rememberUpdatedState { act { call.setHand(!call.handUp) } }
     val handPress = remember { MutableInteractionSource() }

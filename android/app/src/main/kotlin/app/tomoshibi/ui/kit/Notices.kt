@@ -146,8 +146,8 @@ fun GlassSlider(
             Modifier
                 .fillMaxWidth()
                 .height(track)
-                .background(Color.Black.copy(alpha = 0.28f), Capsule)
-                .border(1.dp, Color.White.copy(alpha = 0.10f), Capsule),
+                .background(Theme.recess(0.28f), Capsule)
+                .border(1.dp, Theme.wash.copy(alpha = 0.10f), Capsule),
         )
         // One flat tone, as the web's range input fills: it faded in from the
         // left until the owner asked for fewer gradients (2026-10-20).
@@ -211,12 +211,12 @@ fun RoundButton(
     val press = rememberPress()
     val lit = press.lit && on
     val ink by animateColorAsState(
-        if (!lit) Theme.muted else if (role == RoundRole.Destructive) Theme.danger else Theme.foreground,
+        if (!lit) Theme.muted else if (role == RoundRole.Destructive) Theme.dangerInk else Theme.foreground,
         Motion.hover(), label = "ink",
     )
     val fill by animateColorAsState(
-        if (!lit) Color.White.copy(alpha = 0f) else if (role == RoundRole.Destructive) Theme.danger.copy(alpha = 0.16f)
-        else Color.White.copy(alpha = 0.10f),
+        if (!lit) Theme.wash.copy(alpha = 0f) else if (role == RoundRole.Destructive) Theme.danger.copy(alpha = 0.16f)
+        else Theme.wash.copy(alpha = 0.10f),
         Motion.hover(), label = "fill",
     )
     val edge by animateFloatAsState(if (lit) 0.12f else 0f, Motion.hover(), label = "edge")
@@ -232,7 +232,7 @@ fun RoundButton(
             Modifier
                 .size(size)
                 .background(fill, CircleShape)
-                .border(1.dp, Color.White.copy(alpha = edge), CircleShape),
+                .border(1.dp, Theme.wash.copy(alpha = edge), CircleShape),
             contentAlignment = Alignment.Center,
         ) { Symbol(symbol, size = size.value * 0.43f, weight = Font.Semibold, tint = ink) }
     }
@@ -269,7 +269,7 @@ fun PillButton(
     }
     val fill by animateColorAsState(
         when (role) {
-            PillRole.Normal -> Color.White.copy(alpha = if (lift) 0.16f else 0.10f)
+            PillRole.Normal -> Theme.wash.copy(alpha = if (lift) 0.16f else 0.10f)
             PillRole.Prominent -> Theme.tally.copy(alpha = if (lift) 0.88f else 1f)
             PillRole.Destructive -> Theme.danger.copy(alpha = if (lift) 0.88f else 1f)
         },
@@ -282,7 +282,7 @@ fun PillButton(
             .then(if (wide) Modifier.fillMaxWidth() else Modifier)
             .heightIn(min = height)
             .background(fill, Capsule)
-            .border(1.dp, Color.White.copy(alpha = if (role == PillRole.Normal) 0.08f else 0.18f), Capsule)
+            .border(1.dp, if (role == PillRole.Normal) Theme.wash.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.18f), Capsule)
             .pressable(press, Capsule, on, Role.Button, onClick = onClick)
             .padding(horizontal = height * 0.42f),
         horizontalArrangement = Arrangement.Center,
@@ -327,7 +327,7 @@ fun PanelHeading(
             Box(
                 Modifier
                     .size(26.dp)
-                    .background(Color.White.copy(alpha = 0.09f), rounded(8f)),
+                    .background(Theme.wash.copy(alpha = 0.09f), rounded(8f)),
                 contentAlignment = Alignment.Center,
             ) { Symbol(symbol, size = 12f, weight = Font.Semibold, tint = symbolTint) }
         }
@@ -357,10 +357,12 @@ fun PanelRule(modifier: Modifier = Modifier) {
  * glass, edged in `tint` where the group is about something happening (the
  * door) or about to (ending the meeting) (`.panelCard(tint:)`).
  */
+@Composable
 fun Modifier.panelCard(tint: Color? = null): Modifier {
     val shape = ContinuousShape(16.dp)
-    return background(tint?.copy(alpha = 0.10f) ?: Color.White.copy(alpha = 0.05f), shape)
-        .border(1.dp, tint?.copy(alpha = 0.35f) ?: Color.White.copy(alpha = 0.07f), shape)
+    val wash = Theme.wash
+    return background(tint?.copy(alpha = 0.10f) ?: Theme.plate(0.05f), shape)
+        .border(1.dp, tint?.copy(alpha = 0.35f) ?: wash.copy(alpha = 0.07f), shape)
 }
 
 /**

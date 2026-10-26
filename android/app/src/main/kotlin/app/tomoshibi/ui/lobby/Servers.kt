@@ -31,7 +31,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
@@ -200,10 +199,10 @@ private fun RelayRow(
             when {
                 measured == null -> if (app.lobby.measuring) MediaSpinner(size = 12f, tint = Theme.muted)
                 millis != null -> KitText("${Math.round(millis)} ms", font = Font(13f, digits = true), color = latencyColour(millis), lines = 1)
-                !off -> KitText(t("Timeout"), font = Font(12f), color = Theme.danger, lines = 1)
+                !off -> KitText(t("Timeout"), font = Font(12f), color = Theme.dangerInk, lines = 1)
             }
         }
-        Symbol("checkmark.circle.fill", Modifier.alpha(tick).scale(0.6f + 0.4f * tick), size = 15f, tint = Theme.tally)
+        Symbol("checkmark.circle.fill", Modifier.alpha(tick).scale(0.6f + 0.4f * tick), size = 15f, tint = Theme.tallyInk)
     }
 }
 
@@ -218,7 +217,7 @@ internal fun PageBar(title: String, back: () -> Unit) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent))),
+                .barShade(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent)),
         ) {
             Column(Modifier.fillMaxWidth()) {
                 Spacer(Modifier.windowInsetsTopHeight(WindowInsets.safeDrawing))

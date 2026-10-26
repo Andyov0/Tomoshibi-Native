@@ -21,7 +21,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import app.tomoshibi.basics.Theme
@@ -57,7 +56,7 @@ fun MenuRule(modifier: Modifier = Modifier) {
             .padding(horizontal = 8.dp, vertical = 4.dp)
             .fillMaxWidth()
             .height(1.dp)
-            .background(Color.White.copy(alpha = 0.08f)),
+            .background(Theme.wash.copy(alpha = 0.08f)),
     )
 }
 
@@ -89,7 +88,7 @@ fun MenuItem(
         modifier
             .fillMaxWidth()
             .alpha(if (on) 1f else 0.4f)
-            .background(Color.White.copy(alpha = light), shape)
+            .background(Theme.wash.copy(alpha = light), shape)
             .pressable(press, shape, on, Role.Button, selected = if (checked) true else null, onClick = onClick)
             // A fingertip tall on a phone and the Fold's cover screen, where a
             // menu is pressed with a thumb and its rows touch; the Mac's 34
@@ -106,8 +105,8 @@ fun MenuItem(
                     size = 13f,
                     weight = Font.Medium,
                     tint = when (role) {
-                        MenuRole.Destructive -> Theme.danger
-                        MenuRole.Prominent -> Theme.tally
+                        MenuRole.Destructive -> Theme.dangerInk
+                        MenuRole.Prominent -> Theme.tallyInk
                         MenuRole.Normal -> Theme.foreground.copy(alpha = 0.85f)
                     },
                 )
@@ -117,7 +116,7 @@ fun MenuItem(
             KitText(
                 title,
                 font = Font(13.5f, if (role == MenuRole.Normal) Font.Regular else Font.Semibold),
-                color = if (role == MenuRole.Destructive) Theme.danger else Theme.foreground,
+                color = if (role == MenuRole.Destructive) Theme.dangerInk else Theme.foreground,
             )
             if (detail != null) KitText(detail, font = Font(11.5f), color = Theme.muted)
         }
@@ -133,7 +132,7 @@ fun MenuItem(
                 visible = checked && !busy,
                 enter = fadeIn(Theme.settle()) + scaleIn(Theme.settle()),
                 exit = fadeOut(Theme.leave()) + scaleOut(Theme.leave()),
-            ) { Symbol("checkmark", Modifier.padding(start = 10.dp), size = 11.5f, weight = Font.Bold, tint = Theme.tally) }
+            ) { Symbol("checkmark", Modifier.padding(start = 10.dp), size = 11.5f, weight = Font.Bold, tint = Theme.tallyInk) }
         }
     }
 }

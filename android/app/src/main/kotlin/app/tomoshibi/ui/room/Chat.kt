@@ -43,7 +43,6 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -195,7 +194,7 @@ private fun Empty() {
         Box(
             Modifier
                 .size(56.dp)
-                .background(Color.White.copy(alpha = 0.08f), CircleShape),
+                .background(Theme.wash.copy(alpha = 0.08f), CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Symbol("bubble.left.and.text.bubble.right", size = 26f, weight = Font.Regular, tint = Theme.foreground.copy(alpha = 0.5f))
@@ -233,7 +232,7 @@ private fun Composer(call: CallModel, modifier: Modifier = Modifier) {
         runCatching { focus.requestFocus() }
     }
     val edge by animateColorAsState(
-        if (focused && !offline) Theme.tally.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.09f),
+        if (focused && !offline) Theme.tally.copy(alpha = 0.55f) else Theme.wash.copy(alpha = 0.09f),
         Theme.settle(), label = "edge",
     )
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -241,7 +240,7 @@ private fun Composer(call: CallModel, modifier: Modifier = Modifier) {
             Modifier
                 .fillMaxWidth()
                 .alpha(if (offline) 0.6f else 1f)
-                .background(Color.Black.copy(alpha = 0.22f), rounded(18f))
+                .background(Theme.recess(0.22f), rounded(18f))
                 .border(1.dp, edge, rounded(18f))
                 // The whole box takes the keyboard: the line typed on is
                 // nineteen points of it.
@@ -272,7 +271,7 @@ private fun Composer(call: CallModel, modifier: Modifier = Modifier) {
                     .semantics { contentDescription = t("Say something") },
                 enabled = !offline,
                 textStyle = style,
-                cursorBrush = SolidColor(Theme.tally),
+                cursorBrush = SolidColor(Theme.tallyInk),
                 minLines = 1,
                 maxLines = 5,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
@@ -295,8 +294,8 @@ private fun Composer(call: CallModel, modifier: Modifier = Modifier) {
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 AnimatedVisibility(call.chatFailed, enter = Theme.arrive, exit = Theme.depart) {
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Symbol("exclamationmark.circle.fill", size = 11f, tint = Theme.danger)
-                        KitText(t("That could not be sent."), font = Font(11f), color = Theme.danger, lines = 1)
+                        Symbol("exclamationmark.circle.fill", size = 11f, tint = Theme.dangerInk)
+                        KitText(t("That could not be sent."), font = Font(11f), color = Theme.dangerInk, lines = 1)
                     }
                 }
                 Spacer(Modifier.weight(1f))
@@ -306,7 +305,7 @@ private fun Composer(call: CallModel, modifier: Modifier = Modifier) {
                     KitText(
                         "${draft.length}/${ChatRules.LONGEST}",
                         font = Font(10.5f, digits = true),
-                        color = if (draft.length >= ChatRules.LONGEST) Theme.tally else Theme.muted,
+                        color = if (draft.length >= ChatRules.LONGEST) Theme.tallyInk else Theme.muted,
                         lines = 1,
                     )
                 }
@@ -318,7 +317,7 @@ private fun Composer(call: CallModel, modifier: Modifier = Modifier) {
 @Composable
 private fun SendButton(sendable: Boolean, sending: Boolean, send: () -> Unit, modifier: Modifier = Modifier) {
     val press = rememberPress()
-    val fill by animateColorAsState(if (sendable || sending) Theme.tally else Color.White.copy(alpha = 0.08f), Theme.settle(), label = "send")
+    val fill by animateColorAsState(if (sendable || sending) Theme.tally else Theme.wash.copy(alpha = 0.08f), Theme.settle(), label = "send")
     // Pressed over a fingertip's width on a phone and the cover screen, drawn
     // at its own size; as tall as the box's line allows, which Compose's own
     // reach below and above a small control makes up.

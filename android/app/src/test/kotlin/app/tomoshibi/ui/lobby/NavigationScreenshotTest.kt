@@ -15,6 +15,7 @@ import app.tomoshibi.media.CallAudio
 import app.tomoshibi.model.AppModel
 import app.tomoshibi.model.AppModel.Screen
 import app.tomoshibi.ui.Hinge
+import app.tomoshibi.ui.InAppearance
 import app.tomoshibi.ui.LocalHinge
 import app.tomoshibi.ui.TomoshibiApp
 import app.tomoshibi.ui.kit.GlassBackdrop
@@ -201,7 +202,7 @@ class NavigationScreenshotTest(private val language: Language) {
         val app = fakeApp()
         compose.setContent {
             CompositionLocalProvider(LocalHinge provides BOOK) {
-                GlassBackdrop { LobbyView(app, ada) }
+                InAppearance { GlassBackdrop { LobbyView(app, ada) } }
             }
         }
         settle()

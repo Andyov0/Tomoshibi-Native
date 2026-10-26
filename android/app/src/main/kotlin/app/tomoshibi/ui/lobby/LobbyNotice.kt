@@ -105,11 +105,12 @@ internal fun noticeShown(app: AppModel): Boolean = app.remote.notice?.text?.get(
 private fun Card(remote: Remote, notice: LobbyNotice, text: String, floating: Boolean) {
     val shape = ContinuousShape(20.dp)
     val tint = if (notice.warning) Theme.danger else Theme.tally
+    val ink = if (notice.warning) Theme.dangerInk else Theme.tallyInk
     Row(
         Modifier
             .widthIn(max = 560.dp)
             .fillMaxWidth()
-            .then(if (floating) Modifier.dropShadow(shape, Shadow(radius = 18.dp, color = Color.Black, offset = DpOffset(0.dp, 8.dp), alpha = 0.35f)) else Modifier)
+            .then(if (floating) Modifier.dropShadow(shape, Shadow(radius = 18.dp, color = Color.Black, offset = DpOffset(0.dp, 8.dp), alpha = Theme.shade(0.35f))) else Modifier)
             .background(Theme.surface, shape)
             .border(1.dp, if (notice.warning) Theme.danger.copy(alpha = 0.45f) else Theme.border, shape)
             .padding(start = 14.dp, end = 10.dp, top = 12.dp, bottom = 12.dp)
@@ -118,7 +119,7 @@ private fun Card(remote: Remote, notice: LobbyNotice, text: String, floating: Bo
         verticalAlignment = Alignment.Top,
     ) {
         Box(Modifier.size(30.dp).background(tint.copy(alpha = 0.18f), CircleShape), contentAlignment = Alignment.Center) {
-            Symbol(if (notice.warning) "exclamationmark.circle.fill" else "megaphone.fill", size = 13f, weight = Font.Semibold, tint = tint)
+            Symbol(if (notice.warning) "exclamationmark.circle.fill" else "megaphone.fill", size = 13f, weight = Font.Semibold, tint = ink)
         }
         // New words for the same notice fade over the old rather than cut.
         AnimatedContent(

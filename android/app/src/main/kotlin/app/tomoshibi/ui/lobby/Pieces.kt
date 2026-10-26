@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.RectangleShape
@@ -219,7 +220,7 @@ fun ProblemToast(app: AppModel, modifier: Modifier = Modifier, clearance: Dp = 2
             ) {
                 Symbol(
                     if (stays) "exclamationmark.circle.fill" else "info.circle",
-                    size = 14f, weight = Font.Semibold, tint = if (stays) Theme.tally else Theme.muted,
+                    size = 14f, weight = Font.Semibold, tint = if (stays) Theme.tallyInk else Theme.muted,
                 )
                 KitText(said ?: "", Modifier.weight(1f, fill = false), font = Font(13f))
                 if (stays) {
@@ -299,8 +300,23 @@ object RoomNames {
 /** A name typed where a room goes is one only once it is something; nothing typed is no room, and asks the core nothing. */
 fun validTyped(text: String): Boolean = text.isNotBlank() && RoomNames.valid(RoomNames.normalise(text))
 
-/** ServerPicker.tsx `Latency`: green to 150 ms, the signal colour to 400, red beyond (`latencyColour`). */
-fun latencyColour(ms: Double): Color = if (ms <= 150) Theme.good else if (ms <= 400) Theme.tally else Theme.danger
+/**
+ * ServerPicker.tsx `Latency`: green to 150 ms, the signal colour to 400, red
+ * beyond (`latencyColour`). A figure, so each colour is its ink.
+ */
+@Composable
+fun latencyColour(ms: Double): Color = if (ms <= 150) Theme.goodInk else if (ms <= 400) Theme.tallyInk else Theme.dangerInk
+
+/**
+ * What the top bar of a page lays over the page where it runs up under the
+ * status bar: in the dark the fade into black it always was, `dark` from top
+ * to bottom; in the light the page's own ground, flat and nearly opaque,
+ * since the daylight palette has no gradients (2026-10-26) and a fade into
+ * black over a light page is a smudge.
+ */
+@Composable
+internal fun Modifier.barShade(dark: List<Color>): Modifier =
+    if (Theme.dark) background(Brush.verticalGradient(dark)) else background(Theme.ground.copy(alpha = 0.94f))
 
 /**
  * Everything on these screens arrives in an order: in from fourteen points
@@ -434,8 +450,8 @@ fun SwipeRow(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 if (shown > 40.dp) {
-                    Symbol(symbol, size = 15f, weight = Font.Semibold, tint = Color.White)
-                    KitText(action, Modifier.padding(top = 4.dp, start = 4.dp, end = 4.dp), font = Font(12f, Font.Medium), color = Color.White, lines = 1)
+                    Symbol(symbol, size = 15f, weight = Font.Semibold, tint = Theme.dangerForeground)
+                    KitText(action, Modifier.padding(top = 4.dp, start = 4.dp, end = 4.dp), font = Font(12f, Font.Medium), color = Theme.dangerForeground, lines = 1)
                 }
             }
         }
@@ -465,6 +481,6 @@ fun RowRule(modifier: Modifier = Modifier, leading: Dp = 0.dp) {
             .fillMaxWidth()
             .padding(start = leading)
             .height(0.5.dp)
-            .background(Color.White.copy(alpha = 0.12f)),
+            .background(Theme.wash.copy(alpha = 0.12f)),
     )
 }

@@ -23,6 +23,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import app.tomoshibi.basics.LocalPalette
+import app.tomoshibi.basics.Palette
 import app.tomoshibi.basics.Theme
 
 // The words and the colour they are drawn in, the way SwiftUI hands
@@ -32,9 +34,20 @@ import app.tomoshibi.basics.Theme
 
 /**
  * The colour words and symbols are drawn in where nothing says otherwise:
- * SwiftUI's foreground style, inherited.
+ * SwiftUI's foreground style, inherited. The dark's foreground outside any
+ * palette ([KitPalette] sets it with the palette).
  */
-val LocalInk = compositionLocalOf { Theme.foreground }
+val LocalInk = compositionLocalOf { Palette.Dark.foreground }
+
+/**
+ * What is inside drawn in [palette]: its colours, and its foreground as the
+ * ink words and symbols inherit, which would otherwise stay the dark's light
+ * grey on a light page.
+ */
+@Composable
+fun KitPalette(palette: Palette, content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalPalette provides palette, LocalInk provides palette.foreground, content = content)
+}
 
 /**
  * Whether what is inside may be pressed: SwiftUI's `isEnabled`, which

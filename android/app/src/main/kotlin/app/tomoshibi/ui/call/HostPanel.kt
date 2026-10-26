@@ -29,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
@@ -90,7 +89,7 @@ fun HostPanel(feature: HostFeature, close: () -> Unit, modifier: Modifier = Modi
     }
     LaunchedEffect(feature) { feature.loadRelays() }
     Column(modifier.fillMaxWidth().glassPane(22.dp)) {
-        PanelHeading(t("Running this room"), t("Close"), close, symbol = "crown.fill", symbolTint = Theme.tally)
+        PanelHeading(t("Running this room"), t("Close"), close, symbol = "crown.fill", symbolTint = Theme.tallyInk)
         PanelRule()
         AnimatedContent(
             feature.standing.yours,
@@ -162,8 +161,8 @@ private fun Inviting(feature: HostFeature) {
                 SelectionContainer(
                     Modifier
                         .fillMaxWidth()
-                        .background(Color.Black.copy(alpha = 0.25f), rounded(10f))
-                        .border(1.dp, Color.White.copy(alpha = 0.07f), rounded(10f))
+                        .background(Theme.recess(0.25f), rounded(10f))
+                        .border(1.dp, Theme.wash.copy(alpha = 0.07f), rounded(10f))
                         .padding(horizontal = 10.dp, vertical = 8.dp),
                 ) {
                     KitText(link, font = Font(10.5f, mono = true), color = Theme.foreground.copy(alpha = 0.8f))
@@ -326,7 +325,7 @@ private fun Ending(feature: HostFeature) {
             Column(Modifier.fillMaxWidth().panelCard(tint = Theme.danger).padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     Box(Modifier.width(18.dp), contentAlignment = Alignment.Center) {
-                        Symbol("door.left.hand.closed", size = 13f, weight = Font.Semibold, tint = Theme.danger)
+                        Symbol("door.left.hand.closed", size = 13f, weight = Font.Semibold, tint = Theme.dangerInk)
                     }
                     KitText(
                         if (feature.scoped) {
@@ -365,7 +364,7 @@ private fun QuietButton(title: String, busy: Boolean, enabled: Boolean, action: 
     val press = rememberPress()
     val lit = press.lit
     val ink by animateColorAsState(if (lit) Theme.foreground else Theme.muted, Motion.hover(), label = "ink")
-    val fill by animateColorAsState(if (lit) Theme.danger.copy(alpha = 0.14f) else Color.White.copy(alpha = 0.05f), Motion.hover(), label = "fill")
+    val fill by animateColorAsState(if (lit) Theme.danger.copy(alpha = 0.14f) else Theme.wash.copy(alpha = 0.05f), Motion.hover(), label = "fill")
     KitEnabled(enabled) {
         Row(
             Modifier

@@ -44,6 +44,9 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.remember
+import app.tomoshibi.basics.LocalPalette
+import app.tomoshibi.basics.Palette
 import app.tomoshibi.basics.Theme
 import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
@@ -61,9 +64,10 @@ import dev.chrisbanes.haze.rememberHazeState
 // nearest thing it has: what is behind a pane, captured and blurred by a
 // RenderEffect (Haze), lifted a little and edged in light, over a soft
 // shadow. Android before 12 has no RenderEffect, and there the same shapes
-// are a translucent fill of the same dark tone: the nearest that system
-// comes, as the thin material is the nearest iOS 17 and 18 come for the
-// Apple apps.
+// are a translucent fill of the same tone: the nearest that system comes, as
+// the thin material is the nearest iOS 17 and 18 come for the Apple apps. In
+// the light the glass is the light material, the page's white over what is
+// behind it, as Apple's own material turns with the appearance.
 //
 // Glass is kept to the controls and navigation, as Apple's guidance says
 // (Human Interface Guidelines, Materials: "Don't use Liquid Glass in the
@@ -212,69 +216,92 @@ fun GlassBacking(shape: Shape, modifier: Modifier = Modifier, content: @Composab
 @Composable
 fun GlassGroup(spacing: Dp = 8.dp, content: @Composable () -> Unit) = content()
 
-/** A content-layer surface: what [glassSurface] draws inside [ContentLayer]. */
+/**
+ * A content-layer surface: what [glassSurface] draws inside [ContentLayer],
+ * a light translucent fill and a hairline: a plate raised off what it is on
+ * (Palette.plate), edged in white over the dark and in black over the light.
+ */
+@Composable
 fun Modifier.plainSurface(shape: Shape, tint: Color? = null): Modifier {
-    val filled = background(tint ?: PlainFill, shape)
-    return if (tint == null) filled.border(1.dp, PlainEdge, shape) else filled
+    val filled = background(tint ?: Theme.plate(0.07f), shape)
+    return if (tint == null) filled.border(1.dp, Theme.wash.copy(alpha = 0.09f), shape) else filled
 }
-
-private val PlainFill = Color.White.copy(alpha = 0.07f)
-private val PlainEdge = Color.White.copy(alpha = 0.09f)
 
 /**
  * The glass itself. Over a source: the content behind, blurred, lifted in
  * saturation as Apple's materials lift it (the colour of a picture comes
- * through a pane rather than turning grey), shaded toward the call's own
- * grey so that words on it read over a white slide; under no source, or
+ * through a pane rather than turning grey), shaded toward the palette's own
+ * surface so that words on it read over a white slide or a black one; under no source, or
  * before Android 12, the stand-in fill. Where it says something (`tint`), it
  * is filled with the colour, as Glass.swift found on macOS 27: a tint alone
  * is barely there, and dark words on it could not be read.
+ *
+ * The stand-in is `surface` at four fifths: the system's dark ultra-thin
+ * material over the call reads as the call's grey at about that, and the
+ * light one over the page as white at about that.
  */
+@Composable
 internal fun Modifier.liquidGlass(shape: Shape, tint: Color?, backdrop: HazeState?): Modifier {
+    val palette = LocalPalette.current
     val blurred = backdrop != null && GlassSupport.blurs
+    val standIn = palette.surface.copy(alpha = 0.80f)
+    val blur = remember(palette) { glassBlur(palette, standIn) }
     return this
-        .dropShadow(shape, GlassShadow)
+        .dropShadow(shape, glassShadow(palette))
         .clip(shape)
         // Under the blur, so a pane over nothing it may sample (inside the
         // content it is drawn on) is still a pane.
-        .background(StandIn)
-        .then(if (blurred && backdrop != null) Modifier.hazeBlur(HazeInput.Sources(backdrop), GlassBlur) else Modifier)
+        .background(standIn)
+        .then(if (blurred && backdrop != null) Modifier.hazeBlur(HazeInput.Sources(backdrop), blur) else Modifier)
         .then(if (tint != null) Modifier.background(tint) else Modifier)
-        .border(1.dp, if (tint == null) GlassRim else GlassRimLit, shape)
+        .then(
+            if (palette.dark) Modifier.border(1.dp, if (tint == null) GlassRim else GlassRimLit, shape)
+            else Modifier.border(1.dp, if (tint == null) Color.Black.copy(alpha = 0.08f) else Color.White.copy(alpha = 0.28f), shape),
+        )
 }
 
 /**
- * The stand-in for the blur: the system's dark ultra-thin material over the
- * call reads as the call's grey at about four fifths.
+ * Glass.swift's shadow for the glass before iOS 26: 28 per cent black, 14
+ * soft, 6 down; half as dark in the light (Palette.shade).
  */
-private val StandIn = Theme.surface.copy(alpha = 0.80f)
+private fun glassShadow(palette: Palette) =
+    if (palette.dark) GlassShadow else Shadow(radius = 14.dp, color = Color.Black, offset = DpOffset(0.dp, 6.dp), alpha = palette.shade(0.28f))
 
-/** Glass.swift's shadow for the glass before iOS 26: 28 per cent black, 14 soft, 6 down. */
 private val GlassShadow = Shadow(radius = 14.dp, color = Color.Black, offset = DpOffset(0.dp, 6.dp), alpha = 0.28f)
 
 /**
- * The edge of the glass, catching the light from above: brighter along the
- * top than the bottom, as Liquid Glass's edge is, and as bright on average
- * as the stand-in's sixteen per cent hairline (twenty-eight where tinted).
+ * The edge of the glass in the dark, catching the light from above: brighter
+ * along the top than the bottom, as Liquid Glass's edge is, and as bright on
+ * average as the stand-in's sixteen per cent hairline (twenty-eight where
+ * tinted). In the light the edge is a flat hairline instead, a little
+ * darker than the page round the plain glass and a little lighter than the
+ * colour round the tinted: a light edge on white glass is no edge at all,
+ * and the palette has no gradients to give it.
  */
 private val GlassRim = Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.26f), Color.White.copy(alpha = 0.07f)))
 private val GlassRimLit = Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.40f), Color.White.copy(alpha = 0.16f)))
 
 private val Saturate = ColorMatrix().apply { setToSaturation(1.5f) }
 
-private val GlassBlur = HazeBlurStyle {
+/**
+ * The blur and its shading. In the dark, the call's grey at a third and a
+ * breath of white over the blurred picture; in the light, white at a half,
+ * so that dark words on it read over a dark picture as the dark glass's
+ * light words read over a white slide.
+ */
+private fun glassBlur(palette: Palette, standIn: Color) = HazeBlurStyle {
     blurRadius(22.dp)
     // Apple's glass has no grain.
     noiseFactor(0f)
-    backgroundColor(Theme.background)
+    backgroundColor(palette.background)
     colorEffects(
         listOf(
             HazeColorEffect.colorFilter(ColorFilter.colorMatrix(Saturate)),
-            HazeColorEffect.tint(Theme.surface.copy(alpha = 0.34f)),
+            HazeColorEffect.tint(palette.surface.copy(alpha = if (palette.dark) 0.34f else 0.50f)),
             HazeColorEffect.tint(Color.White.copy(alpha = 0.05f)),
         ),
     )
-    fallbackColorEffect(HazeColorEffect.tint(StandIn))
+    fallbackColorEffect(HazeColorEffect.tint(standIn))
 }
 
 /**
@@ -367,7 +394,7 @@ fun GlassButton(
             .glassLayer(alpha = { alpha }, scale = { scale })
             .then(sized)
             .glassSurface(outline, tint, interactive = true)
-            .brightened(outline) { light }
+            .brightened(outline, Theme.dark) { light }
             .pressable(press, outline, on, Role.Button, label, onClick = onClick)
             .then(if (shape is GlassButtonShape.Capsule) Modifier.padding(horizontal = shape.height * 0.45f) else Modifier),
         horizontalArrangement = Arrangement.spacedBy(spacing, Alignment.CenterHorizontally),

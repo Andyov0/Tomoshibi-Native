@@ -47,7 +47,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ClipEntry
 import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.LocalClipboard
@@ -101,9 +100,9 @@ fun MeetingRow(one: Meeting, app: AppModel, modifier: Modifier = Modifier) {
         Box(
             Modifier
                 .size(34.dp)
-                .background(if (one.started) Theme.tally.copy(alpha = 0.18f) else Color.White.copy(alpha = 0.08f), rounded(10f)),
+                .background(if (one.started) Theme.tally.copy(alpha = 0.18f) else Theme.wash.copy(alpha = 0.08f), rounded(10f)),
             contentAlignment = Alignment.Center,
-        ) { Symbol(if (one.started) "video.fill" else "calendar", size = 15f, tint = if (one.started) Theme.tally else Theme.muted) }
+        ) { Symbol(if (one.started) "video.fill" else "calendar", size = 15f, tint = if (one.started) Theme.tallyInk else Theme.muted) }
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             KitText(one.room, font = Font(14f, Font.Semibold), lines = 1)
             // When, and where, on two lines where a phone or the cover screen
@@ -301,7 +300,7 @@ private fun Form(app: AppModel, account: Account, draft: ScheduleDraft, modifier
         MonthCalendar(
             draft.day,
             { draft.day = it },
-            Modifier.background(Color.Black.copy(alpha = 0.18f), rounded(16f)).padding(12.dp),
+            Modifier.background(Theme.recess(0.18f), rounded(16f)).padding(12.dp),
             earliest = today,
             latest = today.plusDays(60),
         )
@@ -317,9 +316,9 @@ private fun Form(app: AppModel, account: Account, draft: ScheduleDraft, modifier
                 ServerMenu(app, compact = true, id = "schedule.server")
             }
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.06f)))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Theme.wash.copy(alpha = 0.06f)))
         val problem = draft.problem()
-        val ink by animateColorAsState(if (problem) Theme.danger else Theme.muted, Theme.settle(), label = "verdict")
+        val ink by animateColorAsState(if (problem) Theme.dangerInk else Theme.muted, Theme.settle(), label = "verdict")
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             SwappingSymbol(if (problem) "exclamationmark.circle" else "calendar.badge.clock", Modifier.padding(top = 1.dp), size = 12f, weight = Font.Semibold, tint = ink)
             Crossfade(draft.verdict(), Modifier.weight(1f), animationSpec = Theme.settle(), label = "verdict") { said ->
@@ -519,10 +518,10 @@ private fun RowCircle(symbol: String, label: String, destructive: Boolean = fals
         Box(
             Modifier
                 .size(32.dp)
-                .background(Color.White.copy(alpha = if (press.pressed) 0.14f else 0.07f), CircleShape)
-                .border(1.dp, Color.White.copy(alpha = 0.09f), CircleShape),
+                .background(Theme.wash.copy(alpha = if (press.pressed) 0.14f else 0.07f), CircleShape)
+                .border(1.dp, Theme.wash.copy(alpha = 0.09f), CircleShape),
             contentAlignment = Alignment.Center,
-        ) { SwappingSymbol(symbol, size = 12f, weight = Font.Semibold, tint = if (destructive) Theme.danger else Theme.foreground) }
+        ) { SwappingSymbol(symbol, size = 12f, weight = Font.Semibold, tint = if (destructive) Theme.dangerInk else Theme.foreground) }
     }
 }
 

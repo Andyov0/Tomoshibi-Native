@@ -23,6 +23,7 @@ import app.tomoshibi.basics.Language
 import app.tomoshibi.basics.Localization
 import app.tomoshibi.basics.Theme
 import app.tomoshibi.basics.t
+import app.tomoshibi.ui.InAppearance
 import app.tomoshibi.ui.kit.gallery.GalleryOptions
 import app.tomoshibi.ui.kit.gallery.gallerySections
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
@@ -90,11 +91,13 @@ class KitScreenshotTest(private val language: Language) {
     /** The page on the backdrop, as wide as a phone and as tall as it is. */
     private fun page(content: @Composable () -> Unit) {
         compose.setContent {
-            GlassBackdrop {
-                Box(Modifier.fillMaxWidth().testTag("page")) {
-                    Box(Modifier.matchParentSize().background(Theme.background))
-                    Backdrop(Modifier.matchParentSize().glassSource())
-                    content()
+            InAppearance {
+                GlassBackdrop {
+                    Box(Modifier.fillMaxWidth().testTag("page")) {
+                        Box(Modifier.matchParentSize().background(Theme.background))
+                        Backdrop(Modifier.matchParentSize().glassSource())
+                        content()
+                    }
                 }
             }
         }
@@ -168,11 +171,13 @@ class KitScreenshotTest(private val language: Language) {
     private fun screen(key: String, options: GalleryOptions, name: String) {
         val section = gallerySections.first { it.key == key }
         compose.setContent {
-            GlassBackdrop {
-                Box(Modifier.fillMaxSize()) {
-                    Box(Modifier.matchParentSize().background(Theme.background))
-                    Backdrop(Modifier.matchParentSize().glassSource())
-                    section.content(options)
+            InAppearance {
+                GlassBackdrop {
+                    Box(Modifier.fillMaxSize()) {
+                        Box(Modifier.matchParentSize().background(Theme.background))
+                        Backdrop(Modifier.matchParentSize().glassSource())
+                        section.content(options)
+                    }
                 }
             }
         }
