@@ -37,14 +37,17 @@ struct TileMarks: Equatable {
 /// moved, wherever that picture has gone by then (`RoomView.pressed`). The
 /// keyboard presses it with Return or Space, with the focus ring the web
 /// draws for `focus-visible`.
+///
+/// No mark in a corner saying that a press makes it larger. Every app drew
+/// one under the pointer, and on Windows and the web it met the stage's own
+/// controls in that corner however its showing was conditioned; the owner
+/// had it taken away on every platform (2026-10-26), the whole picture being
+/// what is pressed.
 struct TileFrame<Content: View, Overlay: View>: View {
     let marks: TileMarks
     var compact = false
     /// On the stage, so a press sends it back to the grid.
     var selected = false
-    /// The corner symbol that says a press makes this larger; off on the
-    /// stage, where the stage's own controls take that corner.
-    var expandable = true
     /// Square while the picture fills the screen, whose own edges are the
     /// picture's.
     var radius: CGFloat = Theme.tileRadius
@@ -88,22 +91,6 @@ struct TileFrame<Content: View, Overlay: View>: View {
                     .transition(.asymmetric(
                         insertion: .scale(scale: 0.5).combined(with: .opacity).animation(Theme.settle),
                         removal: .scale(scale: 0.8).combined(with: .opacity).animation(Theme.leave)))
-            }
-            if expandable {
-                // Over the picture rather than beside it: anything taking room
-                // would reflow the grid as the pointer crossed it (Tile.tsx).
-                Image(systemName: selected ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: compact ? 9.5 : 11, weight: .bold))
-                    .foregroundStyle(Theme.foreground)
-                    .frame(width: compact ? 20 : 26, height: compact ? 20 : 26)
-                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(.black.opacity(0.5)))
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                    .padding(compact ? 5 : 8)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                    .opacity(hovering || StageDebug.hover ? 1 : 0)
-                    .scaleEffect(hovering || StageDebug.hover ? 1 : 0.9, anchor: .topTrailing)
-                    .allowsHitTesting(false)
-                    .accessibilityHidden(true)
             }
             overlay(hovering || StageDebug.hover)
         }

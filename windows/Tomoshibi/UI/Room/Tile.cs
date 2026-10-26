@@ -299,10 +299,14 @@ internal static class Blur
 /// One place in the room (Android's ui/room/Tile.kt <c>TileFrame</c>): the
 /// picture or, with the camera off, the person's initials; their name at
 /// the foot with the marks that go with it (microphone off, a raised hand);
-/// the ring that lights while they speak; the corner that puts them on the
-/// stage, which shows under the pointer; and the reactions that float up
+/// the ring that lights while they speak; and the reactions that float up
 /// over it. Placed by coordinates, so that it is made once for as long as
 /// its owner is in the call and moving it is an animation.
+///
+/// No mark in a corner saying that a press makes it larger. There was one,
+/// under the pointer, and it met the stage's own controls in the same corner
+/// however its showing was conditioned: the owner had it taken away
+/// (2026-10-26), the whole picture being what is pressed.
 /// </summary>
 internal sealed class Tile : Grid
 {
@@ -330,9 +334,6 @@ internal sealed class Tile : Grid
     private readonly StackPanel _label;
     private readonly TextBlock _name;
     private readonly Border _hand;
-    private readonly Border _expand;
-    private bool _hovering;
-    private bool _expandable = true;
     private readonly Canvas _reactions = new() { IsHitTestVisible = false };
     private readonly HashSet<long> _floating = new();
     private string? _sid;
@@ -390,38 +391,15 @@ internal sealed class Tile : Grid
             IsHitTestVisible = false,
         };
         _hand.Arrives(0.5f);
-        _expand = new Border
-        {
-            Width = 26,
-            Height = 26,
-            CornerRadius = new CornerRadius(7),
-            Background = Ink.Black(0.5f),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(8),
-            IsHitTestVisible = false,
-        };
-        Motion.Hide(_expand);
         Children.Add(_content);
         Children.Add(_reactions);
         Children.Add(_plate);
         Children.Add(_hand);
-        Children.Add(_expand);
         Children.Add(_controls);
         Children.Add(_ring);
 
         // A press selects it (on to the stage or back), a second within the
         // web's 300 ms fills the screen with it (Room.tsx `Presses`).
-        PointerEntered += (_, _) =>
-        {
-            _hovering = true;
-            Corner();
-        };
-        PointerExited += (_, _) =>
-        {
-            _hovering = false;
-            Corner();
-        };
         Tapped += (_, e) =>
         {
             e.Handled = true;
@@ -441,8 +419,6 @@ internal sealed class Tile : Grid
         this.Arrives(anchor: Vector2.Zero);
     }
 
-    private void Corner() => Motion.FadeTo(_expand, _hovering && _expandable ? 1 : 0, TimeSpan.FromMilliseconds(140));
-
     /// <summary>Where it goes; the first place is taken at once, later ones are moved to over the settle curve.</summary>
     public void Place(Rect spot)
     {
@@ -461,7 +437,6 @@ internal sealed class Tile : Grid
         _name.FontSize = compact ? 10.5 : 12.5;
         _hand.Margin = new Thickness(compact ? 5 : 8);
         _hand.Width = _hand.Height = compact ? 22 : 28;
-        _expand.Width = _expand.Height = compact ? 20 : 26;
     }
 
     public Rect Spot => _spot;
@@ -538,16 +513,7 @@ internal sealed class Tile : Grid
             _controls.Children.Clear();
             if (controls is { } shown) _controls.Children.Add(shown.Make());
         }
-        // The pointer's mark in the corner is for a picture off the stage
-        // (RoomView.kt `expandable = !onStage`): on the stage that corner is
-        // the stage's own controls, and the mark showed from under them.
-        if (_expandable == onStage)
-        {
-            _expandable = !onStage;
-            Corner();
-        }
         _hand.Visibility = hand ? Visibility.Visible : Visibility.Collapsed;
-        _expand.Child = K.Symbol(selected ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right", 11, Ink.Foreground);
         this.Named(selected ? T("Show everybody") : T("Show {name} larger", ("name", name)));
 
         // What fills the place, made again only when it changes.

@@ -47,7 +47,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.shadow.Shadow
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -136,6 +135,12 @@ val LocalRoomPictures = staticCompositionLocalOf { RoomPictures.live }
  * the second press of a double one counts for the picture the first one
  * moved, wherever that picture has gone by then (RoomView `pressed`). A long
  * press opens what can be done to it, where it was pressed (`menu`).
+ *
+ * No mark in a corner saying that a press makes it larger. Every app drew
+ * one under a mouse's pointer, and on Windows and the web it met the stage's
+ * own controls in that corner however its showing was conditioned; the owner
+ * had it taken away on every platform (2026-10-26), the whole picture being
+ * what is pressed.
  */
 @Composable
 internal fun TileFrame(
@@ -146,8 +151,6 @@ internal fun TileFrame(
     compact: Boolean = false,
     /** On the stage, so a press sends it back to the grid. */
     selected: Boolean = false,
-    /** The corner symbol that says a press makes this larger; off on the stage, where the stage's own controls take that corner. */
-    expandable: Boolean = true,
     /** Square while the picture fills the screen, whose own edges are the picture's. */
     radius: Dp = Theme.tileRadius,
     /**
@@ -168,7 +171,6 @@ internal fun TileFrame(
     val hovering by hover.collectIsHoveredAsState()
     val ring by animateFloatAsState(if (marks.speaking) 1f else 0f, Theme.settle(), label = "tally")
     val lift by animateFloatAsState(if (floating) 1f else 0f, Theme.settle(), label = "floating")
-    val corner by animateFloatAsState(if (hovering) 1f else 0f, tween(140), label = "corner")
     val pressNow by rememberUpdatedState(press)
     val menuNow by rememberUpdatedState(menu)
     val label = if (selected) t("Show everybody") else t("Show {name} larger", mapOf("name" to marks.label))
@@ -214,31 +216,6 @@ internal fun TileFrame(
             enter = scaleIn(Theme.settle(), initialScale = 0.5f) + fadeIn(Theme.settle()),
             exit = scaleOut(Theme.leave(), targetScale = 0.8f) + fadeOut(Theme.leave()),
         ) { HandMark(compact) }
-        if (expandable) {
-            // Over the picture rather than beside it: anything taking room
-            // would reflow the grid as the pointer crossed it (Tile.tsx).
-            Box(
-                Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(if (compact) 5.dp else 8.dp)
-                    .graphicsLayer {
-                        alpha = corner
-                        val s = 0.9f + 0.1f * corner
-                        scaleX = s
-                        scaleY = s
-                        transformOrigin = androidx.compose.ui.graphics.TransformOrigin(1f, 0f)
-                    }
-                    .size(if (compact) 20.dp else 26.dp)
-                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(7.dp))
-                    .clearAndSetSemantics {},
-                contentAlignment = Alignment.Center,
-            ) {
-                Symbol(
-                    if (selected) "arrow.down.right.and.arrow.up.left" else "arrow.up.left.and.arrow.down.right",
-                    size = if (compact) 9.5f else 11f, weight = Font.Bold, tint = Theme.foreground,
-                )
-            }
-        }
         overlay(hovering)
         Box(
             Modifier

@@ -797,7 +797,7 @@ public struct RoomView: View {
                                            proven: proven(model.localIdentity),
                                            unverified: suspects.contains(model.localIdentity),
                                            speaking: held, muted: !model.microphoneOn, hand: model.handUp, handBesideName: cornered),
-                          compact: compact, selected: onStage, expandable: !onStage, radius: radius, floating: floating, ground: ground, edge: edge,
+                          compact: compact, selected: onStage, radius: radius, floating: floating, ground: ground, edge: edge,
                           press: { pressed(picture.id) }, select: { select(picture.id) }) {
                     SelfPicture(model: model, compact: compact)
                 } overlay: { hovering in
@@ -807,7 +807,7 @@ public struct RoomView: View {
             .contextMenu { pictureMenu(picture, onStage: onStage, label: model.localName, person: nil, sound: .voice, identity: model.localIdentity) }
         case .myShare:
             TileFrame(marks: TileMarks(label: t("{name} (you)", ["name": t("{name} (screen)", ["name": model.localName])])),
-                      compact: compact, selected: onStage, expandable: !onStage, radius: radius, ground: ground, edge: edge,
+                      compact: compact, selected: onStage, radius: radius, ground: ground, edge: edge,
                       press: { pressed(picture.id) }, select: { select(picture.id) }) {
                 MyShareFace(compact: compact, stop: stopSharing)
             } overlay: { hovering in
@@ -838,7 +838,7 @@ public struct RoomView: View {
                                                silenced: quiet,
                                                hand: person.handUp,
                                                handBesideName: cornered),
-                              compact: compact, selected: onStage, expandable: !onStage, radius: radius, ground: ground, edge: edge,
+                              compact: compact, selected: onStage, radius: radius, ground: ground, edge: edge,
                               press: { pressed(picture.id) }, select: { select(picture.id) }) {
                         SurfacePicture(surface: surface, call: model.call, compact: compact)
                     } overlay: { hovering in

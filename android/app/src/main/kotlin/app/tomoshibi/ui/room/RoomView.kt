@@ -827,7 +827,7 @@ private fun Tile(
     when (val role = picture.role) {
         Picture.Role.Watch -> {
             TileFrame(TileMarks("", unlabelled = true), press, Modifier.fillMaxSize(), compact = compact, selected = onStage,
-                expandable = false, radius = radius, ground = Color.Black, edge = edge,
+                radius = radius, ground = Color.Black, edge = edge,
                 // The empty stage's "Add a video" and the controls' list of
                 // videos open the watch panel (WatchStageView's `openPanel`).
                 content = { WatchStage(app, call, Modifier.fillMaxSize(), openPanel = { state.panel = RoomPanel.Watch }) }, overlay = controls)
@@ -842,7 +842,7 @@ private fun Tile(
                     speaking = speaking, muted = !call.microphoneOn, hand = call.handUp, handBesideName = cornered,
                 ),
                 press, Modifier.fillMaxSize(), menu = menu, compact = compact, selected = onStage,
-                expandable = !onStage, radius = radius, floating = floating, ground = ground, edge = edge,
+                radius = radius, floating = floating, ground = ground, edge = edge,
                 content = { SelfPicture(call, compact) }, overlay = controls,
             )
         }
@@ -850,7 +850,7 @@ private fun Tile(
             TileFrame(
                 TileMarks(t("{name} (you)", mapOf("name" to t("{name} (screen)", mapOf("name" to call.localName))))),
                 press, Modifier.fillMaxSize(), menu = menu, compact = compact, selected = onStage,
-                expandable = !onStage, radius = radius, ground = ground, edge = edge,
+                radius = radius, ground = ground, edge = edge,
                 content = { MyShareFace(compact) { call.scope.launch { runCatching { call.sharing.stopScreen() } } } },
                 overlay = controls,
             )
@@ -883,7 +883,7 @@ private fun Tile(
                         handBesideName = cornered,
                     ),
                     press, Modifier.fillMaxSize(), menu = menu, compact = compact, selected = onStage,
-                    expandable = !onStage, radius = radius, ground = ground, edge = edge,
+                    radius = radius, ground = ground, edge = edge,
                     content = { SurfacePicture(surface, call, compact) }, overlay = controls,
                 )
             }
