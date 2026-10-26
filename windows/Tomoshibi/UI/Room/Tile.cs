@@ -331,6 +331,8 @@ internal sealed class Tile : Grid
     private readonly TextBlock _name;
     private readonly Border _hand;
     private readonly Border _expand;
+    private bool _hovering;
+    private bool _expandable = true;
     private readonly Canvas _reactions = new() { IsHitTestVisible = false };
     private readonly HashSet<long> _floating = new();
     private string? _sid;
@@ -410,8 +412,16 @@ internal sealed class Tile : Grid
 
         // A press selects it (on to the stage or back), a second within the
         // web's 300 ms fills the screen with it (Room.tsx `Presses`).
-        PointerEntered += (_, _) => Motion.FadeTo(_expand, 1, TimeSpan.FromMilliseconds(140));
-        PointerExited += (_, _) => Motion.FadeTo(_expand, 0, TimeSpan.FromMilliseconds(140));
+        PointerEntered += (_, _) =>
+        {
+            _hovering = true;
+            Corner();
+        };
+        PointerExited += (_, _) =>
+        {
+            _hovering = false;
+            Corner();
+        };
         Tapped += (_, e) =>
         {
             e.Handled = true;
@@ -430,6 +440,8 @@ internal sealed class Tile : Grid
         IsTabStop = false;
         this.Arrives(anchor: Vector2.Zero);
     }
+
+    private void Corner() => Motion.FadeTo(_expand, _hovering && _expandable ? 1 : 0, TimeSpan.FromMilliseconds(140));
 
     /// <summary>Where it goes; the first place is taken at once, later ones are moved to over the settle curve.</summary>
     public void Place(Rect spot)
@@ -525,6 +537,14 @@ internal sealed class Tile : Grid
             _controlsKey = controlsKey;
             _controls.Children.Clear();
             if (controls is { } shown) _controls.Children.Add(shown.Make());
+        }
+        // The pointer's mark in the corner is for a picture off the stage
+        // (RoomView.kt `expandable = !onStage`): on the stage that corner is
+        // the stage's own controls, and the mark showed from under them.
+        if (_expandable == onStage)
+        {
+            _expandable = !onStage;
+            Corner();
         }
         _hand.Visibility = hand ? Visibility.Visible : Visibility.Collapsed;
         _expand.Child = K.Symbol(selected ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right", 11, Ink.Foreground);
