@@ -82,7 +82,7 @@ internal sealed class SoundPanel : Grid
             _feature = feature;
             _off = new Border
             {
-                Background = Ink.White(0.07f),
+                Background = Ink.Wash(0.07f),
                 CornerRadius = new CornerRadius(9),
                 Padding = new Thickness(7, 2, 7, 2),
                 VerticalAlignment = VerticalAlignment.Center,
@@ -104,8 +104,8 @@ internal sealed class SoundPanel : Grid
             {
                 Child = column,
                 CornerRadius = new CornerRadius(16),
-                Background = Ink.White(0.05f),
-                BorderBrush = Ink.White(0.07f),
+                Background = Ink.Wash(0.05f),
+                BorderBrush = Ink.Wash(0.07f),
                 BorderThickness = new Thickness(1),
                 Padding = new Thickness(12, 10, 12, 8),
             });
@@ -202,7 +202,7 @@ internal sealed class SoundPanel : Grid
                 IsThumbToolTipEnabled = false,
                 VerticalAlignment = VerticalAlignment.Center,
             };
-            var track = Ink.Black(0.28f);
+            var track = Ink.Well(0.28f);
             var fill = Ink.ForegroundAt(0.9f);
             var thumb = Ink.Brush(Shade.White);
             foreach (var state in new[] { "", "PointerOver", "Pressed", "Disabled" })
@@ -231,7 +231,7 @@ internal sealed class SoundPanel : Grid
             // the two read as opposites, and only one is being decided.
             var label = setting.Blocked ? T("Unmute {name}", ("name", name)) : T("Mute {name}", ("name", name));
             _mute.Content = K.Symbol(setting.Blocked ? "speaker.slash.fill" : "speaker.wave.2.fill", 11.5, setting.Blocked ? Ink.Foreground : Ink.Muted);
-            _mute.Resting = Shade.White.WithAlpha(setting.Blocked ? 0.16f : 0.06f);
+            _mute.Resting = Ink.WashShade(setting.Blocked ? 0.16f : 0.06f);
             _mute.Named(label, "sound." + _sound.Key() + "." + person.Id);
             _mute.Tip(label);
             _slider.IsEnabled = !setting.Blocked;

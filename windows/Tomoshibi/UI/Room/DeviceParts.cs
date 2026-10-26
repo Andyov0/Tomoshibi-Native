@@ -29,7 +29,7 @@ internal sealed class LevelMeter : StackPanel
                 Width = 4,
                 Height = 14,
                 CornerRadius = new CornerRadius(2),
-                Background = Ink.White(0.12f),
+                Background = Ink.Wash(0.12f),
                 BackgroundTransition = new BrushTransition { Duration = TimeSpan.FromMilliseconds(120) },
             };
             _segments.Add(segment);
@@ -45,7 +45,7 @@ internal sealed class LevelMeter : StackPanel
         for (var i = 0; i < _segments.Count; i++) if ((double)i / _segments.Count < level) lit = i + 1;
         if (lit == _lit) return;
         _lit = lit;
-        for (var i = 0; i < _segments.Count; i++) _segments[i].Background = i < lit ? Ink.Tally : Ink.White(0.12f);
+        for (var i = 0; i < _segments.Count; i++) _segments[i].Background = i < lit ? Ink.Tally : Ink.Wash(0.12f);
     }
 }
 

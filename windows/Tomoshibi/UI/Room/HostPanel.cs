@@ -52,7 +52,7 @@ internal sealed class HostPanel : Grid
     {
         var line = Panels.Heading(T("Running this room"), "crown.fill", T("Close"), close);
         // The crown in the tally, as the bar's button is.
-        if (line.Children[0] is Border tile) tile.Child = K.Symbol("crown.fill", 12, Ink.Tally);
+        if (line.Children[0] is Border tile) tile.Child = K.Symbol("crown.fill", 12, Ink.TallyText);
         return line;
     }
 
@@ -171,8 +171,8 @@ internal sealed class HostPanel : Grid
     {
         Child = child,
         CornerRadius = new CornerRadius(16),
-        Background = tint is { } t ? Ink.Brush(t.WithAlpha(0.10f)) : Ink.White(0.05f),
-        BorderBrush = tint is { } e ? Ink.Brush(e.WithAlpha(0.28f)) : Ink.White(0.07f),
+        Background = tint is { } t ? Ink.Brush(t.WithAlpha(0.10f)) : Ink.Wash(0.05f),
+        BorderBrush = tint is { } e ? Ink.Brush(e.WithAlpha(0.28f)) : Ink.Wash(0.07f),
         BorderThickness = new Thickness(1),
         Padding = new Thickness(padding),
     };
@@ -200,8 +200,8 @@ internal sealed class HostPanel : Grid
             var box = new Border
             {
                 Child = address,
-                Background = Ink.Black(0.25f),
-                BorderBrush = Ink.White(0.07f),
+                Background = Ink.Well(0.25f),
+                BorderBrush = Ink.Wash(0.07f),
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(10, 8, 10, 8),
@@ -353,7 +353,7 @@ internal sealed class HostPanel : Grid
         var words = K.Text(f.Scoped
             ? T("Everybody will be disconnected and told the room has closed. Links made in the call stop working; links made on an account page do not.")
             : T("Everybody will be disconnected and told the room has closed. Links to it stop working."), 12);
-        var top = K.Line(10, K.Fixed(new Border { Width = 18, Child = K.Symbol("door.left.hand.closed", 13, Ink.Danger), VerticalAlignment = VerticalAlignment.Top }), K.Flex(words));
+        var top = K.Line(10, K.Fixed(new Border { Width = 18, Child = K.Symbol("door.left.hand.closed", 13, Ink.DangerText), VerticalAlignment = VerticalAlignment.Top }), K.Flex(words));
         var cancel = Tap.Words(T("Cancel"), height: 30, size: 12.5);
         cancel.Named(T("Cancel"), "host.cancel");
         cancel.Click += (_, _) =>
@@ -368,7 +368,7 @@ internal sealed class HostPanel : Grid
         close.Named(T("Close the room"), "host.close");
         close.Click += (_, _) => _ = f.Dissolve();
         var buttons = K.Line(8, K.Fixed(cancel), K.Flex(close));
-        var card = Card(K.Column(12, top, buttons), Theme.Danger, 12);
+        var card = Card(K.Column(12, top, buttons), Ink.Palette.Danger, 12);
         return card;
     }
 
@@ -384,8 +384,8 @@ internal sealed class HostPanel : Grid
         tap.PointerEntered += (_, _) =>
         {
             if (!tap.IsEnabled) return;
-            tap.Content = K.Symbol(symbol, 11, destructive ? Ink.Danger : Ink.Foreground);
-            if (destructive) tap.Resting = Theme.Danger.WithAlpha(0.16f);
+            tap.Content = K.Symbol(symbol, 11, destructive ? Ink.DangerText : Ink.Foreground);
+            if (destructive) tap.Resting = Ink.Palette.Danger.WithAlpha(0.16f);
         };
         tap.PointerExited += (_, _) =>
         {
@@ -407,7 +407,7 @@ internal sealed class HostPanel : Grid
         var row = K.Row(6, mark, K.Text(title, 11.5, K.Medium, Ink.Muted, lines: 1));
         row.VerticalAlignment = VerticalAlignment.Center;
         var tap = new Tap(row, Look.Plain, 26, padding: 10) { HorizontalAlignment = HorizontalAlignment.Left };
-        tap.PointerEntered += (_, _) => tap.Resting = Theme.Danger.WithAlpha(0.14f);
+        tap.PointerEntered += (_, _) => tap.Resting = Ink.Palette.Danger.WithAlpha(0.14f);
         tap.PointerExited += (_, _) => tap.Resting = null;
         tap.Named(title);
         tap.Click += (_, _) => act();

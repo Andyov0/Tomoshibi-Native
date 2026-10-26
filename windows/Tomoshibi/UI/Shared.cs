@@ -81,7 +81,7 @@ internal static class Shared
     /// <summary>A line under the form saying something about it, in the muted voice (Screens.kt <c>Note</c>).</summary>
     public static TextBlock Note(string text, bool danger = false)
     {
-        var note = K.Text(text, 12.5, ink: danger ? Ink.Danger : Ink.Muted, align: TextAlignment.Center);
+        var note = K.Text(text, 12.5, ink: danger ? Ink.DangerText : Ink.Muted, align: TextAlignment.Center);
         note.HorizontalAlignment = HorizontalAlignment.Stretch;
         return note;
     }
@@ -153,7 +153,7 @@ internal static class Shared
     public sealed class ProblemSlot : Grid
     {
         private readonly AppModel _app;
-        private readonly TextBlock _words = K.Text("", 12.5, ink: Ink.Danger);
+        private readonly TextBlock _words = K.Text("", 12.5, ink: Ink.DangerText);
         private readonly Tap _close;
         private bool _shown;
 
@@ -165,7 +165,7 @@ internal static class Shared
             Background = Ink.DangerAt(0.10f);
             CornerRadius = new CornerRadius(13);
             Padding = new Thickness(12, 9, 12, 9);
-            Children.Add(K.Line(8, K.Fixed(K.Symbol("exclamationmark.circle.fill", 12.5, Ink.Danger).Pad(0, 1, 0, 0).At(HorizontalAlignment.Left, VerticalAlignment.Top)), K.Flex(_words), K.Fixed(_close)));
+            Children.Add(K.Line(8, K.Fixed(K.Symbol("exclamationmark.circle.fill", 12.5, Ink.DangerText).Pad(0, 1, 0, 0).At(HorizontalAlignment.Left, VerticalAlignment.Top)), K.Flex(_words), K.Fixed(_close)));
             this.Arrives();
             Visibility = Visibility.Collapsed;
             Update();
@@ -207,7 +207,7 @@ internal static class Shared
             _close = Tap.Icon("xmark", T("Close"), size: 24, glyph: 10);
             _close.Click += (_, _) => app.Problem = null;
             _mark = new Grid();
-            _capsule = K.Glass(null, 22, new Thickness(14, 9, 7, 9));
+            _capsule = K.Floating(null, 22, new Thickness(14, 9, 7, 9));
             _capsule.MaxWidth = 520;
             _capsule.Margin = new Thickness(20, 0, 20, clearance);
             _holder = K.Holding(_capsule).Arrives(1f, fromY: 60);
@@ -232,7 +232,7 @@ internal static class Shared
             }
             _words.Text = problem;
             var stays = _app.ProblemStays;
-            var symbol = K.Symbol(stays ? "exclamationmark.circle.fill" : "info.circle", 14, stays ? Ink.Tally : Ink.Muted);
+            var symbol = K.Symbol(stays ? "exclamationmark.circle.fill" : "info.circle", 14, stays ? Ink.TallyText : Ink.Muted);
             _capsule.Padding = new Thickness(14, 9, stays ? 7 : 16, 9);
             var parts = new List<(UIElement, double)> { K.Fixed(symbol), K.Flex(_words) };
             if (stays) parts.Add(K.Fixed(_close));
@@ -255,14 +255,18 @@ internal static class Shared
     /// <summary>
     /// The microphone and the camera a join starts with (Pieces.kt
     /// <c>DeviceSwitches</c>): red when off, and remembered across launches.
+    /// Laid straight on the picture of yourself (the narrow lobby's), they
+    /// wear the picture's look while the camera is on and fills it, and the
+    /// scheme's own while it is off and the ground shows.
     /// </summary>
-    public static StackPanel DeviceSwitches(AppModel app, double size = 44, Look onLook = Look.Plain)
+    public static StackPanel DeviceSwitches(AppModel app, double size = 44, Look look = Look.Plain, bool onPicture = false)
     {
         Tap? microphone = null, camera = null;
         void Paint()
         {
             var mic = app.StartWithMicrophone;
             var cam = app.StartWithCamera;
+            var onLook = onPicture && cam ? Look.Picture : look;
             microphone!.Content = K.Symbol(mic ? "mic.fill" : "mic.slash.fill", size * 0.40, Tap.InkFor(mic ? onLook : Look.Destructive));
             microphone.Look = mic ? onLook : Look.Destructive;
             microphone.Tip(mic ? T("Mute microphone") : T("Unmute microphone"));
@@ -270,8 +274,8 @@ internal static class Shared
             camera.Look = cam ? onLook : Look.Destructive;
             camera.Tip(cam ? T("Turn camera off") : T("Turn camera on"));
         }
-        microphone = new Tap(new Grid(), onLook, size, circle: true);
-        camera = new Tap(new Grid(), onLook, size, circle: true);
+        microphone = new Tap(new Grid(), look, size, circle: true);
+        camera = new Tap(new Grid(), look, size, circle: true);
         microphone.Click += (_, _) => { app.StartWithMicrophone = !app.StartWithMicrophone; Paint(); };
         camera.Click += (_, _) => { app.StartWithCamera = !app.StartWithCamera; Paint(); };
         Paint();
@@ -298,6 +302,9 @@ internal static class Shared
             Background = radius > 0 ? Ink.Surface : Ink.Background;
             Update();
         }
+
+        /// <summary>Whether the camera's picture is on the stage, rather than its ground.</summary>
+        public bool Showing => _self != null;
 
         public void Update()
         {
@@ -340,15 +347,15 @@ internal static class Shared
             Plain(box);
             nameField = box;
         }
-        var column = K.Column(0, IdentityRow(fixedName ? "person.fill.checkmark" : "person", fixedName ? Ink.Tally : Ink.Muted, nameField));
+        var column = K.Column(0, IdentityRow(fixedName ? "person.fill.checkmark" : "person", fixedName ? Ink.TallyText : Ink.Muted, nameField));
         if (!nameOnly)
         {
-            column.Children.Add(new Border { Height = 1, Background = Ink.White(0.07f) });
-            var key = K.Symbol("key", 15, passphrase.Length == 0 ? Ink.Muted : Ink.Tally);
+            column.Children.Add(new Border { Height = 1, Background = Ink.Wash(0.07f) });
+            var key = K.Symbol("key", 15, passphrase.Length == 0 ? Ink.Muted : Ink.TallyText);
             var secret = Fields.Secret(T("Passphrase"), passphrase, text =>
             {
                 onPassphrase(text);
-                if (key is FontIcon icon) icon.Foreground = text.Length == 0 ? Ink.Muted : Ink.Tally;
+                if (key is FontIcon icon) icon.Foreground = text.Length == 0 ? Ink.Muted : Ink.TallyText;
             }, submit: submit);
             Plain(secret);
             column.Children.Add(IdentityRow(key, secret));
@@ -357,8 +364,8 @@ internal static class Shared
         {
             Child = column,
             CornerRadius = new CornerRadius(18),
-            Background = Ink.Black(0.22f),
-            BorderBrush = Ink.White(0.10f),
+            Background = Ink.Well(0.22f),
+            BorderBrush = Ink.Wash(0.10f),
             BorderThickness = new Thickness(1),
             HorizontalAlignment = HorizontalAlignment.Stretch,
         };
@@ -400,8 +407,8 @@ internal static class Shared
     {
         var column = K.Flowing(10);
         var sealedNow = on && word.Length > 0;
-        var lockIcon = K.Symbol(sealedNow ? "lock.fill" : "lock", 13, sealedNow ? Ink.Tally : Ink.Muted);
-        var title = K.Text(sealedNow ? T("This call is sealed") : T("Seal this call"), 14, sealedNow ? K.Semibold : K.Regular, sealedNow ? Ink.Tally : Ink.Foreground);
+        var lockIcon = K.Symbol(sealedNow ? "lock.fill" : "lock", 13, sealedNow ? Ink.TallyText : Ink.Muted);
+        var title = K.Text(sealedNow ? T("This call is sealed") : T("Seal this call"), 14, sealedNow ? K.Semibold : K.Regular, sealedNow ? Ink.TallyText : Ink.Foreground);
         var wordBox = Fields.Secret(T("Sealing word"), word, _ => { }, height: 40);
         var details = K.Column(8, wordBox, K.Text(T("Everybody who types the same word can hear each other, and the server carrying the call cannot. Tell people the word some other way."), 11.5, ink: Ink.Muted));
         details.Arrives();
@@ -412,10 +419,10 @@ internal static class Shared
             if (lockIcon is FontIcon icon)
             {
                 icon.Glyph = isSealed ? "" : "";
-                icon.Foreground = isSealed ? Ink.Tally : Ink.Muted;
+                icon.Foreground = isSealed ? Ink.TallyText : Ink.Muted;
             }
             title.Text = isSealed ? T("This call is sealed") : T("Seal this call");
-            title.Foreground = isSealed ? Ink.Tally : Ink.Foreground;
+            title.Foreground = isSealed ? Ink.TallyText : Ink.Foreground;
             title.FontWeight = isSealed ? K.Semibold : K.Regular;
         }
         var toggle = Fields.Switch(on, value =>
@@ -514,8 +521,8 @@ internal static class Shared
         {
             Child = column,
             CornerRadius = new CornerRadius(18),
-            Background = Ink.Black(0.22f),
-            BorderBrush = Ink.White(0.08f),
+            Background = Ink.Well(0.22f),
+            BorderBrush = Ink.Wash(0.08f),
             BorderThickness = new Thickness(1),
         };
     }

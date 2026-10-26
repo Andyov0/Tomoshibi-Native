@@ -2,8 +2,13 @@
 <Application
     x:Class="Tomoshibi.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    RequestedTheme="Dark">
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!--
+        No RequestedTheme: the app's own theme is the system's choice for
+        apps, as it changes. Each screen and each thing laid over one asks
+        for its scheme's theme itself (Ink.Element), the meeting's dark
+        whatever the system says (Tomoshibi.Basics.Daylight).
+    -->
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -11,12 +16,20 @@
                 <ResourceDictionary>
                     <!--
                         The apps' palette (Theme.swift, Android's Theme.kt, and
-                        Tomoshibi.Basics.Theme, where the numbers live): dark in
-                        every system appearance, Apple's dark greys, and one
-                        signal colour. The Windows controls' own fills and
-                        fields are brought to the same greys here, so that a
-                        TextBox or a ToggleSwitch is the platform's control in
-                        the product's colours rather than Windows' grey.
+                        Tomoshibi.Basics.Theme, where the numbers live): Apple's
+                        greys, dark and light, and one signal colour. The
+                        Windows controls' own fills and fields are brought to
+                        the same greys here, so that a TextBox or a ToggleSwitch
+                        is the platform's control in the product's colours
+                        rather than Windows' grey. The light ones are the dark
+                        ones turned over as the palette turns its border over:
+                        white washes become black at the same strength and the
+                        ink becomes #1C1C1E; a field, black at a quarter over
+                        the dark ground, is the raised grey #E5E5EA the palette
+                        keeps for fills inside a surface (Ink.Well), white
+                        while it is typed in. The accent's brushes are here for
+                        each theme so that Ink.ApplyAccent can paint each in
+                        its own scheme's tally.
                     -->
                     <ResourceDictionary.ThemeDictionaries>
                         <ResourceDictionary x:Key="Dark">
@@ -40,6 +53,54 @@
                             <SolidColorBrush x:Key="ComboBoxBackground" Color="#12FFFFFF" />
                             <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#21FFFFFF" />
                             <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#17FFFFFF" />
+                            <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="AccentTextFillColorTertiaryBrush" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="TextControlElevationBorderFocusedBrush" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="ProgressRingForegroundThemeBrush" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="TextOnAccentFillColorPrimaryBrush" Color="#FFFFA23B" />
+                        </ResourceDictionary>
+                        <ResourceDictionary x:Key="Light">
+                            <SolidColorBrush x:Key="TextControlBackground" Color="#FFE5E5EA" />
+                            <SolidColorBrush x:Key="TextControlBackgroundPointerOver" Color="#FFDEDEE3" />
+                            <SolidColorBrush x:Key="TextControlBackgroundFocused" Color="#FFFFFFFF" />
+                            <SolidColorBrush x:Key="TextControlBorderBrush" Color="#1A000000" />
+                            <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#2E000000" />
+                            <SolidColorBrush x:Key="TextControlForeground" Color="#FF1C1C1E" />
+                            <SolidColorBrush x:Key="TextControlForegroundFocused" Color="#FF1C1C1E" />
+                            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#993C3C43" />
+                            <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#993C3C43" />
+                            <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#993C3C43" />
+                            <SolidColorBrush x:Key="ToggleSwitchFillOff" Color="#24000000" />
+                            <SolidColorBrush x:Key="ToggleSwitchFillOffPointerOver" Color="#33000000" />
+                            <SolidColorBrush x:Key="ToggleSwitchStrokeOff" Color="#1A000000" />
+                            <SolidColorBrush x:Key="ToggleSwitchKnobFillOff" Color="#FF8E8E93" />
+                            <SolidColorBrush x:Key="ToggleSwitchKnobFillOffPointerOver" Color="#FF636366" />
+                            <SolidColorBrush x:Key="ToggleSwitchKnobFillOn" Color="#FFFFFFFF" />
+                            <SolidColorBrush x:Key="ToggleSwitchKnobFillOnPointerOver" Color="#FFFFFFFF" />
+                            <SolidColorBrush x:Key="ComboBoxBackground" Color="#FFE5E5EA" />
+                            <SolidColorBrush x:Key="ComboBoxBackgroundPointerOver" Color="#FFDEDEE3" />
+                            <SolidColorBrush x:Key="ComboBoxBorderBrush" Color="#17000000" />
+                            <SolidColorBrush x:Key="AccentFillColorDefaultBrush" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="AccentFillColorSecondaryBrush" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="AccentFillColorTertiaryBrush" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="AccentTextFillColorTertiaryBrush" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="ToggleSwitchFillOn" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="ToggleSwitchFillOnPointerOver" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="ToggleSwitchFillOnPressed" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="TextControlBorderBrushFocused" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="TextControlElevationBorderFocusedBrush" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="ProgressRingForegroundThemeBrush" Color="#FFFFA23B" />
+                            <SolidColorBrush x:Key="TextOnAccentFillColorPrimaryBrush" Color="#FFFFA23B" />
                         </ResourceDictionary>
                     </ResourceDictionary.ThemeDictionaries>
 

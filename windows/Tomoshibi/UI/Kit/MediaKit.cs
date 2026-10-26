@@ -31,7 +31,7 @@ internal static class MediaKit
     /// </summary>
     public static Border Glass(UIElement content, double height = PanelHeight)
     {
-        var shade = new Border { Background = Ink.Brush(Theme.Background.WithAlpha(0.68f)), CornerRadius = new CornerRadius(22), Child = content };
+        var shade = new Border { Background = Ink.BackgroundAt(0.68f), CornerRadius = new CornerRadius(22), Child = content };
         var glass = K.Glass(shade, 22);
         glass.Height = height;
         return glass;
@@ -61,7 +61,7 @@ internal static class MediaKit
     }
 
     /// <summary>A hairline between the parts of a panel (<c>MediaRule</c>).</summary>
-    public static Border Rule() => new() { Height = 1, Background = Ink.White(0.07f) };
+    public static Border Rule() => new() { Height = 1, Background = Ink.Wash(0.07f) };
 
     /// <summary>
     /// A small round button that lights under the pointer: closing, taking a
@@ -104,7 +104,7 @@ internal static class MediaKit
             Width = 44,
             Height = 44,
             CornerRadius = new CornerRadius(22),
-            Background = Ink.White(0.07f),
+            Background = Ink.Wash(0.07f),
             Child = K.Symbol(symbol, 17, Ink.Muted),
             HorizontalAlignment = HorizontalAlignment.Center,
         };
@@ -125,7 +125,7 @@ internal static class MediaKit
             CornerRadius = new CornerRadius(10),
             Padding = new Thickness(8, 6, 8, 6),
         };
-        if (lit) tap.Resting = Shade.White.WithAlpha(0.09f);
+        if (lit) tap.Resting = Ink.WashShade(0.09f);
         if (act != null) tap.Click += (_, _) => act();
         else tap.IsTabStop = false;
         return tap;
@@ -142,7 +142,7 @@ internal static class MediaKit
     {
         // The raised surface under an accent tint, flat: a blend of the two
         // until the gradients went.
-        var grid = new Grid { Width = width, Height = height, CornerRadius = new CornerRadius(corner), Background = Ink.SurfaceHigh, BorderBrush = Ink.White(0.08f), BorderThickness = new Thickness(1) };
+        var grid = new Grid { Width = width, Height = height, CornerRadius = new CornerRadius(corner), Background = Ink.SurfaceHigh, BorderBrush = Ink.Wash(0.08f), BorderThickness = new Thickness(1) };
         grid.Children.Add(new Border { Background = Ink.TallyAt(0.18f) });
         grid.Children.Add(K.Symbol(symbol, 13, Ink.ForegroundAt(0.7f)).At(HorizontalAlignment.Center, VerticalAlignment.Center));
         if (url.StartsWith("http", StringComparison.Ordinal))
@@ -193,7 +193,7 @@ internal static class MediaKit
     /// <summary>A few words in a small capsule: what a song is, that it is paused (<c>MediaBadge</c>).</summary>
     public static Border Badge(string text, string? symbol = null, bool lit = false)
     {
-        var ink = lit ? Ink.Tally : Ink.ForegroundAt(0.75f);
+        var ink = lit ? Ink.TallyText : Ink.ForegroundAt(0.75f);
         var row = K.Row(4);
         if (symbol != null) row.Children.Add(K.Symbol(symbol, 8.5, ink));
         row.Children.Add(K.Text(text, 10.5, K.Semibold, ink, lines: 1));
@@ -201,8 +201,8 @@ internal static class MediaKit
         {
             Child = row,
             CornerRadius = new CornerRadius(9),
-            Background = lit ? Ink.Brush(Appearance.Shared.Tally.WithAlpha(0.16f)) : Ink.White(0.09f),
-            BorderBrush = lit ? Ink.Brush(Appearance.Shared.Tally.WithAlpha(0.35f)) : null,
+            Background = lit ? Ink.TallyAt(0.16f) : Ink.Wash(0.09f),
+            BorderBrush = lit ? Ink.TallyAt(0.35f) : null,
             BorderThickness = new Thickness(lit ? 1 : 0),
             Padding = new Thickness(7, 3, 7, 3),
             VerticalAlignment = VerticalAlignment.Center,
@@ -251,13 +251,13 @@ internal static class MediaKit
             Child = line,
             Height = 34,
             CornerRadius = new CornerRadius(17),
-            Background = Ink.White(0.06f),
-            BorderBrush = Ink.White(0.10f),
+            Background = Ink.Wash(0.06f),
+            BorderBrush = Ink.Wash(0.10f),
             BorderThickness = new Thickness(1),
             Padding = new Thickness(12, 0, 6, 0),
         };
-        field.GotFocus += (_, _) => capsule.BorderBrush = Ink.Brush(Appearance.Shared.Tally.WithAlpha(0.6f));
-        field.LostFocus += (_, _) => capsule.BorderBrush = Ink.White(0.10f);
+        field.GotFocus += (_, _) => capsule.BorderBrush = Ink.TallyAt(0.6f);
+        field.LostFocus += (_, _) => capsule.BorderBrush = Ink.Wash(0.10f);
         box = field;
         return capsule;
     }
@@ -288,7 +288,7 @@ internal static class MediaKit
         var fill = tint ?? Ink.Foreground;
         foreach (var state in new[] { "", "PointerOver", "Pressed", "Disabled" })
         {
-            slider.Resources["SliderTrackFill" + state] = Ink.White(0.14f);
+            slider.Resources["SliderTrackFill" + state] = Ink.Wash(0.14f);
             slider.Resources["SliderTrackValueFill" + state] = fill;
             slider.Resources["SliderThumbBackground" + state] = Ink.Brush(Shade.White);
             slider.Resources["SliderOuterThumbBackground" + state] = Ink.Brush(Shade.White);

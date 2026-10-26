@@ -27,7 +27,7 @@ internal static class TrackRows
             row.PointerEntered += (_, _) =>
             {
                 end.Children.Clear();
-                end.Children.Add(K.Symbol("plus.circle.fill", 17, Ink.Tally).At(HorizontalAlignment.Right, VerticalAlignment.Center));
+                end.Children.Add(K.Symbol("plus.circle.fill", 17, Ink.TallyText).At(HorizontalAlignment.Right, VerticalAlignment.Center));
             };
             row.PointerExited += (_, _) =>
             {
@@ -42,8 +42,8 @@ internal static class TrackRows
     /// <summary>A line of red words in a panel, for what did not work (<c>MediaProblem</c>).</summary>
     public static Border Problem(string text) => new()
     {
-        Child = K.Line(6, K.Fixed(K.Symbol("exclamationmark.circle.fill", 11, Ink.Danger).At(HorizontalAlignment.Left, VerticalAlignment.Top)), K.Flex(K.Text(text, 12, ink: Ink.Danger))),
-        Background = Ink.Brush(Theme.Danger.WithAlpha(0.12f)),
+        Child = K.Line(6, K.Fixed(K.Symbol("exclamationmark.circle.fill", 11, Ink.DangerText).At(HorizontalAlignment.Left, VerticalAlignment.Top)), K.Flex(K.Text(text, 12, ink: Ink.DangerText))),
+        Background = Ink.DangerAt(0.12f),
         CornerRadius = new CornerRadius(10),
         Padding = new Thickness(10, 8, 10, 8),
         Margin = new Thickness(0, 0, 0, 6),
@@ -220,6 +220,6 @@ internal sealed class PlaylistTab : MusicTabView
         all.IsEnabled = found.Tracks.Length > 0;
         all.VerticalAlignment = VerticalAlignment.Center;
         var line = K.Line(10, K.Fixed(MediaKit.Artwork(found.Tracks.FirstOrDefault()?.Cover ?? "", 44, 44, "music.note.list", 8)), K.Flex(words), K.Fixed(all));
-        return new Border { Child = line, Background = Ink.White(0.05f), CornerRadius = new CornerRadius(14), Padding = new Thickness(10), Margin = new Thickness(0, 0, 0, 6) };
+        return new Border { Child = line, Background = Ink.Wash(0.05f), CornerRadius = new CornerRadius(14), Padding = new Thickness(10), Margin = new Thickness(0, 0, 0, 6) };
     }
 }

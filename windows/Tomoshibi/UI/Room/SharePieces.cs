@@ -34,7 +34,7 @@ internal static class SharePieces
             Width = disc,
             Height = disc,
             CornerRadius = new CornerRadius(disc / 2.0),
-            Background = Ink.White(0.08f),
+            Background = Ink.Wash(0.08f),
             HorizontalAlignment = HorizontalAlignment.Center,
             Child = K.Symbol("rectangle.inset.filled.and.person.filled", compact ? 15 : 22, Ink.ForegroundAt(0.9f)),
         });
@@ -79,7 +79,7 @@ internal static class SharePieces
             CornerRadius = new CornerRadius(disc / 2.0),
             Background = Ink.TallyAt(0.18f),
             HorizontalAlignment = HorizontalAlignment.Center,
-            Child = K.Symbol("rectangle.on.rectangle", compact ? 14 : 24, Ink.Tally),
+            Child = K.Symbol("rectangle.on.rectangle", compact ? 14 : 24, Ink.TallyText),
         });
         column.Children.Add(K.Text(T("You are sharing your screen"), compact ? 11 : 14, K.Semibold, lines: compact ? 1 : 2, align: TextAlignment.Center));
         if (stop != null && !compact)
@@ -132,7 +132,7 @@ internal static class SharePieces
     public static Grid Moving(string to)
     {
         var named = Say(to.Trim());
-        var grid = new Grid { Background = Ink.Brush(Theme.Background.WithAlpha(0.86f)), IsHitTestVisible = true };
+        var grid = new Grid { Background = Ink.BackgroundAt(0.86f), IsHitTestVisible = true };
         grid.Tapped += (_, e) => e.Handled = true;
         grid.PointerPressed += (_, e) => e.Handled = true;
         var column = K.Column(12,
@@ -238,7 +238,7 @@ internal sealed class StrainCard : Grid
             K.Text(T("Your connection is sending about {have} Mbps, and this share needs about {need} Mbps, so it stutters.",
                 ("have", TomoshibiProtocolMethods.StrainMegabits(hint.Have)), ("need", TomoshibiProtocolMethods.StrainMegabits(hint.Need))), 12.5),
             K.Text(T("Switch to {size} at {rate} frames a second?", ("size", Label(hint.To.Quality)), ("rate", hint.To.FrameRate)), 12.5, ink: Ink.Muted));
-        var top = K.Line(10, K.Fixed(new Border { Width = 20, Child = K.Symbol("gauge.with.dots.needle.33percent", 14, Ink.Tally), VerticalAlignment = VerticalAlignment.Top }), K.Flex(words));
+        var top = K.Line(10, K.Fixed(new Border { Width = 20, Child = K.Symbol("gauge.with.dots.needle.33percent", 14, Ink.TallyText), VerticalAlignment = VerticalAlignment.Top }), K.Flex(words));
         var later = Tap.Words(T("Not now"), height: 30, size: 12.5);
         later.Click += (_, _) => call.StrainDecline();
         var take = Tap.Words(T("Switch"), look: Look.Prominent, height: 30, size: 12.5);

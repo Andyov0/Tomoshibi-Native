@@ -287,7 +287,7 @@ internal sealed class UpdateBanner : Grid
 
     private Grid Said(string? badge, string title, string[] lines, Tap[] buttons, bool warning = false, string? problem = null, UIElement[]? extra = null)
     {
-        var tint = warning ? Ink.Danger : Ink.Tally;
+        var tint = warning ? Ink.DangerText : Ink.TallyText;
         var circle = new Border
         {
             Width = 30,
@@ -304,7 +304,7 @@ internal sealed class UpdateBanner : Grid
         }
         var words = K.Column(4, K.Text(title, 14, K.Semibold));
         foreach (var line in lines) words.Children.Add(K.Text(line, 12.5, ink: Ink.Muted, lines: _sidebar ? 3 : 6));
-        if (problem != null) words.Children.Add(K.Text(problem, 12.5, ink: Ink.Danger));
+        if (problem != null) words.Children.Add(K.Text(problem, 12.5, ink: Ink.DangerText));
         foreach (var part in extra ?? []) words.Children.Add(part);
         if (buttons.Length > 0)
         {

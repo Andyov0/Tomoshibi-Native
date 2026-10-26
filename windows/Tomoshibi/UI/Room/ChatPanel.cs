@@ -21,7 +21,7 @@ internal static class Panels
             Width = 26,
             Height = 26,
             CornerRadius = new CornerRadius(8),
-            Background = Ink.White(0.09f),
+            Background = Ink.Wash(0.09f),
             Child = K.Symbol(symbol, 12, Ink.ForegroundAt(0.85f)),
         };
         var closeTap = Tap.Icon("xmark", closeLabel, Look.Clear, 26, 11);
@@ -63,7 +63,7 @@ internal static class Panels
                     paragraph.Inlines.Add(new Run { Text = words.Words });
                     break;
                 case Basics.Linked.Piece.Link link:
-                    var hyperlink = new Hyperlink { Foreground = Ink.Tally, UnderlineStyle = UnderlineStyle.Single };
+                    var hyperlink = new Hyperlink { Foreground = Ink.TallyText, UnderlineStyle = UnderlineStyle.Single };
                     hyperlink.Inlines.Add(new Run { Text = link.Href });
                     if (Uri.TryCreate(link.Href, UriKind.Absolute, out var uri)) hyperlink.NavigateUri = uri;
                     paragraph.Inlines.Add(hyperlink);
@@ -100,7 +100,7 @@ internal sealed class ChatPanel : Grid
         _call = call;
         // A plain disc, where an accent glow was until the gradients went.
         var glow = new Grid { Width = 56, Height = 56, HorizontalAlignment = HorizontalAlignment.Center };
-        glow.Children.Add(new Microsoft.UI.Xaml.Shapes.Ellipse { Fill = Ink.White(0.08f) });
+        glow.Children.Add(new Microsoft.UI.Xaml.Shapes.Ellipse { Fill = Ink.Wash(0.08f) });
         glow.Children.Add(K.Symbol("bubble.left.and.text.bubble.right", 26, Ink.ForegroundAt(0.5f)));
         var emptyWords = K.Text(T("Messages disappear when the call ends."), 12, ink: Ink.Muted, align: TextAlignment.Center);
         emptyWords.MaxWidth = 200;
@@ -143,16 +143,16 @@ internal sealed class ChatPanel : Grid
         var composer = new Border
         {
             Child = K.Line(8, K.Flex(_box), K.Fixed(_send)),
-            Background = Ink.Black(0.22f),
-            BorderBrush = Ink.White(0.09f),
+            Background = Ink.Well(0.22f),
+            BorderBrush = Ink.Wash(0.09f),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(18),
             Padding = new Thickness(4, 5, 5, 5),
         };
         _box.GotFocus += (_, _) => composer.BorderBrush = Ink.TallyAt(0.55f);
-        _box.LostFocus += (_, _) => composer.BorderBrush = Ink.White(0.09f);
+        _box.LostFocus += (_, _) => composer.BorderBrush = Ink.Wash(0.09f);
         _counter = K.Text("", 10.5, ink: Ink.Muted, tabular: true);
-        _failed = K.Row(5, K.Symbol("exclamationmark.circle.fill", 11, Ink.Danger), K.Text(T("That could not be sent."), 11, ink: Ink.Danger));
+        _failed = K.Row(5, K.Symbol("exclamationmark.circle.fill", 11, Ink.DangerText), K.Text(T("That could not be sent."), 11, ink: Ink.DangerText));
         _under = K.Line(0, K.Flex(_failed), K.Fixed(_counter));
         _under.Padding = new Thickness(8, 4, 8, 0);
         _under.Arrives();
@@ -204,7 +204,7 @@ internal sealed class ChatPanel : Grid
         _failed.Visibility = _call.ChatFailed ? Visibility.Visible : Visibility.Collapsed;
         var length = _box.Text.Length;
         _counter.Text = length > 1800 ? $"{length}/{ChatRules.Longest}" : "";
-        _counter.Foreground = length >= ChatRules.Longest ? Ink.Tally : Ink.Muted;
+        _counter.Foreground = length >= ChatRules.Longest ? Ink.TallyText : Ink.Muted;
         // Under the box only while it has something to say.
         _under.Visibility = _call.ChatFailed || length > 1800 ? Visibility.Visible : Visibility.Collapsed;
         var messages = _call.Messages;

@@ -1,7 +1,9 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Tomoshibi.Basics;
 using Tomoshibi.Diagnostics;
 using Tomoshibi.Model;
+using Tomoshibi.UI.Kit;
 using Tomoshibi.UI.Lobby;
 using Tomoshibi.UI.Room;
 
@@ -14,19 +16,33 @@ namespace Tomoshibi.UI.Screens;
 /// to another, so a new picture on the account does not cross-fade the
 /// lobby; the account and the call ride along with the key so that a screen
 /// leaving after its account or call has gone is still drawn as it was.
+///
+/// Each screen is made in its own scheme (Ink.Use before it is made): the
+/// meeting's, which Daylight keeps dark, for the call and a move between
+/// rooms; the system's for every other.
 /// </summary>
 internal sealed class ScreenHost : Grid
 {
     private readonly AppModel _app;
+    private readonly Func<Scheme> _system;
     private Screen? _current;
     private string? _key;
 
-    public ScreenHost(AppModel app)
+    public ScreenHost(AppModel app, Func<Scheme> system)
     {
         _app = app;
+        _system = system;
         app.Changed += Follow;
         Follow();
     }
+
+    /// <summary>The scheme the screen up now is to be drawn in, as the system stands.</summary>
+    public Scheme Wanted => SchemeOf(_key ?? KeyOf());
+
+    private Scheme SchemeOf(string key) =>
+        key.StartsWith("call:", StringComparison.Ordinal) || key.StartsWith("moving:", StringComparison.Ordinal)
+            ? Daylight.ForMeeting(_system())
+            : _system();
 
     /// <summary>Which screen is up, and what it is drawn for.</summary>
     private string KeyOf() => _app.Showing switch
@@ -74,6 +90,7 @@ internal sealed class ScreenHost : Grid
         }
         Log.Line($"showing {key.Split(':')[0]}");
         _key = key;
+        Ink.Use(SchemeOf(key));
         Swap(Make(key), animated: true);
     }
 
@@ -100,10 +117,11 @@ internal sealed class ScreenHost : Grid
         }
     }
 
-    /// <summary>The language or the colour changed: the screen says itself again, or is made again in place.</summary>
+    /// <summary>The language, the colour or the scheme changed: the screen says itself again, or is made again in place.</summary>
     public void Refresh()
     {
         if (_current == null || _key == null) return;
+        _current.Repaint();
         if (_current.Refresh()) return;
         var again = Make(_key);
         Swap(again, animated: false);

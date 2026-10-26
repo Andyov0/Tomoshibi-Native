@@ -29,17 +29,17 @@ internal static class Menu
     {
         var tint = role switch
         {
-            Role.Destructive => Ink.Danger,
-            Role.Prominent => Ink.Tally,
+            Role.Destructive => Ink.DangerText,
+            Role.Prominent => Ink.TallyText,
             _ => Ink.ForegroundAt(0.85f),
         };
-        var words = K.Column(1, K.Words(title, 13.5, role == Role.Normal ? K.Regular : K.Semibold, role == Role.Destructive ? Ink.Danger : Ink.Foreground, lines: 2));
+        var words = K.Column(1, K.Words(title, 13.5, role == Role.Normal ? K.Regular : K.Semibold, role == Role.Destructive ? Ink.DangerText : Ink.Foreground, lines: 2));
         if (detail != null) words.Children.Add(K.Words(detail, 11.5, ink: Ink.Muted, lines: 2));
         var parts = new List<(UIElement, double)>();
         if (symbol != null) parts.Add(K.Fixed(new Border { Width = 18, Child = K.Symbol(symbol, 13, tint) }));
         parts.Add(K.Flex(words));
         if (busy) parts.Add(K.Fixed(K.Spinner(14)));
-        else if (check) parts.Add(K.Fixed(K.Symbol("checkmark", 11.5, Ink.Tally).Pad(8, 0, 0, 0)));
+        else if (check) parts.Add(K.Fixed(K.Symbol("checkmark", 11.5, Ink.TallyText).Pad(8, 0, 0, 0)));
         var line = K.Line(10, parts.ToArray());
         line.VerticalAlignment = VerticalAlignment.Center;
         var tap = new Tap(line, Look.Clear, height: 34, padding: 10)
@@ -57,7 +57,7 @@ internal static class Menu
         return tap;
     }
 
-    public static Border Rule() => new() { Height = 1, Margin = new Thickness(8, 4, 8, 4), Background = Ink.White(0.08f) };
+    public static Border Rule() => new() { Height = 1, Margin = new Thickness(8, 4, 8, 4), Background = Ink.Wash(0.08f) };
 
     /// <summary>A heading over a group of items, in capitals as the other apps draw it.</summary>
     public static TextBlock Heading(string text)
@@ -71,7 +71,8 @@ internal static class Menu
 
 /// <summary>
 /// The apps' segmented choice (kit/Choosing.kt <c>SegmentedChoice</c>): a
-/// dark track and a lighter pill that slides to the chosen segment. Windows
+/// track sunk into the chrome and a pill of the wash that slides to the
+/// chosen segment. Windows
 /// has no control of this shape; the segments are buttons, so the
 /// keyboard and Narrator reach each.
 /// </summary>
@@ -90,15 +91,15 @@ internal sealed class Segmented : Grid
         _chosen = chosen;
         Height = height;
         CornerRadius = new CornerRadius(height / 2);
-        Background = Ink.Black(0.22f);
-        BorderBrush = Ink.White(0.07f);
+        Background = Ink.Well(0.22f);
+        BorderBrush = Ink.Wash(0.07f);
         BorderThickness = new Thickness(1);
         Padding = new Thickness(2);
         _pill = new Border
         {
             CornerRadius = new CornerRadius((height - 4) / 2),
-            Background = Ink.White(0.16f),
-            BorderBrush = Ink.White(0.10f),
+            Background = Pill,
+            BorderBrush = Ink.Wash(0.10f),
             BorderThickness = new Thickness(1),
             HorizontalAlignment = HorizontalAlignment.Left,
         };
@@ -122,6 +123,14 @@ internal sealed class Segmented : Grid
         Children.Add(row);
         row.LayoutUpdated += (_, _) => PlacePill(animated: false);
     }
+
+    /// <summary>
+    /// The chosen segment's pill: the wash at 16 per cent over the dark
+    /// track; over the light one the surface's white, which stands out of a
+    /// grey track as the lighter pill stands out of the dark one, where black
+    /// at 16 per cent sank it into the track.
+    /// </summary>
+    private static Brush Pill => Ink.Light ? Ink.Surface : Ink.Wash(0.16f);
 
     private bool _placed;
     private double _placedX = double.NaN, _placedWidth = double.NaN;
@@ -275,7 +284,7 @@ internal static class Rows
             Width = 26,
             Height = 26,
             CornerRadius = new CornerRadius(7),
-            Background = Ink.White(0.10f),
+            Background = Ink.Wash(0.10f),
             Child = K.Symbol(symbol, 12.5, Ink.Foreground),
         };
     }

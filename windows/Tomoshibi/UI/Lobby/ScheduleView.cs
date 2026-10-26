@@ -15,7 +15,7 @@ namespace Tomoshibi.UI.Lobby;
 /// and time picker, in the reader's language, the hours on a 24-hour clock
 /// and the minutes in quarters as the other apps offer them.
 /// </summary>
-internal sealed class ScheduleView : Grid
+internal sealed class ScheduleView : Grid, IRestyles
 {
     /// <summary>A meeting can be arranged this far ahead (Schedule.kt <c>AHEAD</c>).</summary>
     private const int AheadDays = 60;
@@ -43,8 +43,29 @@ internal sealed class ScheduleView : Grid
         var next = NextQuarter(DateTimeOffset.Now);
         _day = next.Date;
         _time = next.TimeOfDay;
+        _close = close;
         _ = app.Lobby.RefreshArrangements();
+        Build();
+        app.Lobby.Changed += Fill;
+        Unloaded += (_, _) => app.Lobby.Changed -= Fill;
+    }
 
+    private readonly Action _close;
+
+    /// <summary>The system went light or dark while the schedule is open as a sheet: drawn again, keeping what was typed and picked.</summary>
+    public void Restyle()
+    {
+        Children.Clear();
+        Build();
+    }
+
+    private void Build()
+    {
+        var wide = _wide;
+        var close = _close;
+        // The list is kept across a drawing again and filled again in it.
+        if (_list.Parent is Panel holding) holding.Children.Remove(_list);
+        _listSaid = null;
         var heading = K.Column(4,
             K.Text(T("Scheduled meetings"), wide ? 26 : 22, K.Bold),
             K.Text(T("Pick a time and hand out the link before it starts."), wide ? 14 : 13, ink: Ink.Muted));
@@ -96,8 +117,6 @@ internal sealed class ScheduleView : Grid
         var scroller = new ScrollViewer { Content = page, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
         if (!wide) Children.Add(new Backdrop { Opacity = 0.6 });
         Children.Add(scroller);
-        app.Lobby.Changed += Fill;
-        Unloaded += (_, _) => app.Lobby.Changed -= Fill;
         Fill();
     }
 
@@ -146,7 +165,7 @@ internal sealed class ScheduleView : Grid
             if (e.AddedDates.Count > 0) _day = e.AddedDates[0].Date;
             Say();
         };
-        column.Children.Add(new Border { Child = calendar, Background = Ink.Black(0.18f), CornerRadius = new CornerRadius(16), Padding = new Thickness(12) });
+        column.Children.Add(new Border { Child = calendar, Background = Ink.Well(0.18f), CornerRadius = new CornerRadius(16), Padding = new Thickness(12) });
 
         var time = new TimePicker
         {
@@ -185,7 +204,7 @@ internal sealed class ScheduleView : Grid
     {
         if (_verdict == null) return;
         var problem = Problem();
-        var ink = problem != null ? Ink.Danger : Ink.Muted;
+        var ink = problem != null ? Ink.DangerText : Ink.Muted;
         _verdict.Children.Clear();
         _verdict.Children.Add(K.Symbol(problem != null ? "exclamationmark.circle" : "calendar.badge.clock", 12, ink).Pad(0, 1, 0, 0));
         _verdict.Children.Add(K.Text(problem ?? T("Arranged for {when}", ("when", LobbyModel.Said(At))), 12.5, ink: ink));
@@ -323,7 +342,7 @@ internal sealed class ScheduleView : Grid
             parts.Add(K.Fixed(calendar));
         }
         var cancel = Tap.Icon("xmark", T("Cancel meeting"), Look.Plain, 32, 12);
-        cancel.Content = K.Symbol("xmark", 12, Ink.Danger);
+        cancel.Content = K.Symbol("xmark", 12, Ink.DangerText);
         cancel.Click += async (_, _) =>
         {
             if (await _app.Lobby.Cancel(one) is { } refusal) _app.Problem = refusal;
@@ -358,8 +377,8 @@ internal sealed class ScheduleView : Grid
             Width = 34,
             Height = 34,
             CornerRadius = new CornerRadius(10),
-            Background = started ? Ink.TallyAt(0.18f) : Ink.White(0.08f),
-            Child = K.Symbol(started ? "video.fill" : "calendar", 15, started ? Ink.Tally : Ink.Muted),
+            Background = started ? Ink.TallyAt(0.18f) : Ink.Wash(0.08f),
+            Child = K.Symbol(started ? "video.fill" : "calendar", 15, started ? Ink.TallyText : Ink.Muted),
         };
         var when = Refusals.Instant(one.At) is { } at ? MeetingSaid(at) : one.At;
         if (!string.IsNullOrEmpty(one.Relay)) when += " · " + app.Lobby.Label(one.Relay);

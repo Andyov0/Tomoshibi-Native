@@ -118,7 +118,7 @@ internal sealed class SignInScreen : Screen
             // On a narrow window the way in for somebody with a link is at
             // the foot, where a thumb is, as the phone has it.
             var paste = new Tap(K.Row(8, K.Symbol("doc.on.clipboard", 15), K.Text(T("Paste and open"), 15, K.Medium, lines: 1)), Look.Plain, 44, padding: 20);
-            paste.Resting = Tomoshibi.Basics.Theme.SurfaceHigh;
+            paste.Resting = Ink.Palette.SurfaceHigh;
             paste.Named(T("Paste and open"));
             paste.HorizontalAlignment = HorizontalAlignment.Center;
             paste.Click += async (_, _) =>

@@ -160,6 +160,31 @@ internal static class Motion
         visual.StartAnimation("Opacity", fade);
     }
 
+    /// <summary>
+    /// Moves a text's colour to another over the settle curve, rather than
+    /// switching it: a brush of its own is animated, so that a brush the text
+    /// shares with others is left as it is.
+    /// </summary>
+    public static void Recolour(Microsoft.UI.Xaml.Controls.TextBlock text, Windows.UI.Color to)
+    {
+        var from = text.Foreground is Microsoft.UI.Xaml.Media.SolidColorBrush now ? now.Color : to;
+        var brush = new Microsoft.UI.Xaml.Media.SolidColorBrush(from);
+        text.Foreground = brush;
+        if (from == to) return;
+        var change = new Microsoft.UI.Xaml.Media.Animation.ColorAnimation
+        {
+            To = to,
+            Duration = Settle,
+            EnableDependentAnimation = true,
+            EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase { EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut },
+        };
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(change, brush);
+        Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(change, "Color");
+        var board = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+        board.Children.Add(change);
+        board.Begin();
+    }
+
     /// <summary>Scales the element's visual about its middle, over the hover curve unless told.</summary>
     public static void ScaleTo(FrameworkElement element, float scale, TimeSpan? duration = null)
     {

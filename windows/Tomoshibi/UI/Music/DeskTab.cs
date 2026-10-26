@@ -170,7 +170,7 @@ internal sealed class DeskTab : MusicTabView
             K.Flex(K.Text(T("Lower the music while anybody talks"), 11.5, ink: Ink.Muted).At(HorizontalAlignment.Left, VerticalAlignment.Center)),
             K.Fixed(duck)));
         column.Children.Add(Presses(state, now));
-        var card = new Grid { CornerRadius = new CornerRadius(18), Background = Ink.White(0.05f), BorderBrush = Ink.White(0.09f), BorderThickness = new Thickness(1) };
+        var card = new Grid { CornerRadius = new CornerRadius(18), Background = Ink.Wash(0.05f), BorderBrush = Ink.Wash(0.09f), BorderThickness = new Thickness(1) };
         // Whatever the song's adder wrote: a string that only starts like an
         // address is no cover rather than an exception here (WebAddress).
         if (WebAddress.Of(now.Cover) is { } cover)
@@ -219,7 +219,7 @@ internal sealed class DeskTab : MusicTabView
     private FrameworkElement Progress()
     {
         _progressFill = new Border { Height = 3, CornerRadius = new CornerRadius(1.5), Background = Ink.Tally, HorizontalAlignment = HorizontalAlignment.Left, Width = 0 };
-        var track = new Grid { Height = 3, CornerRadius = new CornerRadius(1.5), Background = Ink.White(0.12f), Children = { _progressFill } };
+        var track = new Grid { Height = 3, CornerRadius = new CornerRadius(1.5), Background = Ink.Wash(0.12f), Children = { _progressFill } };
         _progressAt = K.Text("", 10, K.Medium, Ink.Muted, lines: 1, tabular: true);
         _progressOf = K.Text("", 10, K.Medium, Ink.Muted, lines: 1, tabular: true);
         var times = K.Line(0, K.Fixed(_progressAt), K.Flex(K.Spacer()), K.Fixed(_progressOf));
@@ -267,7 +267,7 @@ internal sealed class DeskTab : MusicTabView
         {
             Child = _hearing,
             CornerRadius = new CornerRadius(16),
-            Background = Ink.White(0.05f),
+            Background = Ink.Wash(0.05f),
             Padding = new Thickness(12),
         };
     }

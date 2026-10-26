@@ -32,7 +32,7 @@ the server moves is joined again by itself. A release build talks to the home
 deployment alone and reads no switches; no screen shows a server's address.
 
 The screens are built in code, as Compose builds Android's, and follow the
-Windows way where the platforms differ: the content runs under a dark title
+Windows way where the platforms differ: the content runs under the title
 bar with the caption buttons in the apps' greys; the control layer (the
 lobby's sidebar and join bar, the call's bar, the popovers, the pills over
 the pictures) wears in-app acrylic and what is inside it is plain; fields,
@@ -41,6 +41,19 @@ own controls in the apps' colours, the tally carried into their accent;
 Escape closes what lies on top, then does what the screen's Back does. Every
 view arrives on the settle curve (320 ms) and leaves on the leave curve
 (200 ms), through composition animations on its own visual.
+
+Day and night follow the system's choice for apps while the app runs
+(UI/SystemScheme.cs): the lobby, sign-in, settings, the sheets and dialogs,
+the join and waiting screens and the ending are drawn in the light palette
+or the dark one (Tomoshibi.Basics.Theme, the numbers every platform shares),
+and a change brings a veil of the new ground over the window, draws
+everything again under it and lifts it. The call itself, and whatever is
+opened from inside it, stays dark in either:
+`Daylight.MeetingStaysDark` in Tomoshibi.Basics/Theme.cs is the one switch,
+which the screen host reads for the room and a move between rooms
+(UI/Screens/ScreenHost.cs) and which sets both the kit's palette (UI/Kit/Ink.cs)
+and the Windows controls' theme there. What lies on a picture (a name pill, a
+scrim over a video) is white and black in either scheme.
 
 The window opens as a desktop window: the first time 1280 by 820
 device-independent pixels at the monitor's scale (never more than nine

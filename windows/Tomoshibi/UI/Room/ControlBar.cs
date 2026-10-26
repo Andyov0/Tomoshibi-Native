@@ -211,7 +211,7 @@ internal sealed class ControlBar : Grid
             _row.Children.Add(_devices);
             _row.Children.Add(new Border { Width = 1, Height = 26, Background = Ink.Border, Margin = new Thickness(2, 0, 2, 0), VerticalAlignment = VerticalAlignment.Center });
         }
-        _leave = new Tap(K.Symbol("phone.down.fill", 16, Ink.Brush(Basics.Theme.DangerForeground)), Look.Destructive, Size, label: T("Leave"));
+        _leave = new Tap(K.Symbol("phone.down.fill", 16, Ink.DangerForeground), Look.Destructive, Size, label: T("Leave"));
         _leave.Width = compact ? 52 : 56;
         _leave.Padding = new Thickness(0);
         _leave.Named(T("Leave"), "bar.leave");

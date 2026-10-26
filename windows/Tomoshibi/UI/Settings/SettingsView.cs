@@ -17,7 +17,7 @@ namespace Tomoshibi.UI.Settings;
 /// both features are the next phase's on Windows, and their sections come
 /// with them rather than as choices about something that is not there.
 /// </summary>
-internal sealed class SettingsView : Grid
+internal sealed class SettingsView : Grid, IRestyles
 {
     public enum Topic { General, Media, Account, About }
 
@@ -71,15 +71,7 @@ internal sealed class SettingsView : Grid
         // for those too, the page flashed back in from the top and the
         // picker's slide was lost.
         var accent = Appearance.Shared.Accent;
-        void Redraw()
-        {
-            var offset = _scroller?.VerticalOffset ?? 0;
-            _wide = null;
-            _redrawing = true;
-            try { Build(ActualWidth >= 600); }
-            finally { _redrawing = false; }
-            if (_scroller is { } scroller && offset > 0) scroller.Loaded += (_, _) => scroller.ChangeView(null, offset, null, true);
-        }
+        void Redraw() => Restyle();
         void Appearing()
         {
             if (Appearance.Shared.Accent == accent) return;
@@ -93,6 +85,21 @@ internal sealed class SettingsView : Grid
             Appearance.Shared.Changed -= Appearing;
             Localization.Shared.Changed -= Redraw;
         };
+    }
+
+    /// <summary>
+    /// Drawn again where it was scrolled to, without bringing anything in
+    /// again: for the colour, the language, and the system going light or
+    /// dark while the settings are open.
+    /// </summary>
+    public void Restyle()
+    {
+        var offset = _scroller?.VerticalOffset ?? 0;
+        _wide = null;
+        _redrawing = true;
+        try { Build(ActualWidth >= 600); }
+        finally { _redrawing = false; }
+        if (_scroller is { } scroller && offset > 0) scroller.Loaded += (_, _) => scroller.ChangeView(null, offset, null, true);
     }
 
     public static string Title(Topic topic) => topic switch
@@ -160,8 +167,8 @@ internal sealed class SettingsView : Grid
         var rows = new Grid();
         _plate = new Border
         {
-            Background = Ink.White(0.11f),
-            BorderBrush = Ink.White(0.07f),
+            Background = Ink.Wash(0.11f),
+            BorderBrush = Ink.Wash(0.07f),
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(12),
             VerticalAlignment = VerticalAlignment.Top,
@@ -400,8 +407,8 @@ internal static class Pieces
         }
         else
         {
-            tile.Background = Ink.White(0.10f);
-            tile.BorderBrush = Ink.White(0.06f);
+            tile.Background = Ink.Wash(0.10f);
+            tile.BorderBrush = Ink.Wash(0.06f);
         }
         return tile;
     }

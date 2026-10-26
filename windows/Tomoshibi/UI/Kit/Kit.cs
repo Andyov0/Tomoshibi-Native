@@ -143,15 +143,21 @@ internal static class K
     /// <summary>Space that grows.</summary>
     public static Border Spacer(double width = 0, double height = 0) => new() { Width = width, Height = height };
 
-    /// <summary>A plain card in the content: no material, the apps' white wash over whatever is behind (glass drawn plain, Android's <c>plainSurface</c>).</summary>
+    /// <summary>
+    /// A plain card in the content: no material, the apps' white wash over
+    /// whatever is behind (glass drawn plain, Android's <c>plainSurface</c>).
+    /// In the light scheme the surface's white with the palette's border, so
+    /// that a card stands above the page as the washed one does at night
+    /// (daylight palette, addendum 2), where a black wash sank it.
+    /// </summary>
     public static Border Card(UIElement? child = null, double radius = 16, float fill = 0.05f, float edge = 0.07f, Thickness? padding = null)
     {
         return new Border
         {
             Child = child,
             CornerRadius = new CornerRadius(radius),
-            Background = Ink.White(fill),
-            BorderBrush = edge > 0 ? Ink.White(edge) : null,
+            Background = Ink.Light ? Ink.Surface : Ink.Wash(fill),
+            BorderBrush = edge > 0 ? (Ink.Light ? Ink.Border : Ink.Wash(edge)) : null,
             BorderThickness = new Thickness(edge > 0 ? 1 : 0),
             Padding = padding ?? new Thickness(0),
         };
@@ -176,15 +182,12 @@ internal static class K
     /// </summary>
     public static Border Glass(UIElement? child = null, double radius = 22, Thickness? padding = null, bool shadow = true)
     {
-        var rim = new LinearGradientBrush { StartPoint = new Windows.Foundation.Point(0.5, 0), EndPoint = new Windows.Foundation.Point(0.5, 1) };
-        rim.GradientStops.Add(new GradientStop { Color = Ink.Of(Basics.Shade.White.WithAlpha(0.26f)), Offset = 0 });
-        rim.GradientStops.Add(new GradientStop { Color = Ink.Of(Basics.Shade.White.WithAlpha(0.07f)), Offset = 1 });
         var border = new Border
         {
             Child = child,
             CornerRadius = new CornerRadius(radius),
             Background = Acrylic(),
-            BorderBrush = rim,
+            BorderBrush = Rim(0.26f, 0.07f),
             BorderThickness = new Thickness(1),
             Padding = padding ?? new Thickness(0),
         };
@@ -222,13 +225,42 @@ internal static class K
         return holder;
     }
 
-    /// <summary>The acrylic itself, for a surface that is shaped some other way.</summary>
+    /// <summary>
+    /// The edge of a glass or a pane: in the dark scheme a rim of light along
+    /// its top fading down, from <paramref name="top"/> to <paramref name="foot"/>
+    /// of white; in the light one the palette's border, flat, since a light
+    /// surface is not lit from above against a light ground and the day mode
+    /// has no gradients.
+    /// </summary>
+    public static Brush Rim(float top, float foot)
+    {
+        if (Ink.Light) return Ink.Border;
+        var rim = new LinearGradientBrush { StartPoint = new Windows.Foundation.Point(0.5, 0), EndPoint = new Windows.Foundation.Point(0.5, 1) };
+        rim.GradientStops.Add(new GradientStop { Color = Ink.Of(Basics.Shade.White.WithAlpha(top)), Offset = 0 });
+        rim.GradientStops.Add(new GradientStop { Color = Ink.Of(Basics.Shade.White.WithAlpha(foot)), Offset = 1 });
+        return rim;
+    }
+
+    /// <summary>
+    /// What floats over the page (a menu, a popover, a toast): the glass at
+    /// night; in the light scheme the surface's white, its border and its
+    /// shadow, which read as above the page where a light acrylic over a
+    /// light page did not (daylight palette, addendum 2).
+    /// </summary>
+    public static Border Floating(UIElement? child = null, double radius = 22, Thickness? padding = null)
+    {
+        var glass = Glass(child, radius, padding);
+        if (Ink.Light) glass.Background = Ink.Surface;
+        return glass;
+    }
+
+    /// <summary>The acrylic itself, for a surface that is shaped some other way: tinted with the scheme's surface, which the system's material lightens or darkens round.</summary>
     public static AcrylicBrush Acrylic() => new()
     {
-        TintColor = Ink.Of(Basics.Theme.Surface),
+        TintColor = Ink.Of(Ink.Palette.Surface),
         TintOpacity = 0.62,
         TintLuminosityOpacity = 0.9,
-        FallbackColor = Ink.Of(Basics.Theme.Surface.WithAlpha(0.92f)),
+        FallbackColor = Ink.Of(Ink.Palette.Surface.WithAlpha(0.92f)),
     };
 
     /// <summary>A hairline across a card, inset from its leading edge.</summary>
@@ -236,7 +268,7 @@ internal static class K
     {
         Height = 1,
         Margin = new Thickness(leading, 0, 0, 0),
-        Background = Ink.White(alpha),
+        Background = Ink.Wash(alpha),
     };
 
     /// <summary>The apps' spinner: a ring turning, in the colour it sits on.</summary>

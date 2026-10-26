@@ -361,7 +361,8 @@ internal sealed class Tile : Grid
 
         _ring = new Border { BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(Theme.TileRadius), IsHitTestVisible = false };
         Motion.Hide(_ring);
-        _name = K.Text("", 12.5, K.Medium, lines: 1);
+        // On the dark plate over the picture: the dark scheme's inks in either.
+        _name = K.Text("", 12.5, K.Medium, Ink.OnPicture, lines: 1);
         _label = K.Row(5, _name);
         _label.VerticalAlignment = VerticalAlignment.Center;
         _plate = new Border
@@ -485,7 +486,7 @@ internal sealed class Tile : Grid
         {
             _speaking = lit;
             Motion.FadeTo(_ring, lit ? 1 : 0);
-            _name.Foreground = lit ? Ink.Tally : Ink.Foreground;
+            _name.Foreground = lit ? Ink.Tally : Ink.OnPicture;
         }
         _ring.BorderBrush = Ink.Tally;
         var radius = filled && onStage ? 0 : Theme.TileRadius;
@@ -497,13 +498,13 @@ internal sealed class Tile : Grid
         while (_label.Children.Count > 1) _label.Children.RemoveAt(1);
         if (muted)
         {
-            var mark = K.Symbol("mic.slash.fill", _name.FontSize - 2, Ink.Muted);
+            var mark = K.Symbol("mic.slash.fill", _name.FontSize - 2, Ink.MutedOnPicture);
             mark.Named(T("microphone off"));
             _label.Children.Add(mark);
         }
         // Somebody this listener turned off, said on their picture so that
         // nobody wonders why a person talking makes no sound (Tile.kt `silenced`).
-        if (silenced) _label.Children.Add(K.Symbol("speaker.slash.fill", _name.FontSize - 2, Ink.Muted));
+        if (silenced) _label.Children.Add(K.Symbol("speaker.slash.fill", _name.FontSize - 2, Ink.MutedOnPicture));
         // The stage's own controls over whatever is on it, arriving and
         // leaving with it.
         var controlsKey = controls?.Key;

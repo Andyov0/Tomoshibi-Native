@@ -103,7 +103,7 @@ internal sealed class ServersView : Grid
                 }
                 else if (!relay.Maintenance)
                 {
-                    control = K.Text(T("Timeout"), 12, ink: Ink.Danger);
+                    control = K.Text(T("Timeout"), 12, ink: Ink.DangerText);
                 }
                 var name = relay.Name;
                 rows.Add(RelayRow(title, detail, "server.rack", _app.RelayChoice == name, i == group.Relays.Count - 1, control, relay.Maintenance, () => _app.RelayChoice = name));
@@ -117,7 +117,7 @@ internal sealed class ServersView : Grid
     {
         var trailing = K.Row(10);
         if (control != null) trailing.Children.Add(control);
-        var tick = K.Symbol("checkmark.circle.fill", 15, Ink.Tally);
+        var tick = K.Symbol("checkmark.circle.fill", 15, Ink.TallyText);
         tick.Opacity = chosen ? 1 : 0;
         trailing.Children.Add(tick);
         foreach (var child in trailing.Children) ((FrameworkElement)child).VerticalAlignment = VerticalAlignment.Center;

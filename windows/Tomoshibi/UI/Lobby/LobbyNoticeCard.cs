@@ -65,7 +65,7 @@ internal sealed class LobbyNoticeCard : Grid
 
     private UIElement Card(LobbyNotice notice, string words)
     {
-        var tint = notice.Warning ? Ink.Danger : Ink.Tally;
+        var tint = notice.Warning ? Ink.DangerText : Ink.TallyText;
         var mark = K.Symbol(notice.Warning ? "exclamationmark.circle.fill" : "megaphone.fill", 13, tint);
         mark.HorizontalAlignment = HorizontalAlignment.Center;
         mark.VerticalAlignment = VerticalAlignment.Center;
