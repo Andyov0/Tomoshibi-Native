@@ -1,0 +1,153 @@
+package app.tomoshibi.ui.lobby
+
+import android.content.Context
+import android.graphics.PathMeasure
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.unit.dp
+import androidx.test.core.app.ApplicationProvider
+import app.tomoshibi.basics.Theme
+import app.tomoshibi.ui.InAppearance
+import app.tomoshibi.ui.TestAppearance
+import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
+import com.github.takahirom.roborazzi.captureRoboImage
+import org.junit.After
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
+import java.io.File
+
+/**
+ * The camera card's people as the app draws them: the shared file is in the
+ * app, a stroke is cut along its length, the canvas is placed on the card as
+ * the file says, and pictures of the card at each stage of a drawing and of
+ * everybody finished, recorded with `./gradlew :app:recordRoborazziDebug`
+ * (`-Pappearance=light` for the day) into src/test/screenshots/portraits.
+ */
+@RunWith(RobolectricTestRunner::class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
+@Config(sdk = [35], qualifiers = "w412dp-h892dp-hdpi")
+@OptIn(ExperimentalRoborazziApi::class)
+class PreviewGlassTest {
+    @get:Rule
+    val compose = createComposeRule()
+
+    private val context: Context get() = ApplicationProvider.getApplicationContext()
+
+    @After
+    fun tearDown() {
+        PortraitDebug.said = null
+    }
+
+    @Test
+    fun theSharedFileIsInTheApp() {
+        val drawings = Portraits.load(context)
+        assertNotNull("the app has no portraits.json in its assets", drawings)
+        drawings!!
+        val shared = PortraitBook.parse(File("../../art/portraits.json").readText())
+        assertEquals(shared.portraits.map { it.name to it.strokes.size }, drawings.book.portraits.map { it.name to it.strokes.size })
+        assertEquals(shared.round(), drawings.timeline.round, 1e-9)
+    }
+
+    private fun PortraitBook.round() = PortraitTimeline(this).round
+
+    @Test
+    fun aStrokeIsCutAlongItsLength() {
+        val measure = PathMeasure()
+        val line = StrokePath(PathData.parse("M 0 0 L 100 0"))
+        assertEquals(100f, line.length, 0.01f)
+        line.cut(0.25f, measure)
+        assertEquals(25f, PathMeasure(line.partial, false).length, 0.01f)
+        line.cut(1f, measure)
+        assertEquals(100f, PathMeasure(line.partial, false).length, 0.01f)
+
+        // A stroke lifted inside its `d` is cut across its pieces in their order.
+        val lifted = StrokePath(PathData.parse("M 0 0 L 10 0 M 0 10 L 30 10"))
+        assertEquals(40f, lifted.length, 0.01f)
+        lifted.cut(0.5f, measure)
+        val pieces = PathMeasure(lifted.partial, false)
+        assertEquals(10f, pieces.length, 0.01f)
+        pieces.nextContour()
+        assertEquals(10f, pieces.length, 0.01f)
+        lifted.cut(0.1f, measure)
+        val first = PathMeasure(lifted.partial, false)
+        assertEquals(4f, first.length, 0.01f)
+        assertEquals(false, first.nextContour())
+    }
+
+    @Test
+    fun theCanvasStandsOnTheCardsFootInTheMiddle() {
+        // The README's sums: on a phone's card, wider than tall, the canvas
+        // fills the card's height.
+        val square = PortraitDrawings(PortraitBook.parse(oneStroke(100, 100)))
+        assertEquals(PortraitDrawings.Fit(2.92f, 44f, 0f), square.fit(380f, 292f, 12f))
+        // On a card taller than wide it fills the width less the inset at
+        // either side, and leaves empty glass above the head.
+        val tall = square.fit(200f, 400f, 12f)
+        assertEquals(1.76f, tall.scale, 1e-5f)
+        assertEquals(12f, tall.left, 1e-4f)
+        assertEquals(224f, tall.top, 1e-3f)
+        // A canvas wider than the card is fitted across it all the same.
+        val wide = PortraitDrawings(PortraitBook.parse(oneStroke(300, 100))).fit(200f, 100f, 0f)
+        assertEquals(2f / 3f, wide.scale, 1e-6f)
+        assertEquals(0f, wide.left, 1e-4f)
+        assertEquals(100f / 3f, wide.top, 1e-4f)
+    }
+
+    private fun oneStroke(width: Int, height: Int) = """
+        {"format": 1, "canvas": {"width": $width, "height": $height}, "lineWidth": 2, "placement": "bottom-center", "gap": 0,
+         "portraits": [{"name": "a", "hold": 1, "fade": 1, "strokes": [{"d": "M 0 0 L 1 1", "start": 0, "duration": 1}]}]}
+    """.trimIndent()
+
+    /** The card as the phone's lobby has it, 380 by 292, on the page's ground, each person finished. */
+    @Test
+    fun everybodyFinished() {
+        val drawings = Portraits.load(context)!!
+        card()
+        for (art in drawings.book.portraits) {
+            PortraitDebug.said = art.name
+            compose.waitForIdle()
+            compose.onNodeWithTag("card").captureRoboImage(file("finished-${art.name}"))
+        }
+    }
+
+    /** One person at each stage of their drawing, for the strip of frames beside the iPhone's. */
+    @Test
+    fun oneBeingDrawn() {
+        val drawings = Portraits.load(context)!!
+        val art = drawings.book.portraits.first()
+        val steps = 10
+        card()
+        for (step in 0..steps) {
+            val at = art.writing * step / steps
+            PortraitDebug.said = "${art.name}@$at"
+            compose.waitForIdle()
+            compose.onNodeWithTag("card").captureRoboImage(file("stage-${art.name}-%02d".format(step)))
+        }
+    }
+
+    private fun card() {
+        PortraitDebug.said = PortraitDebug.said ?: Portraits.load(context)!!.book.portraits.first().name
+        compose.setContent {
+            InAppearance {
+                Box(Modifier.testTag("card").background(Theme.ground).padding(16.dp)) {
+                    PreviewGlass(30.dp, held = false, Modifier.size(380.dp, 292.dp))
+                }
+            }
+        }
+        compose.waitForIdle()
+    }
+
+    private fun file(name: String) = "src/test/screenshots/portraits/$name-${if (TestAppearance.light) "light" else "dark"}.png"
+}

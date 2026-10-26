@@ -22,6 +22,7 @@ import app.tomoshibi.model.AppModel
 import app.tomoshibi.model.DebugLaunch
 import app.tomoshibi.ui.TomoshibiApp
 import app.tomoshibi.ui.lobby.LobbyDebug
+import app.tomoshibi.ui.lobby.PortraitDebug
 import kotlinx.coroutines.launch
 
 private const val TAG = "Tomoshibi"
@@ -47,11 +48,14 @@ private const val TAG = "Tomoshibi"
  * Once running, `-e do <command>` on a further start does what a press would:
  * `leave`, `back`, `join <room>`, `prepare <room>`, `enter <room>`,
  * `signout`, `mic`, `camera`, `hand`, `say <text>`, `invite [name]`, `knock`,
- * `cancel`, `state`. `lobby` opens one part of the lobby (`scheduled`,
+ * `cancel`, `state`; `camera on` and `camera off` are the lobby's camera
+ * switch. `lobby` opens one part of the lobby (`scheduled`,
  * `servers`, `start`, `join`, `again`, `settings`), `section` the section the
  * settings open at (`account`, `media`, ...), `room` is typed into the
  * start sheet's field, and `popover` opens one of a screen's popovers by its
- * id, as TOMOSHIBI_DEBUG_LOBBY, _ROOM and _POPOVER do on Apple.
+ * id, as TOMOSHIBI_DEBUG_LOBBY, _ROOM and _POPOVER do on Apple; `portrait`
+ * stands one of the camera card's children still (`name` or `name@seconds`),
+ * as TOMOSHIBI_DEBUG_PORTRAIT does.
  */
 class MainActivity : ComponentActivity() {
     private lateinit var app: AppModel
@@ -184,6 +188,7 @@ private object Debug {
         LobbyDebug.room = intent.getStringExtra("room")
         LobbyDebug.popover = intent.getStringExtra("popover")
         LobbyDebug.section = intent.getStringExtra("section")
+        PortraitDebug.said = intent.getStringExtra("portrait")
     }
 
     suspend fun perform(app: AppModel, line: String) {
@@ -201,7 +206,13 @@ private object Debug {
             "enter" -> app.enter(rest)
             "signout" -> app.signOut()
             "mic" -> app.toggleMicrophone()
-            "camera" -> app.call?.let { call -> runCatching { call.setCamera(!call.cameraOn) } }
+            // `camera on` and `camera off` are the lobby's switch, for the
+            // camera card to be recorded going from glass to picture and
+            // back without a touch; `camera` alone is the call's.
+            "camera" -> when (rest) {
+                "on", "off" -> app.startWithCamera = rest == "on"
+                else -> app.call?.let { call -> runCatching { call.setCamera(!call.cameraOn) } }
+            }
             "hand" -> app.call?.let { call -> runCatching { call.setHand(!call.handUp) } }
             "say" -> app.call?.let { call ->
                 call.chatDraft = rest
