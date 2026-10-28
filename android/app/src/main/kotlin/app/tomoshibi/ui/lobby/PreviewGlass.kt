@@ -46,12 +46,6 @@ import app.tomoshibi.BuildConfig
 import app.tomoshibi.basics.LocalPalette
 import app.tomoshibi.basics.Palette
 import app.tomoshibi.ui.kit.ContinuousShape
-import app.tomoshibi.ui.kit.GlassSupport
-import app.tomoshibi.ui.kit.LocalGlassBackdrop
-import dev.chrisbanes.haze.HazeInput
-import dev.chrisbanes.haze.blur.HazeBlurStyle
-import dev.chrisbanes.haze.blur.HazeColorEffect
-import dev.chrisbanes.haze.blur.hazeBlur
 import kotlinx.coroutines.delay
 import kotlin.math.max
 import kotlin.math.min
@@ -73,15 +67,18 @@ import kotlin.math.min
 // until the owner found the faces unsettling and settled on six small
 // animals, a cat, a rabbit, a bear, a hamster, a penguin and a chick, with
 // two dots for eyes, in thin lines (2026-10-27). The eyes are short strokes
-// that the round ends make into dots. The card stays glass: the system's
-// thinnest material with a hairline of the text colour, as the iPhone's is
-// the clear glass, without the grey haze the regular kind casts.
-// Where there is something behind the card to see through it (the wide
-// lobby's stage, which is the camera's picture as it comes on), the card
-// blurs it with a RenderEffect on Android 12 and later; on the phone's page,
-// one flat colour, a blur would show the same colour, so the card is the
-// material's tint there, as it is before 12 everywhere. No gradients: the
-// owner finds them cheap.
+// that the round ends make into dots.
+//
+// The card is what the iPhone's clear Liquid Glass comes to on the phone's
+// lobby, measured from its pixels (art/README.md, "The card"): by night
+// #202020 on the black page with the glass's lit rim, a point of white at
+// 40 per cent just inside its outline; by day #FFFFFF on the page's #F2F2F7
+// with no edge at all; no shadow either way. It was the thinnest material
+// with a hairline of the text colour, which by night was a darker card than
+// the iPhone's beside it and by day a grey ring round a white one; a blur of
+// what was behind it, the wide lobby's picture coming on, is gone with it,
+// since the card is now solid and nothing behind it could be seen. No
+// gradients: the owner finds them cheap.
 //
 // It is decoration and nothing else: hidden from screen readers, never
 // pressed (a tap on it is the page's, which puts the keyboard away), the
@@ -97,39 +94,21 @@ import kotlin.math.min
  * The camera card's glass with the animals on it, filling what it is put
  * in, clipped to a rounded rectangle of [cornerRadius]. [held]: the card is
  * covered (a sheet over the lobby), and the drawing holds still.
- * [seeThrough]: something may be behind the card to be seen through it
- * blurred (the screen's glass backdrop, which the card must not be part of).
  */
 @Composable
-fun PreviewGlass(cornerRadius: Dp, held: Boolean, modifier: Modifier = Modifier, seeThrough: Boolean = false) {
+fun PreviewGlass(cornerRadius: Dp, held: Boolean, modifier: Modifier = Modifier) {
     val shape = ContinuousShape(cornerRadius)
-    val palette = LocalPalette.current
-    val ink = GlassInk.of(palette)
-    val backdrop = LocalGlassBackdrop.current?.takeIf { seeThrough && GlassSupport.blurs }
-    val frost = remember(palette) { CardFrost(palette, ink) }
+    val ink = GlassInk.of(LocalPalette.current)
     Box(
         modifier
             .clearAndSetSemantics {}
             .clip(shape)
             .background(ink.card)
-            .then(if (backdrop != null) Modifier.hazeBlur(HazeInput.Sources(backdrop), frost) else Modifier)
-            .border(1.dp, ink.cardEdge, shape),
+            // Drawn inside the outline, as the glass's rim is.
+            .then(if (ink.cardEdge != null) Modifier.border(1.dp, ink.cardEdge, shape) else Modifier),
     ) {
         PortraitCycle(held, Modifier.fillMaxSize())
     }
-}
-
-/**
- * The thinnest material over a picture: blurred, and tinted as the card is
- * over the page, so that the card is the same colour wherever what is behind
- * it is plain.
- */
-private fun CardFrost(palette: Palette, ink: GlassInk) = HazeBlurStyle {
-    blurRadius(18.dp)
-    noiseFactor(0f)
-    backgroundColor(palette.ground)
-    colorEffects(listOf(HazeColorEffect.tint(ink.card)))
-    fallbackColorEffect(HazeColorEffect.tint(ink.card))
 }
 
 /**
@@ -270,26 +249,22 @@ private fun PortraitLines(drawings: PortraitDrawings, cycle: CycleState, modifie
 }
 
 /**
- * The card's colours in one appearance, the same on every platform
- * (2026-10-27): the card's face and edge, and the lines. The text colour is
- * the palette's own (night #F5F5F7, day #1C1C1E).
+ * The card's colours in one appearance, as art/README.md gives them for
+ * every platform without Liquid Glass: the card's face, its edge where it
+ * has one, and the lines. The text colour is the palette's own (night
+ * #F5F5F7, day #1C1C1E); the page round the card is the palette's ground
+ * (night #000000, day #F2F2F7).
  */
-internal class GlassInk(val card: Color, val cardEdge: Color, val line: Color) {
+internal class GlassInk(val card: Color, val cardEdge: Color?, val line: Color) {
     companion object {
-        /**
-         * The thinnest material's colour over the page: at night the iPhone's
-         * card drawn without Liquid Glass measures 31 over its black page,
-         * white at twelve per cent; by day white at nearly three quarters
-         * over the page's grey, as a raised plate is (Palette.plate).
-         */
         private val Night = GlassInk(
-            card = Color.White.copy(alpha = 0.12f),
-            cardEdge = Palette.Dark.foreground.copy(alpha = 0.16f),
+            card = Color(0xFF202020),
+            cardEdge = Color.White.copy(alpha = 0.40f),
             line = Palette.Dark.foreground.copy(alpha = LINE_NIGHT),
         )
         private val Day = GlassInk(
-            card = Color.White.copy(alpha = 0.72f),
-            cardEdge = Palette.Light.foreground.copy(alpha = 0.16f),
+            card = Color(0xFFFFFFFF),
+            cardEdge = null,
             line = Palette.Light.foreground.copy(alpha = LINE_DAY),
         )
 

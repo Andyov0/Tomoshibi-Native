@@ -11,6 +11,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.unit.dp
@@ -32,6 +33,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 /**
  * The camera card's portraits as the app draws them: the shared file is in the
@@ -152,6 +154,35 @@ class PreviewGlassTest {
             }
             assertEquals(art.name, line.red, furthest, 2f / 255)
         }
+    }
+
+    /**
+     * The card is what art/README.md gives for a platform without Liquid
+     * Glass: by night #202020 with white at 40 per cent along the inside of
+     * its outline, by day #FFFFFF with no edge, on the page's own ground
+     * (#000000, #F2F2F7). Looked at with nothing drawn on it yet, half way
+     * down its left side, where the outline is straight. The card is solid:
+     * by night the thinnest material it was before is a step darker over
+     * the black page, and lighter over the wide lobby's backdrop.
+     */
+    @Test
+    fun theCardIsTheColoursTheReadmeGives() {
+        PortraitDebug.said = Portraits.load(context)!!.book.portraits.first().name + "@0"
+        card()
+        val palette = TestAppearance.palette
+        val pixels = compose.onNodeWithTag("card").captureToImage().toPixelMap()
+        val inset = (16 * context.resources.displayMetrics.density).roundToInt()
+        val middle = pixels.height / 2
+        // A flat fill is drawn exactly; the edge, a stroke, to within a step or two.
+        fun near(expected: Color, actual: Color, what: String, within: Float = 0.6f / 255) {
+            assertEquals("$what red", expected.red, actual.red, within)
+            assertEquals("$what green", expected.green, actual.green, within)
+            assertEquals("$what blue", expected.blue, actual.blue, within)
+        }
+        near(palette.ground, pixels[inset / 2, middle], "page")
+        near(if (palette.dark) Color(0xFF202020) else Color.White, pixels[pixels.width / 2, middle], "card")
+        val edge = if (palette.dark) Color.White.copy(alpha = 0.4f).compositeOver(Color(0xFF202020)) else Color.White
+        near(edge, pixels[inset, middle], "edge", within = 2f / 255)
     }
 
     /** One portrait at each stage of its drawing, for the strip of frames beside the iPhone's. */

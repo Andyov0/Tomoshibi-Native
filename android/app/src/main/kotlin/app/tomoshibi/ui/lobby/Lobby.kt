@@ -1023,9 +1023,7 @@ private fun HomeStage(app: AppModel, account: Account, onTable: Boolean, held: B
             Appear(!app.startWithCamera, Modifier.weight(1f).fillMaxWidth(), enter = fadeIn(Theme.settle()), exit = fadeOut(Theme.leave())) {
                 BoxWithConstraints(Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = SwitchesClearance), contentAlignment = Alignment.Center) {
                     val width = min(min(maxWidth, maxHeight * CardAspect), 560.dp)
-                    // Over the stage's picture, which it blurs as the
-                    // camera comes on under it and it fades.
-                    PreviewGlass(30.dp, held, Modifier.width(width).height(width / CardAspect).rise(60), seeThrough = true)
+                    PreviewGlass(30.dp, held, Modifier.width(width).height(width / CardAspect).rise(60))
                 }
             }
         }
