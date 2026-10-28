@@ -4,11 +4,11 @@ import org.json.JSONArray
 import org.json.JSONException
 import org.json.JSONObject
 
-// The people the lobby's camera card draws while the camera is off
+// The portraits the lobby's camera card draws while the camera is off
 // (PreviewGlass.kt), as every platform reads them: art/portraits.json at the
 // repository's root, which the build copies into the app's assets unchanged
 // (app/build.gradle.kts `portraitAssets`). The Apple apps draw the same lines
-// at the same pace from the same file, so nothing about a person is written
+// at the same pace from the same file, so nothing about a portrait is written
 // here: this reads the file and says where the pen is at a given moment, and
 // PreviewGlass draws it.
 //
@@ -20,22 +20,22 @@ import org.json.JSONObject
 //       "portraits": [{ "name": ..., "hold": s, "fade": s,
 //                       "strokes": [{ "d": "M .. C .. Q .. L .. Z", "start": s, "duration": s }] }] }
 //
-// The canvas's origin is its top left corner, y down. A person's turn is the
+// The canvas's origin is its top left corner, y down. A portrait's turn is the
 // gap (empty glass), their drawing, their hold and their fade, in the order
 // of the array, round and round. Each stroke is drawn along its length from
 // nothing to all of it between `start` and `start + duration` seconds after
-// the gap, eased in and out (smoothstep); the finished person stands for
+// the gap, eased in and out (smoothstep); the finished portrait stands for
 // `hold` seconds and fades over `fade` on the same curve. `d` holds absolute
 // M, L, C, Q and Z only.
 
-/** The whole file: the canvas the people are drawn on and the people in turn. */
+/** The whole file: the canvas the portraits are drawn on and the portraits in turn. */
 class PortraitBook(
     val width: Float,
     val height: Float,
     /** How wide a line is, in the canvas's units. */
     val lineWidth: Float,
     val placement: Placement,
-    /** Seconds of empty glass before each person. */
+    /** Seconds of empty glass before each portrait. */
     val gap: Double,
     val portraits: List<PortraitArt>,
 ) {
@@ -112,7 +112,7 @@ class PortraitBook(
     }
 }
 
-/** One person: their strokes, and how long they stand finished and take to fade. */
+/** One portrait: its strokes, and how long it stands finished and takes to fade. */
 class PortraitArt(
     /** What a debug switch calls them by (`portrait` on a debug launch). */
     val name: String,
@@ -124,7 +124,7 @@ class PortraitArt(
     val writing: Double = strokes.maxOf { it.start + it.duration }
 }
 
-/** One stroke of the pen and when it is drawn, in seconds after its person's gap. */
+/** One stroke of the pen and when it is drawn, in seconds after its portrait's gap. */
 class PortraitStroke(val path: List<PathData.Segment>, val start: Double, val duration: Double) {
     /**
      * How much of the stroke is down `seconds` after the gap, from nought to
@@ -243,7 +243,7 @@ object PathData {
 
 /**
  * Who is on the card at a moment of the cycle, and how far they are drawn:
- * each person's turn is the gap, their drawing, their hold and their fade,
+ * each portrait's turn is the gap, its drawing, its hold and its fade,
  * one after another in the file's order, round and round.
  */
 class PortraitTimeline(val book: PortraitBook) {
@@ -267,10 +267,10 @@ class PortraitTimeline(val book: PortraitBook) {
     }
 
     /**
-     * Whether anything on the card moves `tau` seconds after this person's
+     * Whether anything on the card moves `tau` seconds after this portrait's
      * gap, and until when (in the same seconds) that stays so: a stroke
      * being drawn and the fade move; the gap, the moments between strokes
-     * and the finished person held do not, and nothing is drawn then
+     * and the finished portrait held do not, and nothing is drawn then
      * (PortraitCycle).
      */
     private fun motion(art: PortraitArt, tau: Double): Pair<Boolean, Double> {
@@ -299,7 +299,7 @@ class PortraitTimeline(val book: PortraitBook) {
         val inRound = clamped - base
         val person = starts.indexOfLast { it <= inRound }.coerceAtLeast(0)
         // A moment at the very end of a round, by rounding, is the start of
-        // the next one rather than past the end of the last person's turn.
+        // the next one rather than past the end of the last portrait's turn.
         if (inRound - starts[person] >= turns[person]) return Triple(0, 0.0, base + round)
         val start = base + starts[person]
         return Triple(person, (clamped - start).coerceAtLeast(0.0), start)

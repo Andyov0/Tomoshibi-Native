@@ -9,12 +9,12 @@ import org.junit.Test
 import java.io.File
 
 /**
- * The camera card's people as the shared file says them (PortraitArt.kt):
+ * The camera card's portraits as the shared file says them (PortraitArt.kt):
  * the file read, its paths read, and who is on the card at each moment of
  * the cycle, which is what keeps this card in step with the iPhone's.
  */
 class PortraitArtTest {
-    /** Two people: one of two strokes with a lift between, one of a single stroke. */
+    /** Two portraits: one of two strokes with a lift between, one of a single stroke. */
     private val two = """
         {
           "format": 1,
@@ -157,7 +157,7 @@ class PortraitArtTest {
             assertEquals(0.5f, it.shown, 1e-6f)
         }
         timeline.at(3.5 + 0.15).let { assertEquals(1f - 0.15625f, it.shown, 1e-6f) }
-        // The second person's gap, then their stroke.
+        // The second portrait's gap, then its stroke.
         timeline.at(4.1 + 0.2).let {
             assertEquals(1, it.person)
             assertFalse(it.moving)

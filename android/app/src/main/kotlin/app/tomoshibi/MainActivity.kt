@@ -54,7 +54,7 @@ private const val TAG = "Tomoshibi"
  * settings open at (`account`, `media`, ...), `room` is typed into the
  * start sheet's field, and `popover` opens one of a screen's popovers by its
  * id, as TOMOSHIBI_DEBUG_LOBBY, _ROOM and _POPOVER do on Apple; `portrait`
- * stands one of the camera card's children still (`name` or `name@seconds`),
+ * stands one of the camera card's animals still (`name` or `name@seconds`),
  * as TOMOSHIBI_DEBUG_PORTRAIT does.
  */
 class MainActivity : ComponentActivity() {

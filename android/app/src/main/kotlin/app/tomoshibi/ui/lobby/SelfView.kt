@@ -48,7 +48,7 @@ import kotlinx.coroutines.flow.collectLatest
  * the phone's lobby card. Filling the screen it is the screen's ground
  * ([Backdrop]), so the glass card over it stands out of it.
  *
- * [glassWhenOff]: with the camera off, a pane of glass with children drawn
+ * [glassWhenOff]: with the camera off, a pane of glass with animals drawn
  * on it instead of the grey ([PreviewGlass]): the phone lobby's card asks for
  * it, as on the iPhone, and the start sheet's preview keeps the grey.
  * [glassHeld]: the card is covered, and its drawing holds still.
@@ -64,7 +64,7 @@ fun CameraStage(
     val shape = if (cornerRadius > 0.dp) ContinuousShape(cornerRadius) else RectangleShape
     Box(modifier.clip(shape)) {
         if (cornerRadius > 0.dp && glassWhenOff) {
-            // The glass and its people go as the camera comes on, and the
+            // The glass and its drawing go as the camera comes on, and the
             // grey a picture stands on comes with it; the other way round as
             // it goes off. Both fade, so the card is never seen empty of
             // either, and the drawing is not drawn at all under a picture.

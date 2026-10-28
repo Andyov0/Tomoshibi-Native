@@ -2,7 +2,6 @@ package app.tomoshibi.ui.lobby
 
 import android.animation.ValueAnimator
 import android.content.Context
-import android.graphics.BlendMode
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PathMeasure
@@ -31,7 +30,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
@@ -58,32 +56,36 @@ import kotlinx.coroutines.delay
 import kotlin.math.max
 import kotlin.math.min
 
-// The lobby's camera card with the camera off: a pane of glass with children
-// drawn on it in lines of glass, one after another (PreviewGlass.swift).
+// The lobby's camera card with the camera off: a pane of glass with small
+// animals drawn on it in thin lines, one after another (PreviewGlass.swift).
 //
 // It was the grey of a camera-off tile, an empty card the size of the
 // picture that was not there. The owner asked for a large piece of glass
-// with people drawn on it in frosted-glass lines, written the way the iPhone
-// writes its first "hello" (2026-10-26), and for Android to have what the
-// iPhone has. Who is drawn, their lines and their pace are the shared file's
-// (art/portraits.json, read by PortraitArt.kt), and how the glass looks
-// without Liquid Glass is the file's README's; what is here is the drawing.
+// with somebody drawn on it, written the way the iPhone writes its first
+// "hello" (2026-10-26), and for Android to have what the iPhone has. Who is
+// drawn, their lines and their pace are the shared file's (art/portraits.json,
+// read by PortraitArt.kt); what is here is the drawing.
 //
-// Android has no Liquid Glass. The README draws its glass the way it looks
-// without its depth, which the Apple apps draw before iOS 26: the lines as
-// one shape, filled with the text colour at 12 per cent and edged at 34, a
-// thin line of light along their upper side, and no shadow; the card the
-// system's thinnest material with a hairline of the text colour. Where there
-// is something behind the card to see through it (the wide lobby's stage,
-// which is the camera's picture as it comes on), the card blurs it with a
-// RenderEffect on Android 12 and later; on the phone's page, one flat colour,
-// a blur would show the same colour and cost a pass on every frame of the
-// drawing, so the card is the material's tint there, as it is before 12
-// everywhere. No gradients: the owner finds them cheap.
+// The lines are single thin lines of the text colour, round at their ends
+// and corners, with nothing else: no glass, no light along them and no
+// shadow. They were tubes of glass round people's and then children's
+// faces, a fill, an edge round the lines made one shape and a line of light,
+// until the owner found the faces unsettling and settled on six small
+// animals, a cat, a rabbit, a bear, a hamster, a penguin and a chick, with
+// two dots for eyes, in thin lines (2026-10-27). The eyes are short strokes
+// that the round ends make into dots. The card stays glass: the system's
+// thinnest material with a hairline of the text colour, as the iPhone's is
+// the clear glass, without the grey haze the regular kind casts.
+// Where there is something behind the card to see through it (the wide
+// lobby's stage, which is the camera's picture as it comes on), the card
+// blurs it with a RenderEffect on Android 12 and later; on the phone's page,
+// one flat colour, a blur would show the same colour, so the card is the
+// material's tint there, as it is before 12 everywhere. No gradients: the
+// owner finds them cheap.
 //
 // It is decoration and nothing else: hidden from screen readers, never
 // pressed (a tap on it is the page's, which puts the keyboard away), the
-// first child standing finished where animations are switched off, and
+// first animal standing finished where animations are switched off, and
 // moving only while it can be seen. It holds still while the app is not in
 // front, while the card is scrolled out of sight or covered by a sheet, and
 // in the gap and the hold nothing on it is drawn again at all: the owner
@@ -92,7 +94,7 @@ import kotlin.math.min
 // thirty times a second (CycleState `run`).
 
 /**
- * The camera card's glass with the children on it, filling what it is put
+ * The camera card's glass with the animals on it, filling what it is put
  * in, clipped to a rounded rectangle of [cornerRadius]. [held]: the card is
  * covered (a sheet over the lobby), and the drawing holds still.
  * [seeThrough]: something may be behind the card to be seen through it
@@ -131,7 +133,7 @@ private fun CardFrost(palette: Palette, ink: GlassInk) = HazeBlurStyle {
 }
 
 /**
- * The children in turn, without the card: placed in what they are drawn in
+ * The animals in turn, without the card: placed in what they are drawn in
  * as the shared file says (`bottom-center`).
  */
 @Composable
@@ -158,7 +160,7 @@ fun PortraitCycle(held: Boolean, modifier: Modifier = Modifier) {
     )
 }
 
-/** Whether the system's animations are off (Settings, Accessibility, Remove animations): the first child, standing still. */
+/** Whether the system's animations are off (Settings, Accessibility, Remove animations): the first animal, standing still. */
 private fun animationsOff(): Boolean = !ValueAnimator.areAnimatorsEnabled()
 
 /**
@@ -178,14 +180,14 @@ internal class CycleState(
 
     var person by mutableIntStateOf(0)
 
-    /** Seconds after the person's gap, no further than their drawing goes; below nought in the gap. */
+    /** Seconds after the portrait's gap, no further than its drawing goes; below nought in the gap. */
     var written by mutableDoubleStateOf(0.0)
     var shown by mutableFloatStateOf(1f)
 
     /** How far into the cycle it had got when it last stopped, in seconds. */
     private var stoppedAt = 0.0
 
-    /** One child standing still, as far into their drawing as said. */
+    /** One animal standing still, as far into their drawing as said. */
     fun stand(still: PortraitDebug.Still) {
         person = still.person
         written = min(still.written, book.portraits[still.person].writing)
@@ -228,7 +230,7 @@ internal class CycleState(
                 show(moment)
                 // The settled frame, when nothing moves, is the one just
                 // shown; nothing changes until the next stroke, the fade or
-                // the next child.
+                // the next animal.
                 delay(if (moment.moving) FRAME_WAIT_MS else ((moment.until - at) * 1000).toLong().coerceAtLeast(0) + 1)
             }
         } finally {
@@ -249,8 +251,9 @@ internal class CycleState(
 }
 
 /**
- * The lines on a layer of their own, faded as a whole by the layer's alpha,
- * so that a fade draws nothing again.
+ * The lines, faded as a whole by their layer's alpha, which a fade changes
+ * without drawing them again. One path drawn once, so the alpha can be laid
+ * on it directly rather than on a layer of pixels of its own.
  */
 @Composable
 private fun PortraitLines(drawings: PortraitDrawings, cycle: CycleState, modifier: Modifier) {
@@ -260,57 +263,39 @@ private fun PortraitLines(drawings: PortraitDrawings, cycle: CycleState, modifie
         modifier
             .graphicsLayer {
                 alpha = cycle.shown
-                // Its own pixels, for the passes inside it to replace one
-                // another rather than lie over the card (LinePainter).
-                compositingStrategy = CompositingStrategy.Offscreen
+                compositingStrategy = CompositingStrategy.ModulateAlpha
             }
             .drawBehind { painter.draw(this, cycle.person, cycle.written, ink) },
     )
 }
 
 /**
- * The README's glass for a platform without Liquid Glass, in one appearance:
- * the card's face and its edge, and the lines' fill, edge and light. The
- * text colour is the palette's own (night #F5F5F7, day #1C1C1E).
+ * The card's colours in one appearance, the same on every platform
+ * (2026-10-27): the card's face and edge, and the lines. The text colour is
+ * the palette's own (night #F5F5F7, day #1C1C1E).
  */
-internal class GlassInk(
-    val card: Color,
-    val cardEdge: Color,
-    val fill: Color,
-    val edge: Color,
-    val light: Color,
-) {
-    /** The edge laid over the fill: what the inner half of the edge is, the fill showing through it. */
-    val edgeOverFill: Color = edge.compositeOver(fill)
-
+internal class GlassInk(val card: Color, val cardEdge: Color, val line: Color) {
     companion object {
-        /** The edge's width, laid along the lines' outline, half inside and half out. */
-        val EdgeWidth = 0.75.dp
-
-        /** The light's width, as a share of the line's, and never under [LightLeast]. */
-        const val LIGHT_WIDTH = 0.16f
-        val LightLeast = 0.8.dp
-
-        /** Where the light lies off the line's middle, in line widths: up and to the left. */
-        const val LIGHT_X = -0.17f
-        const val LIGHT_Y = -0.2f
-
-        private fun of(text: Color, card: Color) = GlassInk(
-            card = card,
-            cardEdge = text.copy(alpha = 0.16f),
-            fill = text.copy(alpha = 0.12f),
-            edge = text.copy(alpha = 0.34f),
-            light = Color.White.copy(alpha = 0.62f),
-        )
-
         /**
          * The thinnest material's colour over the page: at night the iPhone's
          * card drawn without Liquid Glass measures 31 over its black page,
          * white at twelve per cent; by day white at nearly three quarters
          * over the page's grey, as a raised plate is (Palette.plate).
          */
-        private val Night = of(Palette.Dark.foreground, Color.White.copy(alpha = 0.12f))
-        private val Day = of(Palette.Light.foreground, Color.White.copy(alpha = 0.72f))
+        private val Night = GlassInk(
+            card = Color.White.copy(alpha = 0.12f),
+            cardEdge = Palette.Dark.foreground.copy(alpha = 0.16f),
+            line = Palette.Dark.foreground.copy(alpha = LINE_NIGHT),
+        )
+        private val Day = GlassInk(
+            card = Color.White.copy(alpha = 0.72f),
+            cardEdge = Palette.Light.foreground.copy(alpha = 0.16f),
+            line = Palette.Light.foreground.copy(alpha = LINE_DAY),
+        )
+
+        /** The lines' share of the text colour, by night (#F5F5F7) and by day (#1C1C1E). */
+        const val LINE_NIGHT = 0.60f
+        const val LINE_DAY = 0.50f
 
         /** The ink of the appearance the card is drawn in: the dark's or the light's whole, never a blend of them. */
         fun of(palette: Palette): GlassInk = if (palette.dark) Night else Day
@@ -318,21 +303,15 @@ internal class GlassInk(
 }
 
 /**
- * Draws a child's strokes as far as they are written, as the README's lines
- * of glass: one shape, every stroke drawn so far united.
+ * Draws an animal's strokes as far as they are written: every stroke drawn so
+ * far in one path, stroked once at the file's line width with round caps
+ * and joins. One draw, so that where two strokes cross the translucent line
+ * is laid down once and the crossing is no stronger than the line.
  *
- * Into the layer's own pixels, three passes, each replacing what is there
- * rather than laid over it: every stroke a hair wider than the line in the
- * edge's colour, every stroke at the line's width in the edge over the fill,
- * every stroke a hair narrower in the fill. What is left is the shape filled
- * and edged along its outline, as the Apple apps fill the shape and stroke
- * it; where two strokes cross (a cheek and the hair, the two lines of an
- * eye) they are one shape with one edge, where laid one over another they
- * were two lines with a double edge and a darker crossing. Then the light.
- *
- * The strokes already finished are drawn as one path, made again only when
- * another is finished, so that a frame is a handful of paths rather than
- * every stroke of a child of twenty four.
+ * Nothing is made on a frame that need not be: the paths are read once, the
+ * strokes already finished are one path made again only when another is
+ * finished, the stroke being drawn is cut into a path kept for it, and the
+ * paint is the painter's own.
  */
 private class LinePainter(private val drawings: PortraitDrawings) {
     private val measure = PathMeasure()
@@ -346,76 +325,58 @@ private class LinePainter(private val drawings: PortraitDrawings) {
     private val finished = Path()
     private var finishedPerson = -1
     private var finishedCount = -1
-    private val shown = ArrayList<Path>()
+
+    /** What is drawn this frame: the finished strokes and the ones being drawn. */
+    private val drawn = Path()
 
     fun draw(scope: DrawScope, person: Int, written: Double, ink: GlassInk) = with(scope) {
+        if (!gather(person, written)) return@with
         val fit = drawings.fit(size.width, size.height, PortraitDrawings.Inset.toPx())
-        val paths = visible(person, written)
-        if (paths.isEmpty()) return@with
-        val width = drawings.book.lineWidth
-        // The hairlines are the README's points, whatever the scale.
-        val edge = GlassInk.EdgeWidth.toPx() / fit.scale
-        val light = max(width * GlassInk.LIGHT_WIDTH, GlassInk.LightLeast.toPx() / fit.scale)
+        paint.strokeWidth = drawings.book.lineWidth
+        paint.color = ink.line.toArgb()
         drawIntoCanvas {
             val canvas = it.nativeCanvas
             canvas.save()
             canvas.clipRect(0f, 0f, size.width, size.height)
             canvas.translate(fit.left, fit.top)
             canvas.scale(fit.scale, fit.scale)
-            fun pass(stroke: Float, colour: Color) {
-                paint.strokeWidth = stroke
-                paint.color = colour.toArgb()
-                for (path in paths) canvas.drawPath(path, paint)
-            }
-            paint.blendMode = BlendMode.SRC
-            pass(width + edge, ink.edge)
-            pass(width, ink.edgeOverFill)
-            pass(max(width - edge, 0f), ink.fill)
-            // The light: the middle of the lines again, thin, moved up and to
-            // the left. At these proportions it lies inside the shape
-            // everywhere, its round ends included (it is never more than
-            // 0.34 of a width from the middle, the shape's edge half a width
-            // away, while the line is wider than 1.7 points), and needs no
-            // mask to keep it there.
-            paint.blendMode = BlendMode.SRC_OVER
-            paint.strokeWidth = light
-            paint.color = ink.light.toArgb()
-            canvas.translate(width * GlassInk.LIGHT_X, width * GlassInk.LIGHT_Y)
-            for (path in paths) canvas.drawPath(path, paint)
+            canvas.drawPath(drawn, paint)
             canvas.restore()
         }
     }
 
     /**
-     * The strokes as far as they are drawn: the finished ones as one path,
-     * each one being drawn cut at its length so far, those not begun left out.
+     * Gathers into [drawn] the strokes as far as they are drawn: the finished
+     * ones, each one being drawn cut at its length so far, those not begun
+     * left out. False where there is nothing yet.
      */
-    private fun visible(person: Int, written: Double): List<Path> {
+    private fun gather(person: Int, written: Double): Boolean {
         val art = drawings.book.portraits[person]
         val strokes = drawings.people[person]
-        shown.clear()
         var done = 0
-        for ((index, stroke) in art.strokes.withIndex()) if (stroke.drawn(written) >= 1f) done++
+        for (stroke in art.strokes) if (stroke.drawn(written) >= 1f) done++
         if (person != finishedPerson || done != finishedCount) {
-            // The finished strokes only grow while a child is drawn, so their
+            // The finished strokes only grow while an animal is drawn, so their
             // number says which they are.
             finished.rewind()
             for ((index, stroke) in art.strokes.withIndex()) if (stroke.drawn(written) >= 1f) finished.addPath(strokes[index].path)
             finishedPerson = person
             finishedCount = done
         }
-        if (done > 0) shown += finished
+        drawn.set(finished)
+        var any = done > 0
         for ((index, stroke) in art.strokes.withIndex()) {
-            val drawn = stroke.drawn(written)
-            if (drawn <= 0f || drawn >= 1f) continue
-            strokes[index].cut(drawn, measure)
-            shown += strokes[index].partial
+            val part = stroke.drawn(written)
+            if (part <= 0f || part >= 1f) continue
+            strokes[index].cut(part, measure)
+            drawn.addPath(strokes[index].partial)
+            any = true
         }
-        return shown
+        return any
     }
 }
 
-/** The shared file's children as the platform's paths, read once for the life of the process. */
+/** The shared file's animals as the platform's paths, read once for the life of the process. */
 class PortraitDrawings(val book: PortraitBook) {
     val timeline = PortraitTimeline(book)
     internal val people: List<List<StrokePath>> = book.portraits.map { art -> art.strokes.map { StrokePath(it.path) } }
@@ -495,7 +456,7 @@ object Portraits {
     /**
      * The drawings, or null where the file is missing or says something this
      * cannot draw (said in the log once): the card is then the glass alone,
-     * which is what it is in the gap between two children.
+     * which is what it is in the gap between two animals.
      */
     fun load(context: Context): PortraitDrawings? {
         read?.let { return it.getOrNull() }
@@ -513,7 +474,7 @@ object Portraits {
 
 /**
  * The debug switch the iPhone's TOMOSHIBI_DEBUG_PORTRAIT is: a debug launch's
- * `-e portrait <name>[@<seconds>]` stands that child still on the card,
+ * `-e portrait <name>[@<seconds>]` stands that animal still on the card,
  * finished or that many seconds after the gap into their drawing, to
  * photograph each of them and the stages of one. Tests set [said] the same way.
  */

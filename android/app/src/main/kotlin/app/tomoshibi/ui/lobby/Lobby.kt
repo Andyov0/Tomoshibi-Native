@@ -999,7 +999,7 @@ private fun AccountMenu(app: AppModel, account: Account, state: LobbyState) {
  * Home on a wide screen (`HomeStage`): over the picture of yourself, which
  * fills the window under the sidebar, a greeting, the switches for how you
  * will arrive, and the server where there is a choice. With the camera off
- * there is no picture, and the people of the phone's camera card are drawn
+ * there is no picture, and the animals of the phone's camera card are drawn
  * on a card of glass between the greeting and the switches ([held] while a
  * sheet or the settings cover it).
  */

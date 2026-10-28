@@ -9,7 +9,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import app.tomoshibi.basics.Theme
@@ -27,9 +30,11 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import java.io.File
+import kotlin.math.max
+import kotlin.math.min
 
 /**
- * The camera card's people as the app draws them: the shared file is in the
+ * The camera card's portraits as the app draws them: the shared file is in the
  * app, a stroke is cut along its length, the canvas is placed on the card as
  * the file says, and pictures of the card at each stage of a drawing and of
  * everybody finished, recorded with `./gradlew :app:recordRoborazziDebug`
@@ -110,7 +115,7 @@ class PreviewGlassTest {
          "portraits": [{"name": "a", "hold": 1, "fade": 1, "strokes": [{"d": "M 0 0 L 1 1", "start": 0, "duration": 1}]}]}
     """.trimIndent()
 
-    /** The card as the phone's lobby has it, 380 by 292, on the page's ground, each person finished. */
+    /** The card as the phone's lobby has it, 380 by 292, on the page's ground, each portrait finished. */
     @Test
     fun everybodyFinished() {
         val drawings = Portraits.load(context)!!
@@ -122,7 +127,34 @@ class PreviewGlassTest {
         }
     }
 
-    /** One person at each stage of their drawing, for the strip of frames beside the iPhone's. */
+    /**
+     * Where lines cross (a shell over a chick, a wing over a penguin) the
+     * line is laid down once: no pixel of the card is further from its face
+     * than the line's colour over it. Each stroke drawn on its own laid the
+     * translucent line down twice there, a brighter knot at night and a
+     * darker one by day.
+     */
+    @Test
+    fun crossingLinesAreNoBrighterThanOneLine() {
+        val drawings = Portraits.load(context)!!
+        card()
+        val palette = TestAppearance.palette
+        val ink = GlassInk.of(palette)
+        val line = ink.line.compositeOver(ink.card.compositeOver(palette.ground))
+        for (art in drawings.book.portraits) {
+            PortraitDebug.said = art.name
+            compose.waitForIdle()
+            val pixels = compose.onNodeWithTag("card").captureToImage().toPixelMap()
+            var furthest = if (palette.dark) 0f else 1f
+            for (x in 0 until pixels.width) for (y in 0 until pixels.height) {
+                val red = pixels[x, y].red
+                furthest = if (palette.dark) max(furthest, red) else min(furthest, red)
+            }
+            assertEquals(art.name, line.red, furthest, 2f / 255)
+        }
+    }
+
+    /** One portrait at each stage of its drawing, for the strip of frames beside the iPhone's. */
     @Test
     fun oneBeingDrawn() {
         val drawings = Portraits.load(context)!!

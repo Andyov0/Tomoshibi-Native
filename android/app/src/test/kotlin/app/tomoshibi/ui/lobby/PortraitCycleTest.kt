@@ -84,7 +84,7 @@ class PortraitCycleTest {
         val job = launch(display) { cycle.run() }
         advanceTimeBy(4_000)
         job.cancel()
-        // The first child is held finished from 2.5 to 3.5 into the cycle,
+        // The first portrait is held finished from 2.5 to 3.5 into the cycle,
         // and the pen is lifted between their strokes from 1.75 to 2.0.
         assertTrue(display.frames.count { (ms, _) -> ms in 2_560..3_480 } <= 1)
         assertTrue(display.frames.count { (ms, _) -> ms in 1_800..1_990 } <= 1)
