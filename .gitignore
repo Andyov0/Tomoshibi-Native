@@ -8,6 +8,7 @@ DerivedData/
 /apple/TomoshibiCore/Sources/TomoshibiCore/*.generated.swift
 /apple/TomoshibiCore/.build/
 /apple/TomoshibiKit/.build/
+/apple/LobbyRender/.build/
 /interop/.window-of
 
 # The deployment this checkout builds for (see deployment.example).
