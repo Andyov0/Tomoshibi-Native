@@ -65,7 +65,7 @@ public class PortraitsTests
                 Assert.DoesNotContain(stroke.Path, s => s.Verb != PathVerb.Close && s.X > 79 && s.Y < 18);
             }
         }
-        // Every name is somebody's own: the debug switch picks a child by it.
+        // Every name is somebody's own: the debug switch picks a portrait by it.
         Assert.Equal(art.Portraits.Count, art.Portraits.Select(p => p.Name).Distinct().Count());
     }
 
@@ -145,7 +145,7 @@ public class PortraitsTests
         Assert.Equal(0.5, art.At(3.8).Shown, 9);
         Assert.Equal(1 - Easing.Smoothstep(0.5 / 0.6), art.At(4.0).Shown, 9);
         Assert.Equal(0, art.At(4.0).Portrait);
-        // The next child, from the start of their own turn: their gap first.
+        // The next portrait, from the start of their own turn: their gap first.
         var next = art.At(4.1 + 1);
         Assert.Equal(1, next.Portrait);
         Assert.Equal(1, next.Into, 9);
@@ -179,7 +179,7 @@ public class PortraitsTests
         // Finished and held, until the fade.
         Still(2.7, false, 3.5);
         Still(3.6, true, 4.1);
-        // The next child's gap, and their one stroke.
+        // The next portrait's gap, and their one stroke.
         Still(4.3, false, 4.6);
         Still(4.7, true, 6.6);
         // A round later, a round later.
@@ -299,46 +299,47 @@ public class PortraitsTests
     }
 
     [Fact]
-    public void TheTubeIsTheReadmesGlassWithoutLiquidGlass()
+    public void TheLinesAreThinSingleLinesOfTheTextColour()
     {
-        var night = GlassLine.Tube(Theme.Dark.Foreground);
-        var day = GlassLine.Tube(Theme.Light.Foreground);
-        // The text colour at 12 per cent, its edge at 34 per cent 0.75 wide,
-        // white at 62 per cent for the light, the card's border at 16.
-        Assert.Equal("#F5F5F7@31", Hex(night.Fill));
-        Assert.Equal("#F5F5F7@87", Hex(night.Edge));
-        Assert.Equal("#F5F5F7@41", Hex(night.PaneEdge));
-        Assert.Equal("#1C1C1E@31", Hex(day.Fill));
-        Assert.Equal("#1C1C1E@87", Hex(day.Edge));
-        Assert.Equal("#1C1C1E@41", Hex(day.PaneEdge));
-        foreach (var look in new[] { night, day })
+        Assert.Equal(LineKind.Single, PortraitGlass.Lines);
+        Assert.Same(PortraitGlass.Dark, PortraitGlass.Of(Scheme.Dark));
+        Assert.Same(PortraitGlass.Light, PortraitGlass.Of(Scheme.Light));
+        // #F5F5F7 at 60 per cent by night, #1C1C1E at 50 by day, and nothing else.
+        Assert.Equal("#F5F5F7@153", Hex(PortraitGlass.Dark.Fill));
+        Assert.Equal("#1C1C1E@128", Hex(PortraitGlass.Light.Fill));
+        foreach (var look in new[] { PortraitGlass.Dark, PortraitGlass.Light })
         {
-            Assert.True(look.Edged && look.Lit);
-            Assert.Null(look.Width);
-            Assert.Equal("#FFFFFF@158", Hex(look.Light));
-            Assert.Equal(0.75, look.EdgeWidth);
-            Assert.Equal((0.16, 0.8, -0.17, -0.2), (look.LightWidth, look.LightLeast, look.LightX, look.LightY));
+            Assert.Equal(LineKind.Single, look.Kind);
+            Assert.False(look.Edged);
+            Assert.False(look.Lit);
+            // Still on the pane of glass with its one-point border.
             Assert.Equal(1, look.PaneEdgeWidth);
+            Assert.Equal(0.16f, look.PaneEdge.Alpha);
         }
     }
 
     [Fact]
-    public void ASingleLineIsOneColourAndNothingElse()
+    public void TheTubeIsTheReadmesGlassWithoutLiquidGlass()
     {
-        var line = GlassLine.Single(Theme.Dark.Foreground, Shade.White.WithAlpha(0.5f), 1.5);
-        Assert.False(line.Edged);
-        Assert.False(line.Lit);
-        Assert.Equal(1.5, line.Width);
-        // On the same pane of glass.
-        Assert.Equal(GlassLine.Tube(Theme.Dark.Foreground).PaneEdge, line.PaneEdge);
-    }
-
-    [Fact]
-    public void EachSchemeDrawsTheLinesTheAppsDrawNow()
-    {
-        Assert.Same(PortraitGlass.Dark, PortraitGlass.Of(Scheme.Dark));
-        Assert.Same(PortraitGlass.Light, PortraitGlass.Of(Scheme.Light));
-        Assert.Equal(PortraitGlass.Lines, PortraitGlass.Dark.Kind);
-        Assert.Equal(PortraitGlass.Lines, PortraitGlass.Light.Kind);
+        var night = GlassLine.Tube(Scheme.Dark);
+        var day = GlassLine.Tube(Scheme.Light);
+        // The text colour at 12 per cent (14 by day), its edge at 30 per cent
+        // 0.75 wide, white at 60 per cent (90 by day) for the light, the
+        // card's border at 16.
+        Assert.Equal("#F5F5F7@31", Hex(night.Fill));
+        Assert.Equal("#1C1C1E@36", Hex(day.Fill));
+        Assert.Equal(Theme.Dark.Foreground.WithAlpha(0.30f), night.Edge);
+        Assert.Equal(Theme.Light.Foreground.WithAlpha(0.30f), day.Edge);
+        Assert.Equal(Shade.White.WithAlpha(0.60f), night.Light);
+        Assert.Equal(Shade.White.WithAlpha(0.90f), day.Light);
+        Assert.Equal("#F5F5F7@41", Hex(night.PaneEdge));
+        Assert.Equal("#1C1C1E@41", Hex(day.PaneEdge));
+        foreach (var look in new[] { night, day })
+        {
+            Assert.True(look.Edged && look.Lit);
+            Assert.Equal(0.75, look.EdgeWidth);
+            Assert.Equal((0.16, 0.8, -0.17, -0.2), (look.LightWidth, look.LightLeast, look.LightX, look.LightY));
+            Assert.Equal(1, look.PaneEdgeWidth);
+        }
     }
 }

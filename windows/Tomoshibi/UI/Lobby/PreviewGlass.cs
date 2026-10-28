@@ -18,42 +18,40 @@ namespace Tomoshibi.UI.Lobby;
 
 /// <summary>
 /// The lobby's picture of yourself with the camera off: a pane of glass
-/// with children drawn on it in lines of glass, one after another, stroke
-/// by stroke, the way the iPhone writes its first "hello" (the iPhone's
-/// PreviewGlass; the owner asked for the same card here, 2026-10-27). On
-/// the narrow lobby it is the card itself, in-app acrylic over the page
-/// with a hairline border, as the phone's is glass; on the wide one there
-/// is no card, the camera filling the window behind the sidebar, and the
-/// children stand on the stage beside it, where the picture would be.
+/// with little animals drawn on it, one after another, stroke by stroke,
+/// the way the iPhone writes its first "hello" (the iPhone's PreviewGlass;
+/// the owner asked for the same card here, 2026-10-27). On the narrow lobby
+/// it is the card itself, in-app acrylic over the page with a hairline
+/// border, as the phone's is glass; on the wide one there is no card, the
+/// camera filling the window behind the sidebar, and the animals stand on
+/// the stage beside it, where the picture would be.
 ///
 /// Who is drawn and when is art/portraits.json, which every platform plays
-/// as it is (Tomoshibi.Basics.PortraitArt); how a line of glass looks is
-/// the README beside it (PortraitGlass), the numbers for a platform without
-/// Liquid Glass.
+/// as it is (Tomoshibi.Basics.PortraitArt); how the lines look is
+/// PortraitGlass: thin single lines of the text colour now, and the
+/// README's tube of glass before them, kept one switch away.
 ///
 /// Drawn by the compositor. Each piece of a stroke is a path whose TrimEnd
 /// follows one clock, a property the compositor moves itself, through the
-/// README's formulas written as expressions; so while a child is written
+/// README's formulas written as expressions; so while an animal is written
 /// or fades the window's thread does nothing. The clock moves only while
 /// something on the card does: in the gap and the hold, and whenever the
 /// card cannot be seen (the window minimised or hidden, a dialog or sheet
 /// over the lobby, the card scrolled away, the card gone), it stands still
 /// and nothing is drawn again, and it goes on from where it stood. With
-/// Windows' animation effects off the first child stands finished.
+/// Windows' animation effects off the first animal stands finished.
 ///
-/// A line of glass is the README's: every stroke drawn so far, united into
-/// one shape, filled faintly with the text colour, its outline drawn in the
-/// text colour at a third, and the light along the strokes' centre lines.
-/// Direct2D can stroke a path but not stroke the outline of a union of
-/// growing strokes, so each stroke is drawn four times in four pure colours
-/// into a layer: wider than the line by the edge (the outline's outer half),
-/// as wide as the line (its inner half, over the fill), narrower by the
-/// edge (the fill), and the light. Every stroke's widest goes down first and
-/// its light last, so where two lines cross the later fill covers the
-/// earlier edge and they are one shape, as the README asks, rather than
-/// each showing its edges through the other. One colour matrix then turns
-/// each pure colour into its part of the glass, every part its own colour
-/// at its own strength wherever it lies.
+/// The lines are every stroke drawn so far united into one shape, so lines
+/// that cross are one line rather than a darker crossing (the single line
+/// is translucent) or a double edge (the tube's). Direct2D strokes a path
+/// but has no union of growing strokes, so every stroke is drawn in pure
+/// colours into a layer, and one colour matrix turns each colour into its
+/// part of the line, every part its own colour at its own strength wherever
+/// it lies. The single line is one part, red. The tube is four: wider than
+/// the line by its edge (the outline's outer half), as wide as the line
+/// (the inner half, over the fill), narrower by the edge (the fill), and
+/// the light; every stroke's widest goes down first and its light last, so
+/// where two lines cross the later fill covers the earlier edge.
 /// </summary>
 internal sealed class PreviewGlass : Grid
 {
@@ -74,7 +72,7 @@ internal sealed class PreviewGlass : Grid
             try
             {
                 _art = PortraitArt.Load(Path.Combine(AppContext.BaseDirectory, "art", "portraits.json"));
-                Log.Line($"portraits: {_art.Portraits.Count} children, a round of {_art.Round:0.##} s");
+                Log.Line($"portraits: {_art.Portraits.Count} portraits, a round of {_art.Round:0.##} s");
             }
             catch (Exception fault)
             {
@@ -94,7 +92,7 @@ internal sealed class PreviewGlass : Grid
     private bool _inView = true;
 
     /// <param name="radius">The corner the drawing is cut to.</param>
-    /// <param name="pane">Whether this is a card of its own (the narrow lobby's), or children standing on what is already there (the wide stage).</param>
+    /// <param name="pane">Whether this is a card of its own (the narrow lobby's), or portraits standing on what is already there (the wide stage).</param>
     /// <param name="pose">TOMOSHIBI_DEBUG_PORTRAIT in a debug build: one moment, held, for a picture of it.</param>
     public PreviewGlass(double radius, bool pane, string? pose = null)
     {
@@ -194,7 +192,7 @@ internal sealed class PreviewGlass : Grid
             // Into the fade if asked, but not past the turn.
             return art.StartOf(index) + art.Gap + Math.Min(double.IsFinite(seconds) ? seconds : person.Writing, person.Writing + person.Hold + person.Fade);
         }
-        // Somebody who turned animation off sees the first child whole.
+        // Somebody who turned animation off sees the first portrait whole.
         if (_still) return art.Gap + art.Portraits[0].Writing;
         return null;
     }
@@ -211,7 +209,7 @@ internal sealed class PreviewGlass : Grid
         _drawing.Run(Running);
     }
 
-    /// <summary>The composition tree of the child on the card, the clock it is drawn by, and what moves the clock.</summary>
+    /// <summary>The composition tree of the portrait on the card, the clock it is drawn by, and what moves the clock.</summary>
     private sealed class Drawing
     {
         public readonly ContainerVisual Root;
@@ -225,11 +223,11 @@ internal sealed class PreviewGlass : Grid
         private readonly DispatcherQueueTimer _timer;
         private readonly CanvasDevice _device = CanvasDevice.GetSharedDevice();
         private Vector2 _size;
-        private Child? _child;
-        // Every child once made, kept for the next round: making one is a
+        private Picture? _shown;
+        // Every portrait once made, kept for the next round: making one is a
         // few hundred milliseconds of Direct2D paths and shapes, which made
-        // every change of child a stutter.
-        private readonly Dictionary<int, Child> _made = new();
+        // every change of portrait a stutter.
+        private readonly Dictionary<int, Picture> _made = new();
         private bool _running;
         private bool _ticking;
         // Seconds of the cycle played before the present run, and when the
@@ -237,8 +235,8 @@ internal sealed class PreviewGlass : Grid
         private double _banked;
         private long? _since;
 
-        /// <summary>One child: the visual they fade in, their layer, their shapes in the order they are drawn, and their strokes.</summary>
-        private sealed record Child(int Index, LayerVisual Layer, CompositionEffectBrush Glass, CompositionContainerShape Fit, List<CompositionSpriteShape>[] Parts, Line[] Lines, ExpressionAnimation Shown)
+        /// <summary>One portrait: the visual they fade in, their layer, their shapes in the order they are drawn, and their strokes.</summary>
+        private sealed record Picture(int Index, LayerVisual Layer, CompositionEffectBrush Glass, CompositionContainerShape Fit, List<CompositionSpriteShape>[] Parts, Line[] Lines, ExpressionAnimation Shown)
         {
             /// <summary>Whether the fade's expression is on the glass, or it stands at a value of its own.</summary>
             public bool Fading { get; set; }
@@ -271,7 +269,7 @@ internal sealed class PreviewGlass : Grid
             _clock.InsertScalar("t", 0);
             // The fade is the effect's last step, after the matrix. An opacity
             // on the layer, or on a visual holding it, reached the pure
-            // colours before the matrix read them, and a fading child lost
+            // colours before the matrix read them, and a fading portrait lost
             // its edges and its light and went a flat dark grey.
             _effects = compositor.CreateEffectFactory(new OpacityEffect
             {
@@ -335,7 +333,7 @@ internal sealed class PreviewGlass : Grid
         }
 
         /// <summary>
-        /// At each moment the card starts or stops moving: the child whose
+        /// At each moment the card starts or stops moving: the portrait whose
         /// turn it is on the card, the clock let go while something moves
         /// and stopped while nothing does, and the next such moment awaited.
         /// A pause shorter than a fifth of a second (a pen lifted between two
@@ -381,43 +379,43 @@ internal sealed class PreviewGlass : Grid
             _clock.InsertScalar("t", (float)(now % _art.Round));
         }
 
-        /// <summary>The child at <paramref name="index"/> on the card, the one before taken off it.</summary>
+        /// <summary>The portrait at <paramref name="index"/> on the card, the one before taken off it.</summary>
         private void Show(int index)
         {
-            if (_child?.Index == index) return;
-            if (_child != null) Root.Children.Remove(_child.Layer);
-            if (!_made.TryGetValue(index, out var child))
+            if (_shown?.Index == index) return;
+            if (_shown != null) Root.Children.Remove(_shown.Layer);
+            if (!_made.TryGetValue(index, out var portrait))
             {
-                child = Make(index);
-                _made[index] = child;
+                portrait = Make(index);
+                _made[index] = portrait;
             }
             // From nothing again: what they were left at last round is not
             // where their turn begins.
-            child.Fading = false;
-            child.Glass.StopAnimation("fade.Opacity");
-            foreach (var line in child.Lines) line.State = -1;
-            child.Layer.IsVisible = false;
-            child.Layer.Size = _size;
-            _child = child;
-            Root.Children.InsertAtTop(child.Layer);
-            Fit(child);
+            portrait.Fading = false;
+            portrait.Glass.StopAnimation("fade.Opacity");
+            foreach (var line in portrait.Lines) line.State = -1;
+            portrait.Layer.IsVisible = false;
+            portrait.Layer.Size = _size;
+            _shown = portrait;
+            Root.Children.InsertAtTop(portrait.Layer);
+            Fit(portrait);
         }
 
         /// <summary>
         /// Only what moves follows the clock: the strokes being written and
         /// the fade. A stroke not yet begun stands at nothing and one done at
-        /// whole, and the child's opacity stands too outside the fade, so the
+        /// whole, and the portrait's opacity stands too outside the fade, so the
         /// compositor has one or two paths to draw again in a frame rather
-        /// than every path of the child. Asked at each moment the card starts
+        /// than every path of the portrait. Asked at each moment the card starts
         /// or stops moving, which every stroke's start and end is.
         /// </summary>
         private void Follow(double now)
         {
-            if (_child is not { } child) return;
+            if (_shown is not { } portrait) return;
             var moment = _art.At(now);
-            if (moment.Portrait != child.Index) return;
+            if (moment.Portrait != portrait.Index) return;
             var tau = moment.Drawing;
-            foreach (var line in child.Lines)
+            foreach (var line in portrait.Lines)
             {
                 var state = tau >= line.Stroke.End ? 2 : tau >= line.Stroke.Start ? 1 : 0;
                 if (state == line.State) continue;
@@ -434,31 +432,31 @@ internal sealed class PreviewGlass : Grid
                     piece.TrimEnd = state == 2 ? 1 : 0;
                 }
             }
-            var person = _art.Portraits[child.Index];
+            var person = _art.Portraits[portrait.Index];
             var fading = tau >= person.Writing + person.Hold && tau < person.Writing + person.Hold + person.Fade;
-            if (fading && !child.Fading)
+            if (fading && !portrait.Fading)
             {
-                child.Glass.StartAnimation("fade.Opacity", child.Shown);
+                portrait.Glass.StartAnimation("fade.Opacity", portrait.Shown);
             }
             else if (!fading)
             {
-                if (child.Fading) child.Glass.StopAnimation("fade.Opacity");
-                child.Glass.Properties.InsertScalar("fade.Opacity", (float)person.Shown(tau));
+                if (portrait.Fading) portrait.Glass.StopAnimation("fade.Opacity");
+                portrait.Glass.Properties.InsertScalar("fade.Opacity", (float)person.Shown(tau));
             }
-            child.Fading = fading;
+            portrait.Fading = fading;
             // Nothing of them is drawn in the gap, so the layer is not either.
-            child.Layer.IsVisible = tau >= 0;
+            portrait.Layer.IsVisible = tau >= 0;
         }
 
         /// <summary>
-        /// One child, every piece of every stroke a path trimmed by the clock:
+        /// One portrait, every piece of every stroke a path trimmed by the clock:
         /// the README's <c>drawn(stroke)</c>, smoothstep of the share of the
         /// stroke's time gone, and of that the share of this piece's length,
         /// the pen going through a stroke's pieces in order. The layer's
         /// opacity is the README's too: none before the gap ends, whole until
         /// the hold ends, then down the smoothstep over the fade.
         /// </summary>
-        private Child Make(int index)
+        private Picture Make(int index)
         {
             var person = _art.Portraits[index];
             var layer = _compositor.CreateLayerVisual();
@@ -471,7 +469,7 @@ internal sealed class PreviewGlass : Grid
             shapes.RelativeSizeAdjustment = Vector2.One;
             var fit = _compositor.CreateContainerShape();
             var parts = new[] { new List<CompositionSpriteShape>(), new List<CompositionSpriteShape>(), new List<CompositionSpriteShape>(), new List<CompositionSpriteShape>() };
-            // Seconds into this child's drawing, read round the cycle.
+            // Seconds into this portrait's drawing, read round the cycle.
             var drawing = $"(Mod(c.t, {N(_art.Round)}) - {N(_art.StartOf(index) + _art.Gap)})";
             foreach (var stroke in person.Strokes)
             {
@@ -517,7 +515,7 @@ internal sealed class PreviewGlass : Grid
                 ? $"1 - {Smoothstep($"({drawing} - {N(fading)}) / {N(person.Fade)}")}"
                 : $"{drawing} >= {N(fading)} ? 0 : 1");
             shown.SetReferenceParameter("c", _clock);
-            return new Child(index, layer, glass, fit, parts, lines.ToArray(), shown);
+            return new Picture(index, layer, glass, fit, parts, lines.ToArray(), shown);
         }
 
         /// <summary>smoothstep(u) = u²(3 − 2u), u held to nought and one, as an expression.</summary>
@@ -525,17 +523,17 @@ internal sealed class PreviewGlass : Grid
 
         private static string N(double value) => value.ToString("0.######", CultureInfo.InvariantCulture);
 
-        /// <summary>The card's size and corner: the child fitted to it, and every width that is not the drawing's own made again for the new scale.</summary>
+        /// <summary>The card's size and corner: the portrait fitted to it, and every width that is not the drawing's own made again for the new scale.</summary>
         public void Lay(Vector2 size, float radius)
         {
             _size = size;
             Root.Size = size;
             _cut.Size = size;
             _cut.CornerRadius = new Vector2(radius, radius);
-            if (_child != null)
+            if (_shown != null)
             {
-                _child.Layer.Size = size;
-                Fit(_child);
+                _shown.Layer.Size = size;
+                Fit(_shown);
             }
         }
 
@@ -545,19 +543,19 @@ internal sealed class PreviewGlass : Grid
         /// centred on the line's edge; the light is 0.16 of the line, at
         /// least 0.8 points, moved up and to the left by a fifth of it.
         /// </summary>
-        private void Fit(Child child)
+        private void Fit(Picture portrait)
         {
             var fit = _art.Fit(_size.X, _size.Y);
             var scale = (float)fit.Scale;
             if (scale <= 0)
             {
-                child.Fit.Scale = Vector2.Zero;
+                portrait.Fit.Scale = Vector2.Zero;
                 return;
             }
-            child.Fit.Scale = new Vector2(scale, scale);
-            child.Fit.Offset = new Vector2((float)fit.X, (float)fit.Y);
+            portrait.Fit.Scale = new Vector2(scale, scale);
+            portrait.Fit.Offset = new Vector2((float)fit.X, (float)fit.Y);
             // In the canvas's units, which the fit scales to points.
-            var line = _look.Width is { } points ? (float)points / scale : (float)_art.LineWidth;
+            var line = (float)_art.LineWidth;
             var edge = (float)_look.EdgeWidth / scale;
             var widths = new[]
             {
@@ -567,9 +565,9 @@ internal sealed class PreviewGlass : Grid
                 Math.Max(line * (float)_look.LightWidth, (float)_look.LightLeast / scale),
             };
             var moved = new Vector2(line * (float)_look.LightX, line * (float)_look.LightY);
-            for (var part = 0; part < child.Parts.Length; part++)
+            for (var part = 0; part < portrait.Parts.Length; part++)
             {
-                foreach (var shape in child.Parts[part])
+                foreach (var shape in portrait.Parts[part])
                 {
                     shape.StrokeThickness = widths[part];
                     if (part == Light) shape.Offset = moved;

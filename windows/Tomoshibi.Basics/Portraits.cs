@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace Tomoshibi.Basics;
 
 /// <summary>
-/// The children the lobby's camera card draws while the camera is off, one
+/// The portraits the lobby's camera card draws while the camera is off, one
 /// after another, in lines of glass: read from art/portraits.json at the
 /// repository's top, the one file every platform plays as it is, so that
 /// every platform draws the same lines at the same moments (art/README.md,
@@ -13,14 +13,14 @@ namespace Tomoshibi.Basics;
 /// The file says what is drawn and when; the README also says how a line of
 /// glass looks (<see cref="PortraitGlass"/>). Paths are SVG path data in
 /// absolute M, L, C, Q and Z alone, on a canvas whose origin is its top left
-/// with y going down. Each child's turn is the gap of empty glass, then the
+/// with y going down. Each portrait's turn is the gap of empty glass, then the
 /// strokes, each written along its length between its start and its end on
 /// the smoothstep curve, then the finished drawing held, then its fade; the
-/// next child's gap follows, round and round in the file's order.
+/// next portrait's gap follows, round and round in the file's order.
 ///
 /// Parsed strictly: the file ships inside the app, so anything in it this
 /// cannot draw as written is a mistake for the tests that read it
-/// (PortraitsTests) to catch, not a child to be drawn some other way.
+/// (PortraitsTests) to catch, not a portrait to be drawn some other way.
 /// </summary>
 public sealed record PortraitArt(
     int Format,
@@ -43,10 +43,10 @@ public sealed record PortraitArt(
     /// <summary>How long one round of everybody takes.</summary>
     public double Round => Portraits.Sum(Turn);
 
-    /// <summary>How long a child's turn is: the gap, the drawing, the hold and the fade.</summary>
+    /// <summary>How long a portrait's turn is: the gap, the drawing, the hold and the fade.</summary>
     public double Turn(Portrait person) => Gap + person.Writing + person.Hold + person.Fade;
 
-    /// <summary>When the child at <paramref name="index"/> begins their turn (their gap), seconds into a round.</summary>
+    /// <summary>When the portrait at <paramref name="index"/> begins their turn (their gap), seconds into a round.</summary>
     public double StartOf(int index) => Portraits.Take(index).Sum(Turn);
 
     /// <summary>
@@ -113,7 +113,7 @@ public sealed record PortraitArt(
         return new PortraitFit(scale, (width - CanvasWidth * scale) / 2, height - CanvasHeight * scale);
     }
 
-    /// <summary>The child called <paramref name="name"/>, or none (-1).</summary>
+    /// <summary>The portrait called <paramref name="name"/>, or none (-1).</summary>
     public int IndexOf(string name)
     {
         for (var i = 0; i < Portraits.Count; i++)
@@ -221,7 +221,7 @@ public sealed record PortraitArt(
     }
 }
 
-/// <summary>One child: the strokes they are drawn in, how long they stand finished, and how long they take to fade.</summary>
+/// <summary>One portrait: the strokes they are drawn in, how long they stand finished, and how long they take to fade.</summary>
 public sealed record Portrait(string Name, double Hold, double Fade, IReadOnlyList<PortraitStroke> Strokes)
 {
     /// <summary>How long the drawing takes: until the last stroke is whole.</summary>
@@ -241,7 +241,7 @@ public sealed record Portrait(string Name, double Hold, double Fade, IReadOnlyLi
 }
 
 /// <summary>
-/// A line of a child: its path, when it is written, and the pieces of it
+/// A line of a portrait: its path, when it is written, and the pieces of it
 /// that begin with a move, which the pen goes through in order.
 /// </summary>
 public sealed record PortraitStroke(string Data, double Start, double Duration, IReadOnlyList<PathSegment> Path, double Length)
@@ -279,7 +279,7 @@ public sealed record PortraitStroke(string Data, double Start, double Duration, 
 }
 
 /// <summary>
-/// Who is on the card at a moment: which child, how many seconds into their
+/// Who is on the card at a moment: which portrait, how many seconds into their
 /// turn, how many into their drawing (less than nought during the gap), and
 /// the drawing's opacity.
 /// </summary>
@@ -508,28 +508,27 @@ public static class PathData
     }
 }
 
-/// <summary>The two ways the README has drawn a child's lines: a thin line of one colour, or a tube of glass.</summary>
+/// <summary>The two ways the lines have been drawn: a thin line of one colour, or a tube of glass.</summary>
 public enum LineKind { Single, Tube }
 
 /// <summary>
-/// How the lines look (art/README.md, the numbers for a platform without
-/// Liquid Glass). Every stroke drawn so far, at the line's width with round
-/// caps and joins, united into one shape, so two lines that cross are one
-/// line, not a double edge; then, by <see cref="Kind"/>:
+/// How the lines look where there is no Liquid Glass. Every stroke drawn so
+/// far, at the line's width (the file's lineWidth at the card's scale) with
+/// round caps and joins, united into one shape, so two lines that cross are
+/// one line and not a double edge or a darker crossing; then, by
+/// <see cref="Kind"/>:
 ///
-/// - <see cref="LineKind.Single"/>: that shape in <see cref="Fill"/>, and
-///   nothing else;
-/// - <see cref="LineKind.Tube"/>: the glass as it looks without its depth,
-///   the shape filled faintly with the text colour, its outline drawn
-///   <see cref="EdgeWidth"/> across in <see cref="Edge"/>, and the strokes'
-///   centre lines again in <see cref="Light"/>, a little up and to the left,
-///   held inside the shape.
+/// - <see cref="LineKind.Single"/> (the owner, 2026-10-27, for the animals):
+///   that shape in <see cref="Fill"/>, the text colour at 60 per cent by
+///   night and 50 by day, and nothing else: no glass, no light, no shadow;
+/// - <see cref="LineKind.Tube"/> (art/README.md, "Lines of glass", the table
+///   without Liquid Glass): the shape filled faintly with the text colour,
+///   its outline drawn <see cref="EdgeWidth"/> points across in
+///   <see cref="Edge"/>, and the strokes' centre lines again in
+///   <see cref="Light"/>, a little up and to the left, held inside the shape.
 ///
-/// The card under them is a pane of glass with a hairline border. No
-/// shadow, and no gradients anywhere. Lengths are points, or parts of the
-/// line's width where they say so; <see cref="Width"/>, when it is given,
-/// is the line's width in points whatever the card's size, in place of the
-/// file's lineWidth scaled with the drawing.
+/// Either way the card under them is a pane of glass with a one-point border
+/// of the text colour at 16 per cent. No gradients anywhere.
 /// </summary>
 public sealed record GlassLine(
     LineKind Kind,
@@ -542,8 +541,7 @@ public sealed record GlassLine(
     double LightX,
     double LightY,
     Shade PaneEdge,
-    double PaneEdgeWidth,
-    double? Width = null)
+    double PaneEdgeWidth)
 {
     /// <summary>Whether the line has an outline of its own.</summary>
     public bool Edged => Kind == LineKind.Tube && EdgeWidth > 0 && Edge.Alpha > 0;
@@ -551,43 +549,47 @@ public sealed record GlassLine(
     /// <summary>Whether the line has a light along it.</summary>
     public bool Lit => Kind == LineKind.Tube && Light.Alpha > 0;
 
-    /// <summary>The README's tube of glass, in the colours of one scheme's text.</summary>
-    public static GlassLine Tube(Shade text) => new(
-        Kind: LineKind.Tube,
-        Fill: text.WithAlpha(0.12f),
-        Edge: text.WithAlpha(0.34f),
-        EdgeWidth: 0.75,
-        Light: Shade.White.WithAlpha(0.62f),
-        LightWidth: 0.16,
-        LightLeast: 0.8,
-        LightX: -0.17,
-        LightY: -0.2,
-        PaneEdge: text.WithAlpha(0.16f),
-        PaneEdgeWidth: 1);
-
-    /// <summary>A single line of one colour on the same pane.</summary>
-    public static GlassLine Single(Shade text, Shade line, double? width = null) => Tube(text) with
+    /// <summary>The README's tube of glass in one scheme: by day a little more fill and a brighter light.</summary>
+    public static GlassLine Tube(Scheme scheme)
     {
-        Kind = LineKind.Single,
-        Fill = line,
-        Width = width,
-    };
+        var text = Theme.Of(scheme).Foreground;
+        var day = scheme == Scheme.Light;
+        return new(
+            Kind: LineKind.Tube,
+            Fill: text.WithAlpha(day ? 0.14f : 0.12f),
+            Edge: text.WithAlpha(0.30f),
+            EdgeWidth: 0.75,
+            Light: Shade.White.WithAlpha(day ? 0.90f : 0.60f),
+            LightWidth: 0.16,
+            LightLeast: 0.8,
+            LightX: -0.17,
+            LightY: -0.2,
+            PaneEdge: text.WithAlpha(0.16f),
+            PaneEdgeWidth: 1);
+    }
+
+    /// <summary>A thin line of the text colour, on the same pane.</summary>
+    public static GlassLine Single(Scheme scheme)
+    {
+        var text = Theme.Of(scheme).Foreground;
+        return Tube(scheme) with
+        {
+            Kind = LineKind.Single,
+            Fill = text.WithAlpha(scheme == Scheme.Light ? 0.50f : 0.60f),
+        };
+    }
 }
 
 public static class PortraitGlass
 {
-    /// <summary>Which of the README's lines the apps draw now: the one switch between them.</summary>
-    public const LineKind Lines = LineKind.Tube;
+    /// <summary>Which lines the apps draw now: the one switch between them.</summary>
+    public const LineKind Lines = LineKind.Single;
 
-    /// <summary>By night, in #F5F5F7.</summary>
-    public static readonly GlassLine Dark = Make(Theme.Dark.Foreground);
+    public static readonly GlassLine Dark = Make(Scheme.Dark);
 
-    /// <summary>By day, in #1C1C1E.</summary>
-    public static readonly GlassLine Light = Make(Theme.Light.Foreground);
+    public static readonly GlassLine Light = Make(Scheme.Light);
 
     public static GlassLine Of(Scheme scheme) => scheme == Scheme.Light ? Light : Dark;
 
-    private static GlassLine Make(Shade text) => Lines == LineKind.Single
-        ? GlassLine.Single(text, text.WithAlpha(0.5f))
-        : GlassLine.Tube(text);
+    private static GlassLine Make(Scheme scheme) => Lines == LineKind.Single ? GlassLine.Single(scheme) : GlassLine.Tube(scheme);
 }

@@ -288,7 +288,7 @@ internal static class Shared
     /// The picture of yourself before a call (SelfView.kt <c>CameraStage</c>):
     /// the evening room, and the camera over it while it is to start on.
     /// With <c>glass</c> (the narrow lobby's card), a pane of glass with
-    /// people drawn on it while the camera is off (Lobby.PreviewGlass, the
+    /// portraits drawn on it while the camera is off (Lobby.PreviewGlass, the
     /// iPhone's card); as the camera comes on the glass fades away and the
     /// surface a picture stands on fades in under it, and the other way as
     /// it goes off.

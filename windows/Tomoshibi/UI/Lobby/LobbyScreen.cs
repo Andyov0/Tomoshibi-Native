@@ -380,7 +380,7 @@ internal sealed class LobbyScreen : Screen
     private Grid HomeStage()
     {
         var grid = new Grid();
-        // The children drawn in glass while the camera is off, standing on
+        // The portraits drawn while the camera is off, standing on
         // the stage where the picture would be, below the greeting and behind
         // the switches.
         _standing = new Grid { IsHitTestVisible = false, VerticalAlignment = VerticalAlignment.Bottom };
@@ -422,7 +422,7 @@ internal sealed class LobbyScreen : Screen
     }
 
     /// <summary>
-    /// The wide home's children, while the camera is off: the iPhone's card
+    /// The wide home's portraits, while the camera is off: the iPhone's card
     /// has them on a pane of glass; here the stage beside the sidebar is where
     /// the picture of yourself is, and they stand on its foot.
     /// </summary>
@@ -443,7 +443,7 @@ internal sealed class LobbyScreen : Screen
     }
 
     /// <summary>
-    /// How tall the children stand on the wide stage: from a little under
+    /// How tall the portraits stand on the wide stage: from a little under
     /// the greeting to the window's foot, and at most 560 points, so that a
     /// tall window does not make giants of them over an empty stage.
     /// </summary>
