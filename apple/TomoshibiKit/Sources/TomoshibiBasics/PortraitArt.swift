@@ -3,7 +3,7 @@
 
 import CoreGraphics
 
-/// The camera card's children as every client draws them.
+/// The lobby's animals as every client draws them.
 public enum PortraitArt {
     public static let format = 1
     public static let canvas = CGSize(width: 100, height: 100)

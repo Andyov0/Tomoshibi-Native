@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Writes the camera card's children (art/portraits.json) as Swift.
+"""Writes the lobby's animals (art/portraits.json) as Swift.
 
     python3 apple/generate-portraits.py
 
@@ -42,7 +42,7 @@ def main():
         "",
         "import CoreGraphics",
         "",
-        "/// The camera card's children as every client draws them.",
+        "/// The lobby's animals as every client draws them.",
         "public enum PortraitArt {",
         f"    public static let format = {int(art['format'])}",
         f"    public static let canvas = CGSize(width: {number(art['canvas']['width'])}, height: {number(art['canvas']['height'])})",

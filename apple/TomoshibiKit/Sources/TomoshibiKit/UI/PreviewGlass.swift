@@ -87,17 +87,74 @@ struct StageDrawing: View {
     /// What the greeting and the switches take, with a margin.
     static let head: CGFloat = 130
     static let foot: CGFloat = 96
+    /// The window is the one in front, open and not covered.
+    @State private var watched = true
 
     var body: some View {
         GeometryReader { space in
             let band = max(space.size.height - Self.head - Self.foot, 0)
             let side = min(band / 0.75, space.size.width * 0.5, 480)
-            PortraitCycle()
+            PortraitCycle(held: !watched)
                 .frame(width: side, height: side)
                 .position(x: space.size.width / 2, y: Self.head + band / 2 + side * 0.08)
         }
+        .background(WindowWatch { watched = $0 })
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+/// Tells whether the window it is in can be seen being drawn on
+/// (PortraitPlayback `watched`): the key window, not in the Dock, not wholly
+/// covered; and tells again whenever any of that changes.
+private struct WindowWatch: NSViewRepresentable {
+    let changed: (Bool) -> Void
+
+    func makeNSView(context: Context) -> Watcher {
+        let view = Watcher()
+        view.changed = changed
+        return view
+    }
+
+    func updateNSView(_ view: Watcher, context: Context) {
+        view.changed = changed
+    }
+
+    final class Watcher: NSView {
+        var changed: ((Bool) -> Void)?
+        private var observers: [NSObjectProtocol] = []
+        private var last: Bool?
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            observers.forEach(NotificationCenter.default.removeObserver)
+            observers = []
+            guard let window else { return }
+            let names: [Notification.Name] = [
+                NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification,
+                NSWindow.didMiniaturizeNotification, NSWindow.didDeminiaturizeNotification,
+                NSWindow.didChangeOcclusionStateNotification,
+            ]
+            observers = names.map { name in
+                NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.tell() }
+                }
+            }
+            tell()
+        }
+
+        private func tell() {
+            guard let window else { return }
+            let now = PortraitPlayback.watched(key: window.isKeyWindow, miniaturized: window.isMiniaturized,
+                                               visible: window.occlusionState.contains(.visible))
+            guard now != last else { return }
+            last = now
+            changed?(now)
+        }
+
+        deinit {
+            observers.forEach(NotificationCenter.default.removeObserver)
+        }
     }
 }
 #endif
@@ -105,13 +162,12 @@ struct StageDrawing: View {
 // MARK: - The animals, one after another
 
 /// The animals in turn (PortraitRound, as every client plays them), drawn by
-/// a timeline that runs only while something on it moves.
+/// a timeline that runs only while something on it moves, on a clock that
+/// stops while nobody can see the drawing and carries on from there
+/// (PortraitPlayback).
 struct PortraitCycle: View {
     var held = false
-    /// When the cycle's second zero was, while it runs; how far it had got
-    /// while it does not.
-    @State private var origin: Date?
-    @State private var stopped = 0.0
+    @State private var playback = PortraitPlayback()
     /// Something is being written or fading.
     @State private var moving = false
     @State private var inSight = true
@@ -120,7 +176,8 @@ struct PortraitCycle: View {
     private let round = PortraitRound.art
 
     private var running: Bool {
-        !held && inSight && scenePhase == .active && !reduceMotion && PortraitDebug.held == nil && round.length > 0
+        PortraitPlayback.runs(held: held, inSight: inSight, phase: scenePhase, reduceMotion: reduceMotion)
+            && PortraitDebug.held == nil && round.length > 0
     }
 
     var body: some View {
@@ -131,7 +188,7 @@ struct PortraitCycle: View {
                 if !round.people.isEmpty { PortraitLines(person: 0, written: .infinity) }
             } else {
                 TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !(running && moving))) { context in
-                    let now = round.moment(at: origin.map { context.date.timeIntervalSince($0) } ?? stopped)
+                    let now = round.moment(at: playback.elapsed(at: context.date))
                     PortraitLines(person: now.person, written: now.written)
                         .opacity(now.shown)
                 }
@@ -144,10 +201,9 @@ struct PortraitCycle: View {
                 stop()
                 return
             }
-            let origin = Date().addingTimeInterval(-stopped)
-            self.origin = origin
+            playback.run(at: Date())
             while !Task.isCancelled {
-                let t = Date().timeIntervalSince(origin)
+                let t = playback.elapsed(at: Date())
                 let next = round.motion(at: t)
                 if moving != next.moving { moving = next.moving }
                 // A little past the change, so that the last frame drawn
@@ -159,8 +215,7 @@ struct PortraitCycle: View {
     }
 
     private func stop() {
-        if let origin { stopped = Date().timeIntervalSince(origin) }
-        origin = nil
+        playback.stop(at: Date())
         moving = false
     }
 }
