@@ -2,18 +2,21 @@
 
 `portraits.json` is the single source of the little animals drawn on the
 lobby while the camera is off: on a phone, a pane of glass with one animal
-after another drawn on it in thin lines, stroke by stroke, the way the
+after another drawn on it in soft grey lines, stroke by stroke, the way the
 iPhone writes its first "hello"; on a desktop, the same drawings on the
 lobby's own ground. Every client plays this file as it is, so that every
 platform draws the same lines at the same moments. Change the drawings here
 and nowhere else.
 
-The animals are a cat, a rabbit, a bear, a hamster with a sunflower seed, a
-penguin and a chick coming out of its egg: round and simple, two dots for
-eyes and at most a tiny nose or mouth. The owner turned down realistic
-people, then cartoon children with drawn faces and lines of glass, as eerie
-(2026-10-27); keep to plain thin lines, no hollow eyes, no glints, no
-lashes.
+The animals are a cat, a rabbit, a bear, a hamster, a penguin and a chick
+coming out of its egg: chubby round faces, two round dots for eyes set low
+and close, a tiny nose or mouth between them, and a short dash of blush on
+each cheek. The owner turned down realistic people, then cartoon children
+with drawn faces and lines of glass, as eerie (2026-10-27); keep to plain
+lines, no hollow eyes, no glints, no lashes. The first animals, in a line
+half as wide with small eyes far apart on a big face, looked odd and too
+faint (2026-10-28); keep the line at about 7 pt on a phone and the face
+gathered in the middle.
 
 On Apple the file becomes Swift: `apple/generate-portraits.py` writes
 `apple/TomoshibiKit/Sources/TomoshibiBasics/PortraitArt.swift` from it, and
@@ -26,12 +29,12 @@ the two disagree. Run the script after every change to the JSON.
 {
   "format": 1,
   "canvas": {"width": 100, "height": 100},
-  "lineWidth": 1.3,
+  "lineWidth": 2.4,
   "placement": "bottom-center",
   "gap": 0.4,
   "portraits": [
     {"name": "cat", "hold": 2.0, "fade": 0.6,
-     "strokes": [{"d": "M 50 67.6 C 36 67.6 26 60.4 26 49.4 ...", "start": 0.0, "duration": 1.213}, ...]}
+     "strokes": [{"d": "M 29 37 C 28.4 38.5 25.97 42.83 25.4 46 ...", "start": 0.0, "duration": 1.257}, ...]}
   ]
 }
 ```
@@ -54,17 +57,18 @@ the two disagree. Run the script after every change to the JSON.
       command letter; numbers are separated by single spaces, use `.` as the
       decimal point, have at most two decimals and never an exponent. A
       stroke may hold more than one `M` (marks drawn in one go, such as the
-      cat's three stripes, or the two eyes); the pen goes through them in
-      order. An eye is a very short line, about a line's width long, which
-      round ends make a dot.
+      two eyes, or the two dashes of blush); the pen goes through them in
+      order. An eye is a tiny circle, which the line's width fills to a
+      round dot.
     - `start`: seconds after the drawing begins (after the `gap`) that the
       pen starts this stroke.
     - `duration`: seconds the stroke takes.
 
 Strokes are drawn in order: the outline first (head and ears in one line
-where they meet, or a round body), then what is inside the ears and the
-markings (a tabby's stripes, a bear's muzzle, a penguin's white face, the
-egg's crack and shell), then the eyes, and last the nose or mouth.
+where they meet, or a round body), then what belongs to it (a penguin's
+flippers and the edge of its dark cap, a bear's muzzle, the egg's crack and
+shell, a chick's tuft), then the eyes, the nose or mouth, and last the
+blush.
 
 ## Placement: `bottom-center`
 
@@ -147,9 +151,10 @@ the colour does not double where they meet.
 | fill | none: lines only | same |
 | glass, highlight, shadow | none | none |
 
-At 1.3 canvas units the line is about 3.8 pt on an iPhone's card. Drawn by
-day at 40 % the lines were faint on the glass, and by night at 72 % hard;
-these are the soft ones that still read at a glance.
+At 2.4 canvas units the line is about 7 pt on an iPhone's card; at 1.3
+(3.8 pt) it read as a sketch, too faint to carry the drawing. Drawn by day
+at 40 % the lines were faint on the glass, and by night at 72 % hard; these
+are the soft ones that still read at a glance.
 
 ## The card
 
