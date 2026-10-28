@@ -26,7 +26,7 @@ settings:
     DEVELOPMENT_TEAM: SM86NB3CPZ
     CODE_SIGN_STYLE: Automatic
     MARKETING_VERSION: "0.1.6"
-    CURRENT_PROJECT_VERSION: "3"
+    CURRENT_PROJECT_VERSION: "4"
     SWIFT_VERSION: "6.0"
     OTHER_LDFLAGS: ["-ObjC"]
     # The core is built for Apple silicon only (the Mac, phones, and the
