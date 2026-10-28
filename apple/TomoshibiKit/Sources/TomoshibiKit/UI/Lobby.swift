@@ -54,6 +54,17 @@ enum LobbyDebug {
         #endif
     }()
 
+    /// TOMOSHIBI_DEBUG_LOBBY_AGE, in seconds: the lobby is made as if it had
+    /// stood open that long, its schedule's time worked out then, for a test
+    /// to open the schedule after it and find the time worked out again.
+    static let age: TimeInterval = {
+        #if DEBUG
+        TimeInterval(ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_LOBBY_AGE"] ?? "") ?? 0
+        #else
+        0
+        #endif
+    }()
+
     static func sheet(_ opened: String?) -> MeetingSheet.Mode? {
         switch opened {
         case "start": .start
@@ -78,7 +89,14 @@ final class LobbyState {
     /// Where in the lobby somebody is, beside its home.
     enum Place: Hashable { case home, scheduled, servers }
 
-    var place: Place
+    /// Opening the schedule starts its time afresh where nobody chose one
+    /// (ScheduleForm): the draft is the lobby's, made when it was, and the
+    /// time it started at could be hours gone by the time anybody opened it.
+    var place: Place {
+        didSet {
+            if place == .scheduled && oldValue != .scheduled { schedule.open() }
+        }
+    }
     /// The start and join sheet, which keeps its own draft for as long as it
     /// is open: it is presented above both layouts, so it stays open through
     /// a change between them.
@@ -87,7 +105,7 @@ final class LobbyState {
     /// The phone's join bar, half typed.
     var typed = ""
     /// What the schedule's form holds, whichever layout draws it.
-    let schedule = ScheduleDraft()
+    let schedule = ScheduleDraft(now: Date().addingTimeInterval(-LobbyDebug.age))
     /// One set of popovers for whichever layout is drawn; each column of the
     /// sidebar's draws its own, and a click in either closes whichever is
     /// open.
@@ -98,6 +116,8 @@ final class LobbyState {
         place = opened == "scheduled" ? .scheduled : opened == "servers" ? .servers : .home
         sheet = LobbyDebug.sheet(opened)
         settings = opened == "settings"
+        // Opened on the schedule: opened now, as by somebody.
+        if place == .scheduled { schedule.open() }
     }
 }
 
@@ -2434,18 +2454,38 @@ struct MeetingRow: View {
 @Observable
 final class ScheduleDraft {
     var planning = ""
-    /// The next quarter hour's day, hour and minute (ScheduleClock
-    /// `start`): from 23:45 on that is the next day's midnight, which the
-    /// form offered on today's date, already gone.
-    var day: Date
-    var hour: Int
-    var minute: Int
+    /// The day and the time, and which of them somebody chose
+    /// (ScheduleForm). They start at the next quarter hour, its own day
+    /// (from 23:45 on, the next day's midnight, which the form offered on
+    /// today's date, already gone), and again at every opening for what
+    /// nobody chose.
+    private(set) var form: ScheduleForm
+    /// What the calendar and the clock set: chosen by somebody.
+    var day: Date {
+        get { form.day }
+        set { form.choose(day: newValue) }
+    }
+    var hour: Int {
+        get { form.hour }
+        set { form.choose(hour: newValue) }
+    }
+    var minute: Int {
+        get { form.minute }
+        set { form.choose(minute: newValue) }
+    }
 
     init(now: Date = Date(), calendar: Calendar = .current) {
-        let start = ScheduleClock.start(now: now, calendar: calendar)
-        day = start.day
-        hour = start.hour
-        minute = start.minute
+        form = ScheduleForm(now: now, calendar: calendar)
+    }
+
+    /// The schedule opened (LobbyState `place`).
+    func open(now: Date = Date(), calendar: Calendar = .current) {
+        form.open(now: now, calendar: calendar)
+    }
+
+    /// A meeting arranged from it.
+    func arranged() {
+        form.arranged()
     }
 }
 
@@ -2888,6 +2928,7 @@ struct ScheduleView: View {
             switch await app.lobby.arrange(room: room, at: at, relay: app.relayChoice) {
             case let .success(made):
                 draft.planning = ""
+                draft.arranged()
                 copy(made)
             case let .failure(refused):
                 app.problem = refused.sentence

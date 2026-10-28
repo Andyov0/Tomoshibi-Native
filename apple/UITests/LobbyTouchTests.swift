@@ -108,6 +108,25 @@ final class LobbyTouchTests: XCTestCase {
                       "the page closed by its own close")
     }
 
+    /// The schedule opened long after the lobby was made starts at the next
+    /// quarter hour from the opening: the lobby's draft worked its time out
+    /// once, when the lobby was made, and opened hours later the form said
+    /// the time had already gone before anybody touched it. The lobby is
+    /// made three hours back here (TOMOSHIBI_DEBUG_LOBBY_AGE).
+    func testTheScheduleOpenedLaterStartsFromTheOpening() throws {
+        continueAfterFailure = false
+        let app = lobby(["TOMOSHIBI_DEBUG_LOBBY_AGE": "10800"])
+        let schedule = app.buttons["Schedule a meeting"]
+        XCTAssertTrue(schedule.waitForExistence(timeout: 30), "the lobby's Schedule a meeting")
+        schedule.tap()
+        let arrange = app.buttons["Arrange"]
+        XCTAssertTrue(arrange.waitForExistence(timeout: 10), "the schedule, open")
+        let verdict = app.staticTexts.matching(NSPredicate(format: "label BEGINSWITH %@", "Arranged for")).firstMatch
+        XCTAssertTrue(verdict.waitForExistence(timeout: 5), "a time ahead, ready to arrange")
+        XCTAssertFalse(app.staticTexts["That time has already gone."].exists, "not a time three hours gone")
+        XCTAssertTrue(arrange.isEnabled, "Arrange, offered")
+    }
+
     func testJoinBarOpensAPastedLink() throws {
         let app = lobby()
         typingInTheJoinBar(app)
