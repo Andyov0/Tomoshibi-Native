@@ -10,7 +10,7 @@ plugins {
 // keeps the version and takes the next build; a new version is for new
 // features or a large update (owner, 2026-10-22).
 val release = "0.1.6"
-val build = 1
+val build = 2
 
 // The version name joins them as the core's version_with_build does
 // (core/protocol/src/api/updates.rs), written out here because the build
@@ -80,7 +80,7 @@ android {
         targetSdk = 36
         // One more for every build of every version: Android installs over
         // the app only a version code above its own.
-        versionCode = 8
+        versionCode = 9
         versionName = joined
         manifestPlaceholders["tomoshibiHost"] = deploymentHost.lowercase()
         ndk { abiFilters += "arm64-v8a" }
