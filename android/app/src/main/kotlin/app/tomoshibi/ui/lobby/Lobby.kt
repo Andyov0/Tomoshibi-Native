@@ -108,6 +108,7 @@ import app.tomoshibi.ui.kit.rounded
 import app.tomoshibi.ui.settings.SettingsState
 import app.tomoshibi.ui.settings.SettingsTopic
 import app.tomoshibi.ui.settings.SettingsView
+import java.time.Instant
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import uniffi.tomoshibi_protocol.Account
@@ -132,19 +133,32 @@ enum class Place { Home, Scheduled, Servers }
  * section, and the start sheet keeps its draft and its join.
  */
 @Stable
-class LobbyState(sealingWord: String) {
+class LobbyState(sealingWord: String, private val clock: () -> Instant = Instant::now) {
     // A debug launch's part of the lobby opens the first lobby only: read
     // again by the lobby a call came back to, it opened the start sheet over
     // it once more after the test had left the call.
     private val opened = LobbyDebug.open.also { LobbyDebug.open = null }
 
-    var place by mutableStateOf(
+    private var shownPlace by mutableStateOf(
         when (opened) {
             "scheduled" -> Place.Scheduled
             "servers" -> Place.Servers
             else -> Place.Home
         },
     )
+
+    /**
+     * Where the lobby is. Opening the schedule starts its time afresh where
+     * nobody chose one (ScheduleForm, in basics): the draft is the lobby's,
+     * made when it was, and the time it started at could be hours gone by
+     * the time anybody opened it.
+     */
+    var place: Place
+        get() = shownPlace
+        set(to) {
+            if (to == Place.Scheduled && shownPlace != Place.Scheduled) schedule.open(clock())
+            shownPlace = to
+        }
     var sheet by mutableStateOf(LobbyDebug.sheet(opened)?.let { MeetingDraft(it, sealingWord) })
     private var settingsOpen by mutableStateOf(opened == "settings")
 
@@ -168,7 +182,7 @@ class LobbyState(sealingWord: String) {
     )
         private set
     var typed by mutableStateOf("")
-    val schedule = ScheduleDraft()
+    val schedule = ScheduleDraft(clock())
     val popovers = Popovers()
 
     /** Whether a sheet, a dialog or a pushed page is over the lobby. */

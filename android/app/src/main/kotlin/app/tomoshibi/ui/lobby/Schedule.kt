@@ -41,7 +41,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -53,7 +52,7 @@ import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
-import app.tomoshibi.basics.ScheduleClock
+import app.tomoshibi.basics.ScheduleForm
 import app.tomoshibi.basics.Theme
 import app.tomoshibi.basics.readingLocale
 import app.tomoshibi.basics.t
@@ -148,15 +147,41 @@ fun meetingSaid(at: Instant, zone: ZoneId = ZoneId.systemDefault()): String {
  * the wide window, keeps the name, the day and the time.
  */
 @Stable
-class ScheduleDraft {
+class ScheduleDraft(now: Instant = Instant.now()) {
     var planning by mutableStateOf("")
-    /** The next quarter hour, day and time read together (ScheduleClock `start`). */
-    var day by mutableStateOf(ScheduleClock.start(Instant.now(), ZoneId.systemDefault()))
-    var hour by mutableIntStateOf(day.hour)
-    var minute by mutableIntStateOf(day.minute)
+
+    /**
+     * The day and the time, and which of them somebody chose
+     * ([ScheduleForm]): at the next quarter hour, its own day, and again at
+     * every opening for what nobody chose ([open]).
+     */
+    var form by mutableStateOf(ScheduleForm.start(now, ZoneId.systemDefault()))
+        private set
+
+    /** What the calendar and the clock set: chosen by somebody. */
+    var day: LocalDateTime
+        get() = form.day
+        set(value) { form = form.choosingDay(value) }
+    var hour: Int
+        get() = form.hour
+        set(value) { form = form.choosingHour(value) }
+    var minute: Int
+        get() = form.minute
+        set(value) { form = form.choosingMinute(value) }
     var arranging by mutableStateOf(false)
     var copied by mutableStateOf<String?>(null)
-    var now by mutableStateOf(Instant.now())
+    var now by mutableStateOf(now)
+
+    /** The schedule opened at [at] (LobbyState `place`). */
+    fun open(at: Instant = Instant.now(), zone: ZoneId = ZoneId.systemDefault()) {
+        form = form.opened(at, zone)
+        now = at
+    }
+
+    /** A meeting arranged from it. */
+    fun arranged() {
+        form = form.arranged()
+    }
 
     companion object {
         /** Sixty days, as far ahead as Schedule.tsx offers. */
@@ -262,7 +287,7 @@ private fun RowLabel(text: String, symbol: String) {
     }
 }
 
-private fun ScheduleDraft.at(): Instant = ScheduleClock.instant(day.toLocalDate(), hour, minute, ZoneId.systemDefault(), now)
+private fun ScheduleDraft.at(): Instant = form.instant(ZoneId.systemDefault(), now)
 
 private fun ScheduleDraft.problem(): Boolean {
     val at = at()
@@ -347,6 +372,7 @@ private fun plan(app: AppModel, draft: ScheduleDraft, scope: kotlinx.coroutines.
             app.lobby.arrange(room, at, app.relayChoice).fold(
                 { made ->
                     draft.planning = ""
+                    draft.arranged()
                     copy(app, made, draft, clipboard)
                 },
                 { refused -> app.problem = refused.message },
