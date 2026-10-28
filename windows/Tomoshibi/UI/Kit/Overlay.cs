@@ -74,6 +74,12 @@ internal sealed class Overlay : Grid
 
     public bool Any => _pop != null || _dialogs.Count > 0;
 
+    /// <summary>Whether a dialog or a sheet lies over the screen, which then holds still what moves under it (the camera card's drawing).</summary>
+    public bool Covered => _dialogs.Count > 0;
+
+    /// <summary>Said when a dialog or a sheet has come or gone.</summary>
+    public event Action? CoveredChanged;
+
     /// <summary>Escape: the popover on top goes first, then the topmost dialog. Whether anything was closed.</summary>
     public bool Back()
     {
@@ -288,6 +294,7 @@ internal sealed class Overlay : Grid
         _dialogLayer.Children.Add(panel);
         var held = new Held(dim, panel, dismiss, sheet, chrome, frosted, ground, content);
         _dialogs.Add(held);
+        CoveredChanged?.Invoke();
         Motion.Hide(dim);
         Motion.FadeTo(dim, 1);
         if (sheet) Slide(panel, true);
@@ -346,6 +353,7 @@ internal sealed class Overlay : Grid
     private void CloseDialog(Held held)
     {
         if (!_dialogs.Remove(held)) return;
+        CoveredChanged?.Invoke();
         ClosePopover();
         Motion.FadeTo(held.Dim, 0);
         var remove = () =>
