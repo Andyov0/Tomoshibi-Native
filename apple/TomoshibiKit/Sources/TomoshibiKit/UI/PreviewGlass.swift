@@ -2,7 +2,8 @@ import SwiftUI
 import TomoshibiBasics
 
 // The phone lobby's camera card with the camera off: a pane of glass with
-// little animals drawn on it in thin lines, one after another.
+// little animals drawn on it in thin lines, one after another; and on the
+// Mac, which has no card, the same drawings on the lobby's stage.
 //
 // It was the grey of a camera-off tile, an empty card the size of the
 // picture that was not there. The owner asked for a large piece of glass
@@ -70,6 +71,36 @@ private struct PaneOfGlass<S: Shape>: View {
         }
     }
 }
+
+#if os(macOS)
+/// The animals on the Mac's lobby, which has no card: on the stage's own
+/// ground while the camera is off, in the band between the greeting at the
+/// stage's head (HomeStage: 56 points down, two lines) and the switches at
+/// its foot (28 points up, a 60-point capsule), with room to spare above and
+/// below, so that they never stand on either. Centred on the whole stage, a
+/// rabbit's ears came within 18 points of the greeting on a stage 460 tall;
+/// sized by half the stage's height, an animal was about 170 points across
+/// on one 690 tall, small in so much ground. The drawing sits between 8 and
+/// 76 of its canvas's 100 (the animals end above the phone card's buttons),
+/// so the canvas is placed by that and not by its own middle.
+struct StageDrawing: View {
+    /// What the greeting and the switches take, with a margin.
+    static let head: CGFloat = 130
+    static let foot: CGFloat = 96
+
+    var body: some View {
+        GeometryReader { space in
+            let band = max(space.size.height - Self.head - Self.foot, 0)
+            let side = min(band / 0.75, space.size.width * 0.5, 480)
+            PortraitCycle()
+                .frame(width: side, height: side)
+                .position(x: space.size.width / 2, y: Self.head + band / 2 + side * 0.08)
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+#endif
 
 // MARK: - The animals, one after another
 

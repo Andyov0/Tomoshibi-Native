@@ -1,9 +1,10 @@
 # Art the clients share
 
 `portraits.json` is the single source of the little animals drawn on the
-phone lobby's camera card while the camera is off: a pane of glass with one
-animal after another drawn on it in thin lines, stroke by stroke, the way
-the iPhone writes its first "hello". Every client plays this file as it is, so that every
+lobby while the camera is off: on a phone, a pane of glass with one animal
+after another drawn on it in thin lines, stroke by stroke, the way the
+iPhone writes its first "hello"; on a desktop, the same drawings on the
+lobby's own ground. Every client plays this file as it is, so that every
 platform draws the same lines at the same moments. Change the drawings here
 and nowhere else.
 
@@ -86,6 +87,26 @@ meeting button and the calendar button cover the canvas below about
 y = 78, and the microphone and camera switches cover its top right corner
 (x > 79 and y < 18). The animals keep between y = 8 and y = 76 and out of
 that corner.
+
+### On a desktop lobby with no card
+
+The Mac's lobby is a stage that fills the window beside the sidebar, with a
+greeting at its head and the microphone and camera switches at its foot.
+There the drawing goes on the stage's own ground, with no glass under it,
+in the middle of the part of the stage that is seen (not under a sidebar
+that floats over it):
+
+```
+head   = 130 pt (the greeting, and a margin)      foot = 96 pt (the switches, and a margin)
+band   = stageHeight - head - foot
+side   = min(band / 0.75, stageWidth * 0.5, 480 pt)
+canvas = side x side, its centre at (stageWidth / 2, head + band / 2 + side * 0.08)
+```
+
+The drawing sits between y = 8 and y = 76 of its canvas, so its own middle
+(42) goes to the middle of the band. When the camera comes on, the drawing
+fades out as the picture fades in (0.32 s), and back the other way.
+Windows's lobby, if it is the same kind of stage, does the same.
 
 ## Timing
 
