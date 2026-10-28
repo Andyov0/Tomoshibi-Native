@@ -2,26 +2,28 @@ import SwiftUI
 import TomoshibiBasics
 
 // The phone lobby's camera card with the camera off: a pane of glass with
-// cartoon children drawn on it in lines of glass, one after another.
+// little animals drawn on it in thin lines, one after another.
 //
 // It was the grey of a camera-off tile, an empty card the size of the
-// picture that was not there. The owner asked for it to be a large piece of
-// glass instead, with an animation of different people's heads drawn on it
-// in frosted-glass lines, drawn the way the iPhone writes its first "hello"
-// (2026-10-26); then, finding realistic heads and shoulders unsettling, for
-// cartoon children, boys and girls (2026-10-27). What is drawn, and when each
-// line is, comes from art/portraits.json, which every client plays
-// (TomoshibiBasics Portraits.swift); here is only how it looks. It is the one
-// surface in the content layer that is glass (Glass.swift: the rest of the
-// page is plain), because it stands where a picture will be, as the glass
-// over a call does; the card's buttons over it are the content layer's plain
-// ones, so there is no glass on glass.
+// picture that was not there. The owner asked for a large piece of glass
+// instead, with drawings on it drawn the way the iPhone writes its first
+// "hello" (2026-10-26). People came first, then cartoon children; the owner
+// found realistic heads unsettling, and then faces drawn in lines of glass,
+// with ringed eyes and a light along every line, eerie (2026-10-27), and
+// chose cartoon animals in plain thin lines with two dots for eyes. What is
+// drawn, and when each line is, comes from art/portraits.json, which every
+// client plays (TomoshibiBasics Portraits.swift); here is only how it looks,
+// and art/README.md has the same numbers for the other platforms. The card
+// is the one surface in the content layer that is glass (Glass.swift: the
+// rest of the page is plain), because it stands where a picture will be, as
+// the glass over a call does; the card's buttons over it are the content
+// layer's plain ones, so there is no glass on glass.
 //
 // The drawing is decoration. It is hidden from VoiceOver, it is the first
-// child standing finished when Reduce Motion is on, and it moves only while
+// animal standing finished when Reduce Motion is on, and it moves only while
 // it can be seen: it holds still while the app is not in front, while the
 // card is scrolled out of sight or covered by a sheet, and stops with the
-// card. While a child is held finished nothing is redrawn at all: the
+// card. While an animal is held finished nothing is redrawn at all: the
 // timeline that draws them is paused between the moments of writing and
 // fading.
 
@@ -51,13 +53,17 @@ struct PreviewGlass: View {
 /// material with a light edge before it, as `glassSurface` draws a control.
 /// Not `glassSurface` itself, which inside the lobby's content layer draws a
 /// plain surface, and this card is the exception to that.
+///
+/// The clear kind of Liquid Glass, not the regular: the regular casts a soft
+/// grey shadow round what is drawn in it, which by day read as dirt on the
+/// white page round the card and round the lines that were glass before
+/// these (2026-10-27, the two set side by side by day and by night).
 private struct PaneOfGlass<S: Shape>: View {
     let shape: S
 
     var body: some View {
         if #available(macOS 26.0, iOS 26.0, *), !GlassSupport.forcedFallback {
-            Color.clear
-                .glassEffect(Glass.regular, in: shape)
+            Color.clear.glassEffect(Glass.clear, in: shape)
         } else {
             shape.fill(.ultraThinMaterial)
                 .overlay(shape.stroke(Theme.foreground.opacity(0.16), lineWidth: 1))
@@ -65,10 +71,10 @@ private struct PaneOfGlass<S: Shape>: View {
     }
 }
 
-// MARK: - The children, one after another
+// MARK: - The animals, one after another
 
-/// The children on the card in turn (PortraitRound, as every client plays
-/// them), drawn by a timeline that runs only while something on it moves.
+/// The animals in turn (PortraitRound, as every client plays them), drawn by
+/// a timeline that runs only while something on it moves.
 struct PortraitCycle: View {
     var held = false
     /// When the cycle's second zero was, while it runs; how far it had got
@@ -143,30 +149,18 @@ extension View {
 
 // MARK: - The lines
 
-/// One child, drawn `written` seconds into their drawing, placed on the card
-/// as the art says (`bottom-center`: as large as fits the height and the
-/// width less the card's side inset, standing on its foot; art/README.md),
-/// in lines of glass.
+/// One animal, drawn `written` seconds into their drawing, placed as the art
+/// says (`bottom-center`: as large as fits the height and the width less the
+/// card's side inset, standing on its foot), in thin lines.
 ///
-/// A line is Liquid Glass in the line's own shape, tinted faintly with the
-/// colour of the interface's text, with the light caught along its upper
-/// side. Five ways were set side by side on the card, by day and by night:
-/// the glass alone, the glass with the light, the glass filled underneath,
-/// the system's thin material in the line's shape, and a faint fill with an
-/// edge. The material and the fill drew a double edge wherever two strokes
-/// cross, where the glass merges them into one line. The glass alone was
-/// frosted glass but faint, and by day white on a white pane, a relief with
-/// nothing to read; the tint is what makes it a rod of glass there and a lit
-/// one at night, and the light shows on it in both.
-///
-/// The glass is the clear kind, not the regular. The regular casts a soft
-/// grey shadow round everything it is drawn in, which round a face's worth
-/// of lines on the day's white pane was a grey haze: the drawing looked
-/// dirty (2026-10-27, set side by side with tints from 8 to 28 % and with
-/// flat lines). The clear glass has no shadow; by day it takes a little more
-/// tint and a brighter light to read as clean glass rather than as nothing.
-/// The numbers are in art/README.md for the other platforms to draw the
-/// same.
+/// A line is one plain stroke at the art's width with round ends, in the
+/// text's colour taken down to 60 % by night and 50 % by day: soft on the
+/// glass, and still clear on it, where 40 % by day was faint and 72 % by
+/// night was hard (set side by side on the card, 2026-10-27). No glass in
+/// the lines, no light along them, no shadow: lines of glass, each a rod
+/// with two edges and a highlight, were what made the faces before these
+/// eerie. The lines are one shape, so where two cross the colour does not
+/// double.
 struct PortraitLines: View {
     let person: Int
     let written: Double
@@ -175,63 +169,11 @@ struct PortraitLines: View {
     var body: some View {
         GeometryReader { space in
             let width = PortraitPlace(space.size).scale * PortraitArt.lineWidth
-            let look = LineLook(scheme)
-            let outline = PortraitPath(person: person, written: written, outline: true)
-            ZStack {
-                GlassLine(shape: outline, look: look)
-                PortraitPath(person: person, written: written, outline: false)
-                    .stroke(Color.white.opacity(look.light), style: StrokeStyle(lineWidth: max(width * 0.16, 0.8), lineCap: .round, lineJoin: .round))
-                    .offset(x: -width * 0.17, y: -width * 0.2)
-                    .mask(outline)
-            }
+            PortraitPath(person: person, written: written)
+                .stroke(Theme.foreground.opacity(scheme == .dark ? 0.6 : 0.5),
+                        style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round))
         }
         .allowsHitTesting(false)
-    }
-}
-
-/// How much of the text's colour a line takes, and how bright its light is,
-/// by night and by day.
-private struct LineLook {
-    /// The glass's tint.
-    let tint: Double
-    /// The light along the line's upper side.
-    let light: Double
-    /// Without glass: the line's body and its edge.
-    let fill: Double
-    let edge: Double
-
-    init(_ scheme: ColorScheme) {
-        if scheme == .dark {
-            (tint, light, fill, edge) = (0.16, 0.6, 0.12, 0.30)
-        } else {
-            (tint, light, fill, edge) = (0.20, 0.9, 0.14, 0.30)
-        }
-    }
-}
-
-/// The body of a line: glass where the system has it, and before it a faint
-/// fill with an edge, which is what the glass looks like without its depth.
-/// The edge is drawn round the lines made one shape first, as the glass
-/// merges them; round the strokes as they are, it drew every crossing.
-private struct GlassLine: View {
-    let shape: PortraitPath
-    let look: LineLook
-
-    var body: some View {
-        if #available(macOS 26.0, iOS 26.0, *), !GlassSupport.forcedFallback {
-            Color.clear.glassEffect(Glass.clear.tint(Theme.foreground.opacity(look.tint)), in: shape)
-        } else {
-            shape.fill(Theme.foreground.opacity(look.fill))
-            United(shape: shape).stroke(Theme.foreground.opacity(look.edge), lineWidth: 0.75)
-        }
-    }
-
-    private struct United: Shape {
-        let shape: PortraitPath
-
-        func path(in rect: CGRect) -> Path {
-            shape.path(in: rect).normalized(eoFill: false)
-        }
     }
 }
 
@@ -250,59 +192,28 @@ struct PortraitPlace {
     }
 }
 
-/// A child's lines placed in the space, along their middles or as the shape
-/// of the glass: the lines stroked at the art's width, all of them one shape.
+/// An animal's lines, as far as they are drawn, placed in the space.
 struct PortraitPath: Shape {
     let person: Int
     let written: Double
-    let outline: Bool
 
     func path(in rect: CGRect) -> Path {
-        let drawn = outline ? PortraitOutlines.shape(person, at: written) : PortraitOutlines.middles(person, at: written)
-        return drawn.applying(PortraitPlace(rect.size).transform.concatenating(CGAffineTransform(translationX: rect.minX, y: rect.minY)))
-    }
-}
-
-/// Every stroke's shape as glass, worked out once in the canvas's units:
-/// a frame then strokes only the line the pen is on, where stroking the
-/// whole drawing again on every frame is what a drawing with a face's worth
-/// of small lines would cost.
-private enum PortraitOutlines {
-    static let style = StrokeStyle(lineWidth: PortraitArt.lineWidth, lineCap: .round, lineJoin: .round)
-    static let whole: [[Path]] = PortraitArt.portraits.map { person in
-        person.strokes.map { $0.path.strokedPath(style) }
-    }
-
-    static func shape(_ person: Int, at seconds: Double) -> Path {
-        var all = Path()
-        for (i, stroke) in PortraitArt.portraits[person].strokes.enumerated() {
-            let done = Portrait.drawn(stroke, at: seconds)
-            if done >= 1 {
-                all.addPath(whole[person][i])
-            } else if done > 0 {
-                all.addPath(stroke.path.trimmedPath(from: 0, to: done).strokedPath(style))
-            }
-        }
-        return all
-    }
-
-    static func middles(_ person: Int, at seconds: Double) -> Path {
-        var all = Path()
+        var drawn = Path()
         for stroke in PortraitArt.portraits[person].strokes {
-            let done = Portrait.drawn(stroke, at: seconds)
+            let done = Portrait.drawn(stroke, at: written)
             if done >= 1 {
-                all.addPath(stroke.path)
+                drawn.addPath(stroke.path)
             } else if done > 0 {
-                all.addPath(stroke.path.trimmedPath(from: 0, to: done))
+                drawn.addPath(stroke.path.trimmedPath(from: 0, to: done))
             }
         }
-        return all
+        return drawn.applying(PortraitPlace(rect.size).transform.concatenating(CGAffineTransform(translationX: rect.minX, y: rect.minY)))
     }
 }
 
 enum PortraitDebug {
     /// TOMOSHIBI_DEBUG_PORTRAIT=<name>[@<seconds>], in a debug build: that
-    /// child alone, standing still, finished or that far into their
+    /// animal alone, standing still, finished or that far into their
     /// drawing, to photograph each of them.
     static let held: (person: Int, written: Double)? = {
         #if DEBUG

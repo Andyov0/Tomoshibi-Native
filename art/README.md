@@ -1,11 +1,18 @@
 # Art the clients share
 
-`portraits.json` is the single source of the cartoon children drawn on the
+`portraits.json` is the single source of the little animals drawn on the
 phone lobby's camera card while the camera is off: a pane of glass with one
-child after another drawn on it in lines of glass, stroke by stroke, the way
-the iPhone writes its first "hello". Every client plays this file as it is,
-so that every platform draws the same lines at the same moments. Change the
-drawings here and nowhere else.
+animal after another drawn on it in thin lines, stroke by stroke, the way
+the iPhone writes its first "hello". Every client plays this file as it is, so that every
+platform draws the same lines at the same moments. Change the drawings here
+and nowhere else.
+
+The animals are a cat, a rabbit, a bear, a hamster with a sunflower seed, a
+penguin and a chick coming out of its egg: round and simple, two dots for
+eyes and at most a tiny nose or mouth. The owner turned down realistic
+people, then cartoon children with drawn faces and lines of glass, as eerie
+(2026-10-27); keep to plain thin lines, no hollow eyes, no glints, no
+lashes.
 
 On Apple the file becomes Swift: `apple/generate-portraits.py` writes
 `apple/TomoshibiKit/Sources/TomoshibiBasics/PortraitArt.swift` from it, and
@@ -18,12 +25,12 @@ the two disagree. Run the script after every change to the JSON.
 {
   "format": 1,
   "canvas": {"width": 100, "height": 100},
-  "lineWidth": 2.1,
+  "lineWidth": 1.3,
   "placement": "bottom-center",
-  "gap": 0.35,
+  "gap": 0.4,
   "portraits": [
-    {"name": "cowlick", "hold": 1.7, "fade": 0.6,
-     "strokes": [{"d": "M 26.4 46 C 26.4 62 37 70 50 70 ...", "start": 0, "duration": 0.317}, ...]}
+    {"name": "cat", "hold": 2.0, "fade": 0.6,
+     "strokes": [{"d": "M 50 67.6 C 36 67.6 26 60.4 26 49.4 ...", "start": 0.0, "duration": 1.213}, ...]}
   ]
 }
 ```
@@ -33,8 +40,8 @@ the two disagree. Run the script after every change to the JSON.
 - `lineWidth`: the width of every line, in canvas units. Every stroke is
   drawn at this one width, with round caps and round joins.
 - `placement`: how the canvas sits on the card; see below.
-- `gap`: seconds of empty glass before each child.
-- `portraits`: the children in the order they are played. After the last
+- `gap`: seconds of empty glass before each animal.
+- `portraits`: the animals in the order they are played. After the last
   comes the first again.
   - `name`: a stable identifier (lowercase ASCII). Debug switches use it
     (`TOMOSHIBI_DEBUG_PORTRAIT=<name>` on Apple).
@@ -46,15 +53,17 @@ the two disagree. Run the script after every change to the JSON.
       command letter; numbers are separated by single spaces, use `.` as the
       decimal point, have at most two decimals and never an exponent. A
       stroke may hold more than one `M` (marks drawn in one go, such as the
-      three lines of a blush); the pen goes through them in order.
+      cat's three stripes, or the two eyes); the pen goes through them in
+      order. An eye is a very short line, about a line's width long, which
+      round ends make a dot.
     - `start`: seconds after the drawing begins (after the `gap`) that the
       pen starts this stroke.
     - `duration`: seconds the stroke takes.
 
-Strokes are drawn in order: the face first (cheeks and chin, or the opening
-of a hood), then the hair, then the eyes (left, then right: the eye, its
-upper lid, a girl's lashes, the two glints), the mouth, the blush, and last
-what is worn (hood, ears on a hood, collar, ties, strings).
+Strokes are drawn in order: the outline first (head and ears in one line
+where they meet, or a round body), then what is inside the ears and the
+markings (a tabby's stripes, a bear's muzzle, a penguin's white face, the
+egg's crack and shell), then the eyes, and last the nose or mouth.
 
 ## Placement: `bottom-center`
 
@@ -69,18 +78,18 @@ y      = cardBottom - canvas.height * scale
 
 On a phone the card is wider than tall, so the canvas fills the card's
 height. On a card taller than wide (an iPhone Duo's inner display on its
-side) the canvas fills the width and leaves empty glass above the head.
-Lines that leave the canvas (the shoulders run off its foot) are clipped by
-the card's rounded rectangle.
+side) the canvas fills the width and leaves empty glass above the drawing.
+Lines that leave the canvas are clipped by the card's rounded rectangle.
 
 Keep in mind what covers the card on a phone when drawing: the Start a
 meeting button and the calendar button cover the canvas below about
 y = 78, and the microphone and camera switches cover its top right corner
-(x > 79 and y < 18). Faces stay above y = 72; nothing sits in that corner.
+(x > 79 and y < 18). The animals keep between y = 8 and y = 76 and out of
+that corner.
 
 ## Timing
 
-For one child, with `t` the seconds since their turn began:
+For one animal, with `t` the seconds since their turn began:
 
 ```
 smoothstep(u) = u * u * (3 - 2 * u)              for u clamped to [0, 1]
@@ -96,45 +105,46 @@ the path from its start (trim the path by arc length; for a stroke with
 several `M`s, the length is the sum of its pieces and the pen goes through
 them in order). It eases in and out, so the pen slows into the end of each
 line and out of its start. The drawing does not fade in: it arrives by being
-drawn. When the turn ends, the next child's `gap` begins.
+drawn. When the turn ends, the next animal's `gap` begins.
 
 Play only while the card can be seen: hold still (keep the moment) while the
 app is in the background, the card is scrolled away or covered by a sheet,
 and resume from there. With the system's reduce-motion setting on, draw the
-first child finished and still. Nothing is redrawn while nothing moves (the
+first animal finished and still. Nothing is redrawn while nothing moves (the
 gap and the hold).
 
-## Lines of glass
+## The lines
 
-The lines are drawn as one shape: every stroke drawn so far stroked at
-`w = lineWidth * scale` with round caps and joins, all of them united (two
-lines that cross make one shape, not a double edge). The card under them is
-a pane of glass. Text colour below is the interface's own: night `#F5F5F7`,
-day `#1C1C1E`.
-
-On Apple platforms with Liquid Glass (iOS and macOS 26 and later):
+Every stroke drawn so far is stroked once, as one shape, at
+`w = lineWidth * scale` with round caps and round joins, in one colour: the
+interface's text colour at an opacity. Two lines that cross are one shape, so
+the colour does not double where they meet.
 
 | | night | day |
 | --- | --- | --- |
-| line | Liquid Glass, the clear kind, in the lines' shape, tinted with the text colour at 16 % | the same at 20 % |
-| highlight | the strokes' centre lines again, white at 60 %, width `max(0.16 w, 0.8 pt)`, moved by `(-0.17 w, -0.2 w)` (up and to the left), clipped to the lines' shape | white at 90 %, otherwise the same |
-| card | Liquid Glass (regular) in the card's rounded rectangle | same |
+| colour | `#F5F5F7` at 60 % | `#1C1C1E` at 50 % |
+| fill | none: lines only | same |
+| glass, highlight, shadow | none | none |
 
-The clear glass rather than the regular: the regular casts a soft grey
-shadow round everything drawn in it, and round a face's worth of lines on
-the day's white pane that shadow was a grey haze that made the drawing look
-dirty. Wherever the glass is imitated, draw no shadow under the lines.
+At 1.3 canvas units the line is about 3.8 pt on an iPhone's card. Drawn by
+day at 40 % the lines were faint on the glass, and by night at 72 % hard;
+these are the soft ones that still read at a glance.
 
-Everywhere else (Android, Windows, and Apple before 26), which draws the
-glass the way it looks without its depth:
+## The card
+
+On Apple platforms with Liquid Glass (iOS and macOS 26 and later) the card is
+Liquid Glass of the clear kind in the card's rounded rectangle; the regular
+kind casts a soft grey shadow round it, which by day read as dirt. What the
+clear glass comes to on the phone's lobby, measured from its pixels, is what
+to draw elsewhere (Android, Windows):
 
 | | night | day |
 | --- | --- | --- |
-| line fill | text colour at 12 % | text colour at 14 % |
-| line edge | 0.75 pt stroke round the lines' united shape (so that crossings draw no edge), text colour at 30 % | same |
-| highlight | as above: white at 60 % by night and 90 % by day, `max(0.16 w, 0.8 pt)` wide, moved `(-0.17 w, -0.2 w)`, clipped to the lines' shape | same |
+| page round the card | `#000000` | `#F2F2F7` |
+| card | `#202020` | `#FFFFFF` |
+| edge | 1 pt of white at 40 % just inside the card's outline (the glass's lit rim) | none |
 | shadow | none | none |
-| card | the system's thinnest blur material, a 1 pt border of the text colour at 16 % | same |
 
-No gradients anywhere, and nothing filled but the lines themselves: eyes,
-glints and blushes are lines too.
+Apple before 26 draws the system's thinnest blur material with a 1 pt border
+of the text colour at 16 % instead. No gradients anywhere, and nothing
+filled but the lines themselves.
