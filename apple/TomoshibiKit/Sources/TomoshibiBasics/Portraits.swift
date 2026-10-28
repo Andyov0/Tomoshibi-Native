@@ -1,10 +1,10 @@
 import CoreGraphics
 import SwiftUI
 
-// The children the phone lobby's camera card draws while the camera is off
-// (TomoshibiKit PreviewGlass): cartoon heads, a boy and a girl in turn, drawn
-// in lines of glass one stroke after another, the way the iPhone writes its
-// first "hello".
+// The little animals the lobby draws while the camera is off (TomoshibiKit
+// PreviewGlass: on the phone's camera card, and on the Mac's stage), one
+// after another, in thin lines one stroke after another, the way the iPhone
+// writes its first "hello".
 //
 // What is drawn is not here. It is art/portraits.json at the top of the
 // repository, which the Android and Windows clients play as well, so that
@@ -14,7 +14,7 @@ import SwiftUI
 // disagree. Here is only what reading and playing it takes: the path data
 // parsed, how much of a stroke is down at a moment, and whose turn it is.
 
-/// One child: their strokes in the order the pen draws them, when it draws
+/// One animal: their strokes in the order the pen draws them, when it draws
 /// each, and how long the finished drawing stays before it fades.
 public struct Portrait {
     public struct Stroke {
@@ -150,7 +150,7 @@ public struct Portrait {
 
 // MARK: - The round
 
-/// The children one after another, round and round: for each, a moment of
+/// The animals one after another, round and round: for each, a moment of
 /// empty glass (`gap`), the drawing, the finished drawing held, and a fade.
 public struct PortraitRound {
     public let people: [Portrait]
@@ -200,7 +200,7 @@ public struct PortraitRound {
     }
 
     /// Whether anything is moving `t` seconds in, and until when that stays
-    /// so: the drawing and the fade move; the empty glass before a child and
+    /// so: the drawing and the fade move; the empty glass before an animal and
     /// the finished drawing do not.
     public func motion(at t: Double) -> (moving: Bool, until: Double) {
         let (person, into, start) = place(t)

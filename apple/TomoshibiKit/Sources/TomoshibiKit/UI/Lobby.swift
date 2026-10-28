@@ -1297,6 +1297,15 @@ private struct HomeStage: View {
             // camera comes on, and gives it back. Apart from the stage, so
             // that they stand in the middle of what is seen of it rather than
             // under the sidebar that the stage extends beneath.
+            //
+            // The animals go on the same settling curve the picture comes in
+            // on, so that their two opacities add up to one at every moment
+            // and the two are never both strong. On the curve things leaving
+            // the screen take (Theme `leave`), which starts slowly, the
+            // animal was still at 78 % when the picture had reached 76 %,
+            // 0.08 s in. They come back as a new round, whose first moment
+            // is empty (the art's `gap`, 0.4 s), so the picture is gone
+            // before the first line is drawn.
             ZStack {
                 if !app.startWithCamera {
                     StageDrawing().transition(.opacity)

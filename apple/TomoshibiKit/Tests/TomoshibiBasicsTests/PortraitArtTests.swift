@@ -4,7 +4,7 @@ import SwiftUI
 import XCTest
 @testable import TomoshibiBasics
 
-/// The camera card's children: the Swift the apps draw is the JSON every
+/// The lobby's animals: the Swift the apps draw is the JSON every
 /// client draws (art/portraits.json), and what reads and plays it does what
 /// art/README.md tells the other platforms it does.
 final class PortraitArtTests: XCTestCase {
@@ -73,8 +73,8 @@ final class PortraitArtTests: XCTestCase {
         XCTAssertEqual(Set(PortraitArt.portraits.map(\.name)).count, PortraitArt.portraits.count, "names are what debug switches call them by")
     }
 
-    /// The pen draws one stroke after another, each taking a moment, and a
-    /// child is not so long in the drawing that the card seems stuck.
+    /// The pen draws one stroke after another, each taking a moment, and an
+    /// animal is not so long in the drawing that the card seems stuck.
     func testThePenDrawsOneStrokeAfterAnother() {
         for person in PortraitArt.portraits {
             var end = 0.0
@@ -126,7 +126,7 @@ final class PortraitArtTests: XCTestCase {
     }
 
     /// The round as the README plays it: gap, drawing, hold, fade, the next
-    /// child, and the first again after the last; still in the gap and the
+    /// animal, and the first again after the last; still in the gap and the
     /// hold, moving in the drawing and the fade.
     func testTheRound() {
         let one = Portrait(name: "one", hold: 1, fade: 0.5, strokes: [.init(d: "M 0 0 L 1 1", start: 0, duration: 2)])
