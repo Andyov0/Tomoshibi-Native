@@ -265,30 +265,40 @@ private fun PhoneLobby(app: AppModel, account: Account, state: LobbyState) {
                     .then(if (state.covered) Modifier.clearAndSetSemantics {} else Modifier),
             ) {
                 ContentLayer {
+                    // The page is content; the join bar and the account's
+                    // button float over it as a toolbar does, and stay glass,
+                    // blurring the page's parts under them: each part is a
+                    // glass source, the camera card apart. Its drawing
+                    // changes on every frame while a child is written, and a
+                    // blur over a source is worked out again whenever
+                    // anything inside the source changes, wherever that is:
+                    // with the whole page one source, the join bar at the
+                    // foot was blurred afresh for a drawing at the head, and
+                    // on an emulator the lobby took half a core and dropped a
+                    // third of its frames. The card can never pass under the
+                    // join bar (it heads the page), and only its top corner
+                    // under the account's button.
                     Column(
                         Modifier
                             .fillMaxSize()
-                            // The page is content; the join bar floats over it
-                            // as a toolbar does, and stays glass.
-                            .glassSource()
                             .putsKeyboardAway()
                             .verticalScroll(scroll)
                             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal)),
                     ) {
                         Spacer(Modifier.windowInsetsTopHeight(WindowInsets.safeDrawing))
                         Spacer(Modifier.height(BarHeight))
-                        KitText("Tomoshibi", Modifier.padding(start = 16.dp, end = 16.dp, bottom = 10.dp), font = Font(34f, Font.Bold), lines = 1)
+                        KitText("Tomoshibi", Modifier.glassSource().padding(start = 16.dp, end = 16.dp, bottom = 10.dp), font = Font(34f, Font.Bold), lines = 1)
                         // The deployment's notice first, then the update: in the
                         // page under its title, rather than over it, where laid
                         // over the top the banner covered the title and what the
                         // navigation bar leaves of it.
-                        LobbyNoticeCard(app, padding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 12.dp))
-                        UpdateBanner(app, Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp), inline = true)
+                        LobbyNoticeCard(app, Modifier.glassSource(), padding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 12.dp))
+                        UpdateBanner(app, Modifier.glassSource().padding(start = 16.dp, end = 16.dp, bottom = 12.dp), inline = true)
                         Column(Modifier.padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(22.dp)) {
                             Hero(app, state, Modifier.rise())
-                            Upcoming(app, state, Modifier.rise(60))
-                            Recent(app, state, Modifier.rise(100))
-                            ServerCard(app, state, Modifier.rise(140))
+                            Upcoming(app, state, Modifier.glassSource().rise(60))
+                            Recent(app, state, Modifier.glassSource().rise(100))
+                            ServerCard(app, state, Modifier.glassSource().rise(140))
                         }
                         Spacer(Modifier.height(24.dp + 60.dp + 6.dp))
                         Spacer(Modifier.windowInsetsBottomHeight(WindowInsets.safeDrawing))
@@ -374,7 +384,7 @@ private fun NavigationBar(app: AppModel, account: Account, state: LobbyState, sc
 @Composable
 private fun Hero(app: AppModel, state: LobbyState, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().height(292.dp)) {
-        CameraStage(app, Modifier.matchParentSize(), cornerRadius = 30.dp)
+        CameraStage(app, Modifier.matchParentSize(), cornerRadius = 30.dp, glassWhenOff = true, glassHeld = state.covered)
         DeviceSwitches(app, Modifier.align(Alignment.TopEnd).padding(12.dp), size = 40.dp)
         GlassGroup(8.dp) {
             Row(
@@ -703,7 +713,7 @@ private fun ChosenSection(app: AppModel, account: Account, state: LobbyState, on
         label = "section",
     ) { place ->
         when (place) {
-            Place.Home -> HomeStage(app, account, onTable)
+            Place.Home -> HomeStage(app, account, onTable, held = state.sheet != null || state.settings)
             Place.Scheduled -> ScheduleView(app, account, state.schedule, wide = true, close = { state.place = Place.Home })
             Place.Servers -> ServersView(app, wide = true, back = { state.place = Place.Home })
         }
@@ -1002,17 +1012,34 @@ private fun AccountMenu(app: AppModel, account: Account, state: LobbyState) {
 /**
  * Home on a wide screen (`HomeStage`): over the picture of yourself, which
  * fills the window under the sidebar, a greeting, the switches for how you
- * will arrive, and the server where there is a choice.
+ * will arrive, and the server where there is a choice. With the camera off
+ * there is no picture, and the animals of the phone's camera card are drawn
+ * on a card of glass between the greeting and the switches ([held] while a
+ * sheet or the settings cover it).
  */
 @Composable
-private fun HomeStage(app: AppModel, account: Account, onTable: Boolean) {
+private fun HomeStage(app: AppModel, account: Account, onTable: Boolean, held: Boolean) {
     Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-        Column(Modifier.padding(start = 36.dp, top = 56.dp, end = 24.dp).rise(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            ShadowedText(t("Hello, {name}", mapOf("name" to account.name)), Font(34f, Font.Bold), Theme.foreground)
-            // On a table the sidebar's contents are below the hinge (DeskLobby).
-            val start = if (onTable) t("Start one from below when you are ready.") else t("Start one from the sidebar when you are ready.")
-            // White at 78 per cent in the dark, black at as much in the light.
-            ShadowedText(start, Font(15f), Theme.wash.copy(alpha = 0.78f))
+        Column(Modifier.fillMaxSize()) {
+            Column(Modifier.padding(start = 36.dp, top = 56.dp, end = 24.dp).rise(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                ShadowedText(t("Hello, {name}", mapOf("name" to account.name)), Font(34f, Font.Bold), Theme.foreground)
+                // On a table the sidebar's contents are below the hinge (DeskLobby).
+                val start = if (onTable) t("Start one from below when you are ready.") else t("Start one from the sidebar when you are ready.")
+                // White at 78 per cent in the dark, black at as much in the light.
+                ShadowedText(start, Font(15f), Theme.wash.copy(alpha = 0.78f))
+            }
+            // An unfolded Fold is the wide lobby, where the picture fills the
+            // stage and the phone's card is not: with the camera off that
+            // stage was the backdrop and a greeting, a dark window with
+            // nothing in it. The phone's card stands in it instead, in the
+            // phone card's proportions, as large as fits between the greeting
+            // and the switches, which stay below it rather than over a face.
+            Appear(!app.startWithCamera, Modifier.weight(1f).fillMaxWidth(), enter = fadeIn(Theme.settle()), exit = fadeOut(Theme.leave())) {
+                BoxWithConstraints(Modifier.fillMaxSize().padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = SwitchesClearance), contentAlignment = Alignment.Center) {
+                    val width = min(min(maxWidth, maxHeight * CardAspect), 560.dp)
+                    PreviewGlass(30.dp, held, Modifier.width(width).height(width / CardAspect).rise(60))
+                }
+            }
         }
         // The capsule is the glass, and the switches inside it are drawn
         // plain, so that nothing is glass on glass.
@@ -1030,6 +1057,12 @@ private fun HomeStage(app: AppModel, account: Account, onTable: Boolean) {
         }
     }
 }
+
+/** The phone lobby's camera card's proportions, 292 points tall on a phone 412 wide: a wide stage's glass card keeps them. */
+private const val CardAspect = 380f / 292f
+
+/** The room the switches at the foot of a wide stage take, and a little air above them. */
+private val SwitchesClearance = 28.dp + 60.dp + 16.dp
 
 /**
  * Words over the picture, with the soft shadow that keeps them read over a

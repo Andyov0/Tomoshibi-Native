@@ -47,12 +47,38 @@ import kotlinx.coroutines.flow.collectLatest
  * join: the call's darkest ground there vanished into the black page round
  * the phone's lobby card. Filling the screen it is the screen's ground
  * ([Backdrop]), so the glass card over it stands out of it.
+ *
+ * [glassWhenOff]: with the camera off, a pane of glass with animals drawn
+ * on it instead of the grey ([PreviewGlass]): the phone lobby's card asks for
+ * it, as on the iPhone, and the start sheet's preview keeps the grey.
+ * [glassHeld]: the card is covered, and its drawing holds still.
  */
 @Composable
-fun CameraStage(app: AppModel, modifier: Modifier = Modifier, cornerRadius: Dp = 0.dp) {
+fun CameraStage(
+    app: AppModel,
+    modifier: Modifier = Modifier,
+    cornerRadius: Dp = 0.dp,
+    glassWhenOff: Boolean = false,
+    glassHeld: Boolean = false,
+) {
     val shape = if (cornerRadius > 0.dp) ContinuousShape(cornerRadius) else RectangleShape
     Box(modifier.clip(shape)) {
-        if (cornerRadius > 0.dp) Box(Modifier.matchParentSize().background(Theme.surface)) else Backdrop(Modifier.matchParentSize())
+        if (cornerRadius > 0.dp && glassWhenOff) {
+            // The glass and its drawing go as the camera comes on, and the
+            // grey a picture stands on comes with it; the other way round as
+            // it goes off. Both fade, so the card is never seen empty of
+            // either, and the drawing is not drawn at all under a picture.
+            Appear(!app.startWithCamera, Modifier.matchParentSize(), enter = fadeIn(Theme.settle()), exit = fadeOut(Theme.leave())) {
+                PreviewGlass(cornerRadius, glassHeld, Modifier.fillMaxSize())
+            }
+            Appear(app.startWithCamera, Modifier.matchParentSize(), enter = fadeIn(Theme.settle()), exit = fadeOut(Theme.leave())) {
+                Box(Modifier.fillMaxSize().background(Theme.surface))
+            }
+        } else if (cornerRadius > 0.dp) {
+            Box(Modifier.matchParentSize().background(Theme.surface))
+        } else {
+            Backdrop(Modifier.matchParentSize())
+        }
         Appear(
             app.startWithCamera,
             Modifier.matchParentSize(),

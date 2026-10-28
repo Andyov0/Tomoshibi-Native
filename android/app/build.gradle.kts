@@ -38,6 +38,38 @@ val deploymentHost: String = System.getenv("TOMOSHIBI_HOST")?.trim()?.takeIf { i
         }
     ?: "meet.example.com"
 
+// The people the lobby's camera card draws (ui/lobby/PortraitArt.kt): the
+// repository's art/portraits.json, which every platform draws from, copied
+// into the app's assets as it is rather than kept here as a second copy that
+// could drift from the iPhone's. A build without it fails: a card that draws
+// nobody would otherwise be found only by looking at it.
+abstract class PortraitAssets : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val drawings: RegularFileProperty
+
+    @get:OutputDirectory
+    abstract val assets: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        val out = assets.get().asFile
+        out.deleteRecursively()
+        out.mkdirs()
+        drawings.get().asFile.copyTo(out.resolve("portraits.json"), overwrite = true)
+    }
+}
+
+val portraitAssets = tasks.register<PortraitAssets>("portraitAssets") {
+    drawings.set(rootDir.parentFile.resolve("art/portraits.json"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(portraitAssets, PortraitAssets::assets)
+    }
+}
+
 android {
     namespace = "app.tomoshibi"
     compileSdk = 37
