@@ -1289,6 +1289,21 @@ private struct HomeStage: View {
             CameraStage(app: app)
                 .ignoresSafeArea()
                 .backgroundExtended()
+            #if os(macOS)
+            // With the camera off, the little animals the phone's camera card
+            // draws, on the stage itself (PreviewGlass `StageDrawing`): the
+            // owner asked for them on every platform (2026-10-27), and the
+            // Mac's lobby has no card. The picture takes their place as the
+            // camera comes on, and gives it back. Apart from the stage, so
+            // that they stand in the middle of what is seen of it rather than
+            // under the sidebar that the stage extends beneath.
+            ZStack {
+                if !app.startWithCamera {
+                    StageDrawing().transition(.opacity)
+                }
+            }
+            .animation(Theme.settle, value: app.startWithCamera)
+            #endif
             VStack(alignment: .leading, spacing: 6) {
                 Text(t("Hello, {name}", ["name": account.name])).font(.system(size: 34, weight: .bold))
                 Text(t("Start one from the sidebar when you are ready.")).font(.system(size: 15)).foregroundStyle(Theme.ink.opacity(0.78))

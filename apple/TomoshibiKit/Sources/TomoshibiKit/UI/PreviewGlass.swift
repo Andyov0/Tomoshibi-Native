@@ -2,23 +2,31 @@ import SwiftUI
 import TomoshibiBasics
 
 // The phone lobby's camera card with the camera off: a pane of glass with
-// people drawn on it in lines of glass, one after another.
+// little animals drawn on it in thin lines, one after another; and on the
+// Mac, which has no card, the same drawings on the lobby's stage.
 //
 // It was the grey of a camera-off tile, an empty card the size of the
-// picture that was not there. The owner asked for it to be a large piece of
-// glass instead, with an animation of different people's heads drawn on it
-// in frosted-glass lines, drawn the way the iPhone writes its first "hello"
-// (2026-10-26). It is the one surface in the content layer that is glass
-// (Glass.swift: the rest of the page is plain), because it stands where a
-// picture will be, as the glass over a call does; the card's buttons over it
-// are the content layer's plain ones, so there is no glass on glass.
+// picture that was not there. The owner asked for a large piece of glass
+// instead, with drawings on it drawn the way the iPhone writes its first
+// "hello" (2026-10-26). People came first, then cartoon children; the owner
+// found realistic heads unsettling, and then faces drawn in lines of glass,
+// with ringed eyes and a light along every line, eerie (2026-10-27), and
+// chose cartoon animals in plain thin lines with two dots for eyes. What is
+// drawn, and when each line is, comes from art/portraits.json, which every
+// client plays (TomoshibiBasics Portraits.swift); here is only how it looks,
+// and art/README.md has the same numbers for the other platforms. The card
+// is the one surface in the content layer that is glass (Glass.swift: the
+// rest of the page is plain), because it stands where a picture will be, as
+// the glass over a call does; the card's buttons over it are the content
+// layer's plain ones, so there is no glass on glass.
 //
-// The drawing is decoration. It is hidden from VoiceOver, it is one person
-// standing finished when Reduce Motion is on, and it moves only while it can
-// be seen: it holds still while the app is not in front, while the card is
-// scrolled out of sight or covered by a sheet, and stops with the card.
-// While a person is held finished nothing is redrawn at all: the timeline
-// that draws them is paused between the moments of writing and fading.
+// The drawing is decoration. It is hidden from VoiceOver, it is the first
+// animal standing finished when Reduce Motion is on, and it moves only while
+// it can be seen: it holds still while the app is not in front, while the
+// card is scrolled out of sight or covered by a sheet, and stops with the
+// card. While an animal is held finished nothing is redrawn at all: the
+// timeline that draws them is paused between the moments of writing and
+// fading.
 
 struct PreviewGlass: View {
     let cornerRadius: CGFloat
@@ -46,13 +54,17 @@ struct PreviewGlass: View {
 /// material with a light edge before it, as `glassSurface` draws a control.
 /// Not `glassSurface` itself, which inside the lobby's content layer draws a
 /// plain surface, and this card is the exception to that.
+///
+/// The clear kind of Liquid Glass, not the regular: the regular casts a soft
+/// grey shadow round what is drawn in it, which by day read as dirt on the
+/// white page round the card and round the lines that were glass before
+/// these (2026-10-27, the two set side by side by day and by night).
 private struct PaneOfGlass<S: Shape>: View {
     let shape: S
 
     var body: some View {
         if #available(macOS 26.0, iOS 26.0, *), !GlassSupport.forcedFallback {
-            Color.clear
-                .glassEffect(Glass.regular, in: shape)
+            Color.clear.glassEffect(Glass.clear, in: shape)
         } else {
             shape.fill(.ultraThinMaterial)
                 .overlay(shape.stroke(Theme.foreground.opacity(0.16), lineWidth: 1))
@@ -60,67 +72,40 @@ private struct PaneOfGlass<S: Shape>: View {
     }
 }
 
-// MARK: - The people, one after another
+#if os(macOS)
+/// The animals on the Mac's lobby, which has no card: on the stage's own
+/// ground while the camera is off, in the band between the greeting at the
+/// stage's head (HomeStage: 56 points down, two lines) and the switches at
+/// its foot (28 points up, a 60-point capsule), with room to spare above and
+/// below, so that they never stand on either. Centred on the whole stage, a
+/// rabbit's ears came within 18 points of the greeting on a stage 460 tall;
+/// sized by half the stage's height, an animal was about 170 points across
+/// on one 690 tall, small in so much ground. The drawing sits between 8 and
+/// 76 of its canvas's 100 (the animals end above the phone card's buttons),
+/// so the canvas is placed by that and not by its own middle.
+struct StageDrawing: View {
+    /// What the greeting and the switches take, with a margin.
+    static let head: CGFloat = 130
+    static let foot: CGFloat = 96
 
-/// When each person is drawn, held and let go, round and round: a moment of
-/// empty glass, the drawing at the pen's one speed, a second finished, and
-/// a fade, then the next.
-enum Choreography {
-    static let lead = 0.25
-    static let hold = 1.0
-    static let fade = 0.6
-
-    /// How long one person's turn is.
-    static func turn(_ person: Int) -> Double {
-        lead + Portrait.everybody[person].writing + hold + fade
-    }
-
-    /// The turns of one round, as when each starts.
-    private static let starts: [Double] = {
-        var at = 0.0
-        return Portrait.everybody.indices.map { person in
-            defer { at += turn(person) }
-            return at
+    var body: some View {
+        GeometryReader { space in
+            let band = max(space.size.height - Self.head - Self.foot, 0)
+            let side = min(band / 0.75, space.size.width * 0.5, 480)
+            PortraitCycle()
+                .frame(width: side, height: side)
+                .position(x: space.size.width / 2, y: Self.head + band / 2 + side * 0.08)
         }
-    }()
-
-    static let round: Double = Portrait.everybody.indices.reduce(0) { $0 + turn($1) }
-
-    /// Whose turn it is `t` seconds into the cycle, and how far into it.
-    private static func place(_ t: Double) -> (person: Int, into: Double, start: Double) {
-        let base = (t / round).rounded(.down) * round
-        let inRound = t - base
-        let person = starts.lastIndex { $0 <= inRound } ?? 0
-        return (person, inRound - starts[person], base + starts[person])
-    }
-
-    /// Who is on the card `t` seconds in, how many seconds of them are
-    /// drawn, and how much of them is still there to see.
-    static func moment(at t: Double) -> (person: Int, written: Double, shown: Double) {
-        let (person, into, _) = place(max(t, 0))
-        let writing = Portrait.everybody[person].writing
-        let written = into - lead
-        let fading = (into - lead - writing - hold) / fade
-        let shown = 1 - min(max(fading, 0), 1)
-        // Eased out as a light dims, quickly at first.
-        return (person, written, shown * shown * (3 - 2 * shown))
-    }
-
-    /// Whether anything is moving `t` seconds in, and until when that stays
-    /// so: the writing and the fade move, the empty glass before a person
-    /// and the finished drawing do not.
-    static func motion(at t: Double) -> (moving: Bool, until: Double) {
-        let (person, into, start) = place(max(t, 0))
-        let writing = Portrait.everybody[person].writing
-        let marks = [lead, lead + writing, lead + writing + hold, turn(person)]
-        let moving = [false, true, false, true]
-        let phase = marks.firstIndex { into < $0 } ?? 3
-        return (moving[phase], start + marks[phase])
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }
+#endif
 
-/// The people on the card in turn, drawn by a timeline that runs only while
-/// something on it moves.
+// MARK: - The animals, one after another
+
+/// The animals in turn (PortraitRound, as every client plays them), drawn by
+/// a timeline that runs only while something on it moves.
 struct PortraitCycle: View {
     var held = false
     /// When the cycle's second zero was, while it runs; how far it had got
@@ -132,21 +117,22 @@ struct PortraitCycle: View {
     @State private var inSight = true
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    private let round = PortraitRound.art
 
     private var running: Bool {
-        !held && inSight && scenePhase == .active && !reduceMotion && PortraitDebug.held == nil
+        !held && inSight && scenePhase == .active && !reduceMotion && PortraitDebug.held == nil && round.length > 0
     }
 
     var body: some View {
         Group {
             if let still = PortraitDebug.held {
                 PortraitLines(person: still.person, written: still.written)
-            } else if reduceMotion {
-                PortraitLines(person: Portrait.everybody[0], written: .infinity)
+            } else if reduceMotion || round.people.isEmpty {
+                if !round.people.isEmpty { PortraitLines(person: 0, written: .infinity) }
             } else {
                 TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !(running && moving))) { context in
-                    let now = Choreography.moment(at: origin.map { context.date.timeIntervalSince($0) } ?? stopped)
-                    PortraitLines(person: Portrait.everybody[now.person], written: now.written)
+                    let now = round.moment(at: origin.map { context.date.timeIntervalSince($0) } ?? stopped)
+                    PortraitLines(person: now.person, written: now.written)
                         .opacity(now.shown)
                 }
             }
@@ -162,7 +148,7 @@ struct PortraitCycle: View {
             self.origin = origin
             while !Task.isCancelled {
                 let t = Date().timeIntervalSince(origin)
-                let next = Choreography.motion(at: t)
+                let next = round.motion(at: t)
                 if moving != next.moving { moving = next.moving }
                 // A little past the change, so that the last frame drawn
                 // before the timeline pauses is the finished drawing (or the
@@ -194,85 +180,77 @@ extension View {
 
 // MARK: - The lines
 
-/// One person, drawn `written` seconds into their drawing, fitted to the
-/// height of the card and standing on its foot, in lines of glass.
+/// One animal, drawn `written` seconds into their drawing, placed as the art
+/// says (`bottom-center`: as large as fits the height and the width less the
+/// card's side inset, standing on its foot), in thin lines.
 ///
-/// A line is Liquid Glass in the line's own shape, tinted faintly with the
-/// colour of the interface's text, with the light caught along its upper
-/// side. Five ways were set side by side on the card, by day and by night:
-/// the glass alone, the glass with the light, the glass filled underneath,
-/// the system's thin material in the line's shape, and a faint fill with an
-/// edge. The material and the fill drew a double edge wherever two strokes
-/// cross, at an ear or the bridge of the glasses, where the glass merges
-/// them into one line. The glass alone was frosted glass but faint, and by
-/// day white on a white pane, a relief with nothing to read; the tint is
-/// what makes it a grey rod of glass there and a lit one at night, and the
-/// light shows on it in both.
+/// A line is one plain stroke at the art's width with round ends, in the
+/// text's colour taken down to 60 % by night and 50 % by day: soft on the
+/// glass, and still clear on it, where 40 % by day was faint and 72 % by
+/// night was hard (set side by side on the card, 2026-10-27). No glass in
+/// the lines, no light along them, no shadow: lines of glass, each a rod
+/// with two edges and a highlight, were what made the faces before these
+/// eerie. The lines are one shape, so where two cross the colour does not
+/// double.
 struct PortraitLines: View {
-    let person: Portrait
+    let person: Int
     let written: Double
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         GeometryReader { space in
-            let side = min(space.size.width, space.size.height)
-            let width = side * 0.027
-            let centre = PortraitPath(person: person, written: written)
-            let outline = PortraitPath(person: person, written: written, stroked: width)
-            ZStack {
-                GlassLine(shape: outline)
-                centre
-                    .stroke(Color.white.opacity(0.62), style: StrokeStyle(lineWidth: max(width * 0.16, 0.8), lineCap: .round, lineJoin: .round))
-                    .offset(x: -width * 0.17, y: -width * 0.2)
-                    .mask(outline)
-            }
-            .frame(width: side, height: side)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+            let width = PortraitPlace(space.size).scale * PortraitArt.lineWidth
+            PortraitPath(person: person, written: written)
+                .stroke(Theme.foreground.opacity(scheme == .dark ? 0.6 : 0.5),
+                        style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round))
         }
         .allowsHitTesting(false)
     }
 }
 
-/// The body of a line: glass where the system has it, and before it a faint
-/// fill with an edge, which is what the glass looks like without its depth.
-private struct GlassLine: View {
-    let shape: PortraitPath
+/// Where the canvas sits in a space: scaled to fit it and standing on its
+/// foot, in the middle across.
+struct PortraitPlace {
+    let scale: CGFloat
+    let transform: CGAffineTransform
 
-    var body: some View {
-        if #available(macOS 26.0, iOS 26.0, *), !GlassSupport.forcedFallback {
-            Color.clear.glassEffect(Glass.regular.tint(Theme.foreground.opacity(0.16)), in: shape)
-        } else {
-            shape.fill(Theme.foreground.opacity(0.12))
-            shape.stroke(Theme.foreground.opacity(0.34), lineWidth: 0.75)
-        }
+    init(_ size: CGSize) {
+        let canvas = PortraitArt.canvas
+        scale = max(min(size.width / canvas.width, size.height / canvas.height), 0)
+        transform = CGAffineTransform(scaleX: scale, y: scale)
+            .concatenating(CGAffineTransform(translationX: (size.width - canvas.width * scale) / 2,
+                                             y: size.height - canvas.height * scale))
     }
 }
 
-/// A person's lines fitted to the square they are drawn in, along their
-/// middle, or as the outline of a line `stroked` wide.
+/// An animal's lines, as far as they are drawn, placed in the space.
 struct PortraitPath: Shape {
-    let person: Portrait
+    let person: Int
     let written: Double
-    var stroked: CGFloat?
 
     func path(in rect: CGRect) -> Path {
-        let side = min(rect.width, rect.height)
-        let fitted = person.path(after: written)
-            .applying(CGAffineTransform(scaleX: side / 100, y: side / 100)
-                .concatenating(CGAffineTransform(translationX: rect.midX - side / 2, y: rect.maxY - side)))
-        guard let stroked else { return fitted }
-        return fitted.strokedPath(StrokeStyle(lineWidth: stroked, lineCap: .round, lineJoin: .round))
+        var drawn = Path()
+        for stroke in PortraitArt.portraits[person].strokes {
+            let done = Portrait.drawn(stroke, at: written)
+            if done >= 1 {
+                drawn.addPath(stroke.path)
+            } else if done > 0 {
+                drawn.addPath(stroke.path.trimmedPath(from: 0, to: done))
+            }
+        }
+        return drawn.applying(PortraitPlace(rect.size).transform.concatenating(CGAffineTransform(translationX: rect.minX, y: rect.minY)))
     }
 }
 
 enum PortraitDebug {
     /// TOMOSHIBI_DEBUG_PORTRAIT=<name>[@<seconds>], in a debug build: that
-    /// person alone, standing still, finished or that far into their
+    /// animal alone, standing still, finished or that far into their
     /// drawing, to photograph each of them.
-    static let held: (person: Portrait, written: Double)? = {
+    static let held: (person: Int, written: Double)? = {
         #if DEBUG
         guard let said = ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_PORTRAIT"] else { return nil }
         let parts = said.split(separator: "@").map(String.init)
-        guard let person = Portrait.everybody.first(where: { $0.name == parts.first }) else { return nil }
+        guard let person = PortraitArt.portraits.firstIndex(where: { $0.name == parts.first }) else { return nil }
         return (person, parts.count > 1 ? Double(parts[1]) ?? .infinity : .infinity)
         #else
         return nil
