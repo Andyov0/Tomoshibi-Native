@@ -75,9 +75,9 @@
                             <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#2E000000" />
                             <SolidColorBrush x:Key="TextControlForeground" Color="#FF1C1C1E" />
                             <SolidColorBrush x:Key="TextControlForegroundFocused" Color="#FF1C1C1E" />
-                            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#993C3C43" />
-                            <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#993C3C43" />
-                            <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#993C3C43" />
+                            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#BF3C3C43" />
+                            <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#BF3C3C43" />
+                            <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#BF3C3C43" />
                             <SolidColorBrush x:Key="ToggleSwitchFillOff" Color="#24000000" />
                             <SolidColorBrush x:Key="ToggleSwitchFillOffPointerOver" Color="#33000000" />
                             <SolidColorBrush x:Key="ToggleSwitchStrokeOff" Color="#1A000000" />

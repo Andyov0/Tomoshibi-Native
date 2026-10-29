@@ -50,7 +50,7 @@ public class ThemeTests
         Assert.Equal("#E5E5EA", Hex(light.SurfaceHigh));
         Assert.Equal("#000000@26", Hex(light.Border));
         Assert.Equal("#1C1C1E", Hex(light.Foreground));
-        Assert.Equal("#3C3C43@153", Hex(light.Muted));
+        Assert.Equal("#3C3C43@191", Hex(light.Muted));
         Assert.Equal("#34C759", Hex(light.Good));
         Assert.Equal("#FF3B30", Hex(light.Danger));
         Assert.Equal("#FFFFFF", Hex(light.DangerForeground));
@@ -70,6 +70,27 @@ public class ThemeTests
             Assert.True(Contrast(light.DangerText, ground) >= 4.5, $"red {Contrast(light.DangerText, ground):F2}");
         }
         Assert.True(Contrast(light.Danger, light.Background) < 4.5);
+    }
+
+    /// <summary>
+    /// The muted words by day read at 4.5:1 on the light ground and on its
+    /// white cards (the web's ui-polish, 2026-10-29), which Apple's 60 per
+    /// cent did not: about 3.1 to 3.4:1.
+    /// </summary>
+    [Fact]
+    public void TheMutedWordsReadByDay()
+    {
+        var light = Theme.Light;
+        foreach (var ground in new[] { light.Background, light.Surface })
+        {
+            var words = LooksTests.Over(light.Muted, ground);
+            Assert.True(Contrast(words, ground) >= 4.5, $"muted {Contrast(words, ground):F2}");
+            var was = LooksTests.Over(light.Muted.WithAlpha(0.6f), ground);
+            Assert.True(Contrast(was, ground) < 4.5);
+        }
+        // And by night, unchanged, well above it.
+        var dark = Theme.Dark;
+        Assert.True(Contrast(LooksTests.Over(dark.Muted, dark.Surface), dark.Surface) >= 4.5);
     }
 
     /// <summary>The border is the wash at a tenth in either scheme: what the chrome's other washes are turned over by.</summary>
