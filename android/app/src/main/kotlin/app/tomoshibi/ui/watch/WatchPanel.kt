@@ -29,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.tomoshibi.basics.Theme
 import app.tomoshibi.basics.t
@@ -46,6 +47,7 @@ import app.tomoshibi.ui.kit.MediaEmpty
 import app.tomoshibi.ui.kit.MediaField
 import app.tomoshibi.ui.kit.MediaIconButton
 import app.tomoshibi.ui.kit.MediaPanelGlass
+import app.tomoshibi.ui.kit.panelHeight
 import app.tomoshibi.ui.kit.MediaPanelHeader
 import app.tomoshibi.ui.kit.MediaRow
 import app.tomoshibi.ui.kit.MediaRule
@@ -77,20 +79,26 @@ internal val PanelHeight = 548.dp
  * typed in, and each video a row with its poster.
  */
 @Composable
-fun WatchPanel(app: AppModel, call: CallModel, close: () -> Unit, modifier: Modifier = Modifier) {
+fun WatchPanel(app: AppModel, call: CallModel, close: () -> Unit, modifier: Modifier = Modifier, tallest: Dp = PanelHeight) {
     val engine = remember(call) { WatchEngine.of(call) }
     val context = LocalContext.current
     LaunchedEffect(engine) { engine.lend(context) }
-    WatchPanelContent(engine, close, modifier)
+    WatchPanelContent(engine, close, modifier, tallest = tallest)
 }
 
 @Composable
-internal fun WatchPanelContent(engine: WatchEngine, close: () -> Unit, modifier: Modifier = Modifier, start: WatchTab = WatchTab.Queue) {
+internal fun WatchPanelContent(
+    engine: WatchEngine,
+    close: () -> Unit,
+    modifier: Modifier = Modifier,
+    start: WatchTab = WatchTab.Queue,
+    tallest: Dp = PanelHeight,
+) {
     var tab by remember { mutableStateOf(start) }
     // When it opens, and again once the server has said whether this person
     // may start a show: browsing is for choosing, and choosing is theirs.
     LaunchedEffect(engine.ready) { engine.loadServers() }
-    MediaPanelGlass(modifier.height(PanelHeight)) {
+    MediaPanelGlass(modifier.height(panelHeight(PanelHeight, tallest))) {
         Column(Modifier.fillMaxSize()) {
             MediaPanelHeader(t("Watch together"), t("Close watch together"), close, symbol = "play.rectangle.fill")
             if (engine.sealed) {

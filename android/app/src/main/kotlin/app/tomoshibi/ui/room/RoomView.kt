@@ -1105,8 +1105,8 @@ private fun Panel(
                     tallest = if (shape.posture == Posture.Book) maxOf(ChatTallest.value, tallest - 150f).dp else ChatTallest,
                 )
                 RoomPanel.Sound -> SoundPanel(host, close)
-                RoomPanel.Watch -> WatchPanel(app, call, close)
-                RoomPanel.Music -> MusicPanel(app, call, close)
+                RoomPanel.Watch -> WatchPanel(app, call, close, tallest = tallest.dp)
+                RoomPanel.Music -> MusicPanel(app, call, close, tallest = tallest.dp)
                 RoomPanel.Host -> HostPanel(host, close)
                 RoomPanel.Devices -> DevicesPanel(app, call, close)
             }

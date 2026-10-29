@@ -45,6 +45,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.tomoshibi.basics.Theme
 import app.tomoshibi.basics.t
@@ -66,6 +67,7 @@ import app.tomoshibi.ui.kit.MediaEmpty
 import app.tomoshibi.ui.kit.MediaField
 import app.tomoshibi.ui.kit.MediaIconButton
 import app.tomoshibi.ui.kit.MediaPanelGlass
+import app.tomoshibi.ui.kit.panelHeight
 import app.tomoshibi.ui.kit.MediaPanelHeader
 import app.tomoshibi.ui.kit.MediaProblem
 import app.tomoshibi.ui.kit.MediaProgress
@@ -119,22 +121,22 @@ fun musicPlaying(call: CallModel): Boolean = SongDesk.of(call).offer.playing
  * what everybody else hears is untouched.
  */
 @Composable
-fun MusicPanel(app: AppModel, call: CallModel, close: () -> Unit, modifier: Modifier = Modifier) {
+fun MusicPanel(app: AppModel, call: CallModel, close: () -> Unit, modifier: Modifier = Modifier, tallest: Dp = PanelHeight) {
     val desk = remember(call) { SongDesk.of(call) }
-    MusicPanelContent(desk, close, modifier)
+    MusicPanelContent(desk, close, modifier, tallest)
 }
 
 /** About as tall as the web's panel (`h-[min(34rem,...)]`), as MusicPanelView.swift's `height`. */
 private val PanelHeight = 548.dp
 
 @Composable
-internal fun MusicPanelContent(desk: SongDesk, close: () -> Unit, modifier: Modifier = Modifier) {
+internal fun MusicPanelContent(desk: SongDesk, close: () -> Unit, modifier: Modifier = Modifier, tallest: Dp = PanelHeight) {
     DisposableEffect(desk) {
         desk.panelOpen = true
         onDispose { desk.panelOpen = false }
     }
     val tab = if (desk.libraries == null) MusicTab.Desk else desk.tab
-    MediaPanelGlass(modifier.height(PanelHeight)) {
+    MediaPanelGlass(modifier.height(panelHeight(PanelHeight, tallest))) {
         Column(Modifier.fillMaxSize()) {
             MediaPanelHeader(t("Music"), t("Close music"), close, symbol = "music.note")
             AnimatedVisibility(desk.libraries != null, enter = Theme.arrive, exit = Theme.depart) {

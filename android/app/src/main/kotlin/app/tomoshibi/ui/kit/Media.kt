@@ -249,6 +249,20 @@ fun MediaPanelGlass(modifier: Modifier = Modifier, cornerRadius: Dp = 22.dp, con
     }
 }
 
+/**
+ * The height of a media panel that asks for [wanted] in a room that has
+ * [room] for it: its own, or what there is where that is less, down to
+ * [PanelShortest], below which the room scrolls it. Asked for its own
+ * height alone, the music panel was scrolled by the room as the keyboard
+ * came up for its search, and the field it was typed into was cut off at
+ * the panel's foot, the pictures showing below it (the health check of
+ * 2026-10-29); held to the room, its list gives way and the field stays.
+ */
+fun panelHeight(wanted: Dp, room: Dp): Dp = minOf(wanted, maxOf(room, PanelShortest))
+
+/** The least a media panel is drawn at: its heading, its tabs and its field, with a little of its list. */
+val PanelShortest = 240.dp
+
 /** A hairline between the parts of a panel (`MediaRule`). */
 @Composable
 fun MediaRule(modifier: Modifier = Modifier) {
