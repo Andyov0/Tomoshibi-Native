@@ -160,12 +160,30 @@ fun Modifier.glassSource(zIndex: Float = 0f): Modifier {
  */
 @Suppress("UNUSED_PARAMETER")
 @Composable
-fun Modifier.glassSurface(shape: Shape, tint: Color? = null, interactive: Boolean = false): Modifier {
+fun Modifier.glassSurface(shape: Shape, tint: Color? = null, interactive: Boolean = false, shade: Color = Color.Transparent): Modifier {
     // `interactive` is the system's own answer to a touch on iOS 26 glass,
     // which has nothing like it here: the kit's buttons answer a press
     // themselves, as the Apple apps' do on the systems before glass.
-    if (LocalContentLayer.current && !GlassSupport.everywhere) return plainSurface(shape, tint)
-    return liquidGlass(shape, tint, LocalGlassBackdrop.current)
+    if (LocalContentLayer.current && !GlassSupport.everywhere) {
+        val shaded = if (shade.alpha > 0f) background(shade, shape) else this
+        return shaded.plainSurface(shape, tint)
+    }
+    return liquidGlass(shape, tint, LocalGlassBackdrop.current, shade)
+}
+
+/**
+ * What glass laid over somebody's own camera picture is shaded with while
+ * the picture is live ([live]): the palette's surface at seventy per cent,
+ * the web's own island over its preview (PreJoin.tsx, `bg-surface/90`).
+ * The glass alone lets most of the picture through, and over a white wall
+ * the lobby card's microphone and camera were white on near white, and the
+ * start sheet's words over a bright room hard to read (the health check of
+ * 2026-10-29). Faded in and out as the camera turns on and off.
+ */
+@Composable
+fun pictureShade(live: Boolean): Color {
+    val strength by animateFloatAsState(if (live) 0.7f else 0f, Theme.settle(), label = "shade")
+    return Theme.surface.copy(alpha = strength)
 }
 
 /** A larger pane of glass: a sidebar, a sheet, a panel beside a call. */
@@ -183,10 +201,11 @@ fun Modifier.glassPane(cornerRadius: Dp = 22.dp): Modifier = glassSurface(Contin
 fun GlassShell(
     modifier: Modifier = Modifier,
     cornerRadius: Dp = 22.dp,
+    shade: Color = Color.Transparent,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val shape = ContinuousShape(cornerRadius)
-    Box(modifier.liquidGlass(shape, null, LocalGlassBackdrop.current)) {
+    Box(modifier.liquidGlass(shape, null, LocalGlassBackdrop.current, shade)) {
         CompositionLocalProvider(LocalContentLayer provides true) { content() }
     }
 }
@@ -241,7 +260,7 @@ fun Modifier.plainSurface(shape: Shape, tint: Color? = null): Modifier {
  * light one over the page as white at about that.
  */
 @Composable
-internal fun Modifier.liquidGlass(shape: Shape, tint: Color?, backdrop: HazeState?): Modifier {
+internal fun Modifier.liquidGlass(shape: Shape, tint: Color?, backdrop: HazeState?, shade: Color = Color.Transparent): Modifier {
     val palette = LocalPalette.current
     val blurred = backdrop != null && GlassSupport.blurs
     val standIn = palette.surface.copy(alpha = 0.80f)
@@ -253,6 +272,7 @@ internal fun Modifier.liquidGlass(shape: Shape, tint: Color?, backdrop: HazeStat
         // content it is drawn on) is still a pane.
         .background(standIn)
         .then(if (blurred && backdrop != null) Modifier.hazeBlur(HazeInput.Sources(backdrop), blur) else Modifier)
+        .then(if (shade.alpha > 0f) Modifier.background(shade) else Modifier)
         .then(if (tint != null) Modifier.background(tint) else Modifier)
         .then(
             if (palette.dark) Modifier.border(1.dp, if (tint == null) GlassRim else GlassRimLit, shape)
@@ -371,6 +391,7 @@ fun GlassButton(
     enabled: Boolean = true,
     label: String? = null,
     spacing: Dp = 6.dp,
+    shade: Color = Color.Transparent,
     content: @Composable RowScope.() -> Unit,
 ) {
     val on = enabled && LocalEnabled.current
@@ -393,7 +414,7 @@ fun GlassButton(
         modifier
             .glassLayer(alpha = { alpha }, scale = { scale })
             .then(sized)
-            .glassSurface(outline, tint, interactive = true)
+            .glassSurface(outline, tint, interactive = true, shade = shade)
             .brightened(outline, Theme.dark) { light }
             .pressable(press, outline, on, Role.Button, label, onClick = onClick)
             .then(if (shape is GlassButtonShape.Capsule) Modifier.padding(horizontal = shape.height * 0.45f) else Modifier),

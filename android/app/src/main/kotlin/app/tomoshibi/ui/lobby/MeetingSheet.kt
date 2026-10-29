@@ -87,6 +87,7 @@ import app.tomoshibi.ui.kit.rememberPopovers
 import app.tomoshibi.ui.kit.rounded
 import app.tomoshibi.ui.kit.Appear
 import app.tomoshibi.ui.kit.Backdrop
+import app.tomoshibi.ui.kit.pictureShade
 import app.tomoshibi.ui.kit.pressable
 import app.tomoshibi.ui.kit.rememberPress
 import androidx.compose.ui.semantics.Role
@@ -246,7 +247,7 @@ fun MeetingSheet(app: AppModel, draft: MeetingDraft, close: () -> Unit, wide: Bo
                                     Modifier
                                         .align(Alignment.BottomCenter)
                                         .padding(bottom = 12.dp)
-                                        .glassSurface(Capsule)
+                                        .glassSurface(Capsule, shade = pictureShade(app.startWithCamera))
                                         .padding(6.dp),
                                     size = 38.dp,
                                 )
@@ -277,7 +278,7 @@ fun MeetingSheet(app: AppModel, draft: MeetingDraft, close: () -> Unit, wide: Bo
             Box(modifier.fillMaxSize().putsKeyboardAway()) {
                 CameraStage(app, Modifier.fillMaxSize().glassSource())
                 AtTheFoot {
-                        GlassShell(Modifier.padding(10.dp).fillMaxWidth(), cornerRadius = 34.dp) {
+                        GlassShell(Modifier.padding(10.dp).fillMaxWidth(), cornerRadius = 34.dp, shade = pictureShade(app.startWithCamera)) {
                             Column(
                                 Modifier.padding(18.dp).animateContentSize(Theme.settle()),
                                 verticalArrangement = Arrangement.spacedBy(16.dp),

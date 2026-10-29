@@ -93,6 +93,7 @@ import app.tomoshibi.ui.kit.Symbol
 import app.tomoshibi.ui.kit.glassPane
 import app.tomoshibi.ui.kit.glassSource
 import app.tomoshibi.ui.kit.glassSurface
+import app.tomoshibi.ui.kit.pictureShade
 import app.tomoshibi.ui.kit.pressable
 import app.tomoshibi.ui.kit.putsKeyboardAway
 import app.tomoshibi.ui.kit.rememberPopovers
@@ -198,7 +199,8 @@ internal fun PaneScreen(app: AppModel, content: @Composable ColumnScope.(wide: B
                                 CameraStage(app, Modifier.matchParentSize(), cornerRadius = 24.dp)
                                 DeviceSwitches(
                                     app,
-                                    Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp).glassSurface(Capsule).padding(6.dp),
+                                    Modifier.align(Alignment.BottomCenter).padding(bottom = 14.dp)
+                                        .glassSurface(Capsule, shade = pictureShade(app.startWithCamera)).padding(6.dp),
                                     size = 44.dp,
                                 )
                                 LanguageMenu(Modifier.align(Alignment.TopEnd).padding(12.dp))
@@ -222,7 +224,7 @@ internal fun PaneScreen(app: AppModel, content: @Composable ColumnScope.(wide: B
             } else {
                 CameraStage(app, Modifier.fillMaxSize().glassSource())
                 AtTheFoot(Modifier.putsKeyboardAway()) {
-                        Box(Modifier.padding(10.dp).fillMaxWidth().rise().glassPane(34.dp)) {
+                        Box(Modifier.padding(10.dp).fillMaxWidth().rise().glassPane(34.dp).background(pictureShade(app.startWithCamera))) {
                             ContentLayer {
                                 Column(
                                     Modifier.fillMaxWidth().padding(18.dp).animateContentSize(Theme.settle()),
@@ -395,7 +397,8 @@ private fun JoinPicture(app: AppModel, wide: Boolean) {
             CameraStage(app, Modifier.matchParentSize(), cornerRadius = 20.dp)
             DeviceSwitches(
                 app,
-                Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp).glassSurface(Capsule).padding(6.dp),
+                Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)
+                    .glassSurface(Capsule, shade = pictureShade(app.startWithCamera)).padding(6.dp),
                 size = 38.dp,
             )
         }
