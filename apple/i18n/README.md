@@ -46,6 +46,16 @@ only the apps say goes in `native.json`:
 
 Then regenerate.
 
+## The system's prompts
+
+The camera, microphone and local network prompts are the system's, worded by
+the app's Info.plist: `project.yml` gives them in English, and `native.json`'s
+`infoPlist` gives each, by its Info.plist key, in all four languages, the
+English word for word as `project.yml` has it. The generator writes those to
+`App/InfoPlist.xcstrings`, which the build turns into each language's
+`InfoPlist.strings`. A prompt added to `project.yml` needs its four
+translations here before the generator will write anything.
+
 ## Regenerating
 
 ```sh
@@ -69,8 +79,9 @@ The generator stops, writes nothing, and lists every problem when:
 The output is sorted, so regenerating from unchanged dictionaries writes the
 same bytes and a diff shows only what changed.
 
-`Resources/Localizable.xcstrings` is generated. Do not edit it, and do not let
-Xcode's String Catalog editor save it; change the web's dictionaries or
+`Resources/Localizable.xcstrings` and `App/InfoPlist.xcstrings` are
+generated. Do not edit them, and do not let
+Xcode's String Catalog editor save them; change the web's dictionaries or
 `native.json` and regenerate.
 
 ## What checks it

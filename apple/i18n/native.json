@@ -1,5 +1,25 @@
 {
   "comment": "Phrases only the native apps say: menu items, window titles and anything else a browser never shows. The web client's own dictionaries are read directly by generate.mjs and are not copied here; a phrase the web already has belongs there, and the generator refuses one that appears in both. Each entry is keyed by its English, exactly as t() is called, and gives all four languages: \"en\" (normally the key itself), \"zh-Hans\", \"zh-Hant\" and \"ja\". Placeholders are written {likeThis} and must appear unchanged in every language. After editing, run: node apple/i18n/generate.mjs",
+  "infoPlist": {
+    "NSCameraUsageDescription": {
+      "en": "Tomoshibi uses the camera so that others in a call can see you.",
+      "zh-Hans": "Tomoshibi 使用摄像头，让通话中的其他人看到你。",
+      "zh-Hant": "Tomoshibi 使用攝影機，讓通話中的其他人看到你。",
+      "ja": "Tomoshibi は、通話中のほかの人にあなたが見えるようにカメラを使います。"
+    },
+    "NSLocalNetworkUsageDescription": {
+      "en": "Tomoshibi talks to a meeting server on your network.",
+      "zh-Hans": "Tomoshibi 会连接你所在网络中的会议服务器。",
+      "zh-Hant": "Tomoshibi 會連線到你所在網路中的會議伺服器。",
+      "ja": "Tomoshibi は、ネットワーク上の会議サーバーと通信します。"
+    },
+    "NSMicrophoneUsageDescription": {
+      "en": "Tomoshibi uses the microphone so that others in a call can hear you.",
+      "zh-Hans": "Tomoshibi 使用麦克风，让通话中的其他人听到你的声音。",
+      "zh-Hant": "Tomoshibi 使用麥克風，讓通話中的其他人聽到你的聲音。",
+      "ja": "Tomoshibi は、通話中のほかの人にあなたの声が聞こえるようにマイクを使います。"
+    }
+  },
   "phrases": {
     "Could not reach the server.": {
       "en": "Could not reach the server.",

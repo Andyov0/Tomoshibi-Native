@@ -88,6 +88,44 @@ final class LocalizationCatalogTests: XCTestCase {
         }
     }
 
+    /*
+     * The system's prompts for the camera, the microphone and the local
+     * network come from the app's Info.plist, which the build makes from
+     * project.yml in English; App/InfoPlist.xcstrings says them in the other
+     * three. Every prompt project.yml asks with is there, in all four, and
+     * its English is project.yml's own: a prompt reworded in one place and
+     * not the other would ask in the old words in three languages.
+     */
+    func testThePermissionPromptsAreSaidInEveryLanguage() throws {
+        let data = try Data(contentsOf: Self.apple.appendingPathComponent("App/InfoPlist.xcstrings"))
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+        let strings = try XCTUnwrap(root["strings"] as? [String: [String: Any]])
+        let said = strings.mapValues { entry in
+            ((entry["localizations"] as? [String: [String: Any]]) ?? [:]).compactMapValues {
+                ($0["stringUnit"] as? [String: Any])?["value"] as? String
+            }
+        }
+        let project = try String(contentsOf: Self.apple.appendingPathComponent("project.yml"), encoding: .utf8)
+        var asked: [(key: String, english: String)] = []
+        for line in project.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("NS"), let colon = trimmed.firstIndex(of: ":") else { continue }
+            let key = String(trimmed[..<colon])
+            guard key.hasSuffix("UsageDescription") else { continue }
+            asked.append((key, trimmed[trimmed.index(after: colon)...].trimmingCharacters(in: .whitespaces)))
+        }
+        XCTAssertEqual(Set(asked.map(\.key)), ["NSCameraUsageDescription", "NSMicrophoneUsageDescription", "NSLocalNetworkUsageDescription"])
+        let codes = Set(Language.allCases.map(\.rawValue))
+        for (key, english) in asked {
+            let translations = try XCTUnwrap(said[key], "\(key) is not in InfoPlist.xcstrings")
+            XCTAssertEqual(Set(translations.keys), codes, key)
+            XCTAssertEqual(translations["en"], english, "\(key): project.yml and the catalog say it differently")
+            for (code, value) in translations where code != "en" {
+                XCTAssertNotEqual(value, english, "\(key) is English in \(code)")
+            }
+        }
+    }
+
     func testKeepsEveryPlaceholderExactlyAsItWas() {
         for language in Language.allCases {
             for (phrase, translated) in Phrasebook.tables[language] ?? [:] {
