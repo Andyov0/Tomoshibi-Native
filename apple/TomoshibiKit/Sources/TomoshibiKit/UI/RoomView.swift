@@ -27,6 +27,10 @@ public struct RoomView: View {
     @State private var page = 0
     /// The stage given the whole screen (the web's "Fill the screen").
     @State private var filled = false
+    /// The other person of a call of two, put on the stage only to fill the
+    /// screen with them from their own button (`fill(alone:)`): leaving the
+    /// full screen takes them off it again, back to the call of two it was.
+    @State private var pinnedToFill: String?
     /// Where the room's name and the signal reach over the pictures, with the
     /// signal's figures when they are open, and how wide the list of who is
     /// watching is: the list moves down below the figures where they would
@@ -751,10 +755,25 @@ public struct RoomView: View {
     }
 
     private func unfill() {
-        withAnimation(Theme.settle) { filled = false }
+        withAnimation(Theme.settle) {
+            filled = false
+            if let id = pinnedToFill, pin.pinned == id { pin.pin(nil) }
+        }
+        pinnedToFill = nil
         #if os(macOS)
         window.leave()
         #endif
+    }
+
+    /// Fills the screen with the other person of a call of two, who fills
+    /// the room already without being on the stage: from the button at the
+    /// foot of their picture, the web's (Room.tsx `alone`). The commonest call
+    /// anybody has could not be made full screen without first pressing the
+    /// picture into a stage with a strip under it.
+    private func fill(alone id: String) {
+        withAnimation(Theme.settle) { pin.pin(id) }
+        pinnedToFill = id
+        fill()
     }
 
     // MARK: Pictures
@@ -764,14 +783,20 @@ public struct RoomView: View {
                       foot: CGFloat?) -> some View {
         let onStage = picture.id == pin.pinned
         let compact = spot.height < 140
+        // The other person filling a call of two, who has the stage's own
+        // buttons at the foot of their picture (`fill(alone:)`).
+        let alone: Bool = {
+            guard pin.pinned == nil, room.spots.count == Plan.aloneTogether, case .remote = picture.role else { return false }
+            return true
+        }()
         // The stage's own controls: under the pointer on a Mac, and out of
         // sight with the bar while it is; on a touch screen whenever the bar
         // is, since there is no pointer to hover.
         let reveal: (Bool) -> Bool = { hovering in
             #if os(macOS)
-            onStage && (hovering || StageDebug.hover) && (!hides || shown)
+            (onStage || alone) && (hovering || StageDebug.hover) && (!hides || shown)
             #else
-            onStage && shown
+            (onStage || alone) && shown
             #endif
         }
         let radius = filled && onStage ? 0 : Theme.tileRadius
@@ -861,7 +886,8 @@ public struct RoomView: View {
                               press: { pressed(picture.id) }, select: { select(picture.id) }) {
                         SurfacePicture(surface: surface, call: model.call, compact: compact)
                     } overlay: { hovering in
-                        stageControls(for: picture, revealed: reveal(hovering), edge: edge, spot: spot, furnished: !filled || shown)
+                        stageControls(for: picture, revealed: reveal(hovering), edge: edge, spot: spot, furnished: !filled || shown,
+                                      atFoot: alone)
                     }
                 }
                 .contextMenu { pictureMenu(picture, onStage: onStage, label: label, person: person, sound: sound, identity: person.id) }
@@ -869,21 +895,29 @@ public struct RoomView: View {
         }
     }
 
+    /// The stage's own controls over `picture`: in its top corner on the
+    /// stage, or, on the other person of a call of two (`atFoot`), in its
+    /// bottom corner, where nothing else is: the top corner holds this
+    /// participant's own picture as a card, and a button there read as the
+    /// card's. At the foot they keep clear of the bar as the name does,
+    /// moving up with it (`edge`).
     @ViewBuilder
-    private func stageControls(for picture: Picture, revealed: Bool, edge: EdgeInsets, spot: CGRect, furnished: Bool) -> some View {
+    private func stageControls(for picture: Picture, revealed: Bool, edge: EdgeInsets, spot: CGRect, furnished: Bool,
+                               atFoot: Bool = false) -> some View {
         if revealed {
             let other = counterpart(of: picture)
-            let top = stageControlsTop(spot: spot, edge: edge, furnished: furnished)
+            let top = atFoot ? 12 + edge.top : stageControlsTop(spot: spot, edge: edge, furnished: furnished)
             StageControls(other: other?.kind, filled: filled,
                           switchTo: { if let other { withAnimation(Theme.settle) { pin.pin(other.id) } } },
-                          fill: { filled ? unfill() : fill() })
-                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { stageControlsWidth = $0 }
+                          fill: { filled ? unfill() : atFoot ? fill(alone: picture.id) : fill() })
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { if !atFoot { stageControlsWidth = $0 } }
                 .padding(.top, top)
                 .padding(.leading, 12 + edge.leading)
                 .padding(.bottom, 12 + edge.bottom)
                 .padding(.trailing, 12 + edge.trailing)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: atFoot ? .bottomTrailing : .topTrailing)
                 .animation(Theme.settle, value: top)
+                .animation(Theme.settle, value: edge.bottom)
                 .transition(Theme.arrive)
         }
     }

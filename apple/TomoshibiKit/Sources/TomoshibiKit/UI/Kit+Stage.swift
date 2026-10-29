@@ -245,9 +245,10 @@ struct WindowReader: NSViewRepresentable {
 // MARK: - Glass over a picture
 
 /// A round control laid over a picture: dark glass, so it reads on a bright
-/// slide and on a black one alike, lit a little under the pointer.
+/// slide and on a black one alike, lit a step under the pointer and another
+/// held down, and pressed over a fingertip on a touch screen.
 struct PictureButtonStyle: ButtonStyle {
-    var size: CGFloat = 32
+    var size: CGFloat = 36
     var words = false
 
     func makeBody(configuration: Configuration) -> some View {
@@ -259,49 +260,53 @@ struct PictureButtonStyle: ButtonStyle {
         let size: CGFloat
         let words: Bool
         @State private var hovering = false
+        @Environment(\.accessibilityReduceMotion) private var still
 
         var body: some View {
             let shape = words ? AnyShape(Capsule()) : AnyShape(Circle())
+            let held = configuration.isPressed
             configuration.label
                 .padding(.horizontal, words ? 12 : 0)
                 .frame(minWidth: size, minHeight: size)
                 .frame(height: size)
                 .font(.system(size: 12.5, weight: .semibold))
-                .foregroundStyle(Theme.foreground)
+                .foregroundStyle(Color.white)
                 // Dark glass rather than clear: over a bright slide clear glass
                 // is a white blur with white words on it.
                 .background {
                     ZStack {
                         shape.fill(.ultraThinMaterial)
-                        shape.fill(Color.black.opacity(hovering ? 0.5 : 0.38))
+                        shape.fill(Color.black.opacity(0.38))
+                        shape.fill(Color.white.opacity(held ? Theme.Press.quietHeld : hovering ? Theme.Press.quietHover : 0))
                     }
                     .environment(\.colorScheme, .dark)
                 }
                 .overlay(shape.stroke(Color.white.opacity(0.14), lineWidth: 1))
                 .contentShape(shape)
-                .scaleEffect(configuration.isPressed ? 0.94 : 1)
+                .fingertip(words ? Theme.fingertip : size, size)
+                .scaleEffect(held && !still ? Theme.Press.scale : 1)
                 .onHover { hovering = $0 }
                 .animation(.easeOut(duration: 0.12), value: hovering)
-                .animation(Theme.settle, value: configuration.isPressed)
+                .animation(Theme.Press.animation, value: held)
         }
     }
 }
 
 extension ButtonStyle where Self == PictureButtonStyle {
-    static func overPicture(_ size: CGFloat = 32, words: Bool = false) -> PictureButtonStyle {
+    static func overPicture(_ size: CGFloat = 36, words: Bool = false) -> PictureButtonStyle {
         PictureButtonStyle(size: size, words: words)
     }
 }
 
 /// One of the paging arrows either side of the pictures (Plane.tsx
-/// `PageButton`): quiet until the pointer is on it, as the web's are at sixty
-/// per cent until hovered, and looping, so the page indicator is what says
-/// where somebody is.
+/// `PageButton`), looping, so the page indicator is what says where somebody
+/// is. At full strength: at sixty per cent until the pointer came, they read
+/// as arrows that could not be pressed, and a finger never came (the web's
+/// went the same way, ui-polish 2026-10-29).
 struct PageArrow: View {
     let symbol: String
     let label: String
     let action: () -> Void
-    @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
@@ -311,12 +316,9 @@ struct PageArrow: View {
                 .frame(width: 38, height: 38)
                 .contentShape(Circle())
                 .glassSurface(Circle(), interactive: true)
+                .fingertip(38)
         }
-        .buttonStyle(.plain)
-        .opacity(hovering ? 1 : 0.6)
-        .scaleEffect(hovering ? 1.06 : 1)
-        .onHover { hovering = $0 }
-        .animation(Theme.settle, value: hovering)
+        .buttonStyle(Pressable())
         .accessibilityLabel(label)
         .help(label)
     }

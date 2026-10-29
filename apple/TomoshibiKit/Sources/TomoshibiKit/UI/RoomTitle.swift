@@ -16,7 +16,9 @@ struct RoomTitle: View {
             .foregroundStyle(Theme.foreground)
             .lineLimit(1)
             .truncationMode(.middle)
-            .padding(.horizontal, 12).frame(height: 30)
+            // As high as the signal beside it: thirty and twenty-eight side
+            // by side read as two rows that did not line up.
+            .padding(.horizontal, 12).frame(height: 32)
             .glassSurface(Capsule())
     }
 }
@@ -89,8 +91,9 @@ struct EmptyRoomCard: View {
                     .padding(.leading, 14).padding(.trailing, 10)
                     .frame(height: 34)
                     .contentShape(Rectangle())
+                    .fingertip(Theme.fingertip, 34)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(RowPress(radius: 17))
                 .disabled(minting)
                 .transition(Theme.arrive)
             }
@@ -107,8 +110,9 @@ struct EmptyRoomCard: View {
                         .foregroundStyle(Theme.foreground)
                         .frame(width: 34, height: 34)
                         .contentShape(Rectangle())
+                        .fingertip(34)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(RowPress(radius: 17))
                 .disabled(minting)
                 .accessibilityLabel(t("Share link"))
                 .transition(Theme.arrive)
@@ -121,12 +125,16 @@ struct EmptyRoomCard: View {
                     .foregroundStyle(Theme.muted)
                     .frame(width: 34, height: 34)
                     .contentShape(Rectangle())
+                    .fingertip(34)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(RowPress(radius: 17))
             .accessibilityLabel(t("Close"))
             .help(t("Close"))
         }
-        .glassSurface(Capsule())
+        // Behind its buttons rather than around them, as the bar's is
+        // (Glass.swift `glassBacking`): inside a phone's glass a press is
+        // taken only within it, and each button's fingertip reaches past it.
+        .glassBacking(Capsule())
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: 420)
         .animation(Theme.settle, value: copied)
