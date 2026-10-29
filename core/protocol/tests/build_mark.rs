@@ -2,7 +2,7 @@
 //! the same as what an app asks the core, in the shape the scripts look for:
 //! `tomoshibi-core-build:<profile>:<host>:<update key>;`.
 
-use tomoshibi_protocol::api::{core_is_release, home_deployment, home_host, BUILD_MARK, HOST};
+use tomoshibi_protocol::api::{core_is_release, home_deployment, home_host, update_key, BUILD_MARK, HOST};
 
 #[test]
 fn the_mark_says_what_the_core_answers() {
@@ -23,6 +23,10 @@ fn the_mark_says_what_the_core_answers() {
         "the update key field is {:?}",
         fields[2]
     );
+    // The key a packaging script reads must be the one the core holds every
+    // update to: a mark naming no key, or another, over a core that checks
+    // one would pass a script's comparison and still ship the wrong key.
+    assert_eq!(fields[2], update_key().unwrap_or_default());
 }
 
 /// The scripts' pattern, which a host or key with any other character

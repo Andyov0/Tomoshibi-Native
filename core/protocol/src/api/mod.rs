@@ -87,11 +87,12 @@ use text::encode_uri_component;
 /// The cookie an account's session travels in (internal/app/account.go).
 const ACCOUNT_COOKIE: &str = "meet-live.account";
 
-/// The update key's field of [`BUILD_MARK`]: `env!("TOMOSHIBI_UPDATE_KEY")`,
-/// the release key build.rs bakes into the core for update signing
-/// (api/updates.rs `update_key`), once that change is in this tree; until
-/// then empty, which every packaging script refuses.
-macro_rules! build_mark_update_key { () => { "" }; }
+/// The update key's field of [`BUILD_MARK`]: the release key build.rs bakes
+/// into the core for update signing (api/updates.rs `update_key`), so that a
+/// packaging script reads the key the core will hold every update to. It is
+/// empty in a core built to check no signatures, which every packaging
+/// script refuses for a release.
+macro_rules! build_mark_update_key { () => { env!("TOMOSHIBI_UPDATE_KEY") }; }
 
 /// The one deployment these apps are for.
 ///
