@@ -18,6 +18,7 @@ import app.tomoshibi.media.DeviceAccess
 import app.tomoshibi.media.DeviceKind
 import app.tomoshibi.media.DeviceRefused
 import app.tomoshibi.media.LosslessPlayback
+import app.tomoshibi.media.NetworkWatch
 import app.tomoshibi.media.PictureInPicture
 import app.tomoshibi.media.ShareCeiling
 import app.tomoshibi.media.Sharing
@@ -837,10 +838,15 @@ class CallModel internal constructor(
     /** Whether [leave] has run; a second is nothing, the first having let everything go. */
     private var left = false
 
+    /** The device's default network, told to the call for as long as it lasts (CallMedia.watchNetwork). */
+    internal var network: NetworkWatch? = null
+
     suspend fun leave() {
         if (left) return
         left = true
         over = true
+        network?.stop()
+        network = null
         for (last in beforeLeaving.values.toList()) quietly { last() }
         beforeLeaving.clear()
         lossless.closeAll()
@@ -863,6 +869,8 @@ class CallModel internal constructor(
             is CallEvent.Ended -> {
                 endedReason = event.reason
                 over = true
+                network?.stop()
+                network = null
                 audio.stop()
                 if (cameraMade) camera.stop()
                 scope.launch { quietly { sharing.stop() } }
@@ -1079,6 +1087,7 @@ class CallModel internal constructor(
             bridge.flush()
             model.settled = true
             call.setLosslessSink(model.lossless)
+            model.network = media.watchNetwork(call)
             return model
         }
 
