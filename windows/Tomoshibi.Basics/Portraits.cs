@@ -11,7 +11,8 @@ namespace Tomoshibi.Basics;
 /// which this follows formula for formula).
 ///
 /// The file says what is drawn and when; the README also says how the lines
-/// and the card look (<see cref="GlassInk"/>). Paths are SVG path data in
+/// and the card look (<see cref="GlassInk"/>) and where the drawing stands on
+/// a desktop lobby (<see cref="PortraitStage"/>). Paths are SVG path data in
 /// absolute M, L, C, Q and Z alone, on a canvas whose origin is its top left
 /// with y going down. Each portrait's turn is the gap of empty glass, then the
 /// strokes, each written along its length between its start and its end on
@@ -547,4 +548,32 @@ public sealed record GlassInk(Shade Card, Shade? CardEdge, double CardEdgeWidth,
 
     /// <summary>The ink of the appearance the card is drawn in: the dark's or the light's whole, never a blend.</summary>
     public static GlassInk Of(Scheme scheme) => scheme == Scheme.Light ? Day : Night;
+}
+
+/// <summary>
+/// Where the animals stand on a desktop lobby with no card (art/README.md,
+/// "On a desktop lobby with no card"; the Mac's StageDrawing): on the stage's
+/// own ground, the part of it beside the sidebar, in the band between the
+/// greeting at its head and the switches at its foot, a square canvas whose
+/// own drawing (y from 8 to 76 of its 100) has its middle in the band's.
+/// </summary>
+public static class PortraitStage
+{
+    /// <summary>What the greeting and the switches take, with a margin.</summary>
+    public const double Head = 130;
+    public const double Foot = 96;
+
+    /// <summary>The largest the canvas is drawn, so that a tall window does not make giants of the animals.</summary>
+    public const double Most = 480;
+
+    /// <summary>
+    /// The canvas on a stage this large: its side, and where its middle is,
+    /// from the stage's top left. Nothing where the stage has no band.
+    /// </summary>
+    public static (double Side, double CentreX, double CentreY) Place(double stageWidth, double stageHeight)
+    {
+        var band = Math.Max(0, stageHeight - Head - Foot);
+        var side = Math.Max(0, Math.Min(Math.Min(band / 0.75, stageWidth * 0.5), Most));
+        return (side, stageWidth / 2, Head + band / 2 + side * 0.08);
+    }
 }

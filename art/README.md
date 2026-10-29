@@ -110,7 +110,8 @@ canvas = side x side, its centre at (stageWidth / 2, head + band / 2 + side * 0.
 The drawing sits between y = 8 and y = 76 of its canvas, so its own middle
 (42) goes to the middle of the band. When the camera comes on, the drawing
 fades out as the picture fades in (0.32 s), and back the other way.
-Windows's lobby, if it is the same kind of stage, does the same.
+Windows's lobby, the same kind of stage beside its sidebar, does the same
+(`Tomoshibi.Basics.PortraitStage`).
 
 ## Timing
 

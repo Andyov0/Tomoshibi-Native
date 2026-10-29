@@ -360,4 +360,37 @@ public class PortraitsTests
         Assert.Equal(0, GlassInk.Day.CardEdgeWidth);
         Assert.Equal(("none", "none"), table["shadow"]);
     }
+
+    /// <summary>The README's desktop formula: head 130, foot 96, side the least of the band over 0.75, half the stage's width and 480, its middle 0.08 of a side below the band's.</summary>
+    [Theory]
+    // A 1280 by 820 window's stage beside a 284 sidebar: the most, 480.
+    [InlineData(996, 820, 480, 498, 130 + 297 + 38.4)]
+    // Narrow: half the width.
+    [InlineData(350, 560, 175, 175, 130 + 167 + 14)]
+    // Short and wide: the band over 0.75.
+    [InlineData(1500, 526, 400, 750, 130 + 150 + 32)]
+    // No band at all: nothing drawn.
+    [InlineData(800, 200, 0, 400, 130)]
+    public void TheDesktopStageIsTheReadmesFormula(double width, double height, double side, double x, double y)
+    {
+        var placed = PortraitStage.Place(width, height);
+        Assert.Equal(side, placed.Side, 6);
+        Assert.Equal(x, placed.CentreX, 6);
+        Assert.Equal(y, placed.CentreY, 6);
+    }
+
+    [Fact]
+    public void TheDesktopStageKeepsTheDrawingBetweenTheGreetingAndTheSwitches()
+    {
+        // The drawing is y 8 to 76 of its canvas: whatever the stage, it
+        // starts below the head and ends above the foot.
+        foreach (var (width, height) in new[] { (300.0, 560.0), (996.0, 820.0), (2000.0, 600.0), (900.0, 1400.0), (360.0, 2000.0) })
+        {
+            var (side, _, y) = PortraitStage.Place(width, height);
+            var top = y - side / 2 + side * 0.08;
+            var foot = y - side / 2 + side * 0.76;
+            Assert.True(top >= PortraitStage.Head, $"{width}x{height}: the drawing starts at {top}");
+            Assert.True(foot <= height - PortraitStage.Foot, $"{width}x{height}: the drawing ends at {foot}");
+        }
+    }
 }
