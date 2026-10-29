@@ -116,6 +116,20 @@ pub struct JoinGrant {
     /// the next join, so a reconnect is the same person rather than a second
     /// one arriving while the first is cleaned up.
     pub identity: String,
+    /// What has to go back with `identity` for the next join to keep it, where
+    /// the server issued it (a guest's, drawn from nothing); absent for one a
+    /// passphrase or an account keeps, and from a server older than proofs.
+    ///
+    /// The identity is on every roster in the room, so anybody could send it
+    /// back as their own, and the media server would seat them and remove the
+    /// guest who had it; the server now keeps an issued identity only for
+    /// whoever shows this beside it, and issues a fresh one otherwise
+    /// (internal/room/room.go `GuestProof`). The app keeps the two together,
+    /// where it keeps the identity and for as long, and forgets the proof
+    /// whenever an answer comes without one, as api.ts does: kept apart, a
+    /// guest app was a new participant at every reconnect and lost a pin an
+    /// operator had set for it. Never shown, never logged.
+    pub proof: Option<String>,
     /// The room actually authorised, after the server lower-cased it.
     pub room: String,
     /// What to call the machine this call was sent to.
@@ -165,6 +179,7 @@ impl JoinGrant {
             url: required("url")?,
             token: required("token")?,
             identity: required("identity")?,
+            proof: some_text(body.get("proof")),
             room: required("room")?,
             relay: some_text(body.get("relay")),
             region: some_text(body.get("region")),
@@ -271,13 +286,15 @@ pub fn knock_give_up_after_ms() -> u64 {
 }
 
 /// The join's body. Field order is the order api.ts writes the object in, and
-/// a missing identity is left out rather than sent as null, as
+/// a missing identity or proof is left out rather than sent as null, as
 /// `JSON.stringify` leaves out `undefined`: the body is then byte for byte the
 /// one a browser sends.
 #[derive(Serialize)]
 struct JoinBody<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     identity: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    proof: Option<&'a str>,
     name: &'a str,
     passphrase: &'a str,
     relay: &'a str,
@@ -330,12 +347,14 @@ impl Api {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn join(
         &self,
         room: &str,
         name: &str,
         passphrase: &str,
         identity: Option<&str>,
+        proof: Option<&str>,
         relay: &str,
         invite: Option<&str>,
     ) -> Result<JoinGrant, ProtocolError> {
@@ -360,8 +379,12 @@ impl Api {
             path.push_str(&encode_uri_component(invite));
         }
 
+        // A proof is about the identity it came with and goes nowhere
+        // without it.
+        let identity = identity.filter(|identity| !identity.is_empty());
         let body = serde_json::to_vec(&JoinBody {
-            identity: identity.filter(|identity| !identity.is_empty()),
+            identity,
+            proof: identity.and(proof.filter(|proof| !proof.is_empty())),
             name,
             passphrase,
             relay,
@@ -454,7 +477,9 @@ impl Deployment {
     /// Asks to be authorised for a room.
     ///
     /// `identity` is the one a previous join on this device returned, sent
-    /// back so a reconnect is the same participant. `relay` is a relay's name
+    /// back so a reconnect is the same participant, and `proof` the proof that
+    /// join returned with it (`JoinGrant::proof`), without which the server
+    /// keeps no identity it issued. `relay` is a relay's name
     /// somebody chose, or empty to send the fastest by measurement, which is
     /// taken here as the web client takes it. `invite` is an invite token, sent
     /// in the query; the deployment then keeps it in a cookie of its own, which
@@ -462,12 +487,14 @@ impl Deployment {
     ///
     /// Never retried. With a passphrase every attempt is charged to the
     /// deployment's guessing budget.
+    #[allow(clippy::too_many_arguments)]
     pub async fn join(
         self: Arc<Self>,
         room: String,
         name: String,
         passphrase: String,
         identity: Option<String>,
+        proof: Option<String>,
         relay: String,
         invite: Option<String>,
     ) -> Result<JoinGrant, ProtocolError> {
@@ -478,6 +505,7 @@ impl Deployment {
                     &name,
                     &passphrase,
                     identity.as_deref(),
+                    proof.as_deref(),
                     &relay,
                     invite.as_deref(),
                 )

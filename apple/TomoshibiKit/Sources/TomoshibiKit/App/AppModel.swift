@@ -293,14 +293,15 @@ public final class AppModel {
 
     private var passphraseKey: String { "passphrase:" + (deployment?.baseUrl() ?? serverAddress) }
     private var cookieKey: String { "account:" + (deployment?.baseUrl() ?? serverAddress) }
-    private var identityKey: String { "tomoshibi.identity." + (deployment?.baseUrl() ?? serverAddress) }
-    /// A rehearsal's identity, for its own joins only, as a fresh browser tab
-    /// has one of its own. It read the identity this machine had kept while
-    /// it never wrote one, so two test apps in one room joined as the same
-    /// participant, and the server put the first out as a duplicate the
-    /// moment the second arrived: a listener that "never subscribed" to the
-    /// music had simply replaced its holder (2026-10-17).
-    private var rehearsalIdentity: String?
+    /// Where this deployment's identity and its proof are kept (KeptIdentity).
+    private var identityBase: String { deployment?.baseUrl() ?? serverAddress }
+    /// A rehearsal's identity and its proof, for its own joins only, as a
+    /// fresh browser tab has one of its own. It read the identity this
+    /// machine had kept while it never wrote one, so two test apps in one room
+    /// joined as the same participant, and the server put the first out as a
+    /// duplicate the moment the second arrived: a listener that "never
+    /// subscribed" to the music had simply replaced its holder (2026-10-17).
+    private var rehearsalIdentity = KeptIdentity()
 
     // MARK: What is switched on when somebody joins
 
@@ -880,20 +881,25 @@ public final class AppModel {
             // `scopedGuest`).
             let signed = account != nil
             let scopedGuest = arrivedInvited && !scopeOf(name: room).isEmpty
+            let kept = rehearsal ? rehearsalIdentity : KeptIdentity.read(.standard, base: identityBase)
             let grant = try await deployment.join(
                 room: room,
                 name: joiningName,
                 passphrase: signed || scopedGuest ? "" : passphrase,
-                identity: rehearsal ? rehearsalIdentity : UserDefaults.standard.string(forKey: identityKey),
+                identity: kept.identity,
+                proof: kept.proof,
                 relay: relay ?? relayChoice ?? "",
                 invite: invite)
             #if DEBUG
             lastJoinRelay = relay ?? relayChoice ?? ""
             joinsAnswered += 1
             #endif
-            // Every join's identity is kept: signing in or out makes the server
-            // issue a new one, and a stale one sent back would be refused.
-            if rehearsal { rehearsalIdentity = grant.identity } else { UserDefaults.standard.set(grant.identity, forKey: identityKey) }
+            // Every join's identity is kept, with its proof or with none:
+            // signing in or out makes the server issue a new one, a stale one
+            // sent back would be refused, and an issued one sent back without
+            // the proof it came with is replaced by a fresh one.
+            let answered = KeptIdentity(identity: grant.identity, proof: grant.proof)
+            if rehearsal { rehearsalIdentity = answered } else { KeptIdentity.keep(answered, in: .standard, base: identityBase) }
             guard attempt == joinAttempt else { return }
             let options = CallOptions(
                 url: grant.url, token: grant.token, room: grant.room,

@@ -263,7 +263,7 @@ async fn a_refusal_carries_the_servers_code_untouched() {
 
     let said = stub
         .deployment()
-        .join(s("standup"), s("Somebody"), s(""), None, s("x"), None)
+        .join(s("standup"), s("Somebody"), s(""), None, None, s("x"), None)
         .await;
 
     assert_eq!(said.unwrap_err(), refused(403, "not_invited"));
@@ -432,6 +432,7 @@ async fn nothing_answering_is_a_network_failure() {
             s("A"),
             s("hunter2"),
             None,
+            None,
             s(""),
             Some(s("a-token")),
         )
@@ -454,12 +455,12 @@ async fn an_answer_of_the_wrong_shape_is_unexpected() {
 
     assert!(matches!(
         d.clone()
-            .join(s("one"), s("A"), s(""), None, s("x"), None)
+            .join(s("one"), s("A"), s(""), None, None, s("x"), None)
             .await,
         Err(ProtocolError::Unexpected { .. })
     ));
     assert!(matches!(
-        d.join(s("two"), s("A"), s(""), None, s("x"), None).await,
+        d.join(s("two"), s("A"), s(""), None, None, s("x"), None).await,
         Err(ProtocolError::Unexpected { .. })
     ));
 }
@@ -508,6 +509,7 @@ async fn a_passphrase_never_goes_in_an_address() {
             s("standup@acme"),
             s("Alice"),
             s("hunter2 #sec"),
+            None,
             None,
             s(""),
             Some(s("a-token")),
@@ -559,6 +561,7 @@ async fn the_join_body_is_byte_for_byte_what_a_browser_sends() {
             s("Somebody"),
             s(""),
             None,
+            None,
             s("SG Misaka"),
             None,
         )
@@ -576,6 +579,7 @@ async fn the_join_body_is_byte_for_byte_what_a_browser_sends() {
             s("Some \"body\""),
             s("p"),
             Some(s(identity)),
+            None,
             s("SG Misaka"),
             None,
         )
@@ -596,7 +600,8 @@ async fn the_join_body_is_byte_for_byte_what_a_browser_sends() {
 
     // Nobody chose, so the relays are asked about, and a deployment that does
     // not want a measurement is sent none.
-    d.join(s("standup"), s("Somebody"), s(""), Some(s("")), s(""), None)
+    d.clone()
+        .join(s("standup"), s("Somebody"), s(""), Some(s("")), None, s(""), None)
         .await
         .unwrap();
     assert_eq!(stub.to("/api/relays").len(), 1);
@@ -604,6 +609,39 @@ async fn the_join_body_is_byte_for_byte_what_a_browser_sends() {
         stub.last().body(),
         r#"{"name":"Somebody","passphrase":"","relay":""}"#
     );
+
+    // The proof an issued identity came with goes right after it, as api.ts
+    // writes `{ identity, proof, name, passphrase, relay }`.
+    d.clone()
+        .join(
+            s("standup"),
+            s("Somebody"),
+            s(""),
+            Some(s(identity)),
+            Some(s("pr00f_-x")),
+            s("x"),
+            None,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        stub.last().body(),
+        format!(
+            r#"{{"identity":"{identity}","proof":"pr00f_-x","name":"Somebody","passphrase":"","relay":"x"}}"#
+        )
+    );
+
+    // A proof is about the identity it came with: with none, or an empty one,
+    // it is not sent; and an empty proof is no proof.
+    for (kept, proof) in [(None, s("pr00f")), (Some(s("")), s("pr00f")), (Some(s(identity)), s(""))] {
+        d.clone()
+            .join(s("standup"), s("Somebody"), s(""), kept.clone(), Some(proof), s("x"), None)
+            .await
+            .unwrap();
+        let sent = stub.last();
+        let body = sent.body();
+        assert!(!body.contains("proof"), "{kept:?}: {body}");
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -613,6 +651,7 @@ async fn a_join_reads_every_field_and_ignores_the_ones_it_does_not_know() {
             200,
             json!({
                 "url": "wss://hk.example/", "token": "tok", "identity": "tid", "room": "standup",
+                "proof": "pr00f-of-tid",
                 "relay": "Hong Kong", "region": "HK", "holding": "Shanghai", "added": { "later": true },
                 "forward": { "url": "turns:hk.example:443", "username": "u", "credential": "c" }
             }),
@@ -622,10 +661,11 @@ async fn a_join_reads_every_field_and_ignores_the_ones_it_does_not_know() {
 
     let grant = stub
         .deployment()
-        .join(s("Standup"), s("A"), s(""), None, s("hk"), None)
+        .join(s("Standup"), s("A"), s(""), None, None, s("hk"), None)
         .await
         .unwrap();
 
+    assert_eq!(grant.proof.as_deref(), Some("pr00f-of-tid"));
     assert_eq!(grant.relay.as_deref(), Some("Hong Kong"));
     assert_eq!(grant.region.as_deref(), Some("HK"));
     assert_eq!(grant.holding.as_deref(), Some("Shanghai"));
@@ -633,12 +673,34 @@ async fn a_join_reads_every_field_and_ignores_the_ones_it_does_not_know() {
         grant.forward.as_ref().map(|f| f.credential.as_str()),
         Some("c")
     );
-    // A grant is a credential for a few hours, and does not print as one.
+    // A grant is a credential for a few hours, and does not print as one; nor
+    // does the proof, which is what keeps the identity this guest's.
     let printed = format!("{grant:?}");
     assert!(
-        !printed.contains("tok") && !printed.contains("\"c\""),
+        !printed.contains("tok") && !printed.contains("\"c\"") && !printed.contains("pr00f"),
         "{printed}"
     );
+}
+
+/// An identity a passphrase or an account keeps comes with no proof, and nor
+/// does any answer from a server older than proofs; an empty one is none.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_join_without_a_proof_says_none() {
+    let stub = Stub::start(|seen| match seen.path() {
+        "/api/rooms/one/join" => Reply::json(200, grant()),
+        _ => Reply::json(200, json!({ "url": "wss://x.invalid", "token": "t", "identity": "i", "room": "two", "proof": "" })),
+    })
+    .await;
+    let d = stub.deployment();
+
+    for room in ["one", "two"] {
+        let grant = d
+            .clone()
+            .join(s(room), s("A"), s(""), None, None, s("x"), None)
+            .await
+            .unwrap();
+        assert_eq!(grant.proof, None, "{room}");
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -648,7 +710,7 @@ async fn requests_carry_no_origin_and_no_fetch_metadata() {
     let d = stub.deployment();
 
     d.clone()
-        .join(s("standup"), s("A"), s("p"), None, s(""), None)
+        .join(s("standup"), s("A"), s("p"), None, None, s(""), None)
         .await
         .unwrap();
     let _ = d.clone().sign_in(s("a"), s("p")).await;
@@ -906,13 +968,14 @@ async fn the_invite_cookie_lives_in_the_jar_for_the_next_join() {
             s("A"),
             s(""),
             None,
+            None,
             s("x"),
             Some(s("a-token")),
         )
         .await
         .unwrap();
     d.clone()
-        .join(s("standup"), s("A"), s(""), None, s("x"), None)
+        .join(s("standup"), s("A"), s(""), None, None, s("x"), None)
         .await
         .unwrap();
 
@@ -938,7 +1001,7 @@ async fn a_redirect_is_followed_at_home_and_nowhere_else() {
     // A 307 carries its body, and this one is a passphrase.
     let away = d
         .clone()
-        .join(s("away"), s("A"), s("hunter2"), None, s("x"), None)
+        .join(s("away"), s("A"), s("hunter2"), None, None, s("x"), None)
         .await;
     assert!(
         matches!(away, Err(ProtocolError::Unexpected { .. })),
@@ -949,7 +1012,7 @@ async fn a_redirect_is_followed_at_home_and_nowhere_else() {
         "the passphrase went to another host"
     );
 
-    d.join(s("home"), s("A"), s("hunter2"), None, s("x"), None)
+    d.join(s("home"), s("A"), s("hunter2"), None, None, s("x"), None)
         .await
         .unwrap();
     assert_eq!(stub.last().target, "/api/rooms/moved/join");

@@ -483,13 +483,12 @@ internal sealed class AppModel : Observable
     /// <summary>The arranged meetings, recent rooms and measured relays the screens before a call show.</summary>
     public LobbyModel Lobby { get; }
 
-    /// <summary>A rehearsal's identity, for its own joins only, as a fresh browser tab has one of its own.</summary>
-    private string? _rehearsalIdentity;
+    /// <summary>A rehearsal's identity and its proof, for its own joins only, as a fresh browser tab has one of its own.</summary>
+    private KeptIdentity _rehearsalIdentity = new();
 
     private string BaseUrl => Deployment?.BaseUrl() ?? _serverAddress;
     private string PassphraseKey => "passphrase:" + BaseUrl;
     private string CookieKey => "account:" + BaseUrl;
-    private string IdentityKey => "tomoshibi.identity." + BaseUrl;
 
     /// <summary>The relays' light, asked again every minute while no call is showing.</summary>
     private Microsoft.UI.Dispatching.DispatcherQueueTimer? _relayTimer;
@@ -987,16 +986,21 @@ internal sealed class AppModel : Observable
             var signed = Account != null;
             var scopedGuest = ArrivedInvited && TomoshibiProtocolMethods.ScopeOf(Room).Length > 0;
             Log.Line($"joining {Room}");
+            var kept = Rehearsal ? _rehearsalIdentity : KeptIdentity.Read(_defaults, BaseUrl);
             var grant = await deployment.Join(
                 Room, JoiningName,
                 signed || scopedGuest ? "" : Passphrase,
-                Rehearsal ? _rehearsalIdentity : _defaults.String(IdentityKey),
+                kept.Identity,
+                kept.Proof,
                 relay ?? RelayChoice ?? "",
                 Invite);
-            // Every join's identity is kept: signing in or out makes the
-            // server issue a new one, and a stale one sent back is refused.
-            if (Rehearsal) _rehearsalIdentity = grant.Identity;
-            else _defaults.Set(IdentityKey, grant.Identity);
+            // Every join's identity is kept, with its proof or with none:
+            // signing in or out makes the server issue a new one, a stale one
+            // sent back is refused, and an issued one sent back without the
+            // proof it came with is replaced by a fresh one.
+            var answered = new KeptIdentity(grant.Identity, grant.Proof);
+            if (Rehearsal) _rehearsalIdentity = answered;
+            else KeptIdentity.Keep(answered, _defaults, BaseUrl);
             if (attempt != _joinAttempt) return;
             var forward = grant.Forward is { } f ? new IceServer(f.Url, f.Username, f.Credential) : null;
             var options = new CallOptions(grant.Url, grant.Token, grant.Room, SealingWord.Length == 0 ? null : SealingWord, forward);
