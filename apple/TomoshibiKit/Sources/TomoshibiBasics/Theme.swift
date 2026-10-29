@@ -46,7 +46,14 @@ public enum Theme {
     public static let surfaceHigh = adaptive(dark: Shade(0.173, 0.173, 0.180), light: Shade(229 / 255, 229 / 255, 234 / 255))
     public static let border = adaptive(dark: Shade(1, 1, 1, 0.10), light: Shade(0, 0, 0, 0.10))
     public static let foreground = adaptive(dark: Shade(0.961, 0.961, 0.969), light: Shade(28 / 255, 28 / 255, 30 / 255))
-    public static let muted = adaptive(dark: Shade(0.922, 0.922, 0.961, 0.6), light: Shade(60 / 255, 60 / 255, 67 / 255, 0.6))
+    /// Words a step back from the foreground. By day at three quarters
+    /// rather than the system's sixty per cent: at sixty they read at 3.1 to
+    /// 3.4 to 1 on the day's grey and white, under the 4.5 words need, and
+    /// the web found the same of its own (ui-polish, 2026-10-29). The night
+    /// is unchanged.
+    public static let muted = adaptive(dark: Shade(0.922, 0.922, 0.961, 0.6), light: Shade(60 / 255, 60 / 255, 67 / 255, mutedDay))
+    /// `muted`'s opacity by day.
+    static let mutedDay = 0.75
     /// The colour the person chose, read where it is drawn so that a change
     /// redraws everything wearing it at once.
     @MainActor public static var tally: Color { Appearance.shared.accent.color }
@@ -81,10 +88,10 @@ public enum Theme {
     public static let ink = adaptive(dark: Shade(1, 1, 1), light: Shade(0, 0, 0))
 
     /// Words fainter than `muted`, a step back from it: `muted` at `opacity`
-    /// at night; by day `muted` itself, since anything fainter falls under 3
-    /// to 1 on the day's grey and white.
+    /// at night; by day `muted` itself, since anything fainter falls under
+    /// 4.5 to 1 on the day's grey and white.
     public static func faint(_ opacity: Double) -> Color {
-        adaptive(dark: Shade(0.922, 0.922, 0.961, 0.6 * opacity), light: Shade(60 / 255, 60 / 255, 67 / 255, 0.6))
+        adaptive(dark: Shade(0.922, 0.922, 0.961, 0.6 * opacity), light: Shade(60 / 255, 60 / 255, 67 / 255, mutedDay))
     }
 
     /// Something that floats over a surface rather than being part of it (a
@@ -121,7 +128,62 @@ public enum Theme {
     }
 
     /// The tile's corner, 0.5rem.
-    public static let tileRadius: CGFloat = 8
+    public static let tileRadius: CGFloat = Radius.tile
+
+    /// The corners, six of them and the capsule, shared with the web and the
+    /// other clients (ui-polish's scale): the apps had eighteen, from 1 to
+    /// 30, each right where it stood and together not quite one product. An
+    /// inner corner is its outer one less the padding between them, so a
+    /// menu of fourteen with four inside has rows of ten.
+    public enum Radius {
+        /// A picture.
+        public static let tile: CGFloat = 8
+        /// A menu's row, a small plate behind a symbol, a reaction.
+        public static let small: CGFloat = 10
+        /// A menu, a small card inside a panel, a notice.
+        public static let medium: CGFloat = 14
+        /// The lobby's cards, a group of rows.
+        public static let large: CGFloat = 18
+        /// A panel beside a call.
+        public static let panel: CGFloat = 22
+        /// The lobby's preview, the sign-in and join cards.
+        public static let card: CGFloat = 30
+    }
+
+    /// How every control answers being pointed at and pressed: the same
+    /// steps on every button of every client (the web's `pressable` and its
+    /// button variants, ui-polish 2026-10-29). Under the pointer a plate moves
+    /// a tenth of the way towards the foreground, held down or holding its
+    /// panel open sixteen hundredths, and a press shrinks it to 0.95. The
+    /// apps had 0.93, 0.94 and 0.96 for the shrink, and a hover of six
+    /// hundredths that by day nobody could see.
+    public enum Press {
+        /// A raised plate's ink at rest (a button of the call's bar)...
+        public static let rest = 0.12
+        /// ...under the pointer: 0.12 moved a tenth of the rest of the way.
+        public static let hover = 0.21
+        /// ...held down, or holding its panel open: sixteen hundredths.
+        public static let held = 0.26
+        /// A quiet control, clear at rest (a menu's row, a small round
+        /// button), under the pointer and held down.
+        public static let quietHover = 0.10
+        public static let quietHeld = 0.16
+        /// A filled plate (the colour, red, the foreground of a switch that
+        /// is off) under the pointer and held down: the web's `/90` and `/80`.
+        public static let filledHover = 0.9
+        public static let filledHeld = 0.8
+        public static let scale: CGFloat = 0.95
+        /// Anything that cannot be pressed, but the primary action, which is
+        /// grey rather than faded (GlassButtonStyle).
+        public static let disabled = 0.4
+        /// The press's own curve: short, settling.
+        public static let animation = Animation.timingCurve(0.2, 0.9, 0.3, 1, duration: 0.14)
+    }
+
+    /// The least a finger is given on a touch screen, whatever is drawn:
+    /// Apple's 44 points. A control drawn smaller is pressed over this much
+    /// (Kit `fingertip`), as Android's `fingertip()` gives 48dp.
+    public static let fingertip: CGFloat = 44
 
     /// Arrivals decelerate into place; departures need no such courtesy
     /// (--ease-settle and --ease-leave).
