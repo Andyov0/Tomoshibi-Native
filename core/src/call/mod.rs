@@ -93,6 +93,8 @@ pub struct Call {
     /// not say.
     joined_with: String,
     joined_until: Option<Instant>,
+    /// What the platform's network monitor has seen (`path_seen`).
+    network: Arc<tomoshibi_protocol::network::NetworkWatch>,
 }
 
 /// A lock that a panic elsewhere left poisoned, taken all the same.
@@ -200,6 +202,7 @@ impl Call {
             withdrawn: Mutex::new(HashSet::new()),
             joined_with: options.token.clone(),
             joined_until,
+            network: Arc::default(),
         });
 
         call.observer.on_event(CallEvent::StateChanged { state: CallState::Connected });
@@ -624,6 +627,37 @@ impl Call {
     pub fn network_changed(&self) {
         let _core = crate::runtime::enter();
         self.room.network_changed();
+    }
+
+    /// What the platform's network monitor says of the default path, every
+    /// time it says anything, from the moment the call is up: the core works
+    /// out whether it is a change and calls `network_changed` once it has
+    /// stood for half a second (protocol network.rs). A monitor speaks far
+    /// more often than the route changes, and each `network_changed` in a
+    /// connected call is a resume, so the decision is made once, here, for
+    /// every platform, rather than by each of them.
+    pub fn path_seen(self: Arc<Self>, path: tomoshibi_protocol::network::NetworkPath) {
+        let _core = crate::runtime::enter();
+        let call = Arc::downgrade(&self);
+        self.network.seen(path, move || {
+            if let Some(call) = call.upgrade() {
+                call.network_changed();
+            }
+        });
+    }
+
+    /// The device woke from sleep. Its route is likely the one it went to
+    /// sleep on, so no monitor reports a change, while the call's sockets did
+    /// not survive the sleep; the path standing now, or the next one that is
+    /// online, counts as a change.
+    pub fn woke(self: Arc<Self>) {
+        let _core = crate::runtime::enter();
+        let call = Arc::downgrade(&self);
+        self.network.woke(move || {
+            if let Some(call) = call.upgrade() {
+                call.network_changed();
+            }
+        });
     }
 
     /// Whether the app is in the background: readings taken there are not
