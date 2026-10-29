@@ -171,6 +171,16 @@ android {
         jniLibs { useLegacyPackaging = false }
     }
 
+    lint {
+        // A call the oldest Android the app is for does not have is fatal,
+        // so that it stops a release build (lintVitalRelease runs inside
+        // assembleRelease) rather than waiting to be read among the
+        // warnings: URLDecoder.decode(String, Charset), Android 13's, shipped
+        // in 0.1.6 and closed the app on 10 to 12 whenever a link opened it.
+        fatal += "NewApi"
+        checkReleaseBuilds = true
+    }
+
     androidResources {
         // The segmentation model is mapped from the APK as it lies, which a
         // compressed asset cannot be.

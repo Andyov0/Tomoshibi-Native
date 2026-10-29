@@ -1429,9 +1429,16 @@ data class OpenedLink(val origin: String, val room: String, val invite: String?,
             return OpenedLink(origin, room, first("invite"), first("meeting"))
         }
 
-        /** Percent-decoding as a URL's query items are read: a plus is a plus, not a space. */
-        private fun decode(text: String): String = try {
-            URLDecoder.decode(text.replace("+", "%2B"), Charsets.UTF_8)
+        /**
+         * Percent-decoding as a URL's query items are read: a plus is a plus,
+         * not a space. By the charset's name, the form every Android has: the
+         * overload taking a Charset is Android 13's, and on 10 to 12 it threw
+         * NoSuchMethodError, an Error the catch here does not take, which
+         * closed the app on every invitation and meeting link it was opened
+         * with (the 0.1.6 build). Lint's NewApi is fatal in the build for it.
+         */
+        internal fun decode(text: String): String = try {
+            URLDecoder.decode(text.replace("+", "%2B"), "UTF-8")
         } catch (_: Exception) {
             text
         }
