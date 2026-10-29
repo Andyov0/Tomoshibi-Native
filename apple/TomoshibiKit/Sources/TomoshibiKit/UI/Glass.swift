@@ -305,9 +305,55 @@ struct GlassGroup<Content: View>: View {
     }
 }
 
+// A fingertip.
+//
+// Here rather than in Kit.swift, beside the glass buttons that use it,
+// because the Messages extension compiles this file and not that one.
+
+extension View {
+    /// On a touch screen, presses this over at least a fingertip's square
+    /// (Theme.fingertip, Apple's 44 points) around what is drawn, which is
+    /// `drawn` big and stays that size: the press grows, the drawing does
+    /// not. Nothing on the Mac, whose pointer is a point.
+    ///
+    /// An iPhone had a dozen kinds of control under 44, the smallest 20: the
+    /// reactions' arrow, the panels' close, the stage's buttons, a menu's
+    /// rows. Android grows its own the same way (ui/kit/Press.kt
+    /// `fingertip()`). Put on a button's label, inside it, where the label's
+    /// shape is the button's: the area around the drawing is padding laid out
+    /// as nothing (it is taken back by the same amount), so the button keeps
+    /// its place and its neighbours theirs, and a finger on the padding is a
+    /// press of the button. Where two buttons' areas meet, the one drawn later
+    /// takes the press; a row of them a few points apart shares the gap.
+    func fingertip(_ width: CGFloat, _ height: CGFloat? = nil) -> some View {
+        modifier(Fingertip(width: width, height: height ?? width))
+    }
+}
+
+private struct Fingertip: ViewModifier {
+    let width: CGFloat
+    let height: CGFloat
+
+    func body(content: Content) -> some View {
+        #if os(iOS)
+        let across = max(0, (Theme.fingertip - width) / 2)
+        let down = max(0, (Theme.fingertip - height) / 2)
+        content
+            .padding(.horizontal, across)
+            .padding(.vertical, down)
+            .contentShape(Rectangle())
+            .padding(.horizontal, -across)
+            .padding(.vertical, -down)
+        #else
+        content
+        #endif
+    }
+}
+
 /// A button made of glass: a circle around a symbol, or a capsule around
 /// words. `prominent` wears the person's chosen colour; `destructive` is red,
-/// for leaving and nothing else.
+/// for leaving and nothing else; `off` is the foreground's own plate, for a
+/// microphone or a camera that is off (BarButton `off`).
 struct GlassButtonStyle: ButtonStyle {
     enum Shape {
         case circle(CGFloat)
@@ -317,45 +363,81 @@ struct GlassButtonStyle: ButtonStyle {
     var shape: Shape = .capsule(height: 36)
     var prominent = false
     var destructive = false
-    @Environment(\.isEnabled) private var enabled
-    @Environment(\.inContentLayer) private var inContent
-    @Environment(\.colorScheme) private var scheme
+    var off = false
 
     func makeBody(configuration: Configuration) -> some View {
-        let tint: Color? = destructive ? Theme.danger : prominent ? Theme.tally : nil
-        let ink: Color = destructive ? Theme.dangerForeground : prominent ? Theme.tallyForeground : Theme.foreground
+        GlassButtonBody(configuration: configuration, shape: shape, prominent: prominent, destructive: destructive, off: off)
+    }
+}
+
+private struct GlassButtonBody: View {
+    let configuration: ButtonStyleConfiguration
+    let shape: GlassButtonStyle.Shape
+    let prominent: Bool
+    let destructive: Bool
+    let off: Bool
+    @State private var hovering = false
+    @Environment(\.isEnabled) private var enabled
+    @Environment(\.inContentLayer) private var inContent
+    @Environment(\.accessibilityReduceMotion) private var still
+
+    /// The primary action that cannot be taken yet: a grey plate with grey
+    /// words, as the system draws one and as the web now does. It was the
+    /// amber at 45 per cent, which over the night is a brown with an arrow
+    /// on it at 1.55 to 1, and which still reads as the button to press,
+    /// only weaker; somebody pressed it and nothing happened. Grey reads as
+    /// not yet.
+    private var waiting: Bool { prominent && !enabled }
+
+    var body: some View {
+        let held = configuration.isPressed
+        let tint: Color? = waiting ? Theme.surfaceHigh
+            : destructive ? Theme.danger : off ? Theme.foreground : prominent ? Theme.tally : nil
+        let ink: Color = waiting ? Theme.muted
+            : destructive ? Theme.dangerForeground : off ? Theme.background : prominent ? Theme.tallyForeground : Theme.foreground
+        // Glass answers a press and a pointer itself; a plain surface (no
+        // glass, or the content layer) is lit a tenth of the way towards the
+        // foreground under the pointer and sixteen hundredths held down, and
+        // gives under the finger as every control does (Theme.Press).
+        let plain = !GlassSupport.available || inContent
+        let lit = !plain || !enabled ? 0 : held ? Theme.Press.quietHeld : hovering ? Theme.Press.quietHover : 0
         Group {
             switch shape {
             case let .circle(size):
                 configuration.label
                     .frame(width: size, height: size)
                     .contentShape(Circle())
+                    .background(Circle().fill(Theme.ink.opacity(lit)))
                     .glassSurface(Circle(), tint: tint, interactive: true)
+                    .fingertip(size)
             case let .capsule(height):
                 configuration.label
                     .lineLimit(1)
                     .padding(.horizontal, height * 0.45)
                     .frame(minHeight: height)
                     .contentShape(Capsule())
+                    .background(Capsule().fill(Theme.ink.opacity(lit)))
                     .glassSurface(Capsule(), tint: tint, interactive: true)
+                    .fingertip(Theme.fingertip, height)
             }
         }
         .foregroundStyle(ink)
         .font(.system(size: 13.5, weight: .semibold))
-        // Glass answers a press itself; a plain surface (no glass, or the
-        // content layer) is pressed down a little instead, and lit a little
-        // by night or shaded a little by day: brighter than white is white.
-        .scaleEffect(configuration.isPressed && (!GlassSupport.available || inContent) ? 0.96 : 1)
-        .brightness(configuration.isPressed && inContent ? (scheme == .dark ? 0.06 : -0.04) : 0)
-        .opacity(enabled ? 1 : 0.45)
-        .animation(Theme.settle, value: configuration.isPressed)
+        .scaleEffect(held && plain && !still ? Theme.Press.scale : 1)
+        // Faded when it cannot be pressed, but for the primary action, which
+        // is grey instead (`waiting`).
+        .opacity(enabled || prominent ? 1 : Theme.Press.disabled)
+        .onHover { hovering = $0 }
+        .animation(Theme.Press.animation, value: held)
+        .animation(.easeOut(duration: 0.12), value: hovering)
         .animation(Theme.settle, value: enabled)
+        .animation(Theme.settle, value: off)
     }
 }
 
 extension ButtonStyle where Self == GlassButtonStyle {
-    static func glassCircle(_ size: CGFloat = 44, prominent: Bool = false, destructive: Bool = false) -> GlassButtonStyle {
-        GlassButtonStyle(shape: .circle(size), prominent: prominent, destructive: destructive)
+    static func glassCircle(_ size: CGFloat = 44, prominent: Bool = false, destructive: Bool = false, off: Bool = false) -> GlassButtonStyle {
+        GlassButtonStyle(shape: .circle(size), prominent: prominent, destructive: destructive, off: off)
     }
 
     static func glassCapsule(_ height: CGFloat = 36, prominent: Bool = false, destructive: Bool = false) -> GlassButtonStyle {
