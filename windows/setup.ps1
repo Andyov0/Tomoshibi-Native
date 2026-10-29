@@ -11,7 +11,10 @@ shelf and an update hand out (the shelf's file ends .exe).
 The core for each architecture is whatever build-core.ps1 last built there:
 `release` for distribution, which talks to the home deployment alone. A
 release build of the app reads no test switches either, so a setup for a
-test is built with -Configuration Debug over a debug or local core.
+test is built with -Configuration Debug over a debug or local core. A Release
+setup is refused over a core that is not a release build, is built for
+meet.example.com, or holds updates to no key or to another than this
+checkout's (check-core.ps1).
 
 The version and the build (owner, 2026-10-22: a small fix keeps the version
 and takes the next build; a new version is for new features or a large update)
@@ -71,6 +74,9 @@ foreach ($a in "arm64", "x64") {
     foreach ($needed in "Tomoshibi.exe", "tomoshibi_core.dll", "coreclr.dll", "hostfxr.dll", "Microsoft.WindowsAppRuntime.dll") {
         if (-not (Test-Path (Join-Path $dir $needed))) { throw "no $needed in the $a app" }
     }
+    # The core in what is handed out is a release build for the real
+    # deployment; a test setup (-Configuration Debug) may carry any.
+    if ($Configuration -eq "Release") { & (Join-Path $PSScriptRoot "check-core.ps1") (Join-Path $dir "tomoshibi_core.dll") }
     # The four numbers the app joins into what it calls itself
     # (ClientDescription): a build that kept the project's own would call
     # itself the last release and be offered itself again.

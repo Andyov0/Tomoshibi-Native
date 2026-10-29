@@ -61,9 +61,10 @@ pub fn munge_start_bitrate(sdp: &str, start_bitrate_kbps: u32) -> String {
     peer_transport::PeerTransport::munge_x_google_start_bitrate(sdp, start_bitrate_kbps)
 }
 
-// Re-exported to preserve the public `rtc_engine::RECONNECT_*` paths.
+// Tomoshibi: the web's schedule (reconnect_strategy.rs), public so that the
+// core's tests can hold it to the web's numbers.
 pub use reconnect_strategy::{
-    RECONNECT_ATTEMPTS, RECONNECT_BACKOFF_MULTIPLIER, RECONNECT_BASE_DELAY, RECONNECT_MAX_DELAY,
+    wait_before as reconnect_wait, RECONNECT_ATTEMPTS, RECONNECT_DELAYS, RECONNECT_JITTER,
 };
 
 pub(crate) type EngineEmitter = mpsc::UnboundedSender<EngineEvent>;
@@ -365,6 +366,30 @@ impl RtcEngine {
             (handle.session.clone(), _r_lock)
         };
         session.publish_data(data, kind, is_raw_packet).await
+    }
+
+    /// Tomoshibi: the app's word that the network is back or another one
+    /// took over. While reconnecting, the attempt waiting its turn is made
+    /// now, as the web's `online` handler does (`clearReconnectTimeout` then
+    /// `attemptReconnect`); otherwise nothing. Says whether it was
+    /// reconnecting.
+    pub fn retry_now(&self) -> bool {
+        self.inner.retry_now()
+    }
+
+    /// Tomoshibi: the device's network changed under a call. While
+    /// reconnecting this is [`Self::retry_now`]. While connected the
+    /// signalling socket and the media are probably on an interface that is
+    /// gone, and nothing notices until the ping times out, a call gone quiet
+    /// for that long; so a resume is started now, as the web resumes when the
+    /// browser comes back online in a call it never saw drop
+    /// (`handleBrowserOnLine`, `isWaitingForNetworkReconnect`). The web first
+    /// asks the server for a HEAD to be sure the network is up; that is an
+    /// ordinary web request to a relay, which a relay in mainland China is
+    /// taken off the air for answering, so the platform's own word that a path
+    /// is there stands in for it.
+    pub fn network_changed(&self) {
+        self.inner.network_changed()
     }
 
     pub async fn simulate_scenario(&self, scenario: SimulateScenario) -> EngineResult<()> {
@@ -840,6 +865,36 @@ impl EngineInner {
         self.close_notifier.notify_waiters();
     }
 
+    /// Tomoshibi: see [`RtcEngine::retry_now`].
+    fn retry_now(&self) -> bool {
+        let handle = self.running_handle.read();
+        if !handle.reconnecting || handle.closed {
+            return false;
+        }
+        self.retry_now_notify.notify_one();
+        true
+    }
+
+    /// Tomoshibi: see [`RtcEngine::network_changed`]. A resume started here
+    /// takes the path a server's `Leave{Resume}` takes.
+    fn network_changed(self: &Arc<Self>) {
+        {
+            let handle = self.running_handle.read();
+            if handle.closed || !handle.can_reconnect {
+                return;
+            }
+        }
+        if self.retry_now() {
+            return;
+        }
+        self.reconnection_needed(
+            true,
+            false,
+            DisconnectReason::UnknownReason,
+            proto::ReconnectReason::RrSignalDisconnected,
+        );
+    }
+
     /// When waiting for reconnection, it ensures we're always using the latest session.
     async fn wait_reconnection(
         &self,
@@ -983,7 +1038,37 @@ impl EngineInner {
         let mut resuming_emitted = false;
         let mut restarting_emitted = false;
 
+        // Tomoshibi: a retry_now asked for during an attempt of an earlier
+        // episode, after its last wait, is still held by the Notify and
+        // would cut the first real wait of this one short. A permit is taken
+        // only if one is there.
+        tokio::select! {
+            biased;
+            _ = self.retry_now_notify.notified() => {}
+            _ = std::future::ready(()) => {}
+        }
+
         for i in 1..=RECONNECT_ATTEMPTS {
+            // Tomoshibi: the wait comes before each attempt, as the web's does
+            // (reconnect_strategy.rs): the first attempt is at once, and the
+            // engine no longer waits after its last before giving up, which
+            // the SDK did for up to seven seconds. `retry_now` (a server that
+            // asked for it, or the app saying the network is back) ends the
+            // wait so the next attempt is made now; a close ends it too, and
+            // the `is_closed` check below then returns.
+            let wait = reconnect_strategy::delay(i);
+            if !wait.is_zero() {
+                tokio::select! {
+                    _ = tokio::time::sleep(wait) => {}
+                    _ = self.retry_now_notify.notified() => {
+                        log::debug!("retry_now signalled, skipping the reconnect wait");
+                    }
+                    _ = self.close_notifier.notified() => {
+                        log::debug!("engine closed, cancelling the reconnect wait");
+                    }
+                }
+            }
+
             let (is_closed, full_reconnect) = {
                 let running_handle = self.running_handle.read();
                 (running_handle.closed, running_handle.full_reconnect)
@@ -1078,22 +1163,6 @@ impl EngineInner {
                         let mut running_handle = self.running_handle.write();
                         running_handle.full_reconnect = true;
                     }
-                }
-            }
-
-            // Exponential backoff with full jitter between attempts (DELTA 3).
-            // A server-requested reconnect signals retry_now_notify to collapse
-            // this wait so the next attempt fires immediately; a close signals
-            // close_notifier to break out of the loop early (the next iteration's
-            // `is_closed` check then returns) instead of waiting out the backoff.
-            let backoff = reconnect_strategy::delay(i);
-            tokio::select! {
-                _ = tokio::time::sleep(backoff) => {}
-                _ = self.retry_now_notify.notified() => {
-                    log::debug!("retry_now signalled, skipping reconnect backoff");
-                }
-                _ = self.close_notifier.notified() => {
-                    log::debug!("engine closed, cancelling reconnect backoff");
                 }
             }
         }

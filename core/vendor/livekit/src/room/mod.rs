@@ -890,6 +890,19 @@ impl Room {
         self.inner.rtc_engine.simulate_scenario(scenario).await
     }
 
+    /// Tomoshibi: while reconnecting, makes the next attempt now rather than
+    /// after its wait (`RtcEngine::retry_now`). Says whether it was
+    /// reconnecting.
+    pub fn retry_now(&self) -> bool {
+        self.inner.rtc_engine.retry_now()
+    }
+
+    /// Tomoshibi: the device's network changed: the next attempt now while
+    /// reconnecting, a resume now while connected (`RtcEngine::network_changed`).
+    pub fn network_changed(&self) {
+        self.inner.rtc_engine.network_changed()
+    }
+
     /// Test-only: force the next `count` resume attempts to fail, exercising the
     /// resume-failure → full-reconnect escalation path end-to-end.
     #[cfg(feature = "__lk-e2e-test")]
@@ -1763,7 +1776,13 @@ impl RoomSession {
                 let mut set = tokio::task::JoinSet::new();
 
                 for (_, publication) in published_tracks {
-                    let track = publication.track().unwrap();
+                    // Tomoshibi: a publication the person unpublished after
+                    // the list above was taken has no track any more. The
+                    // unwrap that stood here panicked this task, `Reconnected`
+                    // was never sent and the call said "Reconnecting..." for
+                    // good; the track is gone, which is what was asked, so
+                    // there is nothing to publish again.
+                    let Some(track) = publication.track() else { continue };
 
                     let lp = session.local_participant.clone();
                     let republish_session = session.clone();

@@ -199,7 +199,9 @@ pub async fn fetch(client: &reqwest::Client, base: &url::Url) -> Result<RelayLis
         return Ok(RelayList::empty());
     };
 
-    Ok(parse(&body))
+    let list = parse(&body);
+    remember_mainland(&list.relays);
+    Ok(list)
 }
 
 /// Reads a `GET /api/relays` body, leniently.
@@ -557,7 +559,23 @@ async fn over_udp_to(name: &str, target: SocketAddr) -> Option<Duration> {
 /// web's is a new WebSocket, and the rounds come to their [`reading`] as they
 /// do over UDP; one relay out here stops nobody else, there being no other
 /// way left to time them.
+///
+/// Never a relay in mainland China ([`mainland`]): it is left without a
+/// reading and is not contacted. A mainland relay signals through another
+/// (the server's SignalVia) because the providers in front of those machines
+/// intercept TLS to a server without an ICP filing and take the machine off
+/// the air for answering it. The server withholds such a relay's address
+/// only where it has a probe, so one configured without a probe, or one
+/// whose probe is down while another relay's is missing, had every client
+/// open `wss://` to it each time it measured. Without a reading it is never
+/// the fastest by this way of measuring, which is the price: an automatic
+/// choice over the socket lands abroad. The web's relays.ts times the same
+/// relays the same way and needs the same guard; that change is the
+/// coordinator's to make on the web.
 async fn over_signalling(relay: &Relay) -> Option<Duration> {
+    if mainland(relay.region.clone()) {
+        return None;
+    }
     let target = signalling(relay.url.as_deref()?)?;
     // Built before the clock starts: the first build loads the system's
     // certificate roots, which is the device's time and not the relay's.
@@ -829,6 +847,68 @@ fn mapped(value: &[u8], mask: Option<&[u8]>) -> Option<SocketAddr> {
     Some(SocketAddr::new(ip, port))
 }
 
+/// The hosts of every relay a list read from the deployment ([`fetch`]) put
+/// in mainland China, for [`tls_into_mainland`] to refuse a socket to.
+static MAINLAND_HOSTS: Mutex<Vec<String>> = Mutex::new(Vec::new());
+
+fn mainland_hosts() -> std::sync::MutexGuard<'static, Vec<String>> {
+    // Only ever pushed to whole, so a poisoned lock is still a usable one.
+    MAINLAND_HOSTS.lock().unwrap_or_else(|poison| poison.into_inner())
+}
+
+/// Notes the host of each relay in `list` that is in mainland China and whose
+/// address the deployment gave. Kept for the life of the process: a relay
+/// that was once in the mainland does not move, and forgetting one would be
+/// the TLS handshake this exists to prevent.
+pub fn remember_mainland(list: &[Relay]) {
+    let mut hosts = mainland_hosts();
+    for relay in list.iter().filter(|relay| mainland(relay.region.clone())) {
+        let host = relay.url.as_deref().and_then(|url| url::Url::parse(url).ok());
+        let Some(host) = host.as_ref().and_then(url::Url::host_str).map(str::to_ascii_lowercase) else {
+            continue;
+        };
+        if !hosts.contains(&host) {
+            hosts.push(host);
+        }
+    }
+}
+
+/// Whether opening `url` would start a TLS handshake (`wss:` or `https:`)
+/// with a relay this process has been told is in mainland China.
+///
+/// The join answer's `url` is where the call's signalling goes. For a
+/// mainland relay the server gives another relay's address (SignalVia), and
+/// only where no relay can carry the signalling does it give the mainland
+/// relay's own, on the reasoning that a call that may be intercepted beats
+/// one that certainly fails. But the interception is not all: the TLS
+/// handshake is what gets the relay taken off the air for everybody, so the
+/// core's `Call::open` refuses it.
+/// Only relays whose address some list gave can be recognised: the server
+/// withholds the address of a relay with a probe from anybody but an
+/// administrator, and those are not in the join's way unless the server's own
+/// fallback puts them there. The web needs the same refusal (relays.ts and
+/// room.ts); that change is the coordinator's to make on the web.
+pub fn tls_into_mainland(url: &str) -> bool {
+    let Ok(parsed) = url::Url::parse(url.trim()) else { return false };
+    if !matches!(parsed.scheme(), "wss" | "https") {
+        return false;
+    }
+    let Some(host) = parsed.host_str().map(str::to_ascii_lowercase) else { return false };
+    mainland_hosts().contains(&host)
+}
+
+/// Whether a join's `forward` address is one the client may hand to WebRTC:
+/// a `turn:` or `stun:` server, which is UDP or plain TCP. A `turns:` address
+/// is TURN over TLS, and anything else is not a relay's at all; the media
+/// relays the server forwards through include ones in mainland China, where
+/// a TLS handshake is what takes the relay off the air, so neither is used.
+/// The web passes the address through (room.ts) and needs the same check;
+/// that change is the coordinator's to make on the web.
+pub fn forwardable(url: &str) -> bool {
+    let url = url.trim().to_ascii_lowercase();
+    url.starts_with("turn:") || url.starts_with("stun:")
+}
+
 /// Whether a relay's region puts it in mainland China (relays.ts,
 /// `mainland`).
 ///
@@ -1038,6 +1118,43 @@ mod tests {
         let mut bare = reply[..20].to_vec();
         bare[2..4].copy_from_slice(&0u16.to_be_bytes());
         assert_eq!(binding_answer(&bare, &id), None);
+    }
+
+    #[test]
+    fn a_forward_is_plain_turn_or_stun_and_nothing_else() {
+        assert!(forwardable("turn:relay.example.com:3478?transport=udp"));
+        assert!(forwardable("TURN:relay.example.com:3478"));
+        assert!(forwardable(" stun:relay.example.com:3478"));
+        assert!(!forwardable("turns:relay.example.com:5349?transport=tcp"));
+        assert!(!forwardable("wss://relay.example.com"));
+        assert!(!forwardable("https://relay.example.com"));
+        assert!(!forwardable(""));
+    }
+
+    #[test]
+    fn only_a_tls_address_of_a_known_mainland_relay_is_refused() {
+        let at = |name: &str, url: &str, region: Option<&str>| Relay {
+            url: Some(url.into()),
+            region: region.map(str::to_owned),
+            ..named(name)
+        };
+        remember_mainland(&[
+            at("shanghai", "wss://sh.relays.example.net", Some("CN-East")),
+            at("beijing", "ws://bj.relays.example.net:7880", Some("cn north")),
+            at("hongkong", "wss://hk.relays.example.net", Some("HK")),
+            Relay { region: Some("CN".into()), ..named("guangzhou") },
+        ]);
+
+        assert!(tls_into_mainland("wss://sh.relays.example.net"));
+        assert!(tls_into_mainland("https://SH.relays.example.net/"));
+        assert!(tls_into_mainland("wss://bj.relays.example.net:443"));
+        // Plain WebSocket to the same machine is not TLS.
+        assert!(!tls_into_mainland("ws://sh.relays.example.net"));
+        // The relay a mainland relay signals through.
+        assert!(!tls_into_mainland("wss://hk.relays.example.net"));
+        // Nobody said where this one is.
+        assert!(!tls_into_mainland("wss://elsewhere.example.net"));
+        assert!(!tls_into_mainland("not a url"));
     }
 
     #[test]

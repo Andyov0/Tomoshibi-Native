@@ -126,7 +126,6 @@ fn screen_options(width: u32, height: u32, fps: u32, quality: ShareQuality) -> T
 /// takes, in order, on the core's runtime.
 #[derive(uniffi::Object)]
 pub struct AudioInput {
-    sid: String,
     channels: u32,
     track: LocalAudioTrack,
     feed: mpsc::UnboundedSender<Vec<i16>>,
@@ -139,8 +138,10 @@ pub struct AudioInput {
 
 #[uniffi::export]
 impl AudioInput {
+    /// The SID the track is published under now, which a full reconnect
+    /// changes (see `withdraw`).
     pub fn sid(&self) -> String {
-        self.sid.clone()
+        self.track.sid().to_string()
     }
 
     /// Interleaved samples at 48 kHz, in the channel count this input was
@@ -202,7 +203,7 @@ impl AudioInput {
     /// being sent).
     fn drain(self: &Arc<Self>) {
         {
-            let mut draining = self.draining.lock().unwrap();
+            let mut draining = super::held(&self.draining);
             if *draining {
                 return;
             }
@@ -211,7 +212,7 @@ impl AudioInput {
         let input = self.clone();
         crate::runtime::spawn(async move {
             loop {
-                let next = input.lossless.as_ref().and_then(|s| s.lock().unwrap().next_packet());
+                let next = input.lossless.as_ref().and_then(|s| super::held(s).next_packet());
                 let Some(packet) = next else { break };
                 let data = DataPacket {
                     payload: packet.payload,
@@ -222,16 +223,16 @@ impl AudioInput {
                 };
                 let _ = input.call.room.local_participant().publish_data(data).await;
             }
-            *input.draining.lock().unwrap() = false;
+            *super::held(&input.draining) = false;
         });
     }
 
     pub async fn unpublish(self: Arc<Self>) -> Result<(), CallError> {
         if let Some(sender) = self.lossless.as_ref() {
-            sender.lock().unwrap().stop();
-            self.call.senders.lock().unwrap().retain(|s| !Arc::ptr_eq(s, sender));
+            super::held(sender).stop();
+            super::held(&self.call.senders).retain(|s| !Arc::ptr_eq(s, sender));
         }
-        on_core(async move { unpublish(&self.call, &self.sid).await }).await
+        on_core(async move { withdraw(&self.call, &LocalTrack::Audio(self.track.clone())).await }).await
     }
 }
 
@@ -239,7 +240,10 @@ impl AudioInput {
 /// once for the core, which hands it to the hardware encoder without a copy.
 #[derive(uniffi::Object)]
 pub struct VideoInput {
-    sid: String,
+    /// The SID the picture was first published under, which is how the
+    /// uplink watch (`strain`) names the share for as long as it lasts: a
+    /// reconnect that publishes it again under another is the same share.
+    first_sid: String,
     source: NativeVideoSource,
     track: LocalVideoTrack,
     call: Arc<Call>,
@@ -247,14 +251,16 @@ pub struct VideoInput {
 
 impl Drop for VideoInput {
     fn drop(&mut self) {
-        self.call.strain.stopped(&self.sid);
+        self.call.strain.stopped(&self.first_sid);
     }
 }
 
 #[uniffi::export]
 impl VideoInput {
+    /// The SID the track is published under now, which a full reconnect
+    /// changes (see `withdraw`).
     pub fn sid(&self) -> String {
-        self.sid.clone()
+        self.track.sid().to_string()
     }
 
     /// A picture in three planes, as Android's camera and screen give them
@@ -356,8 +362,8 @@ impl VideoInput {
     }
 
     pub async fn unpublish(self: Arc<Self>) -> Result<(), CallError> {
-        self.call.strain.stopped(&self.sid);
-        on_core(async move { unpublish(&self.call, &self.sid).await }).await
+        self.call.strain.stopped(&self.first_sid);
+        on_core(async move { withdraw(&self.call, &LocalTrack::Video(self.track.clone())).await }).await
     }
 }
 
@@ -414,13 +420,50 @@ fn turned(rotation: u32) -> VideoRotation {
     }
 }
 
-async fn unpublish(call: &Call, sid: &str) -> Result<(), CallError> {
+/// Takes a track this participant sends out of the call, under whatever SID
+/// it is published now.
+///
+/// A SID is not a track's name for long. A full reconnect (a Mac waking from
+/// sleep, a network gone for more than a few seconds, a relay or its node
+/// restarting and sending `Leave{Reconnect}`, or a resume that failed)
+/// unpublishes every local track and publishes it again, and the server gives
+/// each one a new SID (vendor room/mod.rs `handle_restarted`). The inputs used
+/// to keep the SID they were first published under, and unpublishing by it
+/// was answered "track not found", which every app swallowed: a camera turned
+/// off stayed on everybody else's screen as its last frame, a stopped share
+/// stayed on the stage, and switching original sound left two microphones.
+/// The web unpublishes by the track itself (sound.ts `unpublishTrack`), which
+/// a republish keeps, so the publication is found here by its WebRTC track id,
+/// which the republish keeps too.
+///
+/// The republish takes a moment, between taking the old publication down and
+/// the server answering for the new one, and a track withdrawn inside that gap
+/// is published nowhere and would come back a moment later. So the track is
+/// marked withdrawn before it is looked for, and the room's
+/// `LocalTrackRepublished` takes down any republished track that is marked
+/// (`Call::handle`). The new publication is listed before that event is sent,
+/// so whichever of the two runs second sees what the first did. Not finding
+/// the track is therefore not an error: either it is already gone, or the
+/// event will take it down.
+async fn withdraw(call: &Call, track: &LocalTrack) -> Result<(), CallError> {
+    let id = track.rtc_track().id();
+    super::held(&call.withdrawn).insert(id.clone());
+    let Some(sid) = published_as(call, &id) else { return Ok(()) };
     call.room
         .local_participant()
-        .unpublish_track(&TrackSid::try_from(sid.to_string()).map_err(|_| CallError::NoSuchTrack { sid: sid.into() })?)
+        .unpublish_track(&sid)
         .await
         .map(|_| ())
         .map_err(|e| CallError::Failed { detail: e.to_string() })
+}
+
+/// The SID under which the track with this WebRTC id is published now.
+pub(super) fn published_as(call: &Call, id: &str) -> Option<TrackSid> {
+    call.room
+        .local_participant()
+        .track_publications()
+        .into_iter()
+        .find_map(|(sid, publication)| publication.track().is_some_and(|t| t.rtc_track().id() == id).then_some(sid))
 }
 
 #[uniffi::export]
@@ -440,12 +483,11 @@ impl Call {
             }
             .map(|channel| Arc::new(Mutex::new(LosslessSender::captured(channel))));
             if let Some(sender) = lossless.as_ref() {
-                self.senders.lock().unwrap().push(sender.clone());
+                super::held(&self.senders).push(sender.clone());
             }
             let source = NativeAudioSource::new(AudioSourceOptions::default(), RATE, channels, 0);
             let track = LocalAudioTrack::create_audio_track(&name, RtcAudioSource::Native(source.clone()));
-            let publication = self
-                .room
+            self.room
                 .local_participant()
                 .publish_track(LocalTrack::Audio(track.clone()), options)
                 .await
@@ -475,7 +517,6 @@ impl Call {
             });
 
             Ok(Arc::new(AudioInput {
-                sid: publication.sid().to_string(),
                 channels,
                 track,
                 feed,
@@ -512,7 +553,7 @@ impl Call {
             if let VideoKind::Screen { fps, quality } = kind {
                 self.strain.started(sid.clone(), track.clone(), quality, fps);
             }
-            Ok(Arc::new(VideoInput { sid, source, track, call: self.clone() }))
+            Ok(Arc::new(VideoInput { first_sid: sid, source, track, call: self.clone() }))
         })
         .await
     }

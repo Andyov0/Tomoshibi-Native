@@ -8,12 +8,18 @@
 # The window's layout is Finder's to write (.DS_Store), so Finder is asked to
 # arrange it; the first time, macOS asks whether this may control Finder. If
 # that is refused the image still works, with Finder's own arrangement.
+#
+# An app whose core is a debug build, is built for meet.example.com, or holds
+# updates to no key (or another than this checkout's) is refused before
+# anything is made (check-core.sh says why).
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 APP=$1
 OUT=$2
 IDENTITY=${3:-}
 NAME=Tomoshibi
+
+"$HERE/check-core.sh" "$APP"
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT

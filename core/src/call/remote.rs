@@ -154,7 +154,7 @@ impl Sinks {
     /// others: a picture can be on the stage and in a tile at once.
     #[cfg(target_os = "android")]
     pub(super) fn attach_window(&self, sid: &str, window: super::window::Window, track: Option<RemoteTrack>) {
-        let entries = self.entries.lock().unwrap();
+        let entries = super::held(&self.entries);
         if let Some(Entry { wanted: Wanted::Windows(windows), .. }) = entries.get(sid) {
             windows.add(window);
             return;
@@ -168,7 +168,7 @@ impl Sinks {
     /// Takes one surface away; the picture stops flowing with the last.
     #[cfg(target_os = "android")]
     pub(super) fn detach_window(&self, sid: &str, window: u64) {
-        let empty = match self.entries.lock().unwrap().get(sid) {
+        let empty = match super::held(&self.entries).get(sid) {
             Some(Entry { wanted: Wanted::Windows(windows), .. }) => windows.remove(window),
             _ => false,
         };
@@ -180,7 +180,7 @@ impl Sinks {
     /// Adds a panel to those this picture is drawn into, keeping the others.
     #[cfg(target_os = "windows")]
     pub(super) fn attach_panel(&self, sid: &str, panel: super::panel::Panel, track: Option<RemoteTrack>) {
-        let entries = self.entries.lock().unwrap();
+        let entries = super::held(&self.entries);
         if let Some(Entry { wanted: Wanted::Panels(panels), .. }) = entries.get(sid) {
             panels.add(panel);
             return;
@@ -194,7 +194,7 @@ impl Sinks {
     /// Takes one panel away; the picture stops flowing with the last.
     #[cfg(target_os = "windows")]
     pub(super) fn detach_panel(&self, sid: &str, panel: u64) {
-        let empty = match self.entries.lock().unwrap().get(sid) {
+        let empty = match super::held(&self.entries).get(sid) {
             Some(Entry { wanted: Wanted::Panels(panels), .. }) => panels.remove(panel),
             _ => false,
         };
@@ -206,14 +206,14 @@ impl Sinks {
     /// The panels a picture is drawn into, to place one or count its frames.
     #[cfg(target_os = "windows")]
     pub(super) fn panels(&self, sid: &str) -> Option<Arc<super::panel::Panels>> {
-        match self.entries.lock().unwrap().get(sid) {
+        match super::held(&self.entries).get(sid) {
             Some(Entry { wanted: Wanted::Panels(panels), .. }) => Some(panels.clone()),
             _ => None,
         }
     }
 
     fn attach(&self, sid: &str, wanted: Wanted, track: Option<RemoteTrack>) {
-        let mut entries = self.entries.lock().unwrap();
+        let mut entries = super::held(&self.entries);
         if let Some(old) = entries.remove(sid) {
             if let Some(task) = old.flowing {
                 task.abort();
@@ -225,7 +225,7 @@ impl Sinks {
 
     /// A track the app may already be waiting for has arrived.
     pub(super) fn subscribed(&self, sid: &str, track: RemoteTrack) {
-        let mut entries = self.entries.lock().unwrap();
+        let mut entries = super::held(&self.entries);
         if let Some(entry) = entries.get_mut(sid) {
             if let Some(task) = entry.flowing.take() {
                 task.abort();
@@ -237,7 +237,7 @@ impl Sinks {
     /// The track went away but the app still wants it: keep the wish, so a
     /// resubscription (after a reconnect, say) picks it up again.
     pub(super) fn unsubscribed(&self, sid: &str) {
-        if let Some(entry) = self.entries.lock().unwrap().get_mut(sid) {
+        if let Some(entry) = super::held(&self.entries).get_mut(sid) {
             if let Some(task) = entry.flowing.take() {
                 task.abort();
             }
@@ -245,7 +245,7 @@ impl Sinks {
     }
 
     pub(super) fn detach(&self, sid: &str) {
-        if let Some(entry) = self.entries.lock().unwrap().remove(sid) {
+        if let Some(entry) = super::held(&self.entries).remove(sid) {
             if let Some(task) = entry.flowing {
                 task.abort();
             }
@@ -253,7 +253,7 @@ impl Sinks {
     }
 
     pub(super) fn detach_all(&self) {
-        for (_, entry) in self.entries.lock().unwrap().drain() {
+        for (_, entry) in super::held(&self.entries).drain() {
             if let Some(task) = entry.flowing {
                 task.abort();
             }

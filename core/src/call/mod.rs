@@ -21,8 +21,8 @@ mod panel;
 mod window;
 
 use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
+    collections::{HashMap, HashSet},
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 use livekit::{
@@ -77,6 +77,22 @@ pub struct Call {
     meter: std::sync::Arc<tomoshibi_protocol::quality::ConnectionMeter>,
     /// The lossless streams this participant offers, for routing asks.
     senders: Mutex<Vec<Arc<Mutex<tomoshibi_protocol::lossless::sender::LosslessSender>>>>,
+    /// The WebRTC ids of the tracks this participant has taken back, so that
+    /// one taken back while a reconnect was publishing it again is taken down
+    /// once it is up (publish.rs `withdraw`).
+    withdrawn: Mutex<HashSet<String>>,
+}
+
+/// A lock that a panic elsewhere left poisoned, taken all the same.
+///
+/// Everything these locks hold is replaced whole or added to one entry at a
+/// time, so a panic between two statements cannot leave it half written, and
+/// a poisoned lock is still a usable one (relays.rs `chosen` reasons the same
+/// way). Unwrapping instead made one panic, on any thread, into a panic in
+/// every later call that touched the lock, and a panic in an exported call
+/// crosses into the app as a crash.
+pub(crate) fn held<T>(lock: &Mutex<T>) -> MutexGuard<'_, T> {
+    lock.lock().unwrap_or_else(|poison| poison.into_inner())
 }
 
 /// Opens the call described by `options` and starts telling `observer` about
@@ -116,6 +132,25 @@ impl Call {
             }
         }
 
+        // Never a TLS handshake with a relay in mainland China: the providers
+        // in front of those machines take one off the air for answering it,
+        // for everybody. The join's address is a mainland relay's own only
+        // where the server found no relay to signal through, and a TURN
+        // forward over TLS (`turns:`) would be the same handshake on another
+        // port. Both are refused here rather than tried (relays.rs
+        // `tls_into_mainland`, `forwardable`). The web opens both as given
+        // and needs the same refusal; that change is the coordinator's.
+        if tomoshibi_protocol::relays::tls_into_mainland(&options.url) {
+            return Err(CallError::Connect {
+                detail: "the call's address is a relay in mainland China, which is never opened over TLS".into(),
+            });
+        }
+        if let Some(forward) = options.forward.as_ref().filter(|f| !tomoshibi_protocol::relays::forwardable(&f.url)) {
+            return Err(CallError::Connect {
+                detail: format!("the call's media relay {} is not a plain TURN or STUN server", forward.url),
+            });
+        }
+
         // When the room is held on another relay than the one this person
         // came in through, the join answer carries a TURN server on the entry
         // relay and the web connects through it alone (room.ts ~775-786).
@@ -144,6 +179,7 @@ impl Call {
             lossless: lossless::Lossless::new(options.sealing_word.as_ref().is_some_and(|w| !w.is_empty())),
             senders: Mutex::new(Vec::new()),
             meter: tomoshibi_protocol::quality::ConnectionMeter::new(),
+            withdrawn: Mutex::new(HashSet::new()),
         });
 
         call.observer.on_event(CallEvent::StateChanged { state: CallState::Connected });
@@ -184,8 +220,8 @@ impl Call {
         match event {
             RoomEvent::ParticipantConnected(p) => say(CallEvent::ParticipantJoined { participant: describe(&p) }),
             RoomEvent::ParticipantDisconnected(p) => {
-                for sender in self.senders.lock().unwrap().iter() {
-                    sender.lock().unwrap().on_left(p.identity().as_str());
+                for sender in held(&self.senders).iter() {
+                    held(sender).on_left(p.identity().as_str());
                 }
                 say(CallEvent::ParticipantLeft { identity: p.identity().to_string() })
             }
@@ -207,7 +243,7 @@ impl Call {
             }),
             RoomEvent::TrackUnpublished { publication, participant } => {
                 self.sinks.detach(&publication.sid().to_string());
-                self.wanted_sizes.lock().unwrap().remove(&publication.sid().to_string());
+                held(&self.wanted_sizes).remove(&publication.sid().to_string());
                 self.freezes.forget(&publication.sid().to_string());
                 say(CallEvent::TrackUnpublished {
                     identity: participant.identity().to_string(),
@@ -217,11 +253,11 @@ impl Call {
             RoomEvent::TrackSubscribed { track, publication, participant } => {
                 let source = publication.source();
                 if matches!(source, TrackSource::Screenshare | TrackSource::ScreenshareAudio) {
-                    let ms = *self.share_playout_ms.lock().unwrap();
+                    let ms = *held(&self.share_playout_ms);
                     let _ = track.set_playout_delay((ms > 0).then(|| ms as f64 / 1000.0));
                 }
                 let sid = publication.sid().to_string();
-                let wanted = self.wanted_sizes.lock().unwrap().get(&sid).copied();
+                let wanted = held(&self.wanted_sizes).get(&sid).copied();
                 let cap = if source == TrackSource::Screenshare { self.freezes.subscribed(&sid) } else { None };
                 if let Some((width, height)) = freeze::combined(cap, wanted) {
                     publication.update_video_dimensions(livekit::track::TrackDimension(width, height));
@@ -254,6 +290,20 @@ impl Call {
             }
             RoomEvent::LocalTrackUnpublished { publication, .. } => {
                 say(CallEvent::LocalTrackUnpublished { sid: publication.sid().to_string() })
+            }
+            // A full reconnect publishes every local track again under a new
+            // SID; the app has already been told by the unpublished and
+            // published events around this one, and the inputs find their
+            // track by what it is rather than by its SID. What is left is a
+            // track the person took back while it was being published again,
+            // which nobody can have found until now (publish.rs `withdraw`).
+            RoomEvent::LocalTrackRepublished { publication, track, .. } => {
+                if held(&self.withdrawn).contains(&track.rtc_track().id()) {
+                    let call = self.clone();
+                    tokio::spawn(async move {
+                        let _ = call.room.local_participant().unpublish_track(&publication.sid()).await;
+                    });
+                }
             }
             RoomEvent::ActiveSpeakersChanged { speakers } => say(CallEvent::Speaking {
                 identities: speakers.iter().map(|p| p.identity().to_string()).collect(),
@@ -292,8 +342,8 @@ impl Call {
                 if topic == "lossless-ask" || topic == "lossless-music-ask" =>
             {
                 let now = freeze::now_ms() as u64;
-                for sender in self.senders.lock().unwrap().iter() {
-                    sender.lock().unwrap().on_ask(now, from.identity().as_str(), &topic, &payload);
+                for sender in held(&self.senders).iter() {
+                    held(sender).on_ask(now, from.identity().as_str(), &topic, &payload);
                 }
             }
             RoomEvent::DataReceived { payload, topic, participant, .. } => say(CallEvent::Data {
@@ -320,6 +370,22 @@ impl Call {
             }
             _ => {}
         }
+    }
+
+    /// The full reconnect a relay restart, a sleep or a long outage forces,
+    /// made on demand: the SDK's own client-side simulation of the server
+    /// saying `Leave{Reconnect}`. For the tests that need one without
+    /// restarting a server (core/tests/republish.rs); not exported to the
+    /// apps.
+    #[doc(hidden)]
+    pub async fn simulate_full_reconnect(self: Arc<Self>) -> Result<(), CallError> {
+        on_core(async move {
+            self.room
+                .simulate_scenario(livekit::SimulateScenario::FullReconnect)
+                .await
+                .map_err(|e| CallError::Failed { detail: e.to_string() })
+        })
+        .await
     }
 
     fn publication(&self, sid: &str) -> Option<RemoteTrackPublication> {
@@ -416,7 +482,7 @@ impl Call {
     pub fn set_share_playout_ms(&self, ms: u32) {
         let _core = crate::runtime::enter();
         let ms = ms.min(1000);
-        *self.share_playout_ms.lock().unwrap() = ms;
+        *held(&self.share_playout_ms) = ms;
         for participant in self.room.remote_participants().values() {
             for publication in participant.track_publications().values() {
                 if matches!(publication.source(), TrackSource::Screenshare | TrackSource::ScreenshareAudio) {
@@ -442,7 +508,7 @@ impl Call {
     /// freeze is being sat out.
     pub fn request_video_size(&self, sid: String, width: u32, height: u32) -> Result<(), CallError> {
         let _core = crate::runtime::enter();
-        self.wanted_sizes.lock().unwrap().insert(sid.clone(), (width, height));
+        held(&self.wanted_sizes).insert(sid.clone(), (width, height));
         let cap = self.freezes.capped(&sid);
         let publication = self.publication(&sid).ok_or(CallError::NoSuchTrack { sid })?;
         if let Some((width, height)) = freeze::combined(cap, Some((width, height))) {
@@ -481,16 +547,40 @@ impl Call {
     /// streams that may be standing in for them; the app turns the level.
     pub async fn set_hearing(self: Arc<Self>, identity: String, music: bool, level: f32, blocked: bool) {
         on_core(async move {
-            self.lossless.settings.lock().unwrap().levels_set(identity, music, level, blocked);
+            held(&self.lossless.settings).levels_set(identity, music, level, blocked);
             self.lossless_tick().await;
         })
         .await
     }
 
+    /// The network is back after being lost: while the call is reconnecting,
+    /// the next attempt is made now rather than after its wait (up to eight
+    /// seconds late in the web's schedule, which the core follows), as the
+    /// web's `online` handler does. Does nothing otherwise. For a platform
+    /// that only knows "online again"; one that sees the network change
+    /// calls `network_changed` instead.
+    pub fn retry_now(&self) {
+        let _core = crate::runtime::enter();
+        self.room.retry_now();
+    }
+
+    /// The device's network changed: the default route moved to another
+    /// interface (Wi-Fi to mobile data, a cable plugged in), or the device
+    /// came back online. While reconnecting it is `retry_now`; while
+    /// connected a resume is started at once, because the signalling socket
+    /// and the media are probably on the interface that went, and nothing
+    /// notices until the server's ping times out, a call gone quiet for that
+    /// long. Call it on a change of path, not on every update a network
+    /// monitor sends: each call while connected is a resume.
+    pub fn network_changed(&self) {
+        let _core = crate::runtime::enter();
+        self.room.network_changed();
+    }
+
     /// Whether the app is in the background: readings taken there are not
     /// evidence of a freeze (the web skips a hidden tab for the same reason).
     pub fn set_background(&self, background: bool) {
-        *self.freezes.background.lock().unwrap() = background;
+        *held(&self.freezes.background) = background;
     }
 
     /// Sends this remote video's frames to `sink` from now until it is

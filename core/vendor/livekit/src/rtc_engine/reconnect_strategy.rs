@@ -12,88 +12,66 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Reconnect backoff schedule.
+//! Reconnect schedule.
 //!
-//! Computes the delay between reconnect attempts as exponential backoff with
-//! full jitter. This replaces a previously fixed reconnect interval: it recovers
-//! faster from transient blips and spreads retries to avoid synchronised
-//! reconnect storms across many clients after a server hiccup.
+//! Tomoshibi: the web client's schedule, which this replaces the SDK's own
+//! with. A native participant gave up on a broken connection in about 22 s
+//! (ten attempts, each followed by a wait drawn from `[0, min(7 s, 0.3 s *
+//! 2^(n-1))]`, the last attempt's wait included), where a browser on the same
+//! network keeps trying for about 45 s: a lift, a tunnel or a Wi-Fi to mobile
+//! hand-over of twenty to forty seconds dropped the app from the call and not
+//! the browser beside it. The numbers are livekit-client's
+//! `DefaultReconnectPolicy` as the deployment's web client is built with it
+//! (livekit-client 2.21.0, `[0, 300, 4*300, 9*300, 16*300, 7000 x 5]` ms, and
+//! up to a second more at random before every attempt after the second; read
+//! out of the built bundle, as the web's `node_modules` was not at hand). The
+//! wait comes before each attempt, as the web's does, so the first attempt is
+//! immediate and nothing is waited for after the last.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-/// Maximum number of reconnect attempts before the engine gives up and closes.
+/// How many attempts are made before the engine gives up and closes.
 pub const RECONNECT_ATTEMPTS: u32 = 10;
 
-/// Exponential-backoff-with-full-jitter parameters for spacing reconnect
-/// attempts. The per-attempt delay is sampled uniformly from
-/// `[0, min(RECONNECT_MAX_DELAY, RECONNECT_BASE_DELAY * MULTIPLIER^(attempt-1))]`.
-pub const RECONNECT_BASE_DELAY: Duration = Duration::from_millis(300);
-pub const RECONNECT_BACKOFF_MULTIPLIER: u64 = 2;
-pub const RECONNECT_MAX_DELAY: Duration = Duration::from_secs(7);
+/// The wait before each attempt, in order: livekit-client's
+/// `DEFAULT_RETRY_DELAYS_IN_MS`.
+pub const RECONNECT_DELAYS: [Duration; RECONNECT_ATTEMPTS as usize] = [
+    Duration::from_millis(0),
+    Duration::from_millis(300),
+    Duration::from_millis(1200),
+    Duration::from_millis(2700),
+    Duration::from_millis(4800),
+    Duration::from_millis(7000),
+    Duration::from_millis(7000),
+    Duration::from_millis(7000),
+    Duration::from_millis(7000),
+    Duration::from_millis(7000),
+];
 
-/// Un-jittered backoff ceiling for the given 1-based reconnect attempt:
-/// `min(RECONNECT_MAX_DELAY, RECONNECT_BASE_DELAY * MULTIPLIER^(attempt-1))`,
-/// floored at 1ms. Grows geometrically until it saturates at the cap.
-pub(super) fn nominal(attempt: u32) -> Duration {
-    let base = RECONNECT_BASE_DELAY.as_millis() as u64;
-    let cap = RECONNECT_MAX_DELAY.as_millis() as u64;
-    let exp = RECONNECT_BACKOFF_MULTIPLIER.saturating_pow(attempt.saturating_sub(1));
-    Duration::from_millis(base.saturating_mul(exp).min(cap).max(1))
+/// The most added at random to a wait, from the third attempt on
+/// (`nextRetryDelayInMs`: `retryCount <= 1 ? delay : delay + Math.random() * 1000`),
+/// so that a fleet of clients cut off together does not come back in step.
+pub const RECONNECT_JITTER: Duration = Duration::from_secs(1);
+
+/// The wait before 1-based `attempt`, with `unit` the random draw in
+/// `[0, 1)`. Beyond the last attempt there is nothing to wait for.
+pub fn wait_before(attempt: u32, unit: f64) -> Duration {
+    let Some(delay) = attempt.checked_sub(1).and_then(|at| RECONNECT_DELAYS.get(at as usize)) else {
+        return Duration::ZERO;
+    };
+    if attempt <= 2 {
+        return *delay;
+    }
+    *delay + RECONNECT_JITTER.mul_f64(unit.clamp(0.0, 1.0))
 }
 
-/// Full-jitter backoff delay for the given 1-based reconnect attempt: sampled
-/// uniformly from `[0, nominal(attempt)]`. A dependency-free pseudo-random
-/// source from the system clock is sufficient — backoff jitter does not need
-/// cryptographic quality, only de-correlation across clients.
+/// [`wait_before`] with a draw from the clock: the jitter only needs to
+/// differ between clients, not to be unpredictable.
 pub(super) fn delay(attempt: u32) -> Duration {
-    let nominal = nominal(attempt).as_millis() as u64;
-    let seed =
-        SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.subsec_nanos() as u64).unwrap_or(0);
-    Duration::from_millis(seed % (nominal + 1))
+    let nanos =
+        SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.subsec_nanos()).unwrap_or(0);
+    wait_before(attempt, f64::from(nanos) / 1e9)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn backoff_nominal_grows_geometrically_then_caps() {
-        // attempt 1 == base, then x2 each step, until it saturates at the cap.
-        assert_eq!(nominal(1), RECONNECT_BASE_DELAY);
-        assert_eq!(nominal(2), RECONNECT_BASE_DELAY * RECONNECT_BACKOFF_MULTIPLIER as u32);
-        assert_eq!(
-            nominal(3),
-            RECONNECT_BASE_DELAY
-                * (RECONNECT_BACKOFF_MULTIPLIER * RECONNECT_BACKOFF_MULTIPLIER) as u32
-        );
-
-        // Monotonic non-decreasing and never above the cap.
-        let mut prev = Duration::ZERO;
-        for attempt in 1..=RECONNECT_ATTEMPTS {
-            let nominal_duration = nominal(attempt);
-            assert!(nominal_duration >= prev, "backoff must not decrease (attempt {attempt})");
-            assert!(nominal_duration <= RECONNECT_MAX_DELAY, "backoff must not exceed the cap");
-            prev = nominal_duration;
-        }
-
-        // Late attempts are pinned to the cap, and large attempt indices don't
-        // overflow into a wrapped-around small value.
-        assert_eq!(nominal(RECONNECT_ATTEMPTS), RECONNECT_MAX_DELAY);
-        assert_eq!(nominal(u32::MAX), RECONNECT_MAX_DELAY);
-    }
-
-    #[test]
-    fn backoff_delay_stays_within_nominal_jitter_window() {
-        // Full jitter: every sample must land within [0, nominal(attempt)].
-        for attempt in 1..=RECONNECT_ATTEMPTS {
-            let nominal_duration = nominal(attempt);
-            for _ in 0..1000 {
-                let delay_duration = delay(attempt);
-                assert!(
-                    delay_duration <= nominal_duration,
-                    "jittered delay {delay_duration:?} exceeded nominal {nominal_duration:?} (attempt {attempt})"
-                );
-            }
-        }
-    }
-}
+// The schedule's tests are in the core (core/tests/reconnect_schedule.rs):
+// this crate's own cannot run where it is vendored.
