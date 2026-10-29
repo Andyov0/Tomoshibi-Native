@@ -930,7 +930,18 @@ public final class AppModel {
                 guard let model else { return }
                 Task { await self?.rejoin(from: model, to: relay) }
             }
+            // The end of the call is the model's to follow, as on Android
+            // (AppModel.kt, the call's onEnded) and Windows (EndedBy), not
+            // the room view's, which a closed window on the Mac takes away.
+            model.onEnded = { [weak self, weak model] reason in
+                guard let model else { return }
+                Task { await self?.ended(because: reason, in: model) }
+            }
             call = model
+            // One that ended while it was being set up, before anybody heard.
+            if let reason = model.endedReason, model.moving == nil {
+                Task { await ended(because: reason, in: model) }
+            }
             landed = true
             room = grant.room
             lobby.remember(room: grant.room)
@@ -1058,7 +1069,7 @@ public final class AppModel {
     /// duplicate by the join that replaced it) ended the call that replaced
     /// it, which was the one still working.
     public func ended(because reason: String, in model: CallModel? = nil) async {
-        if let model, model !== call { return }
+        if let model, model !== call || model === leaving { return }
         let ending: Ending = if reason.contains("RoomDeleted") || reason.contains("RoomClosed") {
             .closed
         } else if reason.contains("ParticipantRemoved") {
@@ -1071,8 +1082,14 @@ public final class AppModel {
         await end(ending)
     }
 
+    /// The call being left, while it is: leaving makes the core say the
+    /// call ended (ClientInitiated), which must not end it a second time.
+    @ObservationIgnored private var leaving: CallModel?
+
     private func end(_ how: Ending) async {
         ending = how
+        leaving = call
+        defer { leaving = nil }
         await call?.leave()
         call = nil
         screen = .ended

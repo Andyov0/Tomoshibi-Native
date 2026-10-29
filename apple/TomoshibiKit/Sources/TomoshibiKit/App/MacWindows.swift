@@ -124,8 +124,12 @@ public final class MacWindows: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// A window in the Dock still shows the call's end when it comes back,
+    /// so the app stays for it. With none, the app goes, and the window it
+    /// would open next is the lobby's rather than an end nobody saw.
     private func callChanged() {
-        guard !inCall, !callWindows.contains(where: \.isVisible) else { return }
+        guard !inCall, !callWindows.contains(where: { $0.isVisible || $0.isMiniaturized }) else { return }
+        app?.backToLobby()
         NSApp.terminate(nil)
     }
 }

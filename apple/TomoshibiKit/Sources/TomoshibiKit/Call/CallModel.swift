@@ -300,6 +300,14 @@ public final class CallModel {
     /// The call ended because the server moved it; the app joins again.
     public var onMoved: ((_ relay: String) -> Void)?
 
+    /// The call ended for good, with the core's reason: anything but a move,
+    /// which `onMoved` hears instead. The app's model listens here rather
+    /// than the room's view, which on the Mac is gone with its window: a
+    /// call that ended behind a closed window was never ended in the app,
+    /// which then neither quit nor showed anything but the dead room when
+    /// the window came back.
+    public var onEnded: ((_ reason: String) -> Void)?
+
     /// Everybody else who wants to hear what the call says: the protocols
     /// layered over it (watching together, the song desk, hosting) each
     /// subscribe here and pick out what concerns them. Called on the main
@@ -844,6 +852,8 @@ public final class CallModel {
             let gone = ["RoomDeleted", "RoomClosed", "ParticipantRemoved"].contains { reason.contains($0) }
             if let moving, Date().timeIntervalSince(moving.at) < 15, gone {
                 onMoved?(moving.relay)
+            } else {
+                onEnded?(reason)
             }
         case let .participantJoined(participant):
             let arriving = person(participant.identity) == nil

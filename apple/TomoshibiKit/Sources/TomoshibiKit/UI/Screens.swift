@@ -117,17 +117,10 @@ public struct AppRoot: View {
                 WaitingScreen(app: app).environment(\.colorScheme, outside).transition(Theme.arrive)
             case .call:
                 if let call = app.call {
+                    // The call's end is the model's (CallModel `onEnded`),
+                    // heard with or without a window drawing the room.
                     RoomView(model: call)
                         .transition(Theme.arrive)
-                        .onChange(of: call.endedReason) {
-                            guard let reason = call.endedReason else { return }
-                            // A move the server announced comes back on its
-                            // own (CallModel's `onMoved`); anything else is the
-                            // end of this call, and says which end it was.
-                            let gone = ["RoomDeleted", "RoomClosed", "ParticipantRemoved"].contains { reason.contains($0) }
-                            if let moving = call.moving, Date().timeIntervalSince(moving.at) < 15, gone { return }
-                            Task { await app.ended(because: reason, in: call) }
-                        }
                 } else if let to = app.movingTo {
                     MovingOverlay(to: to).meetingAppearance().transition(Theme.arrive)
                 } else {
