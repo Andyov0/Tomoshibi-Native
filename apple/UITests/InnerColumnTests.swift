@@ -148,6 +148,10 @@ final class InnerColumnTests: ColumnTestCase {
     private func open(_ app: XCUIApplication, tall: Bool = false) {
         folded = window(app)
         print(tall ? "FOLD-STEP open-tall" : "FOLD-STEP open")
+        // At once: the driver (apple/fold-ui-tests.sh) reads this line from
+        // the test's output, and buffered it arrived after the test had
+        // waited its ninety seconds and failed, as MessagesInviteTests found.
+        fflush(stdout)
         let deadline = Date().addingTimeInterval(90)
         while window(app) == folded && Date() < deadline { usleep(500_000) }
         XCTAssertNotEqual(window(app), folded, "the app moved to the opened display")
@@ -156,6 +160,7 @@ final class InnerColumnTests: ColumnTestCase {
 
     private func close(_ app: XCUIApplication) {
         print("FOLD-STEP close")
+        fflush(stdout)
         let deadline = Date().addingTimeInterval(90)
         while window(app) != folded && Date() < deadline { usleep(500_000) }
         sleep(2)
