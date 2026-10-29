@@ -344,12 +344,13 @@ the output (`WindowsPackageType=None`, `WindowsAppSDKSelfContained`,
 `SelfContained`): the build directory runs as it is, and a launch inherits
 its environment, which is how the `TOMOSHIBI_*` switches reach it.
 
-For distribution `package.ps1` builds the same project as MSIX
-(`WindowsPackageType=MSIX`, `Package.appxmanifest`) for arm64 and for x64,
-puts the two in one `Tomoshibi-<version>.msixbundle`, which is the file the
-deployment's shelf and an update hand out, and signs it with a certificate
-found by its thumbprint in the current user's store, so that no password is
-ever on a command line. The version given is written into the manifest's
+For installing on a machine of our own or sideloading a test, `package.ps1`
+builds the same project as MSIX (`WindowsPackageType=MSIX`,
+`Package.appxmanifest`) for arm64 and for x64, puts the two in one
+`Tomoshibi-<version>.msixbundle` (not what is handed out: that is the setup
+program below, the only file the deployment's shelf takes), and signs it with
+a certificate found by its thumbprint in the current user's store, so that no
+password is ever on a command line. The version given is written into the manifest's
 identity, four dotted numbers as `apps.json` writes them, and the
 certificate's subject into its publisher: Windows installs a newer version
 over an older one only from the same publisher, and the app checks the same
@@ -422,7 +423,8 @@ seconds at most, for a window with no frames. The setup's own window paces
 its bar the same way off a timer and draws it full before it goes.
 
 The app as it is given out is not a package but a setup program
-(`installer\Tomoshibi.iss`, built by `setup.ps1`), and it updates itself by
+(`installer\Tomoshibi.iss`, built by `setup.ps1` over release cores, which
+it checks with `check-core.ps1` for a Release build), and it updates itself by
 running the newer one silently (`SetupInstaller`). The setup's stamp is read
 and the setup started off the window's thread: starting it holds the thread it
 is started on for as long as the system takes to look the new program over,

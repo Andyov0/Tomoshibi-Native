@@ -1,16 +1,20 @@
 <#
 Builds the Windows app as one signed .msixbundle holding an arm64 and an x64
-package: Tomoshibi-<version>.msixbundle, what the deployment's download
-shelf and an update hand out (the shelf's file ends .msixbundle).
+package: Tomoshibi-<version>.msixbundle, for installing on a machine of our
+own or sideloading for a test. It is not what is handed out: the deployment's
+download shelf and an update take the setup program setup.ps1 makes (the
+shelf's file ends .exe).
 
-    windows\build-core.ps1 -Arch arm64; windows\build-core.ps1 -Arch x64
+    windows\build-core.ps1 -Profile release -Arch arm64; windows\build-core.ps1 -Profile release -Arch x64
     windows\package.ps1 -Version 0.1.0.2 -Thumbprint <certificate> -Out C:\out
 
 The core for each architecture is whatever build-core.ps1 last built there:
-`release` for distribution, which talks to the home deployment alone, and
-`debug` with -Configuration Debug for a package a test can point at a local
-deployment (Launch reads its switches from a file there, since a package is
-started without an environment).
+`release`, which talks to the home deployment alone, for a Release package,
+which is refused over any other core, one built for meet.example.com, or one
+holding updates to no key or to another than this checkout's
+(check-core.ps1); `debug` with -Configuration Debug for a package a test can
+point at a local deployment (Launch reads its switches from a file there,
+since a package is started without an environment).
 
 The version is written into a copy of Package.appxmanifest for the build,
 and the publisher is the signing certificate's subject: a package installs
@@ -30,6 +34,13 @@ $ErrorActionPreference = "Stop"
 
 $project = Join-Path $PSScriptRoot "Tomoshibi"
 $manifest = Join-Path $project "Package.appxmanifest"
+
+# A Release package carries a release core for the real deployment, which
+# is checked before anything is written (check-core.ps1).
+if ($Configuration -eq "Release") {
+    foreach ($a in $Arch) { & (Join-Path $PSScriptRoot "check-core.ps1") (Join-Path $project "Native\win-$a\tomoshibi_core.dll") }
+}
+
 $certificate = Get-Item "Cert:\CurrentUser\My\$Thumbprint"
 $publisher = $certificate.Subject
 

@@ -64,6 +64,59 @@ val portraitAssets = tasks.register<PortraitAssets>("portraitAssets") {
     drawings.set(rootDir.parentFile.resolve("art/portraits.json"))
 }
 
+// Refuses a release build over a core that is not one to hand anybody.
+// build-core.sh builds a debug core unless told `release`, and a release APK
+// around a debug or `local` core built and ran as well as any: the only
+// difference was that the core admitted whatever deployment a link named
+// (protocol api::admitted keys on debug assertions). A checkout with no
+// deployment.local builds for meet.example.com, which reaches nothing, and
+// that built cleanly too; and a core with no update key installs whatever
+// build the deployment hands it. The core writes what it is into itself
+// (protocol api BUILD_MARK: profile, host, update key); this reads it out of
+// the library the APK will carry, and holds it to the host this build gives
+// the app's links and to the update key this checkout names, where it names
+// one (TOMOSHIBI_UPDATE_KEY in the environment, else in deployment.local).
+abstract class RequireReleaseCore : DefaultTask() {
+    @get:InputFile
+    @get:PathSensitive(PathSensitivity.NONE)
+    abstract val library: RegularFileProperty
+
+    @get:Input
+    abstract val host: Property<String>
+
+    @get:Input
+    abstract val updateKey: Property<String>
+
+    @TaskAction
+    fun check() {
+        val file = library.get().asFile
+        val text = String(file.readBytes(), Charsets.ISO_8859_1)
+        val marks = Regex("tomoshibi-core-build:[a-z]*:[a-z0-9.-]*:[0-9a-f]*;").findAll(text).map { it.value }.toSet()
+        if (marks.size != 1) throw GradleException("$file carries ${marks.size} core build marks, not one; is it older than the mark?")
+        val (profile, builtFor, key) = marks.single().removeSuffix(";").split(":").drop(1)
+        if (profile != "release") throw GradleException("$file is a $profile core, which admits any deployment; run android/build-core.sh release")
+        if (builtFor == "meet.example.com") throw GradleException("$file is built for meet.example.com, which reaches nothing; set TOMOSHIBI_HOST or deployment.local (see deployment.example) and build the core again")
+        if (key.length != 64) throw GradleException("$file has no update key and would install any build the deployment hands it; set TOMOSHIBI_UPDATE_KEY (see deployment.example) and build the core again")
+        if (builtFor != host.get().lowercase()) throw GradleException("$file is built for $builtFor and this app's links for ${host.get()}; build both for one deployment")
+        val wanted = updateKey.get().lowercase()
+        if (wanted.isNotEmpty() && wanted != key) throw GradleException("$file holds updates to another key than this checkout's TOMOSHIBI_UPDATE_KEY")
+    }
+}
+
+val requireReleaseCore = tasks.register<RequireReleaseCore>("requireReleaseCore") {
+    library.set(rootDir.resolve("core/src/main/jniLibs/arm64-v8a/libtomoshibi_core.so"))
+    host.set(deploymentHost)
+    updateKey.set(
+        System.getenv("TOMOSHIBI_UPDATE_KEY")?.trim()?.takeIf { it.isNotEmpty() }
+            ?: rootDir.parentFile.resolve("deployment.local").takeIf { it.isFile }?.readLines()?.firstNotNullOfOrNull { line ->
+                val said = line.substringBefore("//").split("=", limit = 2)
+                said.takeIf { it.size == 2 && it[0].trim() == "TOMOSHIBI_UPDATE_KEY" }?.get(1)?.trim()?.takeIf { it.isNotEmpty() }
+            }
+            ?: ""
+    )
+}
+tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(requireReleaseCore) }
+
 androidComponents {
     onVariants { variant ->
         variant.sources.assets?.addGeneratedSourceDirectory(portraitAssets, PortraitAssets::assets)

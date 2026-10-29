@@ -87,6 +87,12 @@ use text::encode_uri_component;
 /// The cookie an account's session travels in (internal/app/account.go).
 const ACCOUNT_COOKIE: &str = "meet-live.account";
 
+/// The update key's field of [`BUILD_MARK`]: `env!("TOMOSHIBI_UPDATE_KEY")`,
+/// the release key build.rs bakes into the core for update signing
+/// (api/updates.rs `update_key`), once that change is in this tree; until
+/// then empty, which every packaging script refuses.
+macro_rules! build_mark_update_key { () => { "" }; }
+
 /// The one deployment these apps are for.
 ///
 /// Fixed here rather than in each app so that every client built on the core,
@@ -108,8 +114,48 @@ pub const HOST: &str = env!("TOMOSHIBI_HOST");
 /// [`HOME`], for an app to open on.
 #[uniffi::export]
 pub fn home_deployment() -> String {
+    std::hint::black_box(BUILD_MARK);
     HOME.to_owned()
 }
+
+/// [`HOST`], the deployment this core was built for, for an app's release
+/// build to check against its own before it opens anything (a build given no
+/// host is for meet.example.com and reaches nothing).
+#[uniffi::export]
+pub fn home_host() -> String {
+    HOST.to_owned()
+}
+
+/// Whether this core was built without debug assertions, which is what
+/// [`admitted`] keys on: only such a core holds the app to [`HOME`]. A debug
+/// or `local` core in a release app accepts any deployment a link names and
+/// writes its relay timings to standard error, and nothing else about the app
+/// shows it, so a release build checks this once rather than trusting the
+/// profile the core happened to be built with.
+#[uniffi::export]
+pub fn core_is_release() -> bool {
+    std::hint::black_box(BUILD_MARK);
+    !cfg!(debug_assertions)
+}
+
+/// What a packaging script needs to know about the core, as text in the
+/// built library, for the scripts (apple/dmg/check-core.sh,
+/// windows/check-core.ps1, the Android release's `requireReleaseCore`), which
+/// have a file to read and no core to call: the profile, `release` or
+/// `debug`, then [`HOST`], then the update key the core holds every update to
+/// (hexadecimal, empty where it checks none), between `tomoshibi-core-build:`
+/// and `;`, separated by colons. A release app with a debug core, one for
+/// meet.example.com or one checking no update's signature packaged as readily
+/// as a good one before they read this.
+/// Kept in the binary by the calls the apps make at launch
+/// ([`home_deployment`], [`Deployment::new`]), which name it, so that the
+/// linker's dead stripping cannot take it out of an app.
+#[cfg(not(debug_assertions))]
+pub const BUILD_MARK: &str =
+    concat!("tomoshibi-core-build:release:", env!("TOMOSHIBI_HOST"), ":", build_mark_update_key!(), ";");
+#[cfg(debug_assertions)]
+pub const BUILD_MARK: &str =
+    concat!("tomoshibi-core-build:debug:", env!("TOMOSHIBI_HOST"), ":", build_mark_update_key!(), ";");
 
 /// Whether a build may talk to the deployment at `origin`: a release build
 /// only to [`HOME`]. A debug build talks to the one it is given, because the
@@ -151,6 +197,7 @@ impl Deployment {
         let origin = Url::parse(&format!("{}/", parsed.origin().ascii_serialization()))
             .map_err(|fault| invalid(format!("{base} has no usable origin: {fault}")))?;
 
+        std::hint::black_box(BUILD_MARK);
         if !admitted(&origin, !cfg!(debug_assertions)) {
             return Err(invalid(format!("{base} is not the server this app is for")));
         }
