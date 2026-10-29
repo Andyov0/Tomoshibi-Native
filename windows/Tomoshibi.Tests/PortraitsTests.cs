@@ -298,48 +298,66 @@ public class PortraitsTests
         return $"#{r:X2}{g:X2}{b:X2}@{a}";
     }
 
-    [Fact]
-    public void TheLinesAreThinSingleLinesOfTheTextColour()
+    /// <summary>
+    /// The rows of one of art/README.md's colour tables under its heading,
+    /// each as its name and its two cells (night, day).
+    /// </summary>
+    private static Dictionary<string, (string Night, string Day)> ReadmeTable(string heading)
     {
-        Assert.Equal(LineKind.Single, PortraitGlass.Lines);
-        Assert.Same(PortraitGlass.Dark, PortraitGlass.Of(Scheme.Dark));
-        Assert.Same(PortraitGlass.Light, PortraitGlass.Of(Scheme.Light));
-        // #F5F5F7 at 60 per cent by night, #1C1C1E at 50 by day, and nothing else.
-        Assert.Equal("#F5F5F7@153", Hex(PortraitGlass.Dark.Fill));
-        Assert.Equal("#1C1C1E@128", Hex(PortraitGlass.Light.Fill));
-        foreach (var look in new[] { PortraitGlass.Dark, PortraitGlass.Light })
+        var lines = File.ReadAllLines(Path.Combine(Root(), "art", "README.md"));
+        var at = Array.FindIndex(lines, l => l.Trim() == "## " + heading);
+        Assert.True(at >= 0, $"art/README.md has no section \"{heading}\"");
+        var rows = new Dictionary<string, (string, string)>();
+        for (var i = at + 1; i < lines.Length && !lines[i].StartsWith("## ", StringComparison.Ordinal); i++)
         {
-            Assert.Equal(LineKind.Single, look.Kind);
-            Assert.False(look.Edged);
-            Assert.False(look.Lit);
-            // Still on the pane of glass with its one-point border.
-            Assert.Equal(1, look.PaneEdgeWidth);
-            Assert.Equal(0.16f, look.PaneEdge.Alpha);
+            var cells = lines[i].Split('|', StringSplitOptions.TrimEntries);
+            // | name | night | day |, and not the header or its rule.
+            if (cells.Length != 5 || cells[1].Length == 0 || cells[1].StartsWith("---", StringComparison.Ordinal)) continue;
+            rows[cells[1]] = (cells[2], cells[3]);
         }
+        return rows;
+    }
+
+    /// <summary>A cell's colour, `#RRGGBB` alone or followed by "at N %", as a shade.</summary>
+    private static Shade ReadmeColour(string cell)
+    {
+        var said = System.Text.RegularExpressions.Regex.Match(cell, @"`#([0-9A-Fa-f]{6})`(?:\s+at\s+(\d+)\s*%)?");
+        Assert.True(said.Success, $"no colour in \"{cell}\"");
+        var alpha = said.Groups[2].Success ? int.Parse(said.Groups[2].Value) / 100f : 1f;
+        return Theme.Hex(Convert.ToInt32(said.Groups[1].Value, 16), alpha);
     }
 
     [Fact]
-    public void TheTubeIsTheReadmesGlassWithoutLiquidGlass()
+    public void TheLinesAreTheReadmesThinLinesOfTheTextColour()
     {
-        var night = GlassLine.Tube(Scheme.Dark);
-        var day = GlassLine.Tube(Scheme.Light);
-        // The text colour at 12 per cent (14 by day), its edge at 30 per cent
-        // 0.75 wide, white at 60 per cent (90 by day) for the light, the
-        // card's border at 16.
-        Assert.Equal("#F5F5F7@31", Hex(night.Fill));
-        Assert.Equal("#1C1C1E@36", Hex(day.Fill));
-        Assert.Equal(Theme.Dark.Foreground.WithAlpha(0.30f), night.Edge);
-        Assert.Equal(Theme.Light.Foreground.WithAlpha(0.30f), day.Edge);
-        Assert.Equal(Shade.White.WithAlpha(0.60f), night.Light);
-        Assert.Equal(Shade.White.WithAlpha(0.90f), day.Light);
-        Assert.Equal("#F5F5F7@41", Hex(night.PaneEdge));
-        Assert.Equal("#1C1C1E@41", Hex(day.PaneEdge));
-        foreach (var look in new[] { night, day })
-        {
-            Assert.True(look.Edged && look.Lit);
-            Assert.Equal(0.75, look.EdgeWidth);
-            Assert.Equal((0.16, 0.8, -0.17, -0.2), (look.LightWidth, look.LightLeast, look.LightX, look.LightY));
-            Assert.Equal(1, look.PaneEdgeWidth);
-        }
+        var table = ReadmeTable("The lines");
+        // #F5F5F7 at 60 per cent by night, #1C1C1E at 50 by day: the palette's
+        // own text colours, so the README and the palette cannot drift apart.
+        Assert.Equal(Hex(ReadmeColour(table["colour"].Night)), Hex(GlassInk.Night.Line));
+        Assert.Equal(Hex(ReadmeColour(table["colour"].Day)), Hex(GlassInk.Day.Line));
+        Assert.Equal(Theme.Dark.Foreground.WithAlpha(GlassInk.LineNight), GlassInk.Night.Line);
+        Assert.Equal(Theme.Light.Foreground.WithAlpha(GlassInk.LineDay), GlassInk.Day.Line);
+        Assert.Same(GlassInk.Night, GlassInk.Of(Scheme.Dark));
+        Assert.Same(GlassInk.Day, GlassInk.Of(Scheme.Light));
+    }
+
+    [Fact]
+    public void TheCardIsTheReadmesForPlatformsWithoutLiquidGlass()
+    {
+        var table = ReadmeTable("The card");
+        // #202020 by night and #FFFFFF by day, solid.
+        Assert.Equal(Hex(ReadmeColour(table["card"].Night)), Hex(GlassInk.Night.Card));
+        Assert.Equal(Hex(ReadmeColour(table["card"].Day)), Hex(GlassInk.Day.Card));
+        Assert.Equal(1f, GlassInk.Night.Card.Alpha);
+        Assert.Equal(1f, GlassInk.Day.Card.Alpha);
+        // "1 pt of white at 40 %" by night, "none" by day.
+        var edge = System.Text.RegularExpressions.Regex.Match(table["edge"].Night, @"(\d+) pt of white at (\d+) %");
+        Assert.True(edge.Success, table["edge"].Night);
+        Assert.Equal(double.Parse(edge.Groups[1].Value), GlassInk.Night.CardEdgeWidth);
+        Assert.Equal(Hex(Shade.White.WithAlpha(int.Parse(edge.Groups[2].Value) / 100f)), Hex(GlassInk.Night.CardEdge!.Value));
+        Assert.Equal("none", table["edge"].Day);
+        Assert.Null(GlassInk.Day.CardEdge);
+        Assert.Equal(0, GlassInk.Day.CardEdgeWidth);
+        Assert.Equal(("none", "none"), table["shadow"]);
     }
 }
