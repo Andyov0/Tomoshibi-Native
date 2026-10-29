@@ -101,6 +101,10 @@ struct TileFrame<Content: View, Overlay: View>: View {
                 .allowsHitTesting(false)
         }
         .shadow(color: .black.opacity(floating ? 0.45 : 0), radius: 18, y: 8)
+        // The card's edge and shadow come and go with the card: a third
+        // person arriving turned the card into a grid's tile in one frame
+        // while its frame was still moving.
+        .animation(Theme.settle, value: floating)
         .overlay {
             // The tally around a speaker, held through a pause (useSteady).
             RoundedRectangle(cornerRadius: radius)
@@ -138,31 +142,37 @@ struct TileFrame<Content: View, Overlay: View>: View {
     }
 }
 
-/// The name at the foot of a picture, and what is true of it: in the
-/// person's colour while they speak, a dot for a proven name, a badge for one
-/// worn by somebody else, and one mark for having no sound from here, where
-/// the reader's own doing wins: a microphone somebody else turned off is
-/// nothing to act on, a person talking into silence that you caused is
-/// (Tile.tsx).
+/// The name at the foot of a picture, and what is true of it: a dot for a
+/// proven name, a badge for one worn by somebody else, and one mark for
+/// having no sound from here, where the reader's own doing wins: a
+/// microphone somebody else turned off is nothing to act on, a person
+/// talking into silence that you caused is (Tile.tsx).
+///
+/// A capsule twenty-four high, eight in from the corner, black at seven
+/// tenths and the name always white (the owner, 2026-10-29, the same on every
+/// client). The speaker's name turned amber on a plate at half black: on a
+/// shared white page that was 1.97 to 1, a name that disappeared exactly
+/// while its owner was talking, and the amber line around the picture
+/// already says who that is. White on the darker plate is 8.6 to 1 there.
 private struct NameLabel: View {
     let marks: TileMarks
     let compact: Bool
 
     var body: some View {
-        HStack(spacing: compact ? 3 : 5) {
+        HStack(spacing: compact ? 3 : 6) {
             if marks.hand && marks.handBesideName {
                 HandMark(compact: true, small: true)
-                    .padding(.leading, compact ? -3 : -4)
+                    .padding(.leading, compact ? -3 : -6)
                     .transition(.scale.combined(with: .opacity))
             }
             Text(marks.label)
                 .font(.system(size: compact ? 10.5 : 12.5, weight: .medium))
-                .foregroundStyle(marks.speaking ? Theme.tallyInk : Theme.foreground)
+                .foregroundStyle(Color.white)
                 .lineLimit(1)
                 .truncationMode(.tail)
             if marks.proven {
                 Circle()
-                    .fill(Theme.muted)
+                    .fill(Color.white.opacity(0.7))
                     .frame(width: 3.5, height: 3.5)
                     .padding(.horizontal, 1)
                     .help(t("Only this person can use this name"))
@@ -183,27 +193,28 @@ private struct NameLabel: View {
             if marks.silenced {
                 Image(systemName: "speaker.slash.fill")
                     .font(.system(size: compact ? 9 : 10.5, weight: .semibold))
-                    .foregroundStyle(Theme.dangerInk)
+                    .foregroundStyle(Theme.danger)
                     .help(t("Muted by you"))
                     .accessibilityLabel(t("Muted by you"))
                     .transition(.scale.combined(with: .opacity))
             } else if marks.muted {
+                // White, as the name is: grey on the plate over a bright
+                // picture was 2.2 to 1.
                 Image(systemName: "mic.slash.fill")
                     .font(.system(size: compact ? 9 : 10.5, weight: .semibold))
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(Color.white.opacity(0.85))
                     .accessibilityLabel(t("microphone off"))
                     .transition(.scale.combined(with: .opacity))
             }
         }
-        .padding(.horizontal, compact ? 5 : 7)
-        .padding(.vertical, compact ? 2 : 3.5)
+        .padding(.horizontal, compact ? 6 : 10)
+        .frame(height: compact ? 18 : 24)
         // Over the picture, a dimming rather than glass: one piece of glass
         // on every tile was worked out again from the moving video beneath it
         // on every frame, which is what Apple's guidance says to limit, and a
         // name on a picture is content. The dark fill is what the guidance
         // gives for legibility over rich content.
-        .background(Capsule().fill(Color.black.opacity(0.5)))
-        .overlay(Capsule().stroke(Color.white.opacity(0.1), lineWidth: 0.5))
+        .background(Capsule().fill(Color.black.opacity(0.7)))
         .animation(Theme.settle, value: marks)
     }
 }
@@ -378,7 +389,7 @@ struct MyShareFace: View {
                     Button(action: stop) {
                         Text(t("Stop sharing"))
                     }
-                    .buttonStyle(.glassCapsule(30))
+                    .buttonStyle(.glassCapsule(36))
                 }
             }
             .padding(.horizontal, 12)
@@ -393,31 +404,48 @@ struct MyShareFace: View {
 /// see. Its buttons take their own presses: on the web a press on one carried
 /// on to the picture beneath, and "Their screen" pinned the other picture
 /// only for the picture's own press to pin this one straight back.
+///
+/// Both round and thirty-six across, a finger's forty-four to press on a
+/// touch screen (the web's and every client's, 2026-10-29): they were a
+/// thirty-two point circle beside a thirty-two point tab of words. On a
+/// phone the other picture is a symbol alone, as the web's is, where its
+/// words reached the middle of the stage's top edge.
 struct StageControls: View {
     /// The other picture's kind, when there is one.
     let other: Surface.Kind?
     let filled: Bool
     let switchTo: () -> Void
     let fill: () -> Void
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var width
+    private var words: Bool { width == .regular }
+    #else
+    private let words = true
+    #endif
+
+    static let size: CGFloat = 36
 
     var body: some View {
         HStack(spacing: 8) {
             if let other {
+                let title = other == .screen ? t("Their screen") : t("Their camera")
                 Button(action: switchTo) {
                     HStack(spacing: 6) {
                         Image(systemName: other == .screen ? "rectangle.on.rectangle" : "person.fill")
-                            .font(.system(size: 11.5, weight: .semibold))
-                        Text(other == .screen ? t("Their screen") : t("Their camera"))
+                            .font(.system(size: Self.size * 0.4, weight: .semibold))
+                        if words { Text(title) }
                     }
                 }
-                .buttonStyle(.overPicture(32, words: true))
+                .buttonStyle(.overPicture(Self.size, words: words))
+                .accessibilityLabel(title)
+                .help(title)
                 .transition(Theme.arrive)
             }
             Button(action: fill) {
                 Image(systemName: filled ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 12.5, weight: .bold))
+                    .font(.system(size: Self.size * 0.4, weight: .bold))
             }
-            .buttonStyle(.overPicture(32))
+            .buttonStyle(.overPicture(Self.size))
             .accessibilityLabel(filled ? t("Leave fullscreen") : t("Fill the screen"))
             .help(filled ? t("Leave fullscreen") : t("Fill the screen"))
         }

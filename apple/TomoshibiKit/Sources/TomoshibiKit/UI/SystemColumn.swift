@@ -487,21 +487,21 @@ struct ColumnHeadButton: View {
 }
 
 /// The microphone and the camera as they will be on joining, down the
-/// column: red while off, as `DeviceSwitches` draws them, since this is the
-/// last moment to notice before everybody else does. The same labels, so
-/// that whatever presses one presses the other.
+/// column: the foreground's own plate while off, as `DeviceSwitches` and
+/// the call's bar draw them. The same labels, so that whatever presses one
+/// presses the other.
 struct ColumnDeviceSwitches: View {
     @Bindable var app: AppModel
 
     var body: some View {
         BarButton(symbol: app.startWithMicrophone ? "mic.fill" : "mic.slash.fill",
                   label: app.startWithMicrophone ? t("Mute microphone") : t("Unmute microphone"),
-                  alarm: !app.startWithMicrophone) {
+                  off: !app.startWithMicrophone) {
             app.startWithMicrophone.toggle()
         }
         BarButton(symbol: app.startWithCamera ? "video.fill" : "video.slash.fill",
                   label: app.startWithCamera ? t("Turn camera off") : t("Turn camera on"),
-                  alarm: !app.startWithCamera) {
+                  off: !app.startWithCamera) {
             app.startWithCamera.toggle()
         }
     }

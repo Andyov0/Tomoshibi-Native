@@ -87,6 +87,10 @@ struct ControlBar: View {
     static let columnWidth: CGFloat = 50
     static let columnHeight: CGFloat = 340
 
+    /// Whether the compact bar is the one drawn: nil until the first layout
+    /// has said which fits (`fitting`).
+    @State private var compact: Bool?
+
     var body: some View {
         Group {
             // The whole bar where it fits, and where it does not (a phone, a
@@ -94,17 +98,9 @@ struct ControlBar: View {
             // button. On a phone the whole bar was wider than the screen and
             // both ends hung off it, hanging up with them.
             if layoutAxis == .horizontal {
-                ViewThatFits(in: .horizontal) {
-                    bar(compact: false)
-                    bar(compact: true)
-                }
-                .padding(.horizontal, 10)
+                fitting.padding(.horizontal, 10)
             } else {
-                ViewThatFits(in: .vertical) {
-                    bar(compact: false)
-                    bar(compact: true)
-                }
-                .padding(.vertical, 10)
+                fitting.padding(.vertical, 10)
             }
         }
         #if os(macOS)
@@ -128,7 +124,51 @@ struct ControlBar: View {
         }
     }
 
-    private func bar(compact: Bool) -> some View {
+    /// The two bars, the whole one and the compact one, measured out of
+    /// sight, and the one that fits drawn over them; a change from one to
+    /// the other, a window dragged or a phone turned across the width they
+    /// part at, is the one going and the other coming rather than a jump.
+    /// The system's `ViewThatFits` chose as well, and swapped the bars in a
+    /// frame, the capsule jumping to its new width under the pointer.
+    private var fitting: some View {
+        FirstThatFits(axis: layoutAxis) {
+            probe(compact: false)
+            probe(compact: true)
+        }
+        .coordinateSpace(.named(Self.fits))
+        .overlay {
+            ZStack {
+                if let compact {
+                    bar(compact: compact)
+                        .id(compact)
+                        .transition(.asymmetric(insertion: .opacity.animation(Theme.settle.delay(0.06)),
+                                                removal: .opacity.animation(Theme.leave)))
+                }
+            }
+        }
+    }
+
+    private static let fits = "bar.fits"
+
+    /// One of the two bars, out of sight and out of reach, measured; it says
+    /// whether it is the one the layout chose (`FirstThatFits` puts the
+    /// other far off).
+    private func probe(compact: Bool) -> some View {
+        bar(compact: compact, probing: true)
+            .hidden()
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .onGeometryChange(for: Bool.self) { $0.frame(in: .named(Self.fits)).minX > -FirstThatFits.away / 2 } action: { chosen in
+                guard chosen, self.compact != compact else { return }
+                if self.compact == nil {
+                    self.compact = compact
+                } else {
+                    withAnimation(Theme.settle) { self.compact = compact }
+                }
+            }
+    }
+
+    private func bar(compact: Bool, probing: Bool = false) -> some View {
         let size: CGFloat = compact ? 40 : 44
         let spacing: CGFloat = compact ? 4 : 6
         let axis = layoutAxis
@@ -136,12 +176,12 @@ struct ControlBar: View {
         return stack {
             BarButton(symbol: model.microphoneOn ? "mic.fill" : "mic.slash.fill",
                       label: model.microphoneOn ? t("Mute microphone") : t("Unmute microphone"),
-                      quiet: !model.microphoneOn, size: size) {
+                      off: !model.microphoneOn, size: size) {
                 device { try await model.setMicrophone(!model.microphoneOn) }
             }
             BarButton(symbol: model.cameraOn ? "video.fill" : "video.slash.fill",
                       label: model.cameraOn ? t("Turn camera off") : t("Turn camera on"),
-                      quiet: !model.cameraOn, size: size) {
+                      off: !model.cameraOn, size: size) {
                 device { try await model.setCamera(!model.cameraOn) }
             }
             #if os(macOS)
@@ -157,7 +197,11 @@ struct ControlBar: View {
                 ZStack {
                     BarButton(symbol: "rectangle.on.rectangle", label: model.phoneSharing ? t("Stop sharing") : t("Share your screen"),
                               lit: model.phoneSharing, size: size) { BroadcastPicker.press() }
-                    BroadcastPicker().frame(width: 1, height: 1).opacity(0.02).allowsHitTesting(false)
+                    // Not in a bar that is only measured: the picker pressed
+                    // is the last one made.
+                    if !probing {
+                        BroadcastPicker().frame(width: 1, height: 1).opacity(0.02).allowsHitTesting(false)
+                    }
                 }
                 .transition(Theme.arrive)
             }
@@ -165,8 +209,10 @@ struct ControlBar: View {
             // The hand and, behind the narrow half beside it, the reactions
             // (HandButton.tsx).
             HandControl(model: model, act: act, panel: $panel, popovers: popovers, axis: axis, size: size)
+            // Open panels are held down, not lit (BarButton `pressed`); the
+            // dot is what says something is waiting in them.
             BarButton(symbol: "bubble.left.fill", label: panel == .messages ? t("Hide messages") : t("Show messages"),
-                      lit: panel == .messages, size: size) {
+                      pressed: panel == .messages, size: size) {
                 panel = panel == .messages ? nil : .messages
             }
             // The one dot that says something was said while the messages were
@@ -204,12 +250,12 @@ struct ControlBar: View {
     @ViewBuilder
     private func panels(size: CGFloat) -> some View {
         BarButton(symbol: "speaker.wave.2.fill", label: panel == .sound ? t("Hide sound") : t("Show sound"),
-                  lit: panel == .sound, size: size) {
+                  pressed: panel == .sound, size: size) {
             panel = panel == .sound ? nil : .sound
         }
         if !model.sealed && (offered.watch || panel == .watch) {
             BarButton(symbol: "play.rectangle.fill", label: panel == .watch ? t("Hide watch together") : t("Show watch together"),
-                      lit: panel == .watch, size: size) {
+                      pressed: panel == .watch, size: size) {
                 panel = panel == .watch ? nil : .watch
             }
             // The show is playing while its panel is closed (ControlBar.tsx ~430).
@@ -220,7 +266,7 @@ struct ControlBar: View {
         }
         if offered.music || panel == .music {
             BarButton(symbol: "music.note", label: panel == .music ? t("Hide music") : t("Show music"),
-                      lit: panel == .music, size: size) {
+                      pressed: panel == .music, size: size) {
                 panel = panel == .music ? nil : .music
             }
             .overlay(alignment: .topTrailing) {
@@ -229,7 +275,7 @@ struct ControlBar: View {
             .transition(Theme.arrive)
         }
         if offered.host || panel == .host {
-            BarButton(symbol: "crown.fill", label: t("Running this room"), lit: panel == .host, size: size) {
+            BarButton(symbol: "crown.fill", label: t("Running this room"), pressed: panel == .host, size: size) {
                 panel = panel == .host ? nil : .host
             }
             // Counted as well as coloured (HostPanel.tsx ~400): somebody
@@ -249,7 +295,7 @@ struct ControlBar: View {
             }
             .transition(Theme.arrive)
         }
-        BarButton(symbol: "gearshape.fill", label: t("Devices"), lit: panel == .devices, size: size) {
+        BarButton(symbol: "gearshape.fill", label: t("Devices"), pressed: panel == .devices, size: size) {
             panel = panel == .devices ? nil : .devices
         }
     }
@@ -482,7 +528,6 @@ private struct LeaveControl: View {
     let compact: Bool
     let size: CGFloat
     @State private var ending = false
-    @State private var hovering = false
     #if DEBUG
     @Environment(\.isEnabled) private var enabled
     #endif
@@ -491,21 +536,19 @@ private struct LeaveControl: View {
 
     var body: some View {
         let open = popovers.open == Self.id
+        let width = axis == .horizontal ? (compact ? 52 : 56) : size
+        let height = axis == .horizontal ? size : (compact ? 48 : 52)
         Button {
             popovers.toggle(Self.id)
         } label: {
             Image(systemName: "phone.down.fill")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Theme.dangerForeground)
-                .frame(width: axis == .horizontal ? (compact ? 52 : 56) : size,
-                       height: axis == .horizontal ? size : (compact ? 48 : 52))
-                .background(Capsule().fill(Theme.danger.opacity(open || hovering ? 0.86 : 1)))
-                .overlay(Capsule().stroke(Color.white.opacity(open ? 0.4 : 0.25), lineWidth: 1))
+                .frame(width: width, height: height)
                 .contentShape(Capsule())
+                .fingertip(width, height)
         }
-        .buttonStyle(BarPress())
-        .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: hovering)
+        .buttonStyle(LeavePress(open: open, width: width, height: height))
         .accessibilityLabel(t("Leave"))
         .accessibilityAddTraits(open ? .isSelected : [])
         .help(t("Leave"))
@@ -566,6 +609,42 @@ private struct LeaveControl: View {
     }
 }
 
+/// Leave's red capsule pressed: the red a step lighter under the pointer and
+/// while its question is open, two while held, and the shrink every control
+/// gives (Theme.Press).
+private struct LeavePress: ButtonStyle {
+    let open: Bool
+    let width: CGFloat
+    let height: CGFloat
+
+    func makeBody(configuration: Configuration) -> some View {
+        Capsule(configuration: configuration, open: open, width: width, height: height)
+    }
+
+    private struct Capsule: View {
+        let configuration: Configuration
+        let open: Bool
+        let width: CGFloat
+        let height: CGFloat
+        @State private var hovering = false
+        @Environment(\.accessibilityReduceMotion) private var still
+
+        var body: some View {
+            let held = configuration.isPressed
+            let shape = SwiftUI.Capsule()
+            configuration.label
+                .background(shape.fill(Theme.danger.opacity(held ? Theme.Press.filledHeld : open || hovering ? Theme.Press.filledHover : 1))
+                    .frame(width: width, height: height))
+                .overlay(shape.stroke(Color.white.opacity(open ? 0.4 : 0.25), lineWidth: 1).frame(width: width, height: height))
+                .scaleEffect(held && !still ? Theme.Press.scale : 1)
+                .onHover { hovering = $0 }
+                .animation(Theme.Press.animation, value: held)
+                .animation(.easeOut(duration: 0.12), value: hovering)
+                .animation(Theme.settle, value: open)
+        }
+    }
+}
+
 // MARK: - More
 
 /// The panels, behind one button on a narrow bar. It carries the signal dot
@@ -586,7 +665,7 @@ private struct MoreControl: View {
         let open = panel.map { behind.contains($0) } ?? false
         let busy = (offers.watchPlaying && panel != .watch) || (offers.musicPlaying && panel != .music)
             || (offers.knocking > 0 && panel != .host)
-        BarButton(symbol: "ellipsis", label: t("More"), lit: open, pressed: popovers.open == Self.id, size: size) {
+        BarButton(symbol: "ellipsis", label: t("More"), pressed: open || popovers.open == Self.id, size: size) {
             popovers.toggle(Self.id)
         }
         .overlay(alignment: .topTrailing) {
@@ -908,4 +987,37 @@ enum ControlDebug {
         log.notice("state: \(line, privacy: .public)")
     }
     #endif
+}
+
+/// The first of its children that fits along `axis` in what it is offered,
+/// at the size it asks for; the last when none does. The others are laid
+/// out too, far off and out of sight, so that each can tell from where it
+/// was put whether it is the one (ControlBar `fitting`).
+struct FirstThatFits: Layout {
+    let axis: Axis
+    /// How far off the ones not chosen are put.
+    static let away: CGFloat = 100_000
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard !subviews.isEmpty else { return .zero }
+        return subviews[chosen(proposal, subviews)].sizeThatFits(.unspecified)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard !subviews.isEmpty else { return }
+        let pick = chosen(proposal, subviews)
+        for (index, subview) in subviews.enumerated() {
+            let at = index == pick ? bounds.origin : CGPoint(x: bounds.minX - Self.away, y: bounds.minY)
+            subview.place(at: at, proposal: .unspecified)
+        }
+    }
+
+    private func chosen(_ proposal: ProposedViewSize, _ subviews: Subviews) -> Int {
+        guard let room = axis == .horizontal ? proposal.width : proposal.height else { return 0 }
+        for (index, subview) in subviews.enumerated() {
+            let size = subview.sizeThatFits(.unspecified)
+            if (axis == .horizontal ? size.width : size.height) <= room { return index }
+        }
+        return subviews.count - 1
+    }
 }

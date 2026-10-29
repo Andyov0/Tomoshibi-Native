@@ -40,9 +40,9 @@ extension EnvironmentValues {
     @Entry var popovers: Popovers?
 }
 
-/// A pane of glass anchored to a control, above or below it: the app's own
-/// popover. It closes on Escape, when its id is toggled again, and when the
-/// screen's `PopoverCatcher` is clicked.
+/// A pane anchored to a control, above or below it: the app's own popover.
+/// It closes on Escape, when its id is toggled again, and when the screen's
+/// `PopoverCatcher` is clicked. Opaque, as every menu is (`menuSurface`).
 struct GlassPopover<Panel: View>: ViewModifier {
     let id: String
     let popovers: Popovers
@@ -56,7 +56,7 @@ struct GlassPopover<Panel: View>: ViewModifier {
             if popovers.open == id {
                 panel()
                     .frame(width: width)
-                    .glassShell(cornerRadius: 18)
+                    .menuSurface()
                     .fixedSize(horizontal: false, vertical: true)
                     .alignmentGuide(edge == .top ? VerticalAlignment.top : VerticalAlignment.bottom) { d in
                         edge == .top ? d[.bottom] + 12 : d[.top] - 12
@@ -112,6 +112,110 @@ struct PopoverCatcher: View {
     }
 }
 
+// MARK: - Surfaces that are content
+
+extension View {
+    /// What a menu, a popover and a list of choices are drawn on: an opaque
+    /// surface, raised off what it hangs over, with a hairline edge and a
+    /// shadow, and content inside.
+    ///
+    /// They were glass. Glass is for the controls that float over the
+    /// content (Glass.swift), and a menu is something read: over a picture,
+    /// the picture ran through its words, and the owner's rule for the
+    /// clients is glass on the floating controls alone (2026-10-29, the
+    /// web's "menus, dialogs and panels are opaque"). Fourteen at the corner,
+    /// so a menu's rows of ten inside four of padding are concentric with it.
+    func menuSurface(cornerRadius: CGFloat = Theme.Radius.medium) -> some View {
+        modifier(OpaqueSurface(shape: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous), fill: Theme.floating))
+    }
+
+    /// A panel beside or over a call (the messages, the sound, the devices):
+    /// opaque, for the reason `menuSurface` gives, in the surface's grey
+    /// rather than a menu's raised one, at the panel's corner.
+    func panelSurface(cornerRadius: CGFloat = Theme.Radius.panel) -> some View {
+        modifier(OpaqueSurface(shape: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous), fill: Theme.surface))
+    }
+}
+
+/// `menuSurface` and `panelSurface`: content inside, the fill and an edge
+/// behind it, and a shadow that lifts it off a picture by night and off the
+/// page by day.
+private struct OpaqueSurface<S: Shape>: ViewModifier {
+    let shape: S
+    let fill: Color
+    @Environment(\.colorScheme) private var scheme
+
+    func body(content: Content) -> some View {
+        content
+            .contentLayer()
+            .lifted()
+            .background(shape.fill(fill))
+            .overlay(shape.stroke(Theme.ink.opacity(0.10), lineWidth: 1))
+            .clipShape(shape)
+            .shadow(color: Theme.shadow(scheme == .dark ? 0.45 : 0.3), radius: 16, y: 6)
+    }
+}
+
+/// How a control is pressed, one curve and one shrink everywhere (Theme.Press):
+/// the press lands before whatever it starts has had time to answer. Not for
+/// somebody who asked for less motion, for whom the colour the press also
+/// changes says it.
+struct Pressable: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        PressableBody(configuration: configuration)
+    }
+
+    private struct PressableBody: View {
+        let configuration: Configuration
+        @Environment(\.accessibilityReduceMotion) private var still
+
+        var body: some View {
+            configuration.label
+                .scaleEffect(configuration.isPressed && !still ? Theme.Press.scale : 1)
+                .animation(Theme.Press.animation, value: configuration.isPressed)
+        }
+    }
+}
+
+/// A row of a menu or a list pressed: lit a tenth towards the foreground
+/// under the pointer and sixteen hundredths while a finger is on it, which
+/// on a phone is the only answer a row gives (an iPhone's menu rows had
+/// none: they lit under a pointer a finger does not have). Rows do not
+/// shrink, as the system's own do not.
+struct RowPress: ButtonStyle {
+    var radius: CGFloat = Theme.Radius.small
+
+    func makeBody(configuration: Configuration) -> some View {
+        RowPressBody(configuration: configuration, radius: radius)
+    }
+
+    private struct RowPressBody: View {
+        let configuration: Configuration
+        let radius: CGFloat
+        @State private var hovering = false
+        @Environment(\.isEnabled) private var enabled
+
+        var body: some View {
+            let lit = !enabled ? 0 : configuration.isPressed ? Theme.Press.quietHeld : hovering ? Theme.Press.quietHover : 0
+            configuration.label
+                .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(Theme.ink.opacity(lit)))
+                .onHover { hovering = $0 }
+                .animation(Theme.Press.animation, value: configuration.isPressed)
+                .animation(.easeOut(duration: 0.12), value: hovering)
+        }
+    }
+}
+
+/// A menu's row: a pointer's 32 on the Mac, a finger's 44 on a touch screen
+/// (the web's 32 and 44, Android's 48 by its own rule).
+var menuRowHeight: CGFloat {
+    #if os(iOS)
+    Theme.fingertip
+    #else
+    32
+    #endif
+}
+
 // MARK: - The keyboard
 
 extension View {
@@ -148,12 +252,14 @@ func putKeyboardAway() {
 // MARK: - Menus
 
 /// What a popover menu is made of: rows of items, small headings, rules.
+/// Four in from a menu's corner of fourteen, so that its rows' ten are
+/// concentric with it (Theme.Radius).
 struct MenuCard<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) { content }
-            .padding(6)
+            .padding(4)
     }
 }
 
@@ -190,7 +296,6 @@ struct MenuItem: View {
     var checked = false
     var busy = false
     let action: () -> Void
-    @State private var hovering = false
     @Environment(\.isEnabled) private var enabled
 
     var body: some View {
@@ -212,27 +317,31 @@ struct MenuItem: View {
                     }
                 }
                 Spacer(minLength: 8)
-                if busy {
-                    ProgressView().controlSize(.small)
-                } else if checked {
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 11.5, weight: .bold))
-                        .foregroundStyle(Theme.tallyInk)
-                        .transition(.scale.combined(with: .opacity))
+                // The spinner and the check come and go, as everything does;
+                // the spinner popped in and out with the work it stood for.
+                ZStack {
+                    if busy {
+                        ProgressView().controlSize(.small)
+                            .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                    } else if checked {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11.5, weight: .bold))
+                            .foregroundStyle(Theme.tallyInk)
+                            .transition(.scale.combined(with: .opacity))
+                    }
                 }
             }
             .padding(.horizontal, 10)
-            .padding(.vertical, detail == nil ? 7 : 6)
-            .frame(minHeight: 34)
-            .background(RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Theme.ink.opacity(hovering && enabled ? 0.09 : 0)))
-            .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .padding(.vertical, 6)
+            // A row that explains itself (Leave's two) at least a fingertip
+            // high everywhere.
+            .frame(minHeight: detail == nil ? menuRowHeight : Theme.fingertip)
+            .contentShape(RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous))
         }
-        .buttonStyle(.plain)
-        .opacity(enabled ? 1 : 0.4)
-        .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: hovering)
+        .buttonStyle(RowPress())
+        .opacity(enabled ? 1 : Theme.Press.disabled)
         .animation(Theme.settle, value: checked)
+        .animation(Theme.settle, value: busy)
         .accessibilityAddTraits(checked ? .isSelected : [])
     }
 }
@@ -261,7 +370,7 @@ struct MenuSwitch: View {
             Toggle("", isOn: $isOn).labelsHidden().toggleStyle(.glassSwitch)
         }
         .padding(.horizontal, 10)
-        .frame(minHeight: 36)
+        .frame(minHeight: menuRowHeight)
     }
 }
 

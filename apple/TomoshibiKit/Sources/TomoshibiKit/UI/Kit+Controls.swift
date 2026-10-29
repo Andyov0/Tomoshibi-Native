@@ -54,7 +54,9 @@ struct ControlPopover<Panel: View>: ViewModifier {
             let anchor: UnitPoint = edge == .top ? (place == .end ? .bottomTrailing : .bottom) : (place == .end ? .bottomTrailing : .trailing)
             panel()
                 .frame(width: width)
-                .glassShell(cornerRadius: 18)
+                // Opaque, as every menu is (Kit `menuSurface`): over the
+                // call's pictures, glass let them run through its words.
+                .menuSurface()
                 .fixedSize(horizontal: false, vertical: true)
                 // Clear of the bar's own edge as well as the control's: the
                 // bar's padding is seven points.
@@ -142,61 +144,115 @@ struct EscapeClosesPopovers: ViewModifier {
 // MARK: - The bar's buttons
 
 /// One round button of the control bar: a lit plate in the chosen colour
-/// while what it stands for is on, a plain one otherwise, a little brighter
-/// under the pointer and while its popover is open.
+/// while what it stands for is happening, the foreground's own plate while a
+/// device of one's own is off, and a raised grey otherwise, held down while
+/// its panel or popover is open.
 ///
-/// Inside the bar's glass the buttons are lit plates rather than glass of
-/// their own: glass on glass reads as smudge.
+/// Inside the bar's glass the buttons are plates rather than glass of their
+/// own: glass on glass reads as smudge.
 struct BarButton: View {
     let symbol: String
     let label: String
+    /// Something it stands for is happening: a share going out, a hand up.
+    /// Only that (the owner, 2026-10-29): amber is what is happening in the
+    /// call, and a panel somebody opened is not.
     var lit = false
-    /// Off, and drawn quieter for it: a muted microphone is a choice, not a
-    /// fault, so it is unlit rather than red (ControlBar.tsx `Toggle`).
-    var quiet = false
-    /// Off before a call, where the screens draw a microphone or a camera
-    /// that is off in red (DeviceSwitches): the last moment to notice before
-    /// everybody else does. Not in a call, where off is `quiet`.
-    var alarm = false
-    /// Its popover is open.
+    /// The microphone or the camera, off: drawn in the foreground, white by
+    /// night and near black by day, its symbol in the page's colour, as
+    /// FaceTime and the phone's own call draw a muted microphone, in the call
+    /// and on the screens before it alike (the web's `off`, button.tsx).
+    /// Talking into a muted microphone is the commonest mistake a call has,
+    /// and the muted one was the same grey as a live one with a dimmer
+    /// symbol, which at arm's length is the same button; the screens before
+    /// a call drew it red, so the one switch was two things a screen apart.
+    /// Not red either: red is leaving and faults, and muting is a choice.
+    var off = false
+    /// Its panel or popover is open: held down, the raised grey a step
+    /// further towards the foreground, so that the button that closes it is
+    /// the one that looks pressed. It was amber, which put a second block of
+    /// colour beside the red of leaving whenever a panel was open.
     var pressed = false
     var size: CGFloat = 44
     let action: () -> Void
-    @State private var hovering = false
-    @Environment(\.isEnabled) private var enabled
 
     var body: some View {
         Button(action: action) {
+            // Four tenths of the button, as the web's and the other clients'
+            // are: at 0.36 it read as a button with not much on it.
             Image(systemName: symbol)
-                .font(.system(size: size * 0.36, weight: .semibold))
+                .font(.system(size: size * 0.4, weight: .semibold))
                 .contentTransition(.symbolEffect(.replace))
-                .foregroundStyle(lit ? Theme.tallyForeground : alarm ? Theme.dangerForeground : (quiet ? Theme.muted : Theme.foreground))
                 .frame(width: size, height: size)
-                .background(Circle().fill(lit ? Theme.tally : alarm ? Theme.danger
-                                          : Theme.ink.opacity(pressed ? 0.24 : hovering && enabled ? 0.18 : 0.12)))
-                .overlay(Circle().stroke(lit || alarm ? Color.white.opacity(0.3) : Theme.ink.opacity(pressed ? 0.2 : 0.08), lineWidth: 1))
                 .contentShape(Circle())
+                .fingertip(size)
         }
-        .buttonStyle(BarPress())
-        .onHover { hovering = $0 }
-        .animation(Theme.settle, value: lit)
-        .animation(Theme.settle, value: alarm)
-        .animation(.easeOut(duration: 0.12), value: hovering)
-        .animation(Theme.settle, value: pressed)
+        .buttonStyle(BarButtonStyle(lit: lit, off: off, pressed: pressed, size: size))
         .accessibilityLabel(label)
         .accessibilityAddTraits(lit || pressed ? .isSelected : [])
         .help(label)
     }
 }
 
-/// A press that answers: the button gives a little under the finger.
-struct BarPress: ButtonStyle {
+/// How a bar button's plate is drawn in each of its states, on the one scale
+/// every control keeps (Theme.Press).
+struct BarButtonStyle: ButtonStyle {
+    var lit = false
+    var off = false
+    var pressed = false
+    var size: CGFloat = 44
+
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.93 : 1)
-            .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
+        Plate(configuration: configuration, lit: lit, off: off, pressed: pressed, size: size)
+    }
+
+    private struct Plate: View {
+        let configuration: Configuration
+        let lit: Bool
+        let off: Bool
+        let pressed: Bool
+        let size: CGFloat
+        @State private var hovering = false
+        @Environment(\.isEnabled) private var enabled
+        @Environment(\.accessibilityReduceMotion) private var still
+
+        var body: some View {
+            let held = configuration.isPressed
+            configuration.label
+                .foregroundStyle(lit ? Theme.tallyForeground : off ? Theme.background : Theme.foreground)
+                .background(Circle().fill(plate(held: held)).frame(width: size, height: size))
+                .overlay(Circle().stroke(edge, lineWidth: 1).frame(width: size, height: size))
+                .scaleEffect(held && !still ? Theme.Press.scale : 1)
+                .opacity(enabled ? 1 : Theme.Press.disabled)
+                .onHover { hovering = $0 }
+                .animation(Theme.Press.animation, value: held)
+                .animation(.easeOut(duration: 0.12), value: hovering)
+                .animation(Theme.settle, value: lit)
+                .animation(Theme.settle, value: off)
+                .animation(Theme.settle, value: pressed)
+        }
+
+        private func plate(held: Bool) -> Color {
+            let pointed = hovering && enabled
+            if lit {
+                return Theme.tally.opacity(held ? Theme.Press.filledHeld : pointed ? Theme.Press.filledHover : 1)
+            }
+            if off {
+                return Theme.foreground.opacity(held ? Theme.Press.filledHeld : pointed ? Theme.Press.filledHover : 1)
+            }
+            return Theme.ink.opacity(held || pressed ? Theme.Press.held : pointed ? Theme.Press.hover : Theme.Press.rest)
+        }
+
+        private var edge: Color {
+            if lit { return Color.white.opacity(0.3) }
+            if off { return .clear }
+            return Theme.ink.opacity(pressed ? 0.2 : 0.08)
+        }
     }
 }
+
+/// A press that answers: the button gives a little under the finger, as
+/// every control does (Theme.Press).
+typealias BarPress = Pressable
 
 /// The dot a bar button wears when something it stands for is happening
 /// out of sight (ControlBar.tsx ~383): in the signal colour, ringed in the
@@ -221,7 +277,6 @@ struct ChoiceRow: View {
     var checked = false
     var last = false
     let action: () -> Void
-    @State private var hovering = false
     @Environment(\.isEnabled) private var enabled
 
     var body: some View {
@@ -250,14 +305,11 @@ struct ChoiceRow: View {
                     }
                 }
                 .padding(.horizontal, 14)
-                .frame(minHeight: 40)
-                .background(Theme.ink.opacity(hovering && enabled ? 0.06 : 0))
+                .frame(minHeight: max(40, menuRowHeight))
                 .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .opacity(enabled ? 1 : 0.45)
-            .onHover { hovering = $0 }
-            .animation(.easeOut(duration: 0.12), value: hovering)
+            .buttonStyle(RowPress(radius: 0))
+            .opacity(enabled ? 1 : Theme.Press.disabled)
             .animation(Theme.settle, value: checked)
             .accessibilityAddTraits(checked ? .isSelected : [])
             if !last {

@@ -111,35 +111,59 @@ struct RoundButton: View {
     /// a reason (making a guest host).
     var faint = false
     let action: () -> Void
-    @State private var hovering = false
     @Environment(\.isEnabled) private var enabled
 
     var body: some View {
         Button(action: action) {
             Image(systemName: symbol)
-                .font(.system(size: size * 0.43, weight: .semibold))
-                .foregroundStyle(ink)
+                .font(.system(size: size * 0.4, weight: .semibold))
                 .frame(width: size, height: size)
-                .background(Circle().fill(fill))
-                .overlay(Circle().stroke(Theme.ink.opacity(hovering && enabled ? 0.12 : 0), lineWidth: 1))
                 .contentShape(Circle())
+                .fingertip(size)
         }
-        .buttonStyle(.plain)
-        .opacity(!enabled ? 0.3 : faint ? 0.45 : 1)
-        .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: hovering)
+        .buttonStyle(RoundPress(role: role, size: size))
+        .opacity(!enabled ? Theme.Press.disabled : faint ? 0.45 : 1)
         .accessibilityLabel(label)
         .help(label)
     }
+}
 
-    private var ink: Color {
-        guard hovering && enabled else { return Theme.muted }
-        return role == .destructive ? Theme.dangerInk : Theme.foreground
+/// A small round button lit a tenth of the way towards the foreground under
+/// the pointer and sixteen hundredths under a finger, which on a phone is the
+/// only answer it gives, and pressed down as every control is (Theme.Press).
+private struct RoundPress: ButtonStyle {
+    let role: RoundButton.Role
+    let size: CGFloat
+
+    func makeBody(configuration: Configuration) -> some View {
+        Plate(configuration: configuration, role: role, size: size)
     }
 
-    private var fill: Color {
-        guard hovering && enabled else { return Theme.ink.opacity(0.0) }
-        return role == .destructive ? Theme.danger.opacity(0.16) : Theme.ink.opacity(0.10)
+    private struct Plate: View {
+        let configuration: Configuration
+        let role: RoundButton.Role
+        let size: CGFloat
+        @State private var hovering = false
+        @Environment(\.isEnabled) private var enabled
+        @Environment(\.accessibilityReduceMotion) private var still
+
+        var body: some View {
+            let held = configuration.isPressed && enabled
+            let lit = held || (hovering && enabled)
+            configuration.label
+                .foregroundStyle(!lit ? Theme.muted : role == .destructive ? Theme.dangerInk : Theme.foreground)
+                .background(Circle().fill(fill(held: held)).frame(width: size, height: size))
+                .overlay(Circle().stroke(Theme.ink.opacity(lit ? 0.12 : 0), lineWidth: 1).frame(width: size, height: size))
+                .scaleEffect(held && !still ? Theme.Press.scale : 1)
+                .onHover { hovering = $0 }
+                .animation(Theme.Press.animation, value: held)
+                .animation(.easeOut(duration: 0.12), value: hovering)
+        }
+
+        private func fill(held: Bool) -> Color {
+            let amount = held ? Theme.Press.quietHeld : hovering && enabled ? Theme.Press.quietHover : 0
+            return role == .destructive ? Theme.danger.opacity(amount * 1.6) : Theme.ink.opacity(amount)
+        }
     }
 }
 
@@ -175,30 +199,37 @@ struct PillButton: View {
             .padding(.horizontal, height * 0.42)
             .frame(maxWidth: wide ? .infinity : nil, minHeight: height)
             .background(Capsule().fill(fill))
-            .overlay(Capsule().stroke(role == .normal ? Theme.ink.opacity(0.08) : Color.white.opacity(0.18), lineWidth: 1))
+            .overlay(Capsule().stroke(role == .normal || waiting ? Theme.ink.opacity(0.08) : Color.white.opacity(0.18), lineWidth: 1))
             .contentShape(Capsule())
+            .fingertip(Theme.fingertip, height)
         }
-        .buttonStyle(.plain)
-        .opacity(enabled ? 1 : 0.4)
+        .buttonStyle(Pressable())
+        // The answer that says yes, when it cannot be given yet, is grey
+        // rather than a faded colour (GlassButtonStyle `waiting`).
+        .opacity(enabled || role == .prominent ? 1 : Theme.Press.disabled)
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.12), value: hovering)
         .animation(Theme.settle, value: busy)
     }
 
+    private var waiting: Bool { role == .prominent && !enabled }
+
     private var ink: Color {
+        if waiting { return Theme.muted }
         switch role {
-        case .normal: Theme.foreground
-        case .prominent: Theme.tallyForeground
-        case .destructive: Theme.dangerForeground
+        case .normal: return Theme.foreground
+        case .prominent: return Theme.tallyForeground
+        case .destructive: return Theme.dangerForeground
         }
     }
 
     private var fill: Color {
+        if waiting { return Theme.surfaceHigh }
         let lift = hovering && enabled
         switch role {
-        case .normal: return Theme.ink.opacity(lift ? 0.16 : 0.10)
-        case .prominent: return Theme.tally.opacity(lift ? 0.88 : 1)
-        case .destructive: return Theme.danger.opacity(lift ? 0.88 : 1)
+        case .normal: return Theme.ink.opacity(lift ? Theme.Press.quietHover + 0.06 : 0.10)
+        case .prominent: return Theme.tally.opacity(lift ? Theme.Press.filledHover : 1)
+        case .destructive: return Theme.danger.opacity(lift ? Theme.Press.filledHover : 1)
         }
     }
 }
@@ -229,7 +260,10 @@ struct PanelHeading<Trailing: View>: View {
                 .lineLimit(1)
             Spacer(minLength: 8)
             trailing
-            RoundButton(symbol: "xmark", label: closeLabel, size: 26, action: close)
+            // Thirty-two to the eye and a fingertip to the touch, as every
+            // panel's close is now (the web's 32 and 44): at twenty-six it was
+            // the smallest thing a panel asked to be pressed.
+            RoundButton(symbol: "xmark", label: closeLabel, size: 32, action: close)
         }
         .padding(.leading, 14)
         .padding(.trailing, 10)

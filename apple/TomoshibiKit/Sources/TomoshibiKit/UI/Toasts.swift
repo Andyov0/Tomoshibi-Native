@@ -174,7 +174,9 @@ private struct ToastCard: View {
             .opacity(pinnedHeight == nil ? 1 : 0)
             .frame(height: pinnedHeight, alignment: .top)
             .clipped()
-            .glassPane(cornerRadius: 14)
+            // Opaque, as the web's notices now are: something said is read,
+            // and over a picture glass let the picture through the words.
+            .menuSurface(cornerRadius: Theme.Radius.medium)
             .offset(x: dragged)
             .opacity(1 - min(0.7, Double(max(0, dragged)) / 260))
             .gesture(swipe)

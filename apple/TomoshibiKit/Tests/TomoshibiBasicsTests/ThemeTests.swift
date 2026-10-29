@@ -108,6 +108,18 @@ final class ThemeTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(contrast(pixel(Theme.dangerInk, .light), page), 4.5)
     }
 
+    /// The day's quieter words read as words: 4.5 to 1 or better on the
+    /// day's grey, on white and on the raised grey, and so do the faint ones,
+    /// which by day are the same. At the system's sixty per cent they were
+    /// 3.1 to 3.4 to 1.
+    func testTheDaysQuieterWordsCanBeRead() {
+        for (name, ground) in [("page", Theme.background), ("surface", Theme.surface), ("raised", Theme.surfaceHigh)] {
+            let behind = pixel(ground, .light)
+            XCTAssertGreaterThanOrEqual(contrast(pixel(Theme.muted, .light, over: ground), behind), 4.5, "muted on " + name)
+            XCTAssertGreaterThanOrEqual(contrast(pixel(Theme.faint(0.45), .light, over: ground), behind), 4.5, "faint on " + name)
+        }
+    }
+
     /// WCAG's contrast between two drawn pixels.
     private func contrast(_ a: [UInt8], _ b: [UInt8]) -> Double {
         func luminance(_ p: [UInt8]) -> Double {
@@ -147,7 +159,7 @@ final class ThemeTests: XCTestCase {
         // The translucent ones as the same shades drawn plainly would be.
         XCTAssertEqual(pixel(Theme.border, .light, over: .white), pixel(Color.black.opacity(0.10), .light, over: .white))
         XCTAssertEqual(pixel(Theme.muted, .light, over: .white),
-                       pixel(Color(red: 60 / 255, green: 60 / 255, blue: 67 / 255).opacity(0.6), .light, over: .white))
+                       pixel(Color(red: 60 / 255, green: 60 / 255, blue: 67 / 255).opacity(0.75), .light, over: .white))
         XCTAssertEqual(pixel(Theme.sunk(0.22), .light, over: .white), pixel(Color.black.opacity(0.055), .light, over: .white))
         // A lifted surface is white by day, a faint grey on one already lifted.
         XCTAssertEqual(pixel(Theme.lifted(0.05), .light, over: Theme.background), [255, 255, 255, 255])

@@ -645,8 +645,11 @@ struct CameraStage: View {
 }
 
 /// The microphone and camera as they will be on joining, as glass switches.
-/// Off is drawn in red: this is the last moment to notice before everybody
-/// else does.
+/// Off is the foreground's own plate, as it is on the call's bar (BarButton
+/// `off`): it was red here and a faint grey there, one switch drawn as two
+/// different things a screen apart. Forty-four wherever they stand, their
+/// symbols four tenths of it: the same pair came in four sizes (38, 40, 44,
+/// 52) with two proportions.
 struct DeviceSwitches: View {
     @Bindable var app: AppModel
     var size: CGFloat = 44
@@ -657,12 +660,12 @@ struct DeviceSwitches: View {
                 Button { app.startWithMicrophone.toggle() } label: {
                     Image(systemName: app.startWithMicrophone ? "mic.fill" : "mic.slash.fill").font(.system(size: size * 0.4, weight: .semibold))
                 }
-                .buttonStyle(GlassButtonStyle(shape: .circle(size), destructive: !app.startWithMicrophone))
+                .buttonStyle(.glassCircle(size, off: !app.startWithMicrophone))
                 .accessibilityLabel(app.startWithMicrophone ? t("Mute microphone") : t("Unmute microphone"))
                 Button { app.startWithCamera.toggle() } label: {
-                    Image(systemName: app.startWithCamera ? "video.fill" : "video.slash.fill").font(.system(size: size * 0.38, weight: .semibold))
+                    Image(systemName: app.startWithCamera ? "video.fill" : "video.slash.fill").font(.system(size: size * 0.4, weight: .semibold))
                 }
-                .buttonStyle(GlassButtonStyle(shape: .circle(size), destructive: !app.startWithCamera))
+                .buttonStyle(.glassCircle(size, off: !app.startWithCamera))
                 .accessibilityLabel(app.startWithCamera ? t("Turn camera off") : t("Turn camera on"))
             }
         }
@@ -967,8 +970,10 @@ struct SignInView: View {
                     if !passphrase.isEmpty {
                         Button { shown.toggle() } label: {
                             Image(systemName: shown ? "eye.slash" : "eye").font(.system(size: 13)).foregroundStyle(Theme.muted)
+                                .frame(width: 32, height: 32).contentShape(Rectangle())
+                                .fingertip(32)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(Pressable())
                         .accessibilityLabel(shown ? t("Hide passphrase") : t("Show passphrase"))
                         .transition(Theme.arrive)
                     }
@@ -1177,7 +1182,7 @@ private struct LobbySidebar: View {
                 .buttonStyle(.glassCapsule(platformTall, prominent: true))
                 .help(t("Start a meeting"))
                 Button { state.sheet = .join("") } label: {
-                    Label(t("Join"), systemImage: "link").frame(maxWidth: .infinity)
+                    Label(t("Join"), systemImage: "door.left.hand.open").frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassCapsule(platformTall))
                 .help(t("Join a meeting"))
@@ -1597,7 +1602,7 @@ struct PhoneLobby: View {
                         ColumnDeviceSwitches(app: app)
                         ColumnRule()
                         BarButton(symbol: "calendar", label: t("Schedule a meeting")) { state.place = .scheduled }
-                        BarButton(symbol: "link", label: t("Join a meeting")) { state.sheet = .join("") }
+                        BarButton(symbol: "door.left.hand.open", label: t("Join a meeting")) { state.sheet = .join("") }
                         // A plus rather than the camera the button starts
                         // a call with: just under the camera switch, the
                         // owner took the camera's picture on it for another
@@ -1678,12 +1683,14 @@ struct PhoneLobby: View {
                             if let url = app.lobby.link(one) { Task { await app.open(url) } }
                         } label: {
                             MeetingRow(one: one, app: app).padding(.horizontal, 14).padding(.vertical, 11)
+                                .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
+                        // Lit while a finger is on it, as a list's row is.
+                        .buttonStyle(RowPress(radius: 0))
                         if one.id != app.lobby.upcoming.prefix(4).last?.id { Divider().padding(.leading, 62) }
                     }
                 }
-                .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Theme.surface))
+                .background(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous).fill(Theme.surface))
             }
             .rise(0.06)
         }
@@ -1736,7 +1743,7 @@ struct PhoneLobby: View {
                 .scrollContentBackground(.hidden)
                 .environment(\.defaultMinListRowHeight, Self.recentRow)
                 .frame(height: Self.recentRow * CGFloat(shown.count))
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous))
             }
             .rise(0.1)
         }
@@ -1745,7 +1752,7 @@ struct PhoneLobby: View {
                 HStack(spacing: 12) {
                     Image(systemName: "server.rack").font(.system(size: 16)).foregroundStyle(Theme.muted)
                         .frame(width: 36, height: 36)
-                        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(Theme.ink.opacity(0.08)))
+                        .background(RoundedRectangle(cornerRadius: Theme.Radius.small, style: .continuous).fill(Theme.ink.opacity(0.08)))
                     VStack(alignment: .leading, spacing: 2) {
                         Text(t("Server")).font(.system(size: 16, weight: .semibold))
                         FleetLine(app: app)
@@ -1755,9 +1762,10 @@ struct PhoneLobby: View {
                     Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.muted.opacity(0.6))
                 }
                 .padding(14)
-                .background(RoundedRectangle(cornerRadius: 24, style: .continuous).fill(Theme.surface))
+                .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
+            .buttonStyle(RowPress(radius: Theme.Radius.large))
+            .background(RoundedRectangle(cornerRadius: Theme.Radius.large, style: .continuous).fill(Theme.surface))
             .rise(0.14)
             .transition(Theme.arrive)
         }
@@ -1774,7 +1782,7 @@ struct PhoneLobby: View {
         .frame(maxWidth: .infinity, maxHeight: height == nil ? .infinity : nil)
         .overlay(alignment: .topTrailing) {
             if !columned {
-                DeviceSwitches(app: app, size: 40).padding(12).transition(Theme.arrive)
+                DeviceSwitches(app: app).padding(12).transition(Theme.arrive)
             }
         }
         .overlay(alignment: .bottom) {
@@ -1964,7 +1972,7 @@ struct MeetingSheet: View {
                 CameraStage(app: app, cornerRadius: 20)
                     .aspectRatio(16 / 9, contentMode: .fit)
                     .overlay(alignment: .bottom) {
-                        DeviceSwitches(app: app, size: 38).padding(6).glassSurface(Capsule()).padding(.bottom, 12)
+                        DeviceSwitches(app: app).padding(6).glassSurface(Capsule()).padding(.bottom, 12)
                     }
                 form
                 footer

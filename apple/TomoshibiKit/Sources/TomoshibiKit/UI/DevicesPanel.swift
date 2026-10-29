@@ -51,7 +51,8 @@ struct DevicesPanel: View {
             }
         }
         .padding(16)
-        .glassShell(cornerRadius: 22)
+        // Opaque, as every panel is (Kit `panelSurface`).
+        .panelSurface()
         .animation(Theme.settle, value: lists.microphones)
         .animation(Theme.settle, value: lists.speakers)
         .animation(Theme.settle, value: lists.cameras)
@@ -338,13 +339,16 @@ private struct CloseButton: View {
     @State private var hovering = false
 
     var body: some View {
+        // Thirty-two to the eye and a fingertip to the touch, as every
+        // panel's close is (PanelHeading).
         Button(action: action) {
             Image(systemName: "xmark")
-                .font(.system(size: 10.5, weight: .bold))
+                .font(.system(size: 12, weight: .bold))
                 .foregroundStyle(hovering ? Theme.foreground : Theme.muted)
-                .frame(width: 26, height: 26)
+                .frame(width: 32, height: 32)
                 .background(Circle().fill(Theme.ink.opacity(hovering ? 0.16 : 0.08)))
                 .contentShape(Circle())
+                .fingertip(32)
         }
         .buttonStyle(BarPress())
         .onHover { hovering = $0 }

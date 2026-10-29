@@ -555,9 +555,9 @@ struct MonthCalendar: View {
                         .frame(maxWidth: .infinity)
                 }
             }
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: 4) {
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 7), spacing: Self.rowGap) {
                 ForEach(cells, id: \.self) { cell in
-                    if let cell { dayCell(cell) } else { Color.clear.frame(height: 30) }
+                    if let cell { dayCell(cell) } else { Color.clear.frame(height: Self.dayHeight) }
                 }
             }
             .id(month)
@@ -578,11 +578,31 @@ struct MonthCalendar: View {
         } label: {
             Image(systemName: symbol).font(.system(size: 11, weight: .bold))
         }
-        .buttonStyle(.glassCircle(28))
+        .buttonStyle(.glassCircle(32))
         .disabled(!allowed)
         // Named as Android names them (Calendar.kt): a symbol alone was read
         // out by its English name, or not at all, in every language.
         .accessibilityLabel(months < 0 ? t("Previous month") : t("Next month"))
+    }
+
+    /// A day's row: a finger's height on a touch screen, where the month's
+    /// days were thirty points apart in both directions and a thumb chose
+    /// the day above as often as the day it meant (the web's 44, ui-polish
+    /// 2026-10-29); thirty to a pointer.
+    private static var dayHeight: CGFloat {
+        #if os(iOS)
+        Theme.fingertip
+        #else
+        30
+        #endif
+    }
+
+    private static var rowGap: CGFloat {
+        #if os(iOS)
+        0
+        #else
+        4
+        #endif
     }
 
     private func startOfMonth(_ date: Date) -> Date {
@@ -623,17 +643,18 @@ struct MonthCalendar: View {
             Text("\(calendar.component(.day, from: date))")
                 .font(.system(size: 12.5, weight: chosen || today ? .semibold : .regular).monospacedDigit())
                 .foregroundStyle(chosen ? Theme.tallyForeground : allowed ? Theme.foreground : Theme.faint(0.45))
-                .frame(maxWidth: .infinity, minHeight: 30)
+                .frame(maxWidth: .infinity, minHeight: Self.dayHeight)
                 .background {
                     if chosen {
-                        Circle().fill(Theme.tally).frame(width: 30, height: 30).transition(.scale.combined(with: .opacity))
+                        Circle().fill(Theme.tally).frame(width: 32, height: 32).transition(.scale.combined(with: .opacity))
                     } else if today {
-                        Circle().stroke(Theme.tally.opacity(0.7), lineWidth: 1).frame(width: 30, height: 30)
+                        Circle().stroke(Theme.tally.opacity(0.7), lineWidth: 1).frame(width: 32, height: 32)
+                            .transition(.opacity)
                     }
                 }
                 .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(Pressable())
         .disabled(!allowed)
         .accessibilityLabel(date.formatted(date: .complete, time: .omitted))
         .accessibilityAddTraits(chosen ? .isSelected : [])

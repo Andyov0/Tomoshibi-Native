@@ -24,7 +24,8 @@ struct SoundPanelView: View {
                     ScrollView { rows }.scrollIndicators(.hidden)
                 }
             }
-            .glassPane(cornerRadius: 22)
+            // Opaque, as every panel is (Kit `panelSurface`).
+            .panelSurface()
         }
     }
 

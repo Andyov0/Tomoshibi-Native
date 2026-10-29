@@ -36,11 +36,16 @@ struct SignalBadge: View {
                     }
                 }
                 .padding(.horizontal, detailed ? 11 : 9)
-                .frame(height: 28)
+                // The room's name's height beside it (RoomTitle), and a
+                // fingertip to press: the glass inside the button, so that
+                // the press around it is the button's and not outside a
+                // piece of glass, where a phone's glass takes no touches.
+                .frame(height: 32)
                 .contentShape(Capsule())
+                .glassSurface(Capsule(), interactive: detailed)
+                .fingertip(Theme.fingertip, 32)
             }
-            .buttonStyle(.plain)
-            .glassSurface(Capsule(), interactive: detailed)
+            .buttonStyle(Pressable())
             .accessibilityLabel(title)
             .help(title)
 
@@ -139,7 +144,9 @@ private struct Detail: View {
         // A fixed width: left to itself the row's spacer took the whole of
         // the room's width, and the figures ended up under the side panel.
         .frame(width: 236)
-        .glassSurface(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        // Opaque, as every popover over the call is (Kit `menuSurface`):
+        // figures are read, and through glass the picture ran under them.
+        .menuSurface(cornerRadius: Theme.Radius.medium)
         .onAppear { shown = true }
     }
 
