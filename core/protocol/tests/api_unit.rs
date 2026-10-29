@@ -682,46 +682,6 @@ async fn a_join_reads_every_field_and_ignores_the_ones_it_does_not_know() {
     );
 }
 
-/// How long a join token is good for is the server's own arithmetic, so a
-/// device whose clock is minutes out still keeps the join's token for as long
-/// as the server will take it (rooms.rs `token_lifetime`).
-#[test]
-fn a_join_tokens_lifetime_is_read_off_the_servers_clock() {
-    use base64::Engine;
-    use std::time::Duration;
-    use tomoshibi_protocol::api::token_lifetime;
-
-    let token = |claims: Value| {
-        format!(
-            "e30.{}.c2ln",
-            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(claims.to_string())
-        )
-    };
-
-    // As the control node signs one (iat and nbf both now) and as the media
-    // server's own library does.
-    assert_eq!(
-        token_lifetime(&token(json!({ "exp": 1_800_000_300, "iat": 1_800_000_000, "nbf": 1_800_000_000, "jti": "p" }))),
-        Some(Duration::from_secs(300))
-    );
-    assert_eq!(
-        token_lifetime(&token(json!({ "exp": 1_800_000_600, "nbf": 1_800_000_000 }))),
-        Some(Duration::from_secs(600))
-    );
-    for nonsense in [
-        token(json!({ "iat": 1_800_000_000 })),
-        token(json!({ "exp": 1_800_000_000 })),
-        token(json!({ "exp": 1_800_000_000, "iat": 1_800_000_000 })),
-        token(json!({ "exp": 1_700_000_000, "iat": 1_800_000_000 })),
-        token(json!({ "exp": "soon", "iat": 1_800_000_000 })),
-        s("not a token"),
-        s("a.%%%.b"),
-        s(""),
-    ] {
-        assert_eq!(token_lifetime(&nonsense), None, "{nonsense}");
-    }
-}
-
 /// An identity a passphrase or an account keeps comes with no proof, and nor
 /// does any answer from a server older than proofs; an empty one is none.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

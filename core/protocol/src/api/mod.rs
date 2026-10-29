@@ -70,7 +70,7 @@ pub use remote::{
 pub use rooms::{
     knock_ask_every_ms, knock_give_up_after_ms, DeploymentInfo, DoorAnswer, DoorState,
     HostStanding, InviteInfo, JoinForward, JoinGrant, Joining, KnockTicket, Knocker, MadeInvite,
-    Opening, token_lifetime,
+    Opening,
 };
 pub use updates::{
     update_key, update_notes, version_is_newer, AppBuild, UpdateCheck, UpdateDownload,

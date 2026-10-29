@@ -7,9 +7,10 @@
 //! the first second. And an administrator runs somebody else's room there only
 //! by a session, never by the passphrase typed into the join form. Here every
 //! role sits in one real call and tries every host endpoint with what
-//! `Call::token` gives, and with what the media server holds, against
-//! whichever deployment is running: one handing out guest proofs is taken to
-//! have both changes (they shipped together), one without them neither.
+//! `Call::token` gives, which is always the join's own token, and with what the
+//! media server holds, against whichever deployment is running: one handing
+//! out guest proofs is taken to have both changes (they shipped together), one
+//! without them neither.
 //!
 //! Against a local deployment, `TOMOSHIBI_LOCAL_DEPLOYMENT` or
 //! http://127.0.0.1:8080, with rooms opened and joined by anyone, and two of
@@ -17,8 +18,13 @@
 //! (`TOMOSHIBI_TEST_ADMIN_PASSPHRASE`) and one signed in to its account
 //! (`TOMOSHIBI_TEST_ADMIN_ACCOUNT`, `TOMOSHIBI_TEST_ADMIN_ACCOUNT_PASSPHRASE`).
 //! Skipped, saying so, without them. Only a loopback address is ever used.
-//! `TOMOSHIBI_TEST_LATE=1` waits until the join's token has been given up
-//! (the deployment's `token_ttl`, five minutes by default) and asks again.
+//! `TOMOSHIBI_TEST_LATE=1` waits until every join token is past its expiry
+//! and the verifier's minute of leeway (the deployment's `token_ttl`, five
+//! minutes by default) and asks again, still with the join's own token. A
+//! deployment with the proofs keeps taking its own token after its expiry
+//! while that identity is in the room; one that does not yet says so with
+//! `TOMOSHIBI_TEST_EXPIRED_TOKEN=refused`. One without the proofs refuses an
+//! expired token, as it always did.
 
 use std::{
     sync::Arc,
@@ -136,18 +142,28 @@ async fn ask_everything(seat: &Seat, room: &str, bearer: &str, victim: &Seat) ->
     ]
 }
 
+/// Whether the deployment takes this token as one it signed, for this
+/// request: the media server's only where there are no proofs (it is valid,
+/// and refreshed every five minutes); the join's own while it is good, and
+/// past its expiry where the deployment keeps a participant's own token.
+fn accepted(hardened: bool, media_token: bool, late: bool, expired_kept: bool) -> bool {
+    match (media_token, late) {
+        (true, _) => !hardened,
+        (false, false) => true,
+        (false, true) => hardened && expired_kept,
+    }
+}
+
 /// What each role may do with each token, on a deployment with the proof
 /// (`hardened`) and on one without. `standing` is the panel's question, which
-/// only a token the deployment signed can ask; the rest are the controls.
-fn expected(hardened: bool, role: &str, media_token: bool, late: bool) -> (Option<(bool, bool)>, bool) {
-    // A token the deployment accepts as its own, for this request.
-    let vouched = !hardened || (!media_token && !late);
+/// only a token the deployment accepts can ask; the rest are the controls.
+fn expected(hardened: bool, role: &str, vouched: bool) -> (Option<(bool, bool)>, bool) {
     match (role, hardened) {
         ("host", _) => (vouched.then_some((true, false)), vouched),
         ("guest", _) => (vouched.then_some((false, false)), false),
         // Only a passphrase: an administrator by token on the old deployment,
         // nobody's host on the new one.
-        ("passphrase admin", false) => (Some((true, true)), true),
+        ("passphrase admin", false) => (vouched.then_some((true, true)), vouched),
         ("passphrase admin", true) => (vouched.then_some((false, false)), false),
         // Signed in: the session settles it whatever the token, though the
         // panel's question still needs one the deployment signed.
@@ -156,8 +172,8 @@ fn expected(hardened: bool, role: &str, media_token: bool, late: bool) -> (Optio
     }
 }
 
-fn check(hardened: bool, seat: &Seat, media_token: bool, late: bool, answers: &[(&'static str, String)]) -> Vec<String> {
-    let (standing, controls) = expected(hardened, seat.role, media_token, late);
+fn check(hardened: bool, seat: &Seat, media_token: bool, vouched: bool, answers: &[(&'static str, String)]) -> Vec<String> {
+    let (standing, controls) = expected(hardened, seat.role, vouched);
     let token = if media_token { "media server's token" } else { "Call::token" };
     let mut wrong = Vec::new();
     for (what, answer) in answers {
@@ -177,6 +193,35 @@ fn check(hardened: bool, seat: &Seat, media_token: bool, late: bool, answers: &[
     wrong
 }
 
+/// A token's claims, read without checking its signature.
+fn claims(token: &str) -> serde_json::Value {
+    let middle = token.split('.').nth(1).expect("a JWT");
+    let mut bits = 0u32;
+    let mut held = 0;
+    let mut bytes = Vec::new();
+    for c in middle.bytes() {
+        let value = match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'-' => 62,
+            b'_' => 63,
+            _ => continue,
+        };
+        bits = (bits << 6) | u32::from(value);
+        held += 6;
+        if held >= 8 {
+            held -= 8;
+            bytes.push((bits >> held) as u8);
+        }
+    }
+    serde_json::from_slice(&bytes).expect("claims")
+}
+
+fn now_secs() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64
+}
+
 async fn wait_for(what: &str, limit: Duration, mut done: impl FnMut() -> bool) {
     let deadline = Instant::now() + limit;
     while !done() {
@@ -191,6 +236,7 @@ async fn every_role_can_do_what_the_deployment_lets_it_with_the_token_the_apps_s
     let base = setting.base.as_str();
     let room = format!("roles-{}", std::process::id());
     let late = std::env::var("TOMOSHIBI_TEST_LATE").is_ok_and(|value| value == "1");
+    let expired_kept = std::env::var("TOMOSHIBI_TEST_EXPIRED_TOKEN").map_or(true, |value| value != "refused");
 
     // The host first: a passphrase opening a room nobody has used is its host.
     let host_passphrase = format!("host-roles {}", tomoshibi_protocol::identity::generate_room_name());
@@ -211,7 +257,11 @@ async fn every_role_can_do_what_the_deployment_lets_it_with_the_token_the_apps_s
     })
     .await;
     for seat in seats {
-        assert_eq!(seat.call.token(), seat.joined_with, "{}: the join's own token, while it is good", seat.role);
+        assert_eq!(seat.call.token(), seat.joined_with, "{}: the join's own token", seat.role);
+        // Signed with the deployment's proof, where it has them.
+        let proof = claims(&seat.call.token())["jti"].as_str().unwrap_or_default().to_owned();
+        assert_eq!(!proof.is_empty(), hardened, "{}: the proof in the token's JWT ID", seat.role);
+        assert!(claims(&seat.call.media_token())["jti"].as_str().unwrap_or_default().is_empty());
     }
 
     let mut wrong = Vec::new();
@@ -226,7 +276,8 @@ async fn every_role_can_do_what_the_deployment_lets_it_with_the_token_the_apps_s
                     let victim = self::seat(&base, &room, "guest", "", None).await;
                     let bearer = if media_token { seat.call.media_token() } else { seat.call.token() };
                     let answers = ask_everything(seat, &room, &bearer, &victim).await;
-                    wrong.extend(check(hardened, seat, media_token, late, &answers));
+                    let vouched = accepted(hardened, media_token, late, expired_kept);
+                    wrong.extend(check(hardened, seat, media_token, vouched, &answers));
                     victims.push(victim);
                 }
             }
@@ -239,23 +290,24 @@ async fn every_role_can_do_what_the_deployment_lets_it_with_the_token_the_apps_s
     victims.extend(left);
 
     if late {
-        // Until the join's token is given up for the media server's, which
-        // the deployment's token_ttl decides.
-        println!("waiting for the join's token to be given up");
-        wait_for("the join's token to be given up", Duration::from_secs(15 * 60), || {
-            seats.iter().all(|seat| seat.call.token() != seat.joined_with)
-        })
-        .await;
+        // Until every join token is past its expiry and the verifier's
+        // minute of leeway, which the deployment's token_ttl decides.
+        let expired = seats.iter().map(|seat| claims(&seat.joined_with)["exp"].as_i64().expect("exp")).max().unwrap();
+        println!("waiting until every join token has expired");
+        wait_for("every join token to expire", Duration::from_secs(15 * 60), || now_secs() > expired + 65).await;
+        for seat in seats {
+            assert_eq!(seat.call.token(), seat.joined_with, "{}: still the join's own token, expired", seat.role);
+        }
         let (said_wrong, left) = round(true).await;
         wrong.extend(said_wrong);
         victims.extend(left);
     }
 
-    // The host ends the meeting, with the join's token on a deployment with
-    // the proof only while it is good.
+    // The host ends the meeting with the join's token, which the deployment
+    // takes whenever it took the host's other requests.
     let closed = said(host.deployment.clone().dissolve(room.clone(), host.call.token()).await);
     println!("{:>16} | {:<20} | {:<8} | {closed}", "host", "Call::token", "close");
-    let should_close = !(hardened && late);
+    let should_close = accepted(hardened, false, late, expired_kept);
     if (closed == "ok") != should_close {
         wrong.push(format!("host: close answered {closed}"));
     }
