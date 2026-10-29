@@ -727,19 +727,13 @@ internal sealed class LobbyScreen : Screen
 
     /// <summary>
     /// What the bar over the narrow lobby lies on once the list has scrolled
-    /// under it: black fading out down its height in the dark scheme; in the
-    /// light one the ground itself, flat and nearly opaque, since the day mode
-    /// has no gradients and a black fade over a light list was a smudge.
+    /// under it: the narrow lobby's own ground, flat and nearly opaque, black
+    /// at night and the light scheme's grey by day. It was a black fade down
+    /// its height at night, and the owner's rule is no gradients anywhere
+    /// (2026-10-29); the list now ends at the bar's straight foot, as it
+    /// ends at the join bar's band.
     /// </summary>
-    private static Brush BarGround()
-    {
-        if (Ink.Light) return Ink.BackgroundAt(0.94f);
-        var fade = new LinearGradientBrush { StartPoint = new Windows.Foundation.Point(0.5, 0), EndPoint = new Windows.Foundation.Point(0.5, 1) };
-        fade.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.Black.WithAlpha(0.92f)), Offset = 0 });
-        fade.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.Black.WithAlpha(0.6f)), Offset = 0.6 });
-        fade.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.Black.WithAlpha(0f)), Offset = 1 });
-        return fade;
-    }
+    private static Brush BarGround() => Ink.Light ? Ink.BackgroundAt(0.94f) : Ink.Black(0.94f);
 
     /// <summary>The picture of yourself with the way to start and to schedule (Lobby.kt <c>Hero</c>).</summary>
     private Grid Hero()

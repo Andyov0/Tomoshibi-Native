@@ -126,7 +126,9 @@ internal sealed class Overlay : Grid
             HorizontalScrollMode = ScrollMode.Disabled,
             MaxHeight = Math.Max(120, ActualHeight - 20),
         };
-        var glass = K.Floating(scroller, 18);
+        // Opaque, at the menus' corner, whose rows' corners sit inside it
+        // (Sizing.Menu): fourteen where it was eighteen.
+        var glass = K.Floating(scroller, Sizing.Menu.Radius);
         glass.Width = limit;
         // In the scheme of the screen it opens over, for the Windows controls
         // inside as well as for the kit's colours.

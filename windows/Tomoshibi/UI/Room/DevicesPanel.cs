@@ -41,7 +41,7 @@ internal sealed class DevicesPanel : Grid
         var head = K.Line(10, K.Flex(K.Text(T("Devices"), 15, K.Semibold).At(HorizontalAlignment.Left, VerticalAlignment.Center)), K.Fixed(CloseButton(close)));
         _sections.Children.Add(head);
         _sections.Padding = new Thickness(16);
-        Children.Add(K.Glass(new ScrollViewer { Content = _sections, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, 22));
+        Children.Add(K.PanelSurface(new ScrollViewer { Content = _sections, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, 22));
 
         _microphones = new DeviceRows("mic", "devices.microphone", async id => await _call.UseMicrophone(id));
         var original = Fields.Switch(_call.OriginalSound, async on => await _call.SetOriginalSound(on), T("Original sound"));
@@ -114,7 +114,7 @@ internal sealed class DevicesPanel : Grid
 
     public static Tap CloseButton(Action close)
     {
-        var tap = Tap.Icon("xmark", T("Close"), Look.Plain, 26, 10.5);
+        var tap = Tap.Icon("xmark", T("Close"), Look.Plain, Sizing.Close, 12);
         tap.Click += (_, _) => close();
         return tap;
     }

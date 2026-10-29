@@ -103,8 +103,8 @@ internal static class Frames
 {
     /// <summary>
     /// The pane a form sits on over the evening room: the surface grey let
-    /// through by the room behind it, a rim of light along its top; in the
-    /// light scheme the surface's white with the palette's border. No
+    /// through by the room behind it, with the palette's border as its rim
+    /// (flat, K.Rim); in the light scheme the surface's white. No
     /// material: it is content, and the room behind it is a gradient a blur
     /// would not change.
     /// </summary>
@@ -115,7 +115,7 @@ internal static class Frames
             Child = child,
             CornerRadius = new CornerRadius(radius),
             Background = Ink.Light ? Ink.Surface : Ink.Brush(new Shade(0.13f, 0.14f, 0.16f, 0.62f)),
-            BorderBrush = K.Rim(0.20f, 0.06f),
+            BorderBrush = K.Rim(),
             BorderThickness = new Thickness(1),
             Padding = padding,
         };

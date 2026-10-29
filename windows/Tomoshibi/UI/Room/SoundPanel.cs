@@ -38,7 +38,7 @@ internal sealed class SoundPanel : Grid
         var body = K.Column(8, _nobody, _people);
         body.Padding = new Thickness(10);
         var column = K.Column(0, Panels.Heading(T("Sound"), "speaker.wave.2.fill", T("Close sound"), close), Panels.Rule(), body);
-        Children.Add(K.Glass(new ScrollViewer { Content = column, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, 22));
+        Children.Add(K.PanelSurface(new ScrollViewer { Content = column, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, 22));
         Hearing.Shared.Changed += Update;
         Unloaded += (_, _) => Hearing.Shared.Changed -= Update;
         Update();

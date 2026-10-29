@@ -36,7 +36,7 @@ internal sealed class HostPanel : Grid
         _feature = feature;
         _body.Padding = new Thickness(12);
         var column = K.Column(0, Heading(close), Panels.Rule(), _body);
-        Children.Add(K.Glass(new ScrollViewer { Content = column, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, 22));
+        Children.Add(K.PanelSurface(new ScrollViewer { Content = column, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, 22));
         Loaded += (_, _) =>
         {
             feature.PanelOpen = true;
@@ -51,7 +51,7 @@ internal sealed class HostPanel : Grid
     private static Grid Heading(Action close)
     {
         var line = Panels.Heading(T("Running this room"), "crown.fill", T("Close"), close);
-        // The crown in the tally, as the bar's button is.
+        // The crown in the tally's ink: the room is this person's to run.
         if (line.Children[0] is Border tile) tile.Child = K.Symbol("crown.fill", 12, Ink.TallyText);
         return line;
     }

@@ -174,11 +174,12 @@ internal static class K
 
     /// <summary>
     /// The control layer's material: in-app acrylic over the call or the
-    /// evening room behind it, tinted with the apps' surface grey, a rim of
-    /// light along its top edge fading down, and a shadow under it. Only
-    /// the control layer wears it (the bar, the sidebar, the popovers and
-    /// the pills over the pictures); what is inside it is plain, never
-    /// material on material.
+    /// evening room behind it, tinted with the apps' surface grey, a
+    /// hairline rim, and a shadow under it. Only the controls floating over
+    /// the call or the room wear it (the bar, the sidebar, the stage's
+    /// buttons, the pills over the pictures); what is read (a menu, a panel,
+    /// a dialog) is opaque (<see cref="Floating"/>, <see cref="PanelSurface"/>),
+    /// and what is inside the glass is plain, never material on material.
     /// </summary>
     public static Border Glass(UIElement? child = null, double radius = 22, Thickness? padding = null, bool shadow = true)
     {
@@ -187,7 +188,7 @@ internal static class K
             Child = child,
             CornerRadius = new CornerRadius(radius),
             Background = Acrylic(),
-            BorderBrush = Rim(0.26f, 0.07f),
+            BorderBrush = Rim(),
             BorderThickness = new Thickness(1),
             Padding = padding ?? new Thickness(0),
         };
@@ -226,33 +227,30 @@ internal static class K
     }
 
     /// <summary>
-    /// The edge of a glass or a pane: in the dark scheme a rim of light along
-    /// its top fading down, from <paramref name="top"/> to <paramref name="foot"/>
-    /// of white; in the light one the palette's border, flat, since a light
-    /// surface is not lit from above against a light ground and the day mode
-    /// has no gradients.
+    /// The edge of a glass or a pane: the palette's border, the foreground
+    /// at a tenth, flat in either scheme, as the web's glass draws it. At
+    /// night it was a rim of light along the top fading down (white at 26
+    /// per cent to 7), a gradient however thin, and the owner's rule is that
+    /// there are none (2026-10-29).
     /// </summary>
-    public static Brush Rim(float top, float foot)
-    {
-        if (Ink.Light) return Ink.Border;
-        var rim = new LinearGradientBrush { StartPoint = new Windows.Foundation.Point(0.5, 0), EndPoint = new Windows.Foundation.Point(0.5, 1) };
-        rim.GradientStops.Add(new GradientStop { Color = Ink.Of(Basics.Shade.White.WithAlpha(top)), Offset = 0 });
-        rim.GradientStops.Add(new GradientStop { Color = Ink.Of(Basics.Shade.White.WithAlpha(foot)), Offset = 1 });
-        return rim;
-    }
+    public static Brush Rim() => Ink.Border;
 
     /// <summary>
-    /// What floats over the page (a menu, a popover, a toast): the glass at
-    /// night; in the light scheme the surface's white, its border and its
-    /// shadow, which read as above the page where a light acrylic over a
-    /// light page did not (daylight palette, addendum 2).
+    /// What floats over the page or the call to be read (a menu, a popover,
+    /// a toast): the surface, opaque in either scheme, with the hairline and
+    /// a shadow. It was the glass at night, and words over a moving picture
+    /// change their contrast while they are being read (the web's
+    /// ui-polish: menus, dialogs and panels are opaque).
     /// </summary>
     public static Border Floating(UIElement? child = null, double radius = 22, Thickness? padding = null)
     {
-        var glass = Glass(child, radius, padding);
-        if (Ink.Light) glass.Background = Ink.Surface;
-        return glass;
+        var card = Glass(child, radius, padding);
+        card.Background = Ink.Surface;
+        return card;
     }
+
+    /// <summary>A panel beside the call (the messages, the sound, the devices, the host's, watching together and the music): opaque, as <see cref="Floating"/>.</summary>
+    public static Border PanelSurface(UIElement? child = null, double radius = 22, Thickness? padding = null) => Floating(child, radius, padding);
 
     /// <summary>The acrylic itself, for a surface that is shaped some other way: tinted with the scheme's surface, which the system's material lightens or darkens round.</summary>
     public static AcrylicBrush Acrylic() => new()
