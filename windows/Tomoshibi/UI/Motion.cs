@@ -23,7 +23,8 @@ internal static class Motion
 {
     public static readonly TimeSpan Settle = TimeSpan.FromMilliseconds(Theme.SettleMs);
     public static readonly TimeSpan Leave = TimeSpan.FromMilliseconds(Theme.LeaveMs);
-    public static readonly TimeSpan Hover = TimeSpan.FromMilliseconds(120);
+    /// <summary>A hover or a press, the colour and the scale together: 140 ms, the web's <c>pressable</c>.</summary>
+    public static readonly TimeSpan Hover = TimeSpan.FromMilliseconds(140);
 
     private static Visual VisualOf(UIElement element) => ElementCompositionPreview.GetElementVisual(element);
 

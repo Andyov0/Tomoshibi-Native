@@ -11,7 +11,11 @@ using static Tomoshibi.Basics.Words;
 
 namespace Tomoshibi.UI.Room;
 
-/// <summary>Pieces the call's panels share (kit/Notices.kt <c>PanelHeading</c>, <c>PanelRule</c>).</summary>
+/// <summary>
+/// Pieces the call's panels share (kit/Notices.kt <c>PanelHeading</c>,
+/// <c>PanelRule</c>). The panels are opaque (K.PanelSurface), and their close
+/// mark is 32 (Sizing.Close), where 26 was hard to hit.
+/// </summary>
 internal static class Panels
 {
     public static Grid Heading(string title, string symbol, string closeLabel, Action close)
@@ -24,7 +28,7 @@ internal static class Panels
             Background = Ink.Wash(0.09f),
             Child = K.Symbol(symbol, 12, Ink.ForegroundAt(0.85f)),
         };
-        var closeTap = Tap.Icon("xmark", closeLabel, Look.Clear, 26, 11);
+        var closeTap = Tap.Icon("xmark", closeLabel, Look.Clear, Sizing.Close, 12);
         closeTap.Click += (_, _) => close();
         var line = K.Line(9, K.Fixed(tile), K.Flex(K.Text(title, 14, K.Semibold, lines: 1).At(HorizontalAlignment.Left, VerticalAlignment.Center)), K.Fixed(closeTap));
         line.Padding = new Thickness(14, 10, 10, 10);
@@ -163,7 +167,7 @@ internal sealed class ChatPanel : Grid
             _empty,
             _scroller,
             K.Column(0, composer, _under).Pad(10, 4, 10, 10));
-        Children.Add(K.Glass(column, 22));
+        Children.Add(K.PanelSurface(column, 22));
         Update();
         // The box takes the keyboard a moment after the panel arrives.
         Loaded += async (_, _) =>

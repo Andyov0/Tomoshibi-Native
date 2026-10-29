@@ -74,9 +74,13 @@ public static class Theme
 
     /// <summary>
     /// The light palette (#F2F2F7, #FFFFFF, #E5E5EA; black at 10 per cent
-    /// for the border; #1C1C1E and rgb(60, 60, 67) at 60 per cent for the
+    /// for the border; #1C1C1E and rgb(60, 60, 67) at 75 per cent for the
     /// words; #34C759 and #FF3B30, and #217E38 and #D70015 as words), the
-    /// same numbers on every platform.
+    /// same numbers on every platform. The muted words were Apple's 60 per
+    /// cent, which on the light ground and its white cards read at 3.1 to
+    /// 3.4:1, under the 4.5:1 small print needs; at 75 they reach it (the
+    /// web's ui-polish, 2026-10-29). The dark palette's muted grey already
+    /// reads at over 6:1 and is as it was.
     /// </summary>
     public static readonly Palette Light = new(
         Background: Hex(0xF2F2F7),
@@ -84,7 +88,7 @@ public static class Theme
         SurfaceHigh: Hex(0xE5E5EA),
         Border: Shade.Black.WithAlpha(0.10f),
         Foreground: Hex(0x1C1C1E),
-        Muted: Hex(0x3C3C43, 0.6f),
+        Muted: Hex(0x3C3C43, 0.75f),
         Good: Hex(0x34C759),
         Danger: Hex(0xFF3B30),
         DangerForeground: Shade.White,

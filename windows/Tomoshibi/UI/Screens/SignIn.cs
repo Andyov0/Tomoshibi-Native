@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml.Media;
 using Tomoshibi.Model;
 using Tomoshibi.UI.Kit;
 using static Tomoshibi.Basics.Words;
+using Look = Tomoshibi.Basics.Look;
 
 namespace Tomoshibi.UI.Screens;
 

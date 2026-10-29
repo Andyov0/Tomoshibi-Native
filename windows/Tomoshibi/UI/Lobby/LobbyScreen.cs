@@ -498,7 +498,9 @@ internal sealed class LobbyScreen : Screen
         start.Tip(T("Start a meeting"));
         start.HorizontalAlignment = HorizontalAlignment.Stretch;
         start.Click += (_, _) => OpenSheet(start: true, "");
-        var join = Tap.Words(T("Join"), "link", Look.Plain, 36);
+        // A way in, as the web's became: an arrow going in at a door, where
+        // a link said "copy this" more than "come in".
+        var join = Tap.Words(T("Join"), "arrow.right.to.line", Look.Plain, 36);
         join.Tip(T("Join a meeting"));
         join.HorizontalAlignment = HorizontalAlignment.Stretch;
         join.Click += (_, _) => OpenSheet(start: false, "");
@@ -698,7 +700,7 @@ internal sealed class LobbyScreen : Screen
         // The bar over the top, whose title comes in once the large one has scrolled away.
         var barTitle = K.Text("Tomoshibi", 17, K.Semibold, lines: 1).At(HorizontalAlignment.Center, VerticalAlignment.Center);
         Motion.Hide(barTitle);
-        var settings = new Tap(Faces.AccountAvatar(_account.Name, AvatarAddress, 30), Look.Plain, 40, circle: true, label: T("Settings"));
+        var settings = new Tap(Faces.AccountAvatar(_account.Name, AvatarAddress, Shared.Corner - 4), Look.Plain, Shared.Corner, circle: true, label: T("Settings"));
         settings.Click += (_, _) => OpenSettings();
         var barGround = new Border { Opacity = 0 };
         barGround.Background = BarGround();
@@ -727,19 +729,13 @@ internal sealed class LobbyScreen : Screen
 
     /// <summary>
     /// What the bar over the narrow lobby lies on once the list has scrolled
-    /// under it: black fading out down its height in the dark scheme; in the
-    /// light one the ground itself, flat and nearly opaque, since the day mode
-    /// has no gradients and a black fade over a light list was a smudge.
+    /// under it: the narrow lobby's own ground, flat and nearly opaque, black
+    /// at night and the light scheme's grey by day. It was a black fade down
+    /// its height at night, and the owner's rule is no gradients anywhere
+    /// (2026-10-29); the list now ends at the bar's straight foot, as it
+    /// ends at the join bar's band.
     /// </summary>
-    private static Brush BarGround()
-    {
-        if (Ink.Light) return Ink.BackgroundAt(0.94f);
-        var fade = new LinearGradientBrush { StartPoint = new Windows.Foundation.Point(0.5, 0), EndPoint = new Windows.Foundation.Point(0.5, 1) };
-        fade.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.Black.WithAlpha(0.92f)), Offset = 0 });
-        fade.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.Black.WithAlpha(0.6f)), Offset = 0.6 });
-        fade.GradientStops.Add(new GradientStop { Color = Ink.Of(Shade.Black.WithAlpha(0f)), Offset = 1 });
-        return fade;
-    }
+    private static Brush BarGround() => Ink.Light ? Ink.BackgroundAt(0.94f) : Ink.Black(0.94f);
 
     /// <summary>The picture of yourself with the way to start and to schedule (Lobby.kt <c>Hero</c>).</summary>
     private Grid Hero()
@@ -753,7 +749,7 @@ internal sealed class LobbyScreen : Screen
         var actions = K.Line(8, K.Flex(start), K.Fixed(Shared.OnGlass(schedule)));
         actions.VerticalAlignment = VerticalAlignment.Bottom;
         actions.Margin = new Thickness(12);
-        var switches = Shared.DeviceSwitches(App, 40, onPicture: true);
+        var switches = Shared.DeviceSwitches(App, onPicture: true);
         switches.HorizontalAlignment = HorizontalAlignment.Right;
         switches.VerticalAlignment = VerticalAlignment.Top;
         switches.Margin = new Thickness(12);
@@ -785,7 +781,7 @@ internal sealed class LobbyScreen : Screen
         var header = trailing == null
             ? (UIElement)K.Text(title, 20, K.Bold).Pad(6, 0, 6, 0)
             : K.Line(0, K.Flex(K.Text(title, 20, K.Bold).At(HorizontalAlignment.Left, VerticalAlignment.Center)), K.Fixed(trailing)).Pad(6, 0, 6, 0);
-        var card = new Border { CornerRadius = new CornerRadius(24), Background = Ink.Surface, Child = K.Column(0, rows) };
+        var card = new Border { CornerRadius = new CornerRadius(Sizing.Lobby.CardRadius), Background = Ink.Surface, Child = K.Column(0, rows) };
         return K.Column(8, header, card);
     }
 
@@ -855,7 +851,7 @@ internal sealed class LobbyScreen : Screen
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            CornerRadius = new CornerRadius(24),
+            CornerRadius = new CornerRadius(Sizing.Lobby.CardRadius),
             Resting = Ink.Palette.Surface,
         };
         tap.Named(T("Server"));

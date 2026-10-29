@@ -16,6 +16,14 @@ internal static class Shared
     /// <summary>The window's title bar, which the content runs under: what sits at the top keeps clear of it and of the caption buttons.</summary>
     public const double TitleBar = 32;
 
+    /// <summary>
+    /// A button in a screen's top corner (the language, the server, the
+    /// account) inside the glass it wears: one height for all of them, 32
+    /// drawn with the glass's hairline, where they were 36, 38 and 42
+    /// (Sizing.Lobby.CornerButton).
+    /// </summary>
+    public const double Corner = Sizing.Lobby.CornerButton - 2;
+
     /// <summary>A control over the content wearing the control layer's material: acrylic behind a clear button.</summary>
     public static Border OnGlass(Tap tap, double? radius = null)
     {
@@ -34,7 +42,9 @@ internal static class Shared
     /// </summary>
     public static Border LanguageMenu()
     {
-        var tap = Tap.Icon("globe", T("Language"), size: 36, glyph: 14);
+        // The corner's height drawn, the glass's hairline round it included
+        // (Shared.Corner), as the lobby's other corner buttons are.
+        var tap = Tap.Icon("globe", T("Language"), size: Corner, glyph: 13);
         tap.Click += (_, _) => Overlay.Current?.Toggle("language", tap, () =>
         {
             var words = Localization.Shared;
@@ -254,24 +264,30 @@ internal static class Shared
 
     /// <summary>
     /// The microphone and the camera a join starts with (Pieces.kt
-    /// <c>DeviceSwitches</c>): red when off, and remembered across launches.
+    /// <c>DeviceSwitches</c>), remembered across launches: off, a plate of
+    /// the foreground with the symbol in the page's colour, as the call's bar
+    /// draws them, where they were red here and grey there, one switch drawn
+    /// two ways a screen apart (the owner, 2026-10-29: red is for leaving).
     /// Laid straight on the picture of yourself (the narrow lobby's), they
-    /// wear the picture's look while the camera is on and fills it, and the
+    /// wear the picture's looks while the camera is on and fills it, and the
     /// scheme's own while it is off and the ground shows.
     /// </summary>
-    public static StackPanel DeviceSwitches(AppModel app, double size = 44, Look look = Look.Plain, bool onPicture = false)
+    public static StackPanel DeviceSwitches(AppModel app, double size = Sizing.Lobby.DeviceSwitch, Look look = Look.Plain, bool onPicture = false)
     {
         Tap? microphone = null, camera = null;
         void Paint()
         {
             var mic = app.StartWithMicrophone;
             var cam = app.StartWithCamera;
-            var onLook = onPicture && cam ? Look.Picture : look;
-            microphone!.Content = K.Symbol(mic ? "mic.fill" : "mic.slash.fill", size * 0.40, Tap.InkFor(mic ? onLook : Look.Destructive));
-            microphone.Look = mic ? onLook : Look.Destructive;
+            var picture = onPicture && cam;
+            var onLook = picture ? Look.Picture : look;
+            var offLook = picture ? Look.OffOnPicture : Look.Off;
+            var glyph = Sizing.Icon((float)size);
+            microphone!.Look = mic ? onLook : offLook;
+            microphone.Content = K.Symbol(mic ? "mic.fill" : "mic.slash.fill", glyph, Tap.InkFor(microphone.Look));
             microphone.Tip(mic ? T("Mute microphone") : T("Unmute microphone"));
-            camera!.Content = K.Symbol(cam ? "video.fill" : "video.slash.fill", size * 0.38, Tap.InkFor(cam ? onLook : Look.Destructive));
-            camera.Look = cam ? onLook : Look.Destructive;
+            camera!.Look = cam ? onLook : offLook;
+            camera.Content = K.Symbol(cam ? "video.fill" : "video.slash.fill", glyph, Tap.InkFor(camera.Look));
             camera.Tip(cam ? T("Turn camera off") : T("Turn camera on"));
         }
         microphone = new Tap(new Grid(), look, size, circle: true);
@@ -489,7 +505,7 @@ internal static class Shared
         if (lobby.Measured == null) _ = lobby.Measure();
         var row = K.Row(6);
         row.VerticalAlignment = VerticalAlignment.Center;
-        var tap = new Tap(row, Look.Plain, compact ? 30 : 34, padding: compact ? 12 : 14);
+        var tap = new Tap(row, Look.Plain, compact ? 30 : Corner, padding: compact ? 12 : 14);
         void Paint()
         {
             row.Children.Clear();

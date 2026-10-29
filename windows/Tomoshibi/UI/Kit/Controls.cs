@@ -12,20 +12,21 @@ internal static class Menu
 {
     public enum Role { Normal, Prominent, Destructive }
 
-    /// <summary>A column of items, six in from the edge.</summary>
+    /// <summary>A column of items, in from the menu's edge by the difference of the two corners (Sizing.Menu).</summary>
     public static StackPanel Card(params UIElement[] items)
     {
         var column = K.Column(2, items);
-        column.Padding = new Thickness(6);
+        column.Padding = new Thickness(Sizing.Menu.Inset);
         return column;
     }
 
     /// <summary>
     /// One choice: an optional symbol, its title and a line under it, and a
     /// tick when it is the one chosen. Lit under the pointer; a Windows
-    /// button underneath, so the keyboard reaches it.
+    /// button underneath, so the keyboard reaches it. 32 high at least, or
+    /// 44 for the answers to a question (<paramref name="answer"/>).
     /// </summary>
-    public static Tap Item(string title, Action act, string? symbol = null, string? detail = null, bool check = false, Role role = Role.Normal, bool enabled = true, bool busy = false)
+    public static Tap Item(string title, Action act, string? symbol = null, string? detail = null, bool check = false, Role role = Role.Normal, bool enabled = true, bool busy = false, bool answer = false)
     {
         var tint = role switch
         {
@@ -42,16 +43,17 @@ internal static class Menu
         else if (check) parts.Add(K.Fixed(K.Symbol("checkmark", 11.5, Ink.TallyText).Pad(8, 0, 0, 0)));
         var line = K.Line(10, parts.ToArray());
         line.VerticalAlignment = VerticalAlignment.Center;
-        var tap = new Tap(line, Look.Clear, height: 34, padding: 10)
+        var least = answer ? Sizing.Menu.AnswerRow : Sizing.Menu.Row;
+        var tap = new Tap(line, Look.Clear, height: least, padding: 10)
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            CornerRadius = new CornerRadius(10),
+            CornerRadius = new CornerRadius(Sizing.Menu.RowRadius),
             IsEnabled = enabled,
         };
         tap.Height = double.NaN;
-        tap.MinHeight = 34;
-        tap.Padding = new Thickness(10, detail != null ? 6 : 7, 10, detail != null ? 6 : 7);
+        tap.MinHeight = least;
+        tap.Padding = new Thickness(10, 6, 10, 6);
         tap.Named(title);
         tap.Click += (_, _) => act();
         return tap;

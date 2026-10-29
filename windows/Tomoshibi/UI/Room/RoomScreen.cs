@@ -81,6 +81,11 @@ internal sealed class RoomScreen : Screen
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _idle;
     private DateTime _lastMoved = DateTime.UtcNow;
     private bool _barShown = true;
+    /// <summary>The other person filling a call of two, whose picture carries the stage's buttons at its foot; null in any other room.</summary>
+    private string? _closeFilling;
+    /// <summary>The screen was filled from a call of two, and filling it pinned the picture: letting it go unpins it, back to the call of two.</summary>
+    private bool _fillUnpins;
+    private Windows.Foundation.Point? _pointer;
 
     public RoomScreen(AppModel app, CallModel call) : base(app)
     {
@@ -115,7 +120,20 @@ internal sealed class RoomScreen : Screen
         // leave. Heard however the event was handled on its way, as the web
         // listens on the window with capture, so a key a control took still
         // counts.
-        AddHandler(PointerMovedEvent, new PointerEventHandler((_, _) => Poke()), true);
+        AddHandler(PointerMovedEvent, new PointerEventHandler((_, e) =>
+        {
+            Poke();
+            Hover(e.GetCurrentPoint(this).Position);
+        }), true);
+        // Gone off the window: no picture has the pointer. Heard from the
+        // pictures' own exits as well, which say nothing here unless the
+        // pointer is at the room's edge or past it (the last place reported
+        // as it leaves can be the edge's own pixel).
+        AddHandler(PointerExitedEvent, new PointerEventHandler((_, e) =>
+        {
+            var at = e.GetCurrentPoint(this).Position;
+            if (at.X <= 1 || at.Y <= 1 || at.X >= ActualWidth - 1 || at.Y >= ActualHeight - 1) Hover(null);
+        }), true);
         AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => Poke()), true);
         AddHandler(PointerWheelChangedEvent, new PointerEventHandler((_, _) => Poke()), true);
         AddHandler(KeyDownEvent, new KeyEventHandler((_, _) => Poke()), true);
@@ -357,6 +375,9 @@ internal sealed class RoomScreen : Screen
         var size = new Size((float)ActualWidth, (float)ActualHeight);
         var room = Planned(ids);
         _page = room.Page;
+        // The planner's call of two (Plan.ForRoom): nothing pinned and two
+        // pictures, the other one filling the room.
+        _closeFilling = _pin.Pinned == null && ids.Count <= Plan.AloneTogether ? ids.FirstOrDefault(i => i != "me/camera") : null;
 
         // Pictures that have gone fade out where they were.
         foreach (var gone in _tiles.Keys.Where(id => !room.Spots.ContainsKey(id)).ToList())
@@ -368,7 +389,7 @@ internal sealed class RoomScreen : Screen
         {
             if (!_tiles.TryGetValue(id, out var tile))
             {
-                tile = new Tile(this, id);
+                tile = new Tile(this, id) { BarOut = _barShown };
                 _tiles[id] = tile;
                 _pictures.Children.Add(tile);
             }
@@ -383,6 +404,23 @@ internal sealed class RoomScreen : Screen
         LayPager(room, size);
         LayPanel(size);
         LiftNames();
+        if (_pointer is { } pointer) Hover(pointer);
+    }
+
+    /// <summary>
+    /// Which picture the pointer is on, worked out from where it is rather
+    /// than from each picture's own enter and leave (which the buttons over
+    /// a picture would raise as well): of the pictures under it the one
+    /// drawn on top (Sizing.Stage.Under). Its stage buttons come out; every
+    /// other picture's go.
+    /// </summary>
+    private void Hover(Windows.Foundation.Point? at)
+    {
+        _pointer = at;
+        var under = at is { } p ? Sizing.Stage.Under(_tiles.Select(t => (t.Key, t.Value.Spot)), (float)p.X, (float)p.Y) : null;
+        // Told to every picture each time (each keeps its own and ignores a
+        // repeat), so that one made since the last move is told too.
+        foreach (var (id, tile) in _tiles) tile.PointerOver = id == under;
     }
 
     /// <summary>
@@ -413,12 +451,19 @@ internal sealed class RoomScreen : Screen
     private void ShowTile(Tile tile, string id, Dictionary<string, Surface> surfaces)
     {
         var onStage = _pin.Pinned == id;
-        var controls = onStage && _barShown ? StageControlsFor(id, surfaces) : null;
+        // On the picture on the stage, at its top corner; on the other person
+        // in a call of two, at the foot (the web's StageControls at="bottom"),
+        // since the top corner there holds one's own picture. Made whether or
+        // not the bar is out; the picture shows them with the pointer on it
+        // while the bar is (Tile.ShowControls).
+        var atFoot = !onStage && id == _closeFilling;
+        var controls = onStage || atFoot ? StageControlsFor(id, surfaces, atFoot) : null;
+        float? controlsFoot = atFoot ? StageFootLift(tile.Spot, Counterpart(id, surfaces) != null) : null;
         if (id == "me/camera")
         {
             tile.Show(T("{name} (you)", ("name", Call.LocalName)), Call.LocalIdentity, Call.LocalName, null, Call.CameraOn, mine: true,
                 speaking: Call.MeSpeaking && Call.MicrophoneOn, muted: !Call.MicrophoneOn, hand: Call.HandUp,
-                selected: onStage, onStage: onStage, filled: _filled, Call.Reactions.Where(r => r.From == Call.LocalIdentity), controls: controls);
+                selected: onStage, onStage: onStage, filled: _filled, Call.Reactions.Where(r => r.From == Call.LocalIdentity), controls: controls, controlsFoot: controlsFoot);
             return;
         }
         if (id == WatchStage)
@@ -428,14 +473,14 @@ internal sealed class RoomScreen : Screen
                 face: new Tile.Face.Drawn("watch", () => _watchStage ??= new WatchStage(_watch, () =>
                 {
                     if (_panel != Panel.Watch) Toggle(Panel.Watch);
-                })), controls: controls);
+                })), controls: controls, controlsFoot: controlsFoot);
             return;
         }
         if (id == MyShare)
         {
             tile.Show(T("{name} (you)", ("name", T("{name} (screen)", ("name", Call.LocalName)))), Call.LocalIdentity, Call.LocalName, null, false, mine: true,
                 speaking: false, muted: false, hand: false, selected: onStage, onStage: onStage, filled: _filled, Array.Empty<ShownReaction>(),
-                face: new Tile.Face.MyShare(() => _ = Call.Sharing.StopScreen()), controls: controls);
+                face: new Tile.Face.MyShare(() => _ = Call.Sharing.StopScreen()), controls: controls, controlsFoot: controlsFoot);
             return;
         }
         if (!surfaces.TryGetValue(id, out var surface)) return;
@@ -450,18 +495,20 @@ internal sealed class RoomScreen : Screen
         tile.Show(camera ? name : T("{name} (screen)", ("name", name)), person.Id, name, face == null ? surface.Sid : null, camera, mine: false,
             speaking: camera && person.Speaking, muted: camera && (microphone == null || microphone.Muted), hand: camera && person.HandUp,
             selected: onStage, onStage: onStage, filled: _filled, camera ? Call.Reactions.Where(r => r.From == person.Id) : Array.Empty<ShownReaction>(),
-            face: face, silenced: silenced, controls: controls);
+            face: face, silenced: silenced, controls: controls, controlsFoot: controlsFoot);
     }
 
     /// <summary>
-    /// The stage's own controls over the picture on it, shown with the bar
-    /// and leaving with it (RoomView.kt <c>StageControlsOver</c>): the same
-    /// person's other picture, and filling the screen.
+    /// The stage's own controls over the picture on it, out with the pointer
+    /// on it while the bar is out (RoomView.kt <c>StageControlsOver</c>,
+    /// Tile.ShowControls): the same person's other picture, and filling the
+    /// screen; <paramref name="close"/> for the other person in a call of
+    /// two, where nothing is on the stage until the screen is filled.
     /// </summary>
-    private (string Key, Func<UIElement> Make)? StageControlsFor(string id, Dictionary<string, Surface> surfaces)
+    private (string Key, Func<UIElement> Make)? StageControlsFor(string id, Dictionary<string, Surface> surfaces, bool close = false)
     {
         var other = Counterpart(id, surfaces);
-        var key = $"{other?.Id}|{_filled}|{Localization.Shared.Language}";
+        var key = $"{other?.Id}|{_filled}|{close}|{Localization.Shared.Language}";
         return (key, () => SharePieces.StageControls(other?.Kind, _filled,
             () =>
             {
@@ -473,10 +520,40 @@ internal sealed class RoomScreen : Screen
             },
             () =>
             {
-                if (_filled) Unfill();
-                else Fill();
+                if (_filled)
+                {
+                    Unfill();
+                }
+                else if (close)
+                {
+                    // Nothing is on the stage in a call of two: filling the
+                    // screen puts the other person there first, as a double
+                    // press does, and letting it go puts the call of two back.
+                    _pin = _pin.Pin(id);
+                    Fill();
+                    _fillUnpins = _filled;
+                }
+                else
+                {
+                    Fill();
+                }
                 Lay();
             }));
+    }
+
+    /// <summary>
+    /// How far above the foot of the other person's picture in a call of two
+    /// the stage's buttons sit (Sizing.Stage.FootLift): over the bar's band
+    /// where the bar reaches under them, nothing where it does not.
+    /// </summary>
+    private float StageFootLift(Rect spot, bool counterpart)
+    {
+        if (_bar == null) return 0;
+        var length = _bar.CapsuleLength;
+        var left = (ActualWidth - length) / 2;
+        // The switch's words are about a hundred and forty across beside the circle.
+        var width = Sizing.Stage.Button + (counterpart ? Sizing.Stage.Gap + 140 : 0);
+        return Sizing.Stage.FootLift(spot, width, (float)left, (float)(left + length), barOut: true);
     }
 
     /// <summary>The same person's other picture, which the switch on the stage offers (Room.tsx <c>counterpart</c>).</summary>
@@ -685,6 +762,8 @@ internal sealed class RoomScreen : Screen
     {
         if (!_filled) return;
         _filled = false;
+        if (_fillUnpins) _pin = _pin.Pin(null);
+        _fillUnpins = false;
         if (MainWindow.Current?.AppWindow is { } window) window.SetPresenter(AppWindowPresenterKind.Overlapped);
     }
 
@@ -890,6 +969,7 @@ internal sealed class RoomScreen : Screen
             Step(_barHost, shown, 110);
         }
         LiftNames();
+        foreach (var tile in _tiles.Values) tile.BarOut = shown;
         if (_top != null)
         {
             var topShown = shown || !_filled;

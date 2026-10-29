@@ -84,7 +84,10 @@ internal sealed class ToastStack : Canvas
                 continue;
             }
             card = new Border { Width = 300, Child = Line(toast) };
-            var glass = K.Glass(null, 14, shadow: true);
+            // Opaque, as what is read over the call is (K.Floating): a
+            // notice over a moving picture changed its contrast while it
+            // was read.
+            var glass = K.Floating(null, 14);
             card.Child = null;
             glass.Child = Line(toast);
             card.Child = glass;
@@ -218,7 +221,7 @@ internal sealed class SaidColumn : StackPanel
             var words = K.Column(2);
             if (!run) words.Children.Add(K.Text(Refusals.Named(line.Name, line.Identity), 11, K.Semibold, Ink.Muted, lines: 1));
             words.Children.Add(Panels.Linked(line.Text, 13, lines: 5));
-            var card = K.Holding(K.Glass(K.Line(9, K.Fixed(monogram.At(HorizontalAlignment.Left, VerticalAlignment.Top)), K.Flex(words)), 16, new Thickness(8, run ? 7 : 8, 12, run ? 7 : 8)));
+            var card = K.Holding(K.Floating(K.Line(9, K.Fixed(monogram.At(HorizontalAlignment.Left, VerticalAlignment.Top)), K.Flex(words)), 16, new Thickness(8, run ? 7 : 8, 12, run ? 7 : 8)));
             card.Arrives(0.94f, new Vector2(0, 1), fromY: 8);
             _cards[line.Id] = card;
             Children.Add(card);

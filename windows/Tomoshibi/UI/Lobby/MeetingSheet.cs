@@ -5,6 +5,8 @@ using Tomoshibi.UI.Kit;
 using Tomoshibi.UI.Screens;
 using uniffi.tomoshibi_protocol;
 using static Tomoshibi.Basics.Words;
+using Look = Tomoshibi.Basics.Look;
+using Sizing = Tomoshibi.Basics.Sizing;
 
 namespace Tomoshibi.UI.Lobby;
 
@@ -115,9 +117,9 @@ internal sealed class MeetingSheet : Grid
             var picture = new Grid { Children = { _stage } };
             var switches = new Border
             {
-                Child = Shared.DeviceSwitches(_app, 38),
+                Child = Shared.DeviceSwitches(_app),
                 Background = K.Acrylic(),
-                CornerRadius = new CornerRadius(25),
+                CornerRadius = new CornerRadius((Sizing.Lobby.DeviceSwitch + 12) / 2),
                 Padding = new Thickness(6),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Bottom,

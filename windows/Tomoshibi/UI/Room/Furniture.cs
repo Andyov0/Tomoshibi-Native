@@ -32,12 +32,14 @@ internal sealed class SignalBadge : StackPanel
         Spacing = 6;
         var row = K.Row(7, _bars, _rtt);
         row.VerticalAlignment = VerticalAlignment.Center;
-        _capsule = new Tap(row, Look.Clear, 28, padding: 9);
+        // 32 drawn with the glass's hairline, as high as the room's name
+        // beside it and the lobby's corner buttons (Sizing.PointerHeights).
+        _capsule = new Tap(row, Look.Clear, 30, padding: 9);
         _capsule.Click += (_, _) =>
         {
             if (Appearance.Shared.ConnectionBadge == ConnectionBadge.Detailed) call.ConnectionOpen = !call.ConnectionOpen;
         };
-        Children.Add(K.Glass(_capsule, 14, shadow: false).At(HorizontalAlignment.Left, VerticalAlignment.Top));
+        Children.Add(K.Glass(_capsule, 16, shadow: false).At(HorizontalAlignment.Left, VerticalAlignment.Top));
         _detail.Padding = new Thickness(12, 10, 12, 10);
         _detailCard = K.Glass(_detail, 14);
         _detailCard.Width = 236;
@@ -134,8 +136,8 @@ internal static class RoomTitle
     {
         var text = K.Text(room, 13, K.Semibold, lines: 1);
         text.TextTrimming = TextTrimming.CharacterEllipsis;
-        var glass = K.Glass(text, 15, new Thickness(12, 0, 12, 0), shadow: false);
-        glass.Height = 30;
+        var glass = K.Glass(text, 16, new Thickness(12, 0, 12, 0), shadow: false);
+        glass.Height = 32;
         text.VerticalAlignment = VerticalAlignment.Center;
         glass.VerticalAlignment = VerticalAlignment.Top;
         return glass;

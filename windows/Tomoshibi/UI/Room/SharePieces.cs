@@ -100,24 +100,37 @@ internal static class SharePieces
     /// presses: on the web a press on one carried on to the picture beneath,
     /// and "Their screen" pinned the other picture only for the picture's own
     /// press to pin this one straight back.
+    ///
+    /// Of the bar's material at the stage's size (Sizing.Stage): 36 high, the
+    /// switch a capsule with its words and filling the screen a circle, the
+    /// symbols at four tenths of it. They were 30, a clear button in black at
+    /// half, beside the bar's glass, two materials over one call. Out only
+    /// while the pointer is on the picture (Tile.ShowControls).
     /// </summary>
     public static StackPanel StageControls(Surface.Kinds? other, bool filled, Action switchTo, Action fill)
     {
-        var row = K.Row(8);
+        var row = K.Row(Sizing.Stage.Gap);
         row.HorizontalAlignment = HorizontalAlignment.Right;
         row.VerticalAlignment = VerticalAlignment.Top;
         if (other is { } kind)
         {
             var screen = kind == Surface.Kinds.Screen;
-            var words = Tap.Words(screen ? T("Their screen") : T("Their camera"), screen ? "rectangle.on.rectangle" : "person.fill", Look.Clear, 30, 12);
-            words.Background = Ink.Black(0.5f);
+            var words = Tap.Words(screen ? T("Their screen") : T("Their camera"), screen ? "rectangle.on.rectangle" : "person.fill", Look.Clear, Sizing.Stage.Button - 2, 13, padding: 12);
             words.Click += (_, _) => switchTo();
             row.Children.Add(Shared.OnGlass(words));
         }
-        var expand = Tap.Icon(filled ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right", filled ? T("Leave fullscreen") : T("Fill the screen"), Look.Clear, 30, 12);
+        // Inside the glass's hairline, so that the circle is 36 drawn.
+        var expand = Tap.Icon(filled ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right", filled ? T("Leave fullscreen") : T("Fill the screen"), Look.Clear, Sizing.Stage.Button - 2, Sizing.Icon(Sizing.Stage.Button));
         expand.Click += (_, _) => fill();
         row.Children.Add(Shared.OnGlass(expand));
         foreach (var child in row.Children) if (child is FrameworkElement element) element.Arrives();
+        // Their presses stop here, as the web's stopPropagation does: a tap
+        // carried on to the picture beneath would pin or unpin it after the
+        // button had done its own work, and in a call of two let the screen
+        // go straight back to the stage it had just been taken from.
+        row.Tapped += (_, e) => e.Handled = true;
+        row.DoubleTapped += (_, e) => e.Handled = true;
+        row.RightTapped += (_, e) => e.Handled = true;
         return row;
     }
 

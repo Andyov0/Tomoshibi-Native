@@ -325,8 +325,13 @@ internal sealed class Tile : Grid
 
     public readonly string Id;
     private string? _faceKey;
-    private readonly Grid _controls = new() { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(12) };
+    /// <summary>The stage's buttons over the picture (Sizing.Stage), out while the pointer is on it or the keyboard in them.</summary>
+    private readonly Grid _controls = new() { HorizontalAlignment = HorizontalAlignment.Right, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(Sizing.Stage.Inset) };
     private string? _controlsKey;
+    private bool _pointerOver;
+    private bool _barOut = true;
+    private bool _focusInControls;
+    private bool _controlsOut;
     private readonly RoomScreen _room;
     private readonly Grid _content = new();
     private readonly Border _ring;
@@ -361,21 +366,24 @@ internal sealed class Tile : Grid
 
         _ring = new Border { BorderThickness = new Thickness(2), CornerRadius = new CornerRadius(Theme.TileRadius), IsHitTestVisible = false };
         Motion.Hide(_ring);
-        // On the dark plate over the picture: the dark scheme's inks in either.
-        _name = K.Text("", 12.5, K.Medium, Ink.OnPicture, lines: 1);
+        // The name on its plate (Sizing.NamePlate): a capsule of black at
+        // seven tenths, the name in the dark scheme's white whether or not
+        // its owner speaks, since the ring says who is speaking and the
+        // tally on a bright picture read at about 2:1. It was a rounded
+        // square at half black on Windows, a capsule on the other platforms.
+        _name = K.Text("", 12.5, K.Medium, Ink.Brush(Sizing.NamePlate.Ink), lines: 1);
         _label = K.Row(5, _name);
         _label.VerticalAlignment = VerticalAlignment.Center;
         _plate = new Border
         {
             Child = _label,
-            Background = Ink.Black(0.5f),
-            BorderBrush = Ink.White(0.1f),
-            BorderThickness = new Thickness(0.5),
-            CornerRadius = new CornerRadius(12),
-            Padding = new Thickness(7, 3.5, 7, 3.5),
+            Background = Ink.Brush(Sizing.NamePlate.Fill),
+            Height = Sizing.NamePlate.Height,
+            CornerRadius = new CornerRadius(Sizing.NamePlate.Height / 2),
+            Padding = new Thickness(10, 0, 10, 0),
             HorizontalAlignment = HorizontalAlignment.Left,
             VerticalAlignment = VerticalAlignment.Bottom,
-            Margin = new Thickness(8),
+            Margin = new Thickness(Sizing.NamePlate.Inset),
             IsHitTestVisible = false,
         };
         _hand = new Border
@@ -401,6 +409,14 @@ internal sealed class Tile : Grid
         Children.Add(_hand);
         Children.Add(_controls);
         Children.Add(_ring);
+        // Out of sight and out of reach together until wanted: faded to
+        // nothing they would still take presses over the picture.
+        Motion.Hide(_controls);
+        _controls.IsHitTestVisible = false;
+        // The keyboard on one of them brings them out, as the web's
+        // focus-within does, so that they are not reached unseen.
+        _controls.GotFocus += (_, _) => { _focusInControls = true; ShowControls(); };
+        _controls.LostFocus += (_, _) => { _focusInControls = false; ShowControls(); };
 
         // A press selects it (on to the stage or back), a second within the
         // web's 300 ms fills the screen with it (Room.tsx `Presses`).
@@ -436,14 +452,53 @@ internal sealed class Tile : Grid
         if (_placed) Motion.Settles(this, was, spot);
         _placed = true;
         var compact = spot.Height < 140;
-        _plate.Margin = new Thickness(compact ? 4 : 8);
-        _plate.Padding = compact ? new Thickness(5, 2, 5, 2) : new Thickness(7, 3.5, 7, 3.5);
+        var plate = compact ? Sizing.NamePlate.CompactHeight : Sizing.NamePlate.Height;
+        _plate.Margin = new Thickness(compact ? Sizing.NamePlate.CompactInset : Sizing.NamePlate.Inset);
+        _plate.Height = plate;
+        _plate.CornerRadius = new CornerRadius(plate / 2);
+        _plate.Padding = new Thickness(compact ? 7 : 10, 0, compact ? 7 : 10, 0);
         _name.FontSize = compact ? 10.5 : 12.5;
         _hand.Margin = new Thickness(compact ? 5 : 8);
         _hand.Width = _hand.Height = compact ? 22 : 28;
     }
 
     public Rect Spot => _spot;
+
+    /// <summary>
+    /// The pointer is on this picture and not on another drawn over it
+    /// (Sizing.Stage.Under, worked out by the room from where the pointer
+    /// is): the stage's buttons come out for it, as on the Mac and the web.
+    /// </summary>
+    public bool PointerOver
+    {
+        set
+        {
+            if (_pointerOver == value) return;
+            _pointerOver = value;
+            ShowControls();
+        }
+    }
+
+    /// <summary>The bar is out: the stage's buttons go away with it when nobody has moved.</summary>
+    public bool BarOut
+    {
+        set
+        {
+            if (_barOut == value) return;
+            _barOut = value;
+            ShowControls();
+        }
+    }
+
+    /// <summary>The stage's buttons out or away, fading either way over the arriving and the leaving curves.</summary>
+    private void ShowControls()
+    {
+        var shown = _controls.Children.Count > 0 && Sizing.Stage.Shown(_pointerOver, _barOut, _focusInControls);
+        if (shown == _controlsOut) return;
+        _controlsOut = shown;
+        _controls.IsHitTestVisible = shown;
+        Motion.FadeTo(_controls, shown ? 1 : 0);
+    }
 
     /// <summary>How far in from the picture's left the name's plate stands (Plan.NameUnderBar).</summary>
     public float PlateInset => (float)_plate.Margin.Left;
@@ -486,7 +541,7 @@ internal sealed class Tile : Grid
     public void Show(
         string label, string identity, string name, string? sid, bool camera, bool mine, bool speaking, bool muted, bool hand,
         bool selected, bool onStage, bool filled, IEnumerable<ShownReaction> reactions,
-        Face? face = null, bool silenced = false, (string Key, Func<UIElement> Make)? controls = null)
+        Face? face = null, bool silenced = false, (string Key, Func<UIElement> Make)? controls = null, float? controlsFoot = null)
     {
         face ??= new Face.Picture();
         _name.Text = label;
@@ -502,7 +557,6 @@ internal sealed class Tile : Grid
         {
             _speaking = lit;
             Motion.FadeTo(_ring, lit ? 1 : 0);
-            _name.Foreground = lit ? Ink.Tally : Ink.OnPicture;
         }
         _ring.BorderBrush = Ink.Tally;
         var radius = filled && onStage ? 0 : Theme.TileRadius;
@@ -514,22 +568,31 @@ internal sealed class Tile : Grid
         while (_label.Children.Count > 1) _label.Children.RemoveAt(1);
         if (muted)
         {
-            var mark = K.Symbol("mic.slash.fill", _name.FontSize - 2, Ink.MutedOnPicture);
+            var mark = K.Symbol("mic.slash.fill", _name.FontSize - 2, Ink.Brush(Sizing.NamePlate.Ink));
             mark.Named(T("microphone off"));
             _label.Children.Add(mark);
         }
         // Somebody this listener turned off, said on their picture so that
         // nobody wonders why a person talking makes no sound (Tile.kt `silenced`).
-        if (silenced) _label.Children.Add(K.Symbol("speaker.slash.fill", _name.FontSize - 2, Ink.MutedOnPicture));
+        if (silenced) _label.Children.Add(K.Symbol("speaker.slash.fill", _name.FontSize - 2, Ink.Brush(Sizing.NamePlate.Ink)));
         // The stage's own controls over whatever is on it, arriving and
         // leaving with it.
+        // At the picture's top corner on the stage; at its foot in a call
+        // of two, lifted over the bar where the bar reaches under them
+        // (Sizing.Stage.FootLift), the top corner there holding one's own
+        // picture.
         var controlsKey = controls?.Key;
         if (controlsKey != _controlsKey)
         {
             _controlsKey = controlsKey;
             _controls.Children.Clear();
             if (controls is { } shown) _controls.Children.Add(shown.Make());
+            ShowControls();
         }
+        _controls.VerticalAlignment = controlsFoot != null ? VerticalAlignment.Bottom : VerticalAlignment.Top;
+        _controls.Margin = controlsFoot is { } lift
+            ? new Thickness(Sizing.Stage.Inset, Sizing.Stage.Inset, Sizing.Stage.Inset, Sizing.Stage.Inset + lift)
+            : new Thickness(Sizing.Stage.Inset);
         _hand.Visibility = hand ? Visibility.Visible : Visibility.Collapsed;
         this.Named(selected ? T("Show everybody") : T("Show {name} larger", ("name", name)));
 

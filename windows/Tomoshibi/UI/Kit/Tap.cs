@@ -2,36 +2,16 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Shapes;
 using Tomoshibi.Basics;
 
 namespace Tomoshibi.UI.Kit;
 
-/// <summary>What a button wears (Android's GlassButton, prominent and destructive; the bar's BarButton; a quiet one in a list).</summary>
-internal enum Look
-{
-    /// <summary>The apps' wash over whatever is behind (white in the dark scheme, black in the light), with a hairline edge.</summary>
-    Plain,
-    /// <summary>The tally, with its own ink: the one thing on the screen to press.</summary>
-    Prominent,
-    /// <summary>Red, for leaving and for a device turned off.</summary>
-    Destructive,
-    /// <summary>Nothing until the pointer is over it: a row, a link, a close mark.</summary>
-    Clear,
-    /// <summary>The call's bar: a stronger wash, lit in the tally when on.</summary>
-    Bar,
-    /// <summary>
-    /// Plain, on a picture (a switch over the camera): the dark scheme's
-    /// white wash and ink in either scheme, as everything laid on a picture
-    /// is, where the light scheme's black wash and dark ink were lost on a
-    /// dark picture.
-    /// </summary>
-    Picture,
-}
-
 /// <summary>
 /// A button as the apps draw one: a capsule or a circle of a given height,
-/// its fill brightening under the pointer and further when pressed, a
-/// little smaller while pressed, and dimmed when it cannot be pressed. A
+/// its fill moving towards the foreground under the pointer and further
+/// when pressed, a little smaller while pressed, and dimmed when it cannot
+/// be pressed, by the one rule every look follows (Basics.Looks). A
 /// Windows Button underneath, so that it takes the keyboard's focus, shows
 /// the system's focus ring, answers Enter and Space, and is a button to
 /// Narrator and to UI Automation.
@@ -40,6 +20,7 @@ internal class Tap : Button
 {
     private Look _look;
     private bool _lit;
+    private bool _held;
     private bool _over;
     private bool _down;
     private readonly bool _circle;
@@ -93,7 +74,10 @@ internal class Tap : Button
     protected override void OnContentChanged(object oldContent, object newContent)
     {
         base.OnContentChanged(oldContent, newContent);
-        if (newContent is UIElement inside) inside.Opacity = IsEnabled ? _faint : 0.45;
+        // New content is drawn in its maker's ink; a greyed prominent
+        // button's is greyed again (Paint).
+        _greyed = false;
+        Paint();
     }
 
     private double _faint = 1;
@@ -119,18 +103,35 @@ internal class Tap : Button
         get => _look;
         set
         {
+            if (_look == value) return;
             _look = value;
             Paint();
         }
     }
 
-    /// <summary>On: a bar button whose device or panel is on wears the tally.</summary>
+    /// <summary>On: a bar button whose thing is happening (a share going out, a hand up) wears the tally.</summary>
     public bool Lit
     {
         get => _lit;
         set
         {
+            if (_lit == value) return;
             _lit = value;
+            Paint();
+        }
+    }
+
+    /// <summary>
+    /// Held down: a button whose panel is open, drawn pressed in the
+    /// neutral grey rather than the tally (Looks.Paint).
+    /// </summary>
+    public bool Held
+    {
+        get => _held;
+        set
+        {
+            if (_held == value) return;
+            _held = value;
             Paint();
         }
     }
@@ -148,56 +149,69 @@ internal class Tap : Button
         }
     }
 
-    public static Brush InkFor(Look look, bool lit = false) => look switch
-    {
-        Look.Prominent => Ink.TallyForeground,
-        Look.Destructive => Ink.DangerForeground,
-        Look.Bar when lit => Ink.TallyForeground,
-        Look.Picture => Ink.OnPicture,
-        _ => Ink.Foreground,
-    };
+    /// <summary>The ink a look draws its content in, in the scheme being drawn.</summary>
+    public static Brush InkFor(Look look, bool lit = false) =>
+        Ink.Brush(Looks.Paint(look, Ink.Palette, Ink.TallyShade, Appearance.Shared.TallyForeground, Touch.Rest, lit: lit).Ink);
+
+    /// <summary>Whether the content is drawn in the greyed prominent's ink at present.</summary>
+    private bool _greyed;
 
     private void Paint()
     {
-        // The washes in the scheme being drawn: white over the dark ground,
-        // black over the light one. A lit bar button's edge is the light
-        // catching it in either, white.
-        var danger = Ink.Palette.Danger;
-        var (rest, over, down, edge) = _look switch
-        {
-            Look.Prominent => (Ink.TallyShade, Mix(Ink.TallyShade, 0.10f), Mix(Ink.TallyShade, -0.10f), (Shade?)null),
-            Look.Destructive => (danger, Mix(danger, 0.08f), danger.WithAlpha(0.86f), (Shade?)null),
-            Look.Clear => (Ink.WashShade(0f), Ink.WashShade(0.08f), Ink.WashShade(0.14f), (Shade?)null),
-            Look.Bar when _lit => (Ink.TallyShade, Mix(Ink.TallyShade, 0.10f), Mix(Ink.TallyShade, -0.10f), Shade.White.WithAlpha(0.3f)),
-            Look.Bar => (Ink.WashShade(0.12f), Ink.WashShade(0.18f), Ink.WashShade(0.24f), Ink.WashShade(0.08f)),
-            Look.Picture => (Shade.White.WithAlpha(0.07f), Shade.White.WithAlpha(0.13f), Shade.White.WithAlpha(0.16f), Shade.White.WithAlpha(0.09f)),
-            _ => (Ink.WashShade(0.07f), Ink.WashShade(0.13f), Ink.WashShade(0.16f), Ink.WashShade(0.09f)),
-        };
-        if (_resting is { } resting)
-        {
-            // A row lit for being the chosen one keeps its light under the pointer, a little brighter.
-            rest = resting;
-            over = new Shade(resting.Red, resting.Green, resting.Blue, Math.Min(1f, resting.Alpha + 0.06f));
-            down = new Shade(resting.Red, resting.Green, resting.Blue, Math.Min(1f, resting.Alpha + 0.12f));
-        }
+        var touch = _down ? Touch.Down : _over ? Touch.Over : Touch.Rest;
         var enabled = IsEnabled;
-        // Dimmed when it cannot be pressed by drawing its fill, its edge and
-        // what is in it at 45 per cent, rather than by the button's own
-        // opacity: that was set before the button reached the screen and
-        // lost there, the composition visual the press scales being the one
-        // XAML writes the element's opacity to when it is shown.
-        static Shade Dim(Shade shade, bool on) => on ? shade : shade.WithAlpha(shade.Alpha * 0.45f);
-        Background = Ink.Brush(Dim(!enabled ? rest : _down ? down : _over ? over : rest, enabled));
-        BorderBrush = edge is { } e ? Ink.Brush(Dim(e, enabled)) : null;
-        BorderThickness = new Thickness(edge != null ? 1 : 0);
-        if (Content is UIElement inside) inside.Opacity = enabled ? _faint : 0.45;
-        Motion.ScaleTo(this, _down && enabled ? 0.96f : 1f);
+        var painted = Looks.Paint(_look, Ink.Palette, Ink.TallyShade, Appearance.Shared.TallyForeground, touch, enabled, _lit, _held, _resting);
+        // The fill, its edge and what is in it are dimmed here rather than
+        // by the button's own opacity: that was set before the button
+        // reached the screen and lost there, the composition visual the
+        // press scales being the one XAML writes the element's opacity to
+        // when it is shown.
+        Background = Ink.Brush(painted.Fill);
+        BorderBrush = painted.Edge is { } edge ? Ink.Brush(edge) : null;
+        BorderThickness = new Thickness(painted.Edge != null ? 1 : 0);
+        if (Content is UIElement inside)
+        {
+            inside.Opacity = enabled ? _faint * painted.ContentOpacity : painted.ContentOpacity;
+            // A prominent button that cannot be pressed is a grey plate with
+            // grey words, its content drawn again in the muted ink, and in
+            // the tally's ink again once it can be pressed.
+            var grey = _look == Look.Prominent && !enabled && _resting == null;
+            if (grey != _greyed)
+            {
+                _greyed = grey;
+                Recolour(inside, Ink.Brush(painted.Ink));
+            }
+        }
+        Motion.ScaleTo(this, painted.Scale);
     }
 
-    /// <summary>A colour lightened (positive) or darkened (negative) by an amount, its alpha kept.</summary>
-    private static Shade Mix(Shade shade, float by)
+    /// <summary>The words, symbols and spinners in a button's content, drawn in another ink.</summary>
+    private static void Recolour(UIElement element, Brush ink)
     {
-        float Move(float channel) => by >= 0 ? channel + (1 - channel) * by : channel * (1 + by);
-        return new Shade(Move(shade.Red), Move(shade.Green), Move(shade.Blue), shade.Alpha);
+        switch (element)
+        {
+            case TextBlock text:
+                text.Foreground = ink;
+                break;
+            case FontIcon icon:
+                icon.Foreground = ink;
+                break;
+            case ProgressRing ring:
+                ring.Foreground = ink;
+                break;
+            case Microsoft.UI.Xaml.Shapes.Path path:
+                if (path.Fill != null) path.Fill = ink;
+                if (path.Stroke != null) path.Stroke = ink;
+                break;
+            case Line line:
+                line.Stroke = ink;
+                break;
+            case Border border when border.Child != null:
+                Recolour(border.Child, ink);
+                break;
+            case Panel panel:
+                foreach (var child in panel.Children) Recolour(child, ink);
+                break;
+        }
     }
 }

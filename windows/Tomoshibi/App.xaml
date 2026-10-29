@@ -75,9 +75,9 @@
                             <SolidColorBrush x:Key="TextControlBorderBrushPointerOver" Color="#2E000000" />
                             <SolidColorBrush x:Key="TextControlForeground" Color="#FF1C1C1E" />
                             <SolidColorBrush x:Key="TextControlForegroundFocused" Color="#FF1C1C1E" />
-                            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#993C3C43" />
-                            <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#993C3C43" />
-                            <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#993C3C43" />
+                            <SolidColorBrush x:Key="TextControlPlaceholderForeground" Color="#BF3C3C43" />
+                            <SolidColorBrush x:Key="TextControlPlaceholderForegroundFocused" Color="#BF3C3C43" />
+                            <SolidColorBrush x:Key="TextControlPlaceholderForegroundPointerOver" Color="#BF3C3C43" />
                             <SolidColorBrush x:Key="ToggleSwitchFillOff" Color="#24000000" />
                             <SolidColorBrush x:Key="ToggleSwitchFillOffPointerOver" Color="#33000000" />
                             <SolidColorBrush x:Key="ToggleSwitchStrokeOff" Color="#1A000000" />
@@ -114,9 +114,10 @@
                         and the press are the kit's own, the apps' numbers,
                         rather than the default template's states, which
                         would turn a lamplit button grey under the pointer.
-                        The brush moves to its new colour over the hover
-                        curve's 120 ms. The system's focus ring still draws
-                        round it for the keyboard.
+                        The brush moves to its new colour over the 140 ms a
+                        press takes everywhere (the web's pressable). The
+                        system's focus ring still draws round it for the
+                        keyboard.
                     -->
                     <Style x:Key="Tap" TargetType="Button">
                         <Setter Property="Background" Value="Transparent" />
@@ -137,7 +138,7 @@
                                         CornerRadius="{TemplateBinding CornerRadius}"
                                         Padding="{TemplateBinding Padding}">
                                         <Border.BackgroundTransition>
-                                            <BrushTransition Duration="0:0:0.12" />
+                                            <BrushTransition Duration="0:0:0.14" />
                                         </Border.BackgroundTransition>
                                         <ContentPresenter
                                             HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"

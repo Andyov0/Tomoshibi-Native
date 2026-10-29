@@ -24,17 +24,17 @@ internal static class MediaKit
     public const double PanelHeight = 548;
 
     /// <summary>
-    /// The glass a panel beside the call is drawn on, darkened from inside
-    /// (<c>MediaPanelGlass</c>): these panels sit over the stage, and the
-    /// stage is often a film, whose colours came straight through clear glass
-    /// and left grey words on it unreadable.
+    /// What a panel beside the call is drawn on (<c>MediaPanelGlass</c>):
+    /// opaque, as every panel is (K.PanelSurface). These panels sit over the
+    /// stage, and the stage is often a film, whose colours came through the
+    /// glass and the darkening laid inside it and left grey words on it
+    /// unreadable while it played.
     /// </summary>
     public static Border Glass(UIElement content, double height = PanelHeight)
     {
-        var shade = new Border { Background = Ink.BackgroundAt(0.68f), CornerRadius = new CornerRadius(22), Child = content };
-        var glass = K.Glass(shade, 22);
-        glass.Height = height;
-        return glass;
+        var panel = K.PanelSurface(content, 22);
+        panel.Height = height;
+        return panel;
     }
 
     /// <summary>The top of a panel beside the call: its symbol on the tally, its name, and the button that closes it (<c>MediaPanelHeader</c>).</summary>
@@ -53,7 +53,7 @@ internal static class MediaKit
             }));
         }
         parts.Add(K.Flex(K.Text(title, 14, K.Semibold, lines: 1).At(HorizontalAlignment.Left, VerticalAlignment.Center)));
-        var shut = IconButton("xmark", closeLabel, close);
+        var shut = IconButton("xmark", closeLabel, close, Sizing.Close);
         parts.Add(K.Fixed(shut));
         var line = K.Line(10, parts.ToArray());
         line.Padding = new Thickness(14, 10, 10, 10);

@@ -68,32 +68,27 @@ internal sealed class ControlBar : Grid
     }
 
     /// <summary>
-    /// How long the bar is (ControlBar.kt <c>BarLength</c>): the buttons, the
-    /// hand with its reactions' half beside it, the rule and leaving, the
-    /// gaps between them and the ends; the buttons the features offer only
-    /// while they are offered.
+    /// How long the bar is (ControlBar.kt <c>BarLength</c>, Sizing.Bar.Length):
+    /// the round buttons (the microphone, the camera, the share and the
+    /// messages, then More on a compact bar or the panels' buttons on a full
+    /// one, those the features offer only while they are offered), the hand
+    /// with its reactions' half beside it, the rule and leaving.
     /// </summary>
     public static double Length(bool compact, Offers offers, RoomScreen.Panel? panel, bool sealedCall)
     {
-        var size = compact ? 40.0 : 44.0;
-        var along = new List<double> { size, size, size, 60, size };
+        var round = 4;
         if (compact)
         {
-            along.Add(size);
+            round += 1;
         }
         else
         {
-            along.Add(size); // sound
-            if (!sealedCall && (offers.Watch || panel == RoomScreen.Panel.Watch)) along.Add(size);
-            if (offers.Music || panel == RoomScreen.Panel.Music) along.Add(size);
-            if (offers.Host || panel == RoomScreen.Panel.Host) along.Add(size);
-            along.Add(size); // devices
-            along.Add(1 + 4); // the rule before leaving
+            round += 2; // sound, devices
+            if (!sealedCall && (offers.Watch || panel == RoomScreen.Panel.Watch)) round++;
+            if (offers.Music || panel == RoomScreen.Panel.Music) round++;
+            if (offers.Host || panel == RoomScreen.Panel.Host) round++;
         }
-        along.Add(compact ? 52 : 56);
-        var inset = compact ? 5 : 7;
-        var spacing = compact ? 4 : 6;
-        return 2 * inset + along.Sum() + spacing * (along.Count - 1);
+        return Sizing.Bar.Length(compact, round);
     }
 
     /// <summary>
@@ -124,7 +119,7 @@ internal sealed class ControlBar : Grid
         Build();
     }
 
-    private double Size => _compact == true ? 40 : 44;
+    private double Size => _compact == true ? Sizing.Bar.CompactButton : Sizing.Bar.Button;
 
     // A feature's button is on the bar while it is offered, and while its
     // panel is open, so that the panel can be closed where it was opened.
@@ -136,9 +131,10 @@ internal sealed class ControlBar : Grid
     {
         _row.Children.Clear();
         var compact = _compact == true;
-        _row.Spacing = compact ? 4 : 6;
-        _capsule.Padding = new Thickness(compact ? 5 : 7);
-        _capsule.CornerRadius = new CornerRadius((Size + (compact ? 10 : 14)) / 2);
+        var inset = compact ? Sizing.Bar.CompactInset : Sizing.Bar.Inset;
+        _row.Spacing = compact ? Sizing.Bar.CompactSpacing : Sizing.Bar.Spacing;
+        _capsule.Padding = new Thickness(inset);
+        _capsule.CornerRadius = new CornerRadius((Size + 2 * inset) / 2);
 
         _microphone = Bar("mic.fill", "");
         _microphone.Click += async (_, _) => await Device(() => _call.SetMicrophone(!_call.MicrophoneOn));
@@ -224,7 +220,7 @@ internal sealed class ControlBar : Grid
             _row.Children.Add(new Border { Width = 1, Height = 26, Background = Ink.Border, Margin = new Thickness(2, 0, 2, 0), VerticalAlignment = VerticalAlignment.Center });
         }
         _leave = new Tap(K.Symbol("phone.down.fill", 16, Ink.DangerForeground), Look.Destructive, Size, label: T("Leave"));
-        _leave.Width = compact ? 52 : 56;
+        _leave.Width = compact ? Sizing.Bar.CompactLeaveWidth : Sizing.Bar.LeaveWidth;
         _leave.Padding = new Thickness(0);
         _leave.Named(T("Leave"), "bar.leave");
         _leave.Click += (_, _) => OpenLeave();
@@ -264,7 +260,7 @@ internal sealed class ControlBar : Grid
 
     private Tap Bar(string symbol, string label)
     {
-        var tap = new Tap(K.Symbol(symbol, Size * 0.36), Look.Bar, Size, circle: true);
+        var tap = new Tap(K.Symbol(symbol, Sizing.Icon((float)Size)), Look.Bar, Size, circle: true);
         if (label.Length > 0) tap.Tip(label);
         return tap;
     }
@@ -287,11 +283,15 @@ internal sealed class ControlBar : Grid
     public void Update()
     {
         if (_microphone == null) return;
+        // A device that is off is a plate of the foreground with its symbol
+        // in the page's colour (Look.Off): the one state on the bar somebody
+        // has to read at a glance, which a dimmer symbol on the same grey
+        // did not say from arm's length.
         var mic = _call.MicrophoneOn;
-        Paint(_microphone, mic ? "mic.fill" : "mic.slash.fill", mic ? T("Mute microphone") : T("Unmute microphone"), lit: false, quiet: !mic);
+        Paint(_microphone, mic ? "mic.fill" : "mic.slash.fill", mic ? T("Mute microphone") : T("Unmute microphone"), off: !mic);
         _microphone.Named(mic ? T("Mute microphone") : T("Unmute microphone"), "bar.microphone");
         var cam = _call.CameraOn;
-        Paint(_camera!, cam ? "video.fill" : "video.slash.fill", cam ? T("Turn camera off") : T("Turn camera on"), lit: false, quiet: !cam);
+        Paint(_camera!, cam ? "video.fill" : "video.slash.fill", cam ? T("Turn camera off") : T("Turn camera on"), off: !cam);
         _camera!.Named(cam ? T("Turn camera off") : T("Turn camera on"), "bar.camera");
         var sharing = _call.Sharing;
         // With the screen switched off by the deployment the button is the
@@ -300,22 +300,22 @@ internal sealed class ControlBar : Grid
         var screen = _offers.ScreenShare;
         var shareLabel = sharing.Active ? T("Screen sharing settings") : sharing.Listening ? T("Sharing sound") : screen ? T("Share your screen") : T("Share only sound");
         Paint(_share!, sharing.Active ? "rectangle.inset.filled.on.rectangle" : sharing.Listening ? "waveform.circle.fill" : screen ? "rectangle.on.rectangle" : "waveform",
-            shareLabel, lit: sharing.Active || sharing.Listening, quiet: false);
+            shareLabel, lit: sharing.Active || sharing.Listening);
         _share!.Named(shareLabel, "bar.share");
         var chat = _room.Showing == RoomScreen.Panel.Messages;
-        Paint(_messages!, "bubble.left.fill", chat ? T("Hide messages") : T("Show messages"), lit: chat, quiet: false);
+        Paint(_messages!, "bubble.left.fill", chat ? T("Hide messages") : T("Show messages"), held: chat);
         _messages!.Named(chat ? T("Hide messages") : T("Show messages"), "bar.messages");
         _unread!.Visibility = _call.Unread && !chat ? Visibility.Visible : Visibility.Collapsed;
         if (_sound != null)
         {
             var open = _room.Showing == RoomScreen.Panel.Sound;
-            Paint(_sound, "speaker.wave.2.fill", open ? T("Hide sound") : T("Show sound"), lit: open, quiet: false);
+            Paint(_sound, "speaker.wave.2.fill", open ? T("Hide sound") : T("Show sound"), held: open);
             _sound.Named(open ? T("Hide sound") : T("Show sound"), "bar.sound");
         }
         if (_watch != null)
         {
             var open = _room.Showing == RoomScreen.Panel.Watch;
-            Paint(_watch, "play.rectangle.fill", open ? T("Hide watch together") : T("Show watch together"), lit: open, quiet: false);
+            Paint(_watch, "play.rectangle.fill", open ? T("Hide watch together") : T("Show watch together"), held: open);
             _watch.Named(open ? T("Hide watch together") : T("Show watch together"), "bar.watch");
             // The show is playing while its panel is closed (ControlBar.tsx ~430).
             _watchDot!.Visibility = _offers.WatchPlaying && !open ? Visibility.Visible : Visibility.Collapsed;
@@ -323,23 +323,22 @@ internal sealed class ControlBar : Grid
         if (_music != null)
         {
             var open = _room.Showing == RoomScreen.Panel.Music;
-            Paint(_music, "music.note", open ? T("Hide music") : T("Show music"), lit: open, quiet: false);
+            Paint(_music, "music.note", open ? T("Hide music") : T("Show music"), held: open);
             _music.Named(open ? T("Hide music") : T("Show music"), "bar.music");
             _musicDot!.Visibility = _offers.MusicPlaying && !open ? Visibility.Visible : Visibility.Collapsed;
         }
         if (_host != null)
         {
             var open = _room.Showing == RoomScreen.Panel.Host;
-            _host.Lit = open;
-            _host.Content = K.Symbol("crown.fill", Size * 0.36, open ? Ink.TallyForeground : Ink.Foreground);
+            _host.Held = open;
             _knockingCount!.Text = _offers.Knocking.ToString();
             _knocking!.Visibility = _offers.Knocking > 0 && !open ? Visibility.Visible : Visibility.Collapsed;
         }
-        if (_devices != null) _devices.Lit = _room.Showing == RoomScreen.Panel.Devices;
+        if (_devices != null) _devices.Held = _room.Showing == RoomScreen.Panel.Devices;
         if (_more != null)
         {
             var behind = _room.Showing is RoomScreen.Panel.Sound or RoomScreen.Panel.Watch or RoomScreen.Panel.Music or RoomScreen.Panel.Host or RoomScreen.Panel.Devices;
-            _more.Lit = behind;
+            _more.Held = behind;
             // It carries the dot whenever one of the buttons it stands for would.
             var busy = (_offers.WatchPlaying && _room.Showing != RoomScreen.Panel.Watch) || (_offers.MusicPlaying && _room.Showing != RoomScreen.Panel.Music)
                 || (_offers.Knocking > 0 && _room.Showing != RoomScreen.Panel.Host);
@@ -353,10 +352,22 @@ internal sealed class ControlBar : Grid
         }
     }
 
-    private void Paint(Tap tap, string symbol, string label, bool lit, bool quiet)
+    /// <summary>
+    /// A bar button in its state: <paramref name="lit"/> in the tally while
+    /// what it stands for is happening (a share going out); <paramref name="held"/>
+    /// drawn pressed while its panel is open, in the neutral grey, since an
+    /// open panel is not something happening in the call and the tally is
+    /// kept for what is (the owner, 2026-10-29); <paramref name="off"/> a
+    /// device turned off. Every symbol at full strength: a closed panel's
+    /// was muted, and half the bar read as disabled.
+    /// </summary>
+    private void Paint(Tap tap, string symbol, string label, bool lit = false, bool held = false, bool off = false)
     {
+        var look = off ? Look.Off : Look.Bar;
+        tap.Look = look;
         tap.Lit = lit;
-        tap.Content = K.Symbol(symbol, Size * 0.36, lit ? Ink.TallyForeground : quiet ? Ink.Muted : Ink.Foreground);
+        tap.Held = held;
+        tap.Content = K.Symbol(symbol, Sizing.Icon((float)Size), Tap.InkFor(look, lit));
         tap.Tip(label);
     }
 
@@ -368,9 +379,15 @@ internal sealed class ControlBar : Grid
     private UIElement HandControl()
     {
         _hand = new Tap(K.Symbol("hand.raised.fill", 16), Look.Bar, Size);
-        _hand.Width = 40;
+        // As tall as the bar's buttons, compact or not, where it was always
+        // 40 across beside a 20 the reactions took, the hardest thing on the
+        // bar to hit.
+        // MinWidth as well: a Tap is never narrower than it is tall unless
+        // told, and the hand and its arrow were each drawn 44 across, wider
+        // than the bar had measured them.
+        _hand.Width = _hand.MinWidth = Sizing.Bar.Hand((float)Size);
         _hand.Padding = new Thickness(0);
-        _hand.CornerRadius = new CornerRadius(22, 0, 0, 22);
+        _hand.CornerRadius = new CornerRadius(Size / 2, 0, 0, Size / 2);
         _hand.Named(T("Raise your hand"), "bar.hand");
         _hand.Click += async (_, _) =>
         {
@@ -383,21 +400,26 @@ internal sealed class ControlBar : Grid
                 _call.PressFailed();
             }
         };
-        var chevron = K.Symbol("chevron.up", 9, Ink.Muted);
-        _reactionsHalf = new Tap(chevron, Look.Bar, Size) { Width = 20, CornerRadius = new CornerRadius(0, 22, 22, 0), Padding = new Thickness(0) };
+        var chevron = K.Symbol("chevron.up", 10, Ink.Foreground);
+        _reactionsHalf = new Tap(chevron, Look.Bar, Size) { Width = Sizing.Bar.ReactionsArrow, MinWidth = Sizing.Bar.ReactionsArrow, CornerRadius = new CornerRadius(0, Size / 2, Size / 2, 0), Padding = new Thickness(0) };
         _reactionsHalf.Tip(T("Reactions"));
-        _reactionsHalf.Click += (_, _) => Overlay.Current?.Toggle("reactions", _reactionsHalf, Reactions, width: 234, edge: Edge.Above, align: Align.Centre);
+        _reactionsHalf.Click += (_, _) => OpenReactions();
         return K.Row(0, _hand, _reactionsHalf);
     }
 
+    /// <summary>The tray, as wide as its reactions and the inset each side (and the hairline round it).</summary>
+    private void OpenReactions() =>
+        Overlay.Current?.Toggle("reactions", _reactionsHalf!, Reactions, width: Sizing.Bar.ReactionsWidth(CallModel.ReactionChoices.Count) + 2, edge: Edge.Above, align: Align.Centre);
+
+    /// <summary>The six reactions, 40 square each (36 by 34 before), their corners inside the tray's.</summary>
     private UIElement Reactions()
     {
-        var row = K.Row(2);
-        row.Padding = new Thickness(4);
+        var row = K.Row(Sizing.Bar.ReactionGap);
+        row.Padding = new Thickness(Sizing.Menu.Inset);
         foreach (var what in CallModel.ReactionChoices)
         {
             var glyph = new TextBlock { Text = what, FontSize = 20, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-            var tap = new Tap(glyph, Look.Clear, 34, padding: 0) { Width = 36, CornerRadius = new CornerRadius(8) };
+            var tap = new Tap(glyph, Look.Clear, Sizing.Bar.Reaction, padding: 0) { Width = Sizing.Bar.Reaction, CornerRadius = new CornerRadius(Sizing.Menu.RowRadius) };
             tap.Named(what, "reaction." + CallModel.ReactionChoices.ToList().IndexOf(what));
             tap.Click += (_, _) =>
             {
@@ -442,7 +464,7 @@ internal sealed class ControlBar : Grid
         items.Add(Menu.Rule());
         items.Add(Item(T("Devices"), "gearshape.fill", RoomScreen.Panel.Devices));
         items.Add(Menu.Rule());
-        items.Add(Menu.Item(T("Reactions"), () => { Overlay.Current?.ClosePopover(); Overlay.Current?.Toggle("reactions", _reactionsHalf!, Reactions, width: 234, edge: Edge.Above, align: Align.Centre); }, "sparkles"));
+        items.Add(Menu.Item(T("Reactions"), () => { Overlay.Current?.ClosePopover(); OpenReactions(); }, "sparkles"));
         return Menu.Card(items.ToArray());
     }
 
@@ -468,7 +490,7 @@ internal sealed class ControlBar : Grid
                 {
                     Overlay.Current?.ClosePopover();
                     _ = _room.App.LeaveCall(_call);
-                }, "rectangle.portrait.and.arrow.right", T("The meeting carries on without you.")),
+                }, "rectangle.portrait.and.arrow.right", T("The meeting carries on without you."), answer: true),
             };
             if (_call.Hosting)
             {
@@ -487,7 +509,7 @@ internal sealed class ControlBar : Grid
                         end.IsEnabled = true;
                         _call.PressFailed();
                     }
-                }, "door.left.hand.closed", T("Everybody is disconnected and links stop working."), role: Menu.Role.Destructive);
+                }, "door.left.hand.closed", T("Everybody is disconnected and links stop working."), role: Menu.Role.Destructive, answer: true);
                 end.Named(T("End for everybody"), "leave.end");
                 items.Add(end);
             }
@@ -525,7 +547,7 @@ internal sealed class SharePanel : Grid
     {
         _call = call;
         _remote = remote;
-        _column.Padding = new Thickness(6);
+        _column.Padding = new Thickness(Sizing.Menu.Inset);
         _column.Children.Add(_screenSpace);
         _column.Children.Add(_sound);
         Children.Add(_column);
