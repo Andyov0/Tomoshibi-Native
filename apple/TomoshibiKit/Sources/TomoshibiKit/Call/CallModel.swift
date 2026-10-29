@@ -353,6 +353,8 @@ public final class CallModel {
     /// its light on after the call.
     @ObservationIgnored private var over = false
     private var bridge: Bridge?
+    /// The device's default path, told to the call for as long as it lasts.
+    @ObservationIgnored private var network: NetworkWatch?
 
     init(call: Call, deployment: Deployment, region: String?, sealed: Bool) {
         self.call = call
@@ -383,6 +385,9 @@ public final class CallModel {
         model.driveChatForDebug()
         #endif
         call.setLosslessSink(sink: model.lossless)
+        let network = NetworkWatch(call: call)
+        network.start()
+        model.network = network
         #if os(iOS)
         model.watchInterruptions()
         let receiver = BroadcastReceiver(call: call)
@@ -913,6 +918,8 @@ public final class CallModel {
 
     public func leave() async {
         over = true
+        network?.stop()
+        network = nil
         #if os(iOS)
         stopWatchingInterruptions()
         #endif
@@ -938,6 +945,8 @@ public final class CallModel {
         case let .ended(reason):
             endedReason = reason
             over = true
+            network?.stop()
+            network = nil
             #if os(iOS)
             stopWatchingInterruptions()
             #endif
