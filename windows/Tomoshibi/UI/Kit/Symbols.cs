@@ -134,6 +134,9 @@ internal static class Symbols
         ["music.magnifyingglass"] = "\uE721",
         ["plus.circle.fill"] = "\uECC8",
         ["tv"] = "\uE7F4",
+        // A film's sharpness (the watch settings' picture quality): the
+        // monitor, as for the screen.
+        ["sparkles.tv"] = "\uE7F4",
         ["antenna.radiowaves.left.and.right"] = "\uEC05",
         ["hand.thumbsup.fill"] = "\uE8E1",
         ["xmark.circle.fill"] = "\uEB90",
