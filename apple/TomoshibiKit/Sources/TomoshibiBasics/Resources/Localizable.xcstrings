@@ -20,13 +20,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : ",以及 UDP 媒体端口。"
+            "value" : "，以及 UDP 媒体端口。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : ",以及 UDP 媒體埠。"
+            "value" : "，以及 UDP 媒體埠。"
           }
         }
       }
@@ -530,13 +530,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "链接能让组外的人以访客身份进入组里的某个房间。失效时间留空,链接就一直有效,直到有人让它失效。"
+            "value" : "链接能让组外的人以访客身份进入组里的某个房间。失效时间留空，链接就一直有效，直到有人让它失效。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "連結能讓群組外的人以訪客身分進入群組裡的某個房間。失效時間留空,連結就一直有效,直到有人讓它失效。"
+            "value" : "連結能讓群組外的人以訪客身分進入群組裡的某個房間。失效時間留空，連結就一直有效，直到有人讓它失效。"
           }
         }
       }
@@ -704,7 +704,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "パスフレーズが必要です。"
+            "value" : "合言葉が必要です。"
           }
         },
         "zh-Hans" : {
@@ -716,7 +716,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "需要口令。"
+            "value" : "需要密語。"
           }
         }
       }
@@ -734,19 +734,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "パスフレーズは保存されないため、後から誰にも表示できません。あなたにもです。できるのは新しいものを設定して渡すことだけです。本人は /account でログインしてパスフレーズや画像を変更できます。"
+            "value" : "合言葉は保存されないため、後から誰にも表示できません。あなたにもです。できるのは新しいものを設定して渡すことだけです。本人は /account でサインインして合言葉や画像を変更できます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "口令从不保存,所以事后谁也看不到——包括你自己。你能做的是重设一个再交给对方。用户在 /account 登录后可以自己改口令、换头像。"
+            "value" : "口令从不保存，所以事后谁也看不到——包括你自己。你能做的是重设一个再交给对方。用户在 /account 登录后可以自己改口令、换头像。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "通行語從不保存,所以事後誰也看不到——包括你自己。你能做的是重設一個再交給對方。使用者在 /account 登入後可以自己改通行語、換頭像。"
+            "value" : "密語從不保存，所以事後誰也看不到——包括你自己。你能做的是重設一個再交給對方。使用者在 /account 登入後可以自己改密語、換頭像。"
           }
         }
       }
@@ -770,13 +770,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "每个点是它那一格内的平均值,线条后面的色带是格内单次读数的最高值,突发流量就出现在那里。累计量从本进程启动算起。趋势会在重启后留存:近期精细,越往前越粗,最长六个月。"
+            "value" : "每个点是它那一格内的平均值，线条后面的色带是格内单次读数的最高值，突发流量就出现在那里。累计量从本进程启动算起。趋势会在重启后留存：近期精细，越往前越粗，最长六个月。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "每個點是它那一格內的平均值,線條後面的色帶是格內單次讀數的最高值,突發流量就出現在那裡。累計量從本行程啟動算起。趨勢會在重啟後留存:近期精細,越往前越粗,最長六個月。"
+            "value" : "每個點是它那一格內的平均值，線條後面的色帶是格內單次讀數的最高值，突發流量就出現在那裡。累計量從本行程啟動算起。趨勢會在重新啟動後留存：近期精細，越往前越粗，最長六個月。"
           }
         }
       }
@@ -860,13 +860,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "中转名称,给 TLS 到不了的机器用。音视频仍走这台"
+            "value" : "中转名称，给 TLS 到不了的机器用。音视频仍走这台"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "中轉名稱,給 TLS 到不了的機器用。音視訊仍走這台"
+            "value" : "中轉名稱，給 TLS 到不了的機器用。音視訊仍走這台"
           }
         }
       }
@@ -1004,19 +1004,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "署名はパスフレーズから作られるもので、公開情報です。参加したどの部屋でも名前の横に表示されます。パスフレーズではなく署名を訊いてください。パスフレーズはこのサーバーが知ることも保存することもありません。"
+            "value" : "署名は合言葉から作られるもので、公開情報です。参加したどの部屋でも名前の横に表示されます。合言葉ではなく署名を訊いてください。合言葉はこのサーバーが知ることも保存することもありません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "签名是口令生成的,而且是公开的——他们进任何房间时都会显示在名字旁边。向对方要签名,不要口令;口令本服务器从来不会知道,也无法保存。"
+            "value" : "签名是口令生成的，而且是公开的——他们进任何房间时都会显示在名字旁边。向对方要签名，不要口令；口令本服务器从来不会知道，也无法保存。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "簽名是通行語生成的,而且是公開的——他們進任何房間時都會顯示在名字旁邊。向對方要簽名,不要通行語;通行語本伺服器從來不會知道,也無法保存。"
+            "value" : "簽名是密語生成的，而且是公開的——他們進任何房間時都會顯示在名字旁邊。向對方要簽名，不要密語；密語本伺服器從來不會知道，也無法保存。"
           }
         }
       }
@@ -1040,13 +1040,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "歌名,或歌单链接"
+            "value" : "歌名，或歌单链接"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "歌名,或歌單連結"
+            "value" : "歌名，或歌單連結"
           }
         }
       }
@@ -1100,13 +1100,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "视频链接,或分享时带的那段文字"
+            "value" : "视频链接，或分享时带的那段文字"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "影片連結,或分享時附帶的那段文字"
+            "value" : "影片連結，或分享時附帶的那段文字"
           }
         }
       }
@@ -1190,13 +1190,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "拒绝访问:该服务器仅限管理员使用。"
+            "value" : "拒绝访问：该服务器仅限管理员使用。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "拒絕存取:該伺服器僅限管理員使用。"
+            "value" : "拒絕存取：該伺服器僅限管理員使用。"
           }
         }
       }
@@ -1304,19 +1304,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Emby を許可されたアカウント:{count}"
+            "value" : "Emby を許可されたアカウント：{count}"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已开通 Emby 的账号:{count}"
+            "value" : "已开通 Emby 的账号：{count}"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已開通 Emby 的帳號:{count}"
+            "value" : "已開通 Emby 的帳號：{count}"
           }
         }
       }
@@ -1454,7 +1454,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "合言葉を付けると、この名前は自分だけのものになり、開いた部屋の進行役にもなれます。"
+            "value" : "合言葉を付けると、この名前は自分だけのものになり、開いた部屋のホストにもなれます。"
           }
         },
         "zh-Hans" : {
@@ -1844,7 +1844,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "クライアントに伝える アドレス"
+            "value" : "クライアントに伝えるアドレス"
           }
         },
         "zh-Hans" : {
@@ -1856,7 +1856,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "下發給客戶端的位址"
+            "value" : "提供給用戶端的位址"
           }
         }
       }
@@ -1964,19 +1964,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Emby を許可された管理者:{count}"
+            "value" : "Emby を許可された管理者：{count}"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已开通 Emby 的管理员:{count}"
+            "value" : "已开通 Emby 的管理员：{count}"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已開通 Emby 的管理員:{count}"
+            "value" : "已開通 Emby 的管理員：{count}"
           }
         }
       }
@@ -2300,13 +2300,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "只认账号,邀请链接一律失效。"
+            "value" : "只认账号，邀请链接一律失效。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "只認帳號,邀請連結一律失效。"
+            "value" : "只認帳號，邀請連結一律失效。"
           }
         }
       }
@@ -2324,19 +2324,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "招待リンク、アカウント、またはルームを開いたときの合言葉。名前を当てるだけでは入れません。"
+            "value" : "招待リンク、アカウント、または部屋を開いたときの合言葉。名前を当てるだけでは入れません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "需要邀请链接、账号,或者开这个房间时用的口令。光猜到名字进不来。"
+            "value" : "需要邀请链接、账号，或者开这个房间时用的口令。光猜到名字进不来。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "需要邀請連結、帳號,或者開這個房間時用的口令。光猜到名字進不來。"
+            "value" : "需要邀請連結、帳號，或者開這個房間時用的密語。光猜到名字進不來。"
           }
         }
       }
@@ -2366,7 +2366,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "舊版客戶端（沒說是哪個平台）"
+            "value" : "舊版用戶端（沒說是哪個平台）"
           }
         }
       }
@@ -2396,7 +2396,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Android 客戶端"
+            "value" : "Android 用戶端"
           }
         }
       }
@@ -2546,7 +2546,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "設了口令的任何人"
+            "value" : "設了密語的任何人"
           }
         }
       }
@@ -2570,13 +2570,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "拿到这个链接的人都能进,直到你解散会议为止。不需要口令。"
+            "value" : "拿到这个链接的人都能进，直到你解散会议为止。不需要口令。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "拿到這個連結的人都能進,直到你解散會議為止。不需要口令。"
+            "value" : "拿到這個連結的人都能進，直到你解散會議為止。不需要密語。"
           }
         }
       }
@@ -2810,7 +2810,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "只有新房间设为“仅限有账号的人”时才完全生效。"
+            "value" : "只有新房间设为「仅限有账号的人」时才完全生效。"
           }
         },
         "zh-Hant" : {
@@ -2900,13 +2900,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "预约会议"
+            "value" : "预定会议"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "預約會議"
+            "value" : "預定會議"
           }
         }
       }
@@ -2960,13 +2960,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你没有被开通预约会议。"
+            "value" : "你还没有预定会议的权限。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你沒有被開通預約會議。"
+            "value" : "你還沒有預定會議的權限。"
           }
         }
       }
@@ -3074,7 +3074,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "入室をお願いする"
+            "value" : "入室をリクエスト"
           }
         },
         "zh-Hans" : {
@@ -3470,13 +3470,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "番剧放不了:完整的一集,以及 720P 以上的画质,都只能经中转播放。"
+            "value" : "番剧放不了：完整的一集，以及 720P 以上的画质，都只能经中转播放。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "番劇播不了:完整的一集,以及 720P 以上的畫質,都只能經中轉播放。"
+            "value" : "番劇播不了：完整的一集，以及 720P 以上的畫質，都只能經中轉播放。"
           }
         }
       }
@@ -3590,13 +3590,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "B 站普通视频和粘贴的链接一律不中转,由观众各自直接播放。"
+            "value" : "B 站普通视频和粘贴的链接一律不中转，由观众各自直接播放。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "B 站一般影片和貼上的連結一律不中轉,由觀眾各自直接播放。"
+            "value" : "B 站一般影片和貼上的連結一律不中轉，由觀眾各自直接播放。"
           }
         }
       }
@@ -3716,37 +3716,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "虛化我的背景"
-          }
-        }
-      }
-    },
-    "Blurred" : {
-      "extractionState" : "manual",
-      "generatesSymbol" : false,
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Blurred"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ぼかし中"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已虚化"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已虛化"
+            "value" : "模糊我的背景"
           }
         }
       }
@@ -3920,13 +3890,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "会议会用你上次在会议里选的麦克风、摄像头和扬声器,只要它们还接着。"
+            "value" : "会议会用你上次在会议里选的麦克风、摄像头和扬声器，只要它们还接着。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "會議會用你上次在會議裡選的麥克風、攝影機和喇叭,只要它們還接著。"
+            "value" : "會議會用你上次在會議裡選的麥克風、攝影機和喇叭，只要它們還接著。"
           }
         }
       }
@@ -4244,7 +4214,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ルームを変える"
+            "value" : "部屋を変える"
           }
         },
         "zh-Hans" : {
@@ -5210,13 +5180,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "复制链接失败,请从下面的框里手动复制。"
+            "value" : "复制链接失败，请从下面的框里手动复制。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "複製連結失敗,請從下面的框裡手動複製。"
+            "value" : "複製連結失敗，請從下面的框裡手動複製。"
           }
         }
       }
@@ -5300,13 +5270,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "读不到你的预定。"
+            "value" : "无法加载你预定的会议。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "讀不到你的預定。"
+            "value" : "無法載入你預定的會議。"
           }
         }
       }
@@ -5330,13 +5300,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "联系不上这场会议,正在重试。"
+            "value" : "联系不上这场会议，正在重试。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "聯絡不上這場會議,正在重試。"
+            "value" : "聯絡不上這場會議，正在重試。"
           }
         }
       }
@@ -5444,7 +5414,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "現在のパスフレーズ"
+            "value" : "現在の合言葉"
           }
         },
         "zh-Hans" : {
@@ -5456,7 +5426,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "目前通行語"
+            "value" : "目前密語"
           }
         }
       }
@@ -6020,13 +5990,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "由口令算出,是同一个人"
+            "value" : "由口令算出，是同一个人"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "由密語算出,是同一個人"
+            "value" : "由密語算出，是同一個人"
           }
         }
       }
@@ -6140,13 +6110,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Emby 的流量是自服务器上次启动以来中转的量,重启后归零。"
+            "value" : "Emby 的流量是自服务器上次启动以来中转的量，重启后归零。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Emby 的流量是自伺服器上次啟動以來中轉的量,重啟後歸零。"
+            "value" : "Emby 的流量是自伺服器上次啟動以來中轉的量，重新啟動後歸零。"
           }
         }
       }
@@ -6224,7 +6194,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "全員の会議を終了"
+            "value" : "全員に対して会議を終了"
           }
         },
         "zh-Hans" : {
@@ -6284,7 +6254,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "名前とパスフレーズを入力してください。"
+            "value" : "名前と合言葉を入力してください。"
           }
         },
         "zh-Hans" : {
@@ -6296,7 +6266,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "輸入你的名字和口令。"
+            "value" : "輸入你的名字和密語。"
           }
         }
       }
@@ -6350,13 +6320,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "每个管理员都能查看全部。只有可以管理全部的管理员能任命管理员,或给任何人开通 Emby。"
+            "value" : "每个管理员都能查看全部。只有可以管理全部的管理员能任命管理员，或给任何人开通 Emby。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "每個管理員都能檢視全部。只有可以管理全部的管理員能任命管理員,或給任何人開通 Emby。"
+            "value" : "每個管理員都能檢視全部。只有可以管理全部的管理員能任命管理員，或給任何人開通 Emby。"
           }
         }
       }
@@ -6374,7 +6344,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "この部屋は所属グループのメンバー全員が主催者なので、引き継ぐ相手はいません。"
+            "value" : "この部屋は所属グループのメンバー全員がホストなので、引き継ぐ相手はいません。"
           }
         },
         "zh-Hans" : {
@@ -6410,13 +6380,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "逐个采样原样送达,比实时慢约 1 秒"
+            "value" : "逐个采样原样送达，比实时慢约 1 秒"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "逐個取樣原樣送達,比即時慢約 1 秒"
+            "value" : "逐個取樣原樣送達，比即時慢約 1 秒"
           }
         }
       }
@@ -6440,13 +6410,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "所有观众都经这个部署观看 B 站的番剧和电影,会员集完整播放,最高 4K,画质按各自播放器的大小来定。不需要任何人单独开通。"
+            "value" : "所有观众都经这个部署观看 B 站的番剧和电影，会员集完整播放，最高 4K，画质按各自播放器的大小来定。不需要任何人单独开通。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "所有觀眾都經這個部署觀看 B 站的番劇和電影,會員集完整播放,最高 4K,畫質按各自播放器的大小來定。不需要任何人單獨開通。"
+            "value" : "所有觀眾都經這個部署觀看 B 站的番劇和電影，會員集完整播放，最高 4K，畫質按各自播放器的大小來定。不需要任何人單獨開通。"
           }
         }
       }
@@ -6470,13 +6440,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "所有人会被断开,链接同时失效。"
+            "value" : "所有人会被断开，链接同时失效。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "所有人會被斷開,連結同時失效。"
+            "value" : "所有人會被斷開，連結同時失效。"
           }
         }
       }
@@ -6530,13 +6500,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "所有人会自动重连,不需要任何操作。"
+            "value" : "所有人会自动重连，不需要任何操作。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "所有人會自動重連,不需要任何操作。"
+            "value" : "所有人會自動重連，不需要任何操作。"
           }
         }
       }
@@ -6554,19 +6524,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "同じ合い言葉を入れた人どうしだけが聞こえ、通話を運ぶサーバーには聞こえません。合い言葉は別の方法で伝えてください。"
+            "value" : "同じ暗号キーを入力した人どうしだけが聞こえ、通話を運ぶサーバーには聞こえません。暗号キーは別の方法で伝えてください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "输入同一个暗号的人才能互相听见,承载通话的服务器听不见。暗号请用别的方式告诉对方。"
+            "value" : "输入同一个暗号的人才能互相听见，承载通话的服务器听不见。暗号请用别的方式告诉对方。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "輸入同一個暗號的人才能互相聽見,承載通話的伺服器聽不見。暗號請用別的方式告訴對方。"
+            "value" : "輸入同一個暗號的人才能互相聽見，承載通話的伺服器聽不見。暗號請用別的方式告訴對方。"
           }
         }
       }
@@ -6590,13 +6560,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "所有人会被断开并收到「房间已解散」的提示。会中生成的链接会失效,在用户面板生成的链接不会。"
+            "value" : "所有人会被断开并收到「房间已解散」的提示。会中生成的链接会失效，在用户面板生成的链接不会。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "所有人會被斷開並收到「房間已解散」的提示。會中產生的連結會失效,在使用者面板產生的連結不會。"
+            "value" : "所有人會被斷開並收到「房間已解散」的提示。會中產生的連結會失效，在使用者面板產生的連結不會。"
           }
         }
       }
@@ -6620,13 +6590,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "所有人会被断开并收到「房间已解散」的提示,指向这个房间的链接同时失效。"
+            "value" : "所有人会被断开并收到「房间已解散」的提示，指向这个房间的链接同时失效。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "所有人會被斷開並收到「房間已解散」的提示,指向這個房間的連結同時失效。"
+            "value" : "所有人會被斷開並收到「房間已解散」的提示，指向這個房間的連結同時失效。"
           }
         }
       }
@@ -6811,6 +6781,36 @@
         }
       }
     },
+    "Fewer controls" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fewer controls"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "その他の操作を閉じる"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收起更多控制"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "收起更多控制"
+          }
+        }
+      }
+    },
     "Fill in at least one language." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -6920,13 +6920,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Emby 的片只能经中转播放,所以放不了。"
+            "value" : "Emby 的片只能经中转播放，所以放不了。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Emby 的片只能經中轉播放,所以放不了。"
+            "value" : "Emby 的片只能經中轉播放，所以放不了。"
           }
         }
       }
@@ -6944,7 +6944,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "初期パスフレーズ"
+            "value" : "初期合言葉"
           }
         },
         "zh-Hans" : {
@@ -6956,7 +6956,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "初始通行語"
+            "value" : "初始密語"
           }
         }
       }
@@ -7154,19 +7154,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "削除しますか?"
+            "value" : "削除しますか？"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "删掉这条?"
+            "value" : "删掉这条？"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "刪掉這條?"
+            "value" : "刪掉這條？"
           }
         }
       }
@@ -7286,7 +7286,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "幀率"
+            "value" : "影格速率"
           }
         }
       }
@@ -7670,13 +7670,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "现在就把它交给 {name}。它不会被保存,之后再也看不到。"
+            "value" : "现在就把它交给 {name}。它不会被保存，之后再也看不到。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "現在就把它交給 {name}。它不會被保存,之後再也看不到。"
+            "value" : "現在就把它交給 {name}。它不會被保存，之後再也看不到。"
           }
         }
       }
@@ -7784,19 +7784,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "選択リストの分類に使われます。スラッシュで入れ子:Oversea/Asia"
+            "value" : "選択リストの分類に使われます。スラッシュで入れ子：Oversea/Asia"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "决定选择框里的分组。用斜杠嵌套:Oversea/Asia"
+            "value" : "决定选择框里的分组。用斜杠嵌套：Oversea/Asia"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "決定選擇框裡的分組。用斜線巢狀:Oversea/Asia"
+            "value" : "決定選擇框裡的分組。用斜線巢狀：Oversea/Asia"
           }
         }
       }
@@ -8030,13 +8030,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你好,{name}"
+            "value" : "你好，{name}"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你好,{name}"
+            "value" : "你好，{name}"
           }
         }
       }
@@ -8060,13 +8060,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hi-Res 和母带文件很大,开始播放要等更久。"
+            "value" : "Hi-Res 和母带文件很大，开始播放要等更久。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hi-Res 和母帶檔案很大,開始播放要等更久。"
+            "value" : "Hi-Res 和母帶檔案很大，開始播放要等更久。"
           }
         }
       }
@@ -8600,13 +8600,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "进会议时开哪些设备、界面怎么摆,只对这个浏览器生效。换个浏览器或设备各有各的设置。"
+            "value" : "进会议时开哪些设备、界面怎么摆，只对这个浏览器生效。换个浏览器或设备各有各的设置。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "進會議時開哪些裝置、介面怎麼擺,只對這個瀏覽器生效。換個瀏覽器或裝置各有各的設定。"
+            "value" : "進會議時開哪些裝置、介面怎麼擺，只對這個瀏覽器生效。換個瀏覽器或裝置各有各的設定。"
           }
         }
       }
@@ -8984,7 +8984,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "誰かを招待する"
+            "value" : "招待する"
           }
         },
         "zh-Hans" : {
@@ -9080,13 +9080,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "只为这一通话发放,说明不了对方是谁"
+            "value" : "只为这一通话发放，说明不了对方是谁"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "只為這一通話發放,說明不了對方是誰"
+            "value" : "只為這一通話發放，說明不了對方是誰"
           }
         }
       }
@@ -9104,7 +9104,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "次の名前になります:"
+            "value" : "次の名前になります："
           }
         },
         "zh-Hans" : {
@@ -9170,13 +9170,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "无论如何,一天后失效。"
+            "value" : "无论如何，一天后失效。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "無論如何,一天後失效。"
+            "value" : "無論如何，一天後失效。"
           }
         }
       }
@@ -9404,7 +9404,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ルームへの参加"
+            "value" : "部屋への参加"
           }
         },
         "zh-Hans" : {
@@ -9704,19 +9704,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "緯度, 経度。地球儀に表示され、距離の判断にも使われます"
+            "value" : "緯度、経度。地球儀に表示され、距離の判断にも使われます"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "纬度, 经度。用于地球仪显示,也让集群能判断远近"
+            "value" : "纬度，经度。用于地球仪显示，也让集群能判断远近"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "緯度, 經度。用於地球儀顯示,也讓叢集能判斷遠近"
+            "value" : "緯度，經度。用於地球儀顯示，也讓叢集能判斷遠近"
           }
         }
       }
@@ -9944,7 +9944,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "入れる"
+            "value" : "入室を許可"
           }
         },
         "zh-Hans" : {
@@ -10004,7 +10004,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "リンクをコピーしました"
+            "value" : "コピーしました"
           }
         },
         "zh-Hans" : {
@@ -10046,7 +10046,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "鏈路佔用"
+            "value" : "連線佔用"
           }
         }
       }
@@ -10346,7 +10346,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mac 客戶端"
+            "value" : "Mac 用戶端"
           }
         }
       }
@@ -10400,13 +10400,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "设为房主"
+            "value" : "设为主持人"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "設為房主"
+            "value" : "設為主持人"
           }
         }
       }
@@ -10820,13 +10820,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "会议由这里的成员发起。如果有人给了你链接,直接打开它就好。"
+            "value" : "会议由这里的成员发起。如果有人给了你链接，直接打开它就好。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "會議由這裡的成員發起。如果有人給了你連結,直接打開它就好。"
+            "value" : "會議由這裡的成員發起。如果有人給了你連結，直接打開它就好。"
           }
         }
       }
@@ -10850,13 +10850,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这里的会议要求登录账号,链接放不了人进来。"
+            "value" : "这里的会议要求登录账号，链接放不了人进来。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這裡的會議要求登入帳號,連結放不了人進來。"
+            "value" : "這裡的會議要求登入帳號，連結放不了人進來。"
           }
         }
       }
@@ -10976,7 +10976,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "麥克風電平"
+            "value" : "麥克風音量"
           }
         }
       }
@@ -11037,6 +11037,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "更多"
+          }
+        }
+      }
+    },
+    "More controls" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "More controls"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "その他の操作"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更多控制"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更多控制"
           }
         }
       }
@@ -11120,13 +11150,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "立刻迁移,结束这通通话"
+            "value" : "立刻迁移，结束这通通话"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "立刻遷移,結束這通通話"
+            "value" : "立刻遷移，結束這通通話"
           }
         }
       }
@@ -11300,13 +11330,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "闭麦"
+            "value" : "静音"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "閉麥"
+            "value" : "靜音"
           }
         }
       }
@@ -11570,13 +11600,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "自己起个名字,留空就随机生成一个没人用过的。"
+            "value" : "自己起个名字，留空就随机生成一个没人用过的。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "自己起個名字,留空就隨機生成一個沒人用過的。"
+            "value" : "自己起個名字，留空就隨機生成一個沒人用過的。"
           }
         }
       }
@@ -11600,7 +11630,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "需要先勾选“一起看”。"
+            "value" : "需要先勾选「一起看」。"
           }
         },
         "zh-Hant" : {
@@ -11671,6 +11701,36 @@
         }
       }
     },
+    "New messages" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "New messages"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新しいメッセージがあります"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有新消息"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有新訊息"
+          }
+        }
+      }
+    },
     "New passphrase" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -11684,7 +11744,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "新しいパスフレーズ"
+            "value" : "新しい合言葉"
           }
         },
         "zh-Hans" : {
@@ -11696,7 +11756,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "新通行語"
+            "value" : "新密語"
           }
         }
       }
@@ -11900,13 +11960,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没有配置管理员,所以任何人都能开房间。"
+            "value" : "没有配置管理员，所以任何人都能开房间。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "沒有設定管理員,所以任何人都能開房間。"
+            "value" : "沒有設定管理員，所以任何人都能開房間。"
           }
         }
       }
@@ -12050,13 +12110,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "不降噪,不自动调节音量。适合戴耳机或演奏音乐。"
+            "value" : "不降噪，不自动调节音量。适合戴耳机或演奏音乐。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "不降噪,不自動調整音量。適合戴耳機或演奏音樂。"
+            "value" : "不降噪，不自動調整音量。適合戴耳機或演奏音樂。"
           }
         }
       }
@@ -12110,13 +12170,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没有配置中继,所以这个节点无处安放通话。"
+            "value" : "没有配置中继，所以这个节点无处安放通话。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "沒有設定中繼,所以這個節點無處安放通話。"
+            "value" : "沒有設定中繼，所以這個節點無處安放通話。"
           }
         }
       }
@@ -12380,13 +12440,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "还没有人开通 Emby,所以不会中转任何片。"
+            "value" : "还没有人开通 Emby，所以不会中转任何片。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "還沒有人開通 Emby,所以不會中轉任何片。"
+            "value" : "還沒有人開通 Emby，所以不會中轉任何片。"
           }
         }
       }
@@ -12464,19 +12524,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "誰も入れてくれませんでした。リンクをもらってください。"
+            "value" : "入室は許可されませんでした。招待リンクを依頼してください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没有人放你进去。找组织者要个链接吧。"
+            "value" : "没有人放你进去。找主持人要个链接吧。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "沒有人放你進去。找組織者要個連結吧。"
+            "value" : "沒有人放你進去。找主持人要個連結吧。"
           }
         }
       }
@@ -12661,36 +12721,6 @@
         }
       }
     },
-    "Not blurred" : {
-      "extractionState" : "manual",
-      "generatesSymbol" : false,
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Not blurred"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ぼかさない"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "不虚化"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "不虛化"
-          }
-        }
-      }
-    },
     "Not now" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -12704,7 +12734,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "今はしない"
+            "value" : "後で"
           }
         },
         "zh-Hans" : {
@@ -12764,19 +12794,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未ログインのため最大 320 kbps です。"
+            "value" : "サインインしていないため最大 320 kbps です。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未登录,最高 320 kbps。"
+            "value" : "未登录，最高 320 kbps。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "未登入,最高 320 kbps。"
+            "value" : "未登入，最高 320 kbps。"
           }
         }
       }
@@ -12800,13 +12830,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "维护中,暂不接受通话"
+            "value" : "维护中，暂不接受通话"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "維護中,暫不接受通話"
+            "value" : "維護中，暫不接受通話"
           }
         }
       }
@@ -12854,19 +12884,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "まだ入れていません:接続を確立中です"
+            "value" : "まだ入れていません：接続を確立中です"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "还没进来:连接仍在建立中"
+            "value" : "还没进来：连接仍在建立中"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "還沒進來:連線仍在建立中"
+            "value" : "還沒進來：連線仍在建立中"
           }
         }
       }
@@ -12950,13 +12980,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "现在没在放歌,在下面点一首吧。"
+            "value" : "现在没在放歌，在下面点一首吧。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "現在沒在放歌,在下面點一首吧。"
+            "value" : "現在沒在放歌，在下面點一首吧。"
           }
         }
       }
@@ -12980,13 +13010,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "现在没在放。贴一个视频链接,大家一起看。"
+            "value" : "现在没在放。贴一个视频链接，大家一起看。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "現在沒在播放。貼上影片連結,大家一起看。"
+            "value" : "現在沒在播放。貼上影片連結，大家一起看。"
           }
         }
       }
@@ -13244,7 +13274,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "新しいルームを開けるのは管理者だけです。教わったルーム名を入力してください。"
+            "value" : "新しい部屋を開けるのは管理者だけです。伝えられた部屋の名前を入力してください。"
           }
         },
         "zh-Hans" : {
@@ -13334,19 +13364,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Emby の許可と取り消し、Emby を許可された人のパスフレーズの再設定は、すべてを管理できる管理者だけが行えます。"
+            "value" : "Emby の許可と取り消し、Emby を許可された人の合言葉の再設定は、すべてを管理できる管理者だけが行えます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "只有可以管理全部的管理员能开通或取消 Emby,或为已开通 Emby 的人重设口令。"
+            "value" : "只有可以管理全部的管理员能开通或取消 Emby，或为已开通 Emby 的人重设口令。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "只有可以管理全部的管理員能開通或取消 Emby,或為已開通 Emby 的人重設通行語。"
+            "value" : "只有可以管理全部的管理員能開通或取消 Emby，或為已開通 Emby 的人重設密語。"
           }
         }
       }
@@ -13436,7 +13466,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "只有在這裡有帳號的人能開房間。自己隨便設的口令不算。"
+            "value" : "只有在這裡有帳號的人能開房間。自己隨便設的密語不算。"
           }
         }
       }
@@ -13484,7 +13514,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "この部屋に人を入れられるのは、進行役だけです。"
+            "value" : "この部屋への入室を許可できるのはホストだけです。"
           }
         },
         "zh-Hans" : {
@@ -13730,7 +13760,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "打开磁盘映像，把 Tomoshibi 拖进“应用程序”文件夹。"
+            "value" : "打开磁盘映像，把 Tomoshibi 拖进「应用程序」文件夹。"
           }
         },
         "zh-Hant" : {
@@ -13814,19 +13844,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このマシンで開けておくもの:"
+            "value" : "このマシンで開けておくもの："
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这台机器上要放行:"
+            "value" : "这台机器上要放行："
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這台機器上要放行:"
+            "value" : "這台機器上要放行："
           }
         }
       }
@@ -14270,13 +14300,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "贴一个链接,所有人同步一起看。"
+            "value" : "贴一个链接，所有人同步一起看。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "貼上連結,所有人同步一起看。"
+            "value" : "貼上連結，所有人同步一起看。"
           }
         }
       }
@@ -14570,13 +14600,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "选好时间,开始前就把链接发出去。"
+            "value" : "选好时间，开始前就把链接发出去。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "選好時間,開始前就把連結發出去。"
+            "value" : "選好時間，開始前就把連結發出去。"
           }
         }
       }
@@ -15800,13 +15830,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "中转名称,逗号分隔。双向生效"
+            "value" : "中转名称，逗号分隔。双向生效"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "中轉名稱,逗號分隔。雙向生效"
+            "value" : "中轉名稱，逗號分隔。雙向生效"
           }
         }
       }
@@ -16190,13 +16220,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "移出只会结束他这次通话,并不能阻止他用同一个名字再进来。"
+            "value" : "移出只会结束他这次通话，并不能阻止他用同一个名字再进来。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "移出只會結束他這次通話,並不能阻止他用同一個名字再進來。"
+            "value" : "移出只會結束他這次通話，並不能阻止他用同一個名字再進來。"
           }
         }
       }
@@ -16244,7 +16274,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ルーム名"
+            "value" : "部屋の名前"
           }
         },
         "zh-Hans" : {
@@ -16304,7 +16334,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ルーム名に使えるのは小文字・数字・ハイフンだけです。"
+            "value" : "部屋の名前に使えるのは小文字・数字・ハイフンだけです。"
           }
         },
         "zh-Hans" : {
@@ -16370,13 +16400,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "房间要么谁都能开,要么只有管理员能开,而这个两者都不是。"
+            "value" : "房间要么谁都能开，要么只有管理员能开，而这个两者都不是。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "房間要麼誰都能開,要麼只有管理員能開,而這個兩者都不是。"
+            "value" : "房間要麼誰都能開，要麼只有管理員能開，而這個兩者都不是。"
           }
         }
       }
@@ -16394,19 +16424,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ここのルームは招待制です。届いたリンクを開くか、サインインしてください。"
+            "value" : "ここの部屋は招待制です。届いたリンクを開くか、サインインしてください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这里的房间需要邀请。打开别人发给你的链接,或者登录。"
+            "value" : "这里的房间需要邀请。打开别人发给你的链接，或者登录。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這裡的房間需要邀請。打開別人發給你的連結,或者登入。"
+            "value" : "這裡的房間需要邀請。打開別人發給你的連結，或者登入。"
           }
         }
       }
@@ -16520,13 +16550,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "以 root 身份在新机器上运行这条命令。把 <prefix> 换成它要用的名字,剩下的它自己做:下载程序、取走本部署的证书和密钥、把域名指向这台机器、启动中转。"
+            "value" : "以 root 身份在新机器上运行这条命令。把 <prefix> 换成它要用的名字，剩下的它自己做：下载程序、取走本部署的证书和密钥、把域名指向这台机器、启动中转。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "以 root 身分在新機器上執行這條指令。把 <prefix> 換成它要用的名字,其餘的它會自己完成:下載程式、取走本部署的憑證和金鑰、把網域指向這台機器、啟動中轉。"
+            "value" : "以 root 身分在新機器上執行這條指令。把 <prefix> 換成它要用的名字，其餘的它會自己完成：下載程式、取走本部署的憑證和金鑰、把網域指向這台機器、啟動中轉。"
           }
         }
       }
@@ -16580,13 +16610,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这个房间的管理"
+            "value" : "房间管理"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這個房間的管理"
+            "value" : "房間管理"
           }
         }
       }
@@ -16964,19 +16994,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "この通話を封じる"
+            "value" : "この通話を暗号化する"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "给这通话加密"
+            "value" : "为本次通话加密"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "給這通話加密"
+            "value" : "為這次通話加密"
           }
         }
       }
@@ -16994,7 +17024,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "合い言葉"
+            "value" : "暗号キー"
           }
         },
         "zh-Hans" : {
@@ -17060,13 +17090,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "搜一首歌或粘贴歌单链接,点歌台就开起来了。"
+            "value" : "搜一首歌或粘贴歌单链接，点歌台就开起来了。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "搜一首歌或貼上歌單連結,點歌台就開起來了。"
+            "value" : "搜一首歌或貼上歌單連結，點歌台就開起來了。"
           }
         }
       }
@@ -17120,13 +17150,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "搜一首歌,放给会里的所有人听。"
+            "value" : "搜一首歌，放给会里的所有人听。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "搜一首歌,播放給會議裡的所有人聽。"
+            "value" : "搜一首歌，播放給會議裡的所有人聽。"
           }
         }
       }
@@ -17414,7 +17444,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "パスフレーズを再設定"
+            "value" : "合言葉を再設定"
           }
         },
         "zh-Hans" : {
@@ -17426,7 +17456,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "重設通行語"
+            "value" : "重設密語"
           }
         }
       }
@@ -17456,7 +17486,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要開新房間得先設口令。已經存在的房間任何人都能加入。"
+            "value" : "要開新房間得先設密語。已經存在的房間任何人都能加入。"
           }
         }
       }
@@ -17510,13 +17540,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在这里设置,不在配置文件里。"
+            "value" : "在这里设置，不在配置文件里。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在這裡設定,不在設定檔裡。"
+            "value" : "在這裡設定，不在設定檔裡。"
           }
         }
       }
@@ -17540,13 +17570,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "配置文件里设成了「任何人都能开会」——包括 signed,因为口令就是随便输的东西。要改请改配置文件。"
+            "value" : "配置文件里设成了「任何人都能开会」——包括 signed，因为口令就是随便输的东西。要改请改配置文件。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "設定檔裡設成了「任何人都能開會」——包括 signed,因為口令就是隨便輸的東西。要改請改設定檔。"
+            "value" : "設定檔裡設成了「任何人都能開會」——包括 signed，因為密語就是隨便輸的東西。要改請改設定檔。"
           }
         }
       }
@@ -17564,19 +17594,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "設定ファイルで「ルーム名を知っている人は誰でも」になっています。ここではルーム名がすべてなので、当てた人も入れます。変更は設定ファイルで。"
+            "value" : "設定ファイルで「部屋の名前を知っている人は誰でも」になっています。ここでは部屋の名前がすべてなので、当てた人も入れます。変更は設定ファイルで。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "配置文件里设成了「知道房间名就能进」——而这里房间就是一个名字,所以猜到的人也能进。要改请改配置文件。"
+            "value" : "配置文件里设成了「知道房间名就能进」——而这里房间就是一个名字，所以猜到的人也能进。要改请改配置文件。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "設定檔裡設成了「知道房間名就能進」——而這裡房間就是一個名字,所以猜到的人也能進。要改請改設定檔。"
+            "value" : "設定檔裡設成了「知道房間名就能進」——而這裡房間就是一個名字，所以猜到的人也能進。要改請改設定檔。"
           }
         }
       }
@@ -17624,19 +17654,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "設定は {chosen} ですが {effect} で動作中:厳しい方を満たせる人がいないため、あなたを含む全員が締め出されるところでした。"
+            "value" : "設定は {chosen} ですが {effect} で動作中：厳しい方を満たせる人がいないため、あなたを含む全員が締め出されるところでした。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "设的是 {chosen},实际按 {effect} 运行:没人能满足更严的那个,那样会把所有人(包括你)关在外面。"
+            "value" : "设的是 {chosen}，实际按 {effect} 运行：没人能满足更严的那个，那样会把所有人(包括你)关在外面。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "設的是 {chosen},實際按 {effect} 運行:沒人能滿足更嚴的那個,那樣會把所有人(包括你)關在外面。"
+            "value" : "設的是 {chosen}，實際按 {effect} 執行：沒人能滿足更嚴的那個，那樣會把所有人(包括你)關在外面。"
           }
         }
       }
@@ -17876,7 +17906,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "共享中"
+            "value" : "分享中"
           }
         }
       }
@@ -18254,7 +18284,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ログインの有無にかかわらずアプリのロビーに表示され、終了時刻か取り下げまで続きます"
+            "value" : "サインインの有無にかかわらずアプリのロビーに表示され、終了時刻か取り下げまで続きます"
           }
         },
         "zh-Hans" : {
@@ -18386,7 +18416,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "登入後可以修改自己的口令和頭像。"
+            "value" : "登入後可以修改自己的密語和頭像。"
           }
         }
       }
@@ -18686,7 +18716,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "自上次重啟"
+            "value" : "自上次重新啟動"
           }
         }
       }
@@ -18764,19 +18794,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "「{title}」をスキップしました:音楽アカウントでは再生できません。"
+            "value" : "「{title}」をスキップしました：音楽アカウントでは再生できません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已跳过「{title}」:音乐账号播放不了。"
+            "value" : "已跳过「{title}」：音乐账号播放不了。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已跳過「{title}」:音樂帳號播放不了。"
+            "value" : "已跳過「{title}」：音樂帳號播放不了。"
           }
         }
       }
@@ -18854,19 +18884,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "その合言葉は既に使われています。別のものを。"
+            "value" : "その合言葉は既に使われています。別の合言葉を選んでください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已经有人在用这个口令,换一个。"
+            "value" : "已经有人在用这个口令，换一个。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已經有人在用這個口令,換一個。"
+            "value" : "已經有人在用這個密語，換一個。"
           }
         }
       }
@@ -18914,19 +18944,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "そのルームには人がいます。先に閉じてから削除してください。"
+            "value" : "その部屋には人がいます。先に閉じてから削除してください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这个房间里有人。先关掉它,再删记录。"
+            "value" : "这个房间里有人。先关掉它，再删记录。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這個房間裡有人。先關掉它,再刪記錄。"
+            "value" : "這個房間裡有人。先關掉它，再刪記錄。"
           }
         }
       }
@@ -18980,13 +19010,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "连不上 YouTube 的观众(比如在中国大陆)看不到,并会被告知原因。"
+            "value" : "连不上 YouTube 的观众(比如在中国大陆)看不到，并会被告知原因。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "連不上 YouTube 的觀眾(例如在中國大陸)看不到,並會被告知原因。"
+            "value" : "連不上 YouTube 的觀眾(例如在中國大陸)看不到，並會被告知原因。"
           }
         }
       }
@@ -19010,13 +19040,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这个名字已经被别人证明过"
+            "value" : "这个名字已被别人认证"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這個名字已經被別人證明過"
+            "value" : "這個名字已被別人認證"
           }
         }
       }
@@ -19784,19 +19814,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "{size}・{rate} fps に切り替えますか?"
+            "value" : "{size}・{rate} fps に切り替えますか？"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要改成 {size}、{rate} 帧吗?"
+            "value" : "要改成 {size}、{rate} 帧吗？"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "要改成 {size}、{rate} 幀嗎?"
+            "value" : "要改成 {size}、{rate} fps 嗎？"
           }
         }
       }
@@ -20060,13 +20090,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没能改成,再试一次。"
+            "value" : "没能改成，再试一次。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "沒能改成,再試一次。"
+            "value" : "沒能改成，再試一次。"
           }
         }
       }
@@ -20090,13 +20120,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没能完成,再试一次。"
+            "value" : "没能完成，再试一次。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "沒能完成,再試一次。"
+            "value" : "沒能完成，再試一次。"
           }
         }
       }
@@ -20150,13 +20180,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "找不到这一集:可能已经下架,或者在服务器所在的地区看不了。"
+            "value" : "找不到这一集：可能已经下架，或者在服务器所在的地区看不了。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "找不到這一集:可能已經下架,或者在伺服器所在的地區無法觀看。"
+            "value" : "找不到這一集：可能已經下架，或者在伺服器所在的地區無法觀看。"
           }
         }
       }
@@ -20174,19 +20204,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "この招待は無効になりました。もう一度もらってください。"
+            "value" : "この招待は無効になりました。新しい招待を依頼してください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这个邀请已经失效了,再要一个吧。"
+            "value" : "这个邀请已经失效了，再要一个吧。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這個邀請已經失效了,再要一個吧。"
+            "value" : "這個邀請已經失效了，再要一個吧。"
           }
         }
       }
@@ -20210,13 +20240,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这个邀请 {when} 才生效,到时候再来。"
+            "value" : "这个邀请 {when} 才生效，到时候再来。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這個邀請 {when} 才生效,到時候再來。"
+            "value" : "這個邀請 {when} 才生效，到時候再來。"
           }
         }
       }
@@ -20330,13 +20360,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这台服务器不认识这个权限,它可能在跑旧版本。"
+            "value" : "这台服务器不认识这个权限，它可能在跑旧版本。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這台伺服器不認識這個權限,它可能在跑舊版本。"
+            "value" : "這台伺服器不認識這個權限，它可能在跑舊版本。"
           }
         }
       }
@@ -20390,13 +20420,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这台服务器不认识这个管理权限,它可能在跑旧版本。"
+            "value" : "这台服务器不认识这个管理权限，它可能在跑旧版本。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這台伺服器不認識這個管理權限,它可能在跑舊版本。"
+            "value" : "這台伺服器不認識這個管理權限，它可能在跑舊版本。"
           }
         }
       }
@@ -20546,7 +20576,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這不是客戶端能撥的位址。"
+            "value" : "這不是用戶端能撥的位址。"
           }
         }
       }
@@ -20666,7 +20696,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這不是你現在的口令。"
+            "value" : "這不是你現在的密語。"
           }
         }
       }
@@ -20720,13 +20750,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这是最后一个能改动任何东西的管理员,所以保留。"
+            "value" : "这是最后一个能改动任何东西的管理员，所以保留。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這是最後一個能改動任何東西的管理員,所以保留。"
+            "value" : "這是最後一個能改動任何東西的管理員，所以保留。"
           }
         }
       }
@@ -20744,7 +20774,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "それは今使われているパスフレーズです。"
+            "value" : "それは今使われている合言葉です。"
           }
         },
         "zh-Hans" : {
@@ -20756,7 +20786,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這就是目前正在用的口令。"
+            "value" : "這就是目前正在用的密語。"
           }
         }
       }
@@ -20786,7 +20816,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這就是你現在用的口令。"
+            "value" : "這就是你現在用的密語。"
           }
         }
       }
@@ -20840,13 +20870,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没能生成链接,再试一次。"
+            "value" : "没能生成链接，再试一次。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "沒能產生連結,再試一次。"
+            "value" : "沒能產生連結，再試一次。"
           }
         }
       }
@@ -20996,7 +21026,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "名字和口令對不上。"
+            "value" : "名字和密語對不上。"
           }
         }
       }
@@ -21134,7 +21164,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "そのパスフレーズは他の人のものです。"
+            "value" : "その合言葉は他の人のものです。"
           }
         },
         "zh-Hans" : {
@@ -21146,7 +21176,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這個口令已經是別人的了。"
+            "value" : "這個密語已經是別人的了。"
           }
         }
       }
@@ -21164,7 +21194,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "そのパスフレーズは管理者のものではありません。"
+            "value" : "その合言葉は管理者のものではありません。"
           }
         },
         "zh-Hans" : {
@@ -21176,7 +21206,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這個口令不屬於任何管理員。"
+            "value" : "這個密語不屬於任何管理員。"
           }
         }
       }
@@ -21194,7 +21224,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "そのパスフレーズは短すぎます。"
+            "value" : "その合言葉は短すぎます。"
           }
         },
         "zh-Hans" : {
@@ -21206,7 +21236,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這個口令太短了。"
+            "value" : "這個密語太短了。"
           }
         }
       }
@@ -21470,13 +21500,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "那台服务器没有应答,会议没有被挪走。"
+            "value" : "那台服务器没有应答，会议没有被挪走。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "那台伺服器沒有回應,會議沒有被移走。"
+            "value" : "那台伺服器沒有回應，會議沒有被移走。"
           }
         }
       }
@@ -21530,13 +21560,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "那台服务器是保留的,这个会议不能放上去。"
+            "value" : "那台服务器是保留的，这个会议不能放上去。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "那台伺服器是保留的,這個會議不能放上去。"
+            "value" : "那台伺服器是保留的，這個會議不能放上去。"
           }
         }
       }
@@ -21560,13 +21590,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这个会话已经结束,请重新登录。"
+            "value" : "这个会话已经结束，请重新登录。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這個工作階段已經結束,請重新登入。"
+            "value" : "這個工作階段已經結束，請重新登入。"
           }
         }
       }
@@ -21680,13 +21710,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这个视频有版权保护(DRM),只能在原网站上看。"
+            "value" : "这个视频有版权保护(DRM)，只能在原网站上看。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這部影片有版權保護(DRM),只能在原網站上看。"
+            "value" : "這部影片有版權保護(DRM)，只能在原網站上看。"
           }
         }
       }
@@ -21710,13 +21740,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这个视频仅限付费会员观看,只能在原网站上看。"
+            "value" : "这个视频仅限付费会员观看，只能在原网站上看。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這部影片僅限付費會員觀看,只能在原網站上看。"
+            "value" : "這部影片僅限付費會員觀看，只能在原網站上看。"
           }
         }
       }
@@ -21770,13 +21800,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这个时间段不能用:失效时间要晚于生效时间,也要晚于现在。"
+            "value" : "这个时间段不能用：失效时间要晚于生效时间，也要晚于现在。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這個時段不能用:失效時間要晚於生效時間,也要晚於現在。"
+            "value" : "這個時段不能用：失效時間要晚於生效時間，也要晚於現在。"
           }
         }
       }
@@ -21830,13 +21860,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "全站的 Emby 中转是关着的,在“房间”里打开之前,这一项不起作用。"
+            "value" : "全站的 Emby 中转是关着的，在「房间」里打开之前，这一项不起作用。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "全站的 Emby 中轉是關著的,在「房間」裡打開之前,這一項不起作用。"
+            "value" : "全站的 Emby 中轉是關著的，在「房間」裡打開之前，這一項不起作用。"
           }
         }
       }
@@ -21914,7 +21944,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ブラウザーが接続するアドレスです。ws:// または wss:// で始まり、その機体は role: relay で動いている必要があります。"
+            "value" : "ブラウザが接続するアドレスです。ws:// または wss:// で始まり、その機体は role: relay で動いている必要があります。"
           }
         },
         "zh-Hans" : {
@@ -22070,13 +22100,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "改动没能写下来,所以什么都没变。"
+            "value" : "改动没能写下来，所以什么都没变。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "改動沒能寫下來,所以什麼都沒變。"
+            "value" : "改動沒能寫下來，所以什麼都沒變。"
           }
         }
       }
@@ -22130,13 +22160,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "配置文件设为中转所有视频(meet.watch.direct_only 是关的),在打开它之前,这些开关都不起作用。Emby 片仍然需要单独开通。"
+            "value" : "配置文件设为中转所有视频(meet.watch.direct_only 是关的)，在打开它之前，这些开关都不起作用。Emby 片仍然需要单独开通。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "設定檔設為中轉所有影片(meet.watch.direct_only 是關的),在打開它之前,這些開關都不起作用。Emby 片仍然需要單獨開通。"
+            "value" : "設定檔設為中轉所有影片(meet.watch.direct_only 是關的)，在打開它之前，這些開關都不起作用。Emby 片仍然需要單獨開通。"
           }
         }
       }
@@ -22250,13 +22280,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "房主已解散这个房间。"
+            "value" : "主持人已解散这个房间。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "房主已解散這個房間。"
+            "value" : "主持人已解散這個房間。"
           }
         }
       }
@@ -22274,7 +22304,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "進行役はまだこの会議を始めていません。"
+            "value" : "ホストはまだこの会議を始めていません。"
           }
         },
         "zh-Hans" : {
@@ -22340,13 +22370,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "音乐库没有响应,再试一次。"
+            "value" : "音乐库没有响应，再试一次。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "音樂庫沒有回應,再試一次。"
+            "value" : "音樂庫沒有回應，再試一次。"
           }
         }
       }
@@ -22400,13 +22430,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "媒体服务器没有响应,再试一次。"
+            "value" : "媒体服务器没有响应，再试一次。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "媒體伺服器沒有回應,再試一次。"
+            "value" : "媒體伺服器沒有回應，再試一次。"
           }
         }
       }
@@ -22430,13 +22460,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "媒体服务器没有应答,没法确认房间是否在用,什么都没改。"
+            "value" : "媒体服务器没有应答，没法确认房间是否在用，什么都没改。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "媒體伺服器沒有應答,沒法確認房間是否在用,什麼都沒改。"
+            "value" : "媒體伺服器沒有應答，沒法確認房間是否在用，什麼都沒改。"
           }
         }
       }
@@ -22460,13 +22490,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "媒体服务器没有应答,所以现在正在发生什么无从得知。这台服务器记下来的内容在下面。"
+            "value" : "媒体服务器没有应答，所以现在正在发生什么无从得知。这台服务器记下来的内容在下面。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "媒體伺服器沒有應答,所以現在正在發生什麼無從得知。這台伺服器記下來的內容在下面。"
+            "value" : "媒體伺服器沒有應答，所以現在正在發生什麼無從得知。這台伺服器記下來的內容在下面。"
           }
         }
       }
@@ -22514,7 +22544,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "会議はあなたが退出しても続きます。"
+            "value" : "退出しても会議は続きます。"
           }
         },
         "zh-Hans" : {
@@ -22574,7 +22604,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "教えてもらった部屋名を入力します。"
+            "value" : "伝えられた部屋の名前を入力します。"
           }
         },
         "zh-Hans" : {
@@ -22760,13 +22790,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "存储没有应答,所以什么都没变。"
+            "value" : "存储没有应答，所以什么都没变。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "儲存沒有回應,所以什麼都沒變。"
+            "value" : "儲存沒有回應，所以什麼都沒變。"
           }
         }
       }
@@ -23030,13 +23060,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "没能读取这个视频,再试一次。"
+            "value" : "没能读取这个视频，再试一次。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "無法讀取這部影片,再試一次。"
+            "value" : "無法讀取這部影片，再試一次。"
           }
         }
       }
@@ -23060,13 +23090,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "视频中断了,没能接上。"
+            "value" : "视频中断了，没能接上。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "影片中斷了,沒能接上。"
+            "value" : "影片中斷了，沒能接上。"
           }
         }
       }
@@ -23390,13 +23420,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "他会被断开,然后从这台重新接入。"
+            "value" : "他会被断开，然后从这台重新接入。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "他會被斷開,然後從這台重新接入。"
+            "value" : "他會被斷開，然後從這台重新接入。"
           }
         }
       }
@@ -23444,7 +23474,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "この人は合言葉なしで参加しているため、部屋の主催者にはなれません。合言葉を付けて参加し直してもらってください。"
+            "value" : "この人は合言葉なしで参加しているため、ホストになれません。合言葉を付けて参加し直してもらってください。"
           }
         },
         "zh-Hans" : {
@@ -23594,19 +23624,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "この通話は封じられています"
+            "value" : "この通話は暗号化されています"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这通话已加密"
+            "value" : "本次通话已加密"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這通話已加密"
+            "value" : "這次通話已加密"
           }
         }
       }
@@ -23720,13 +23750,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这个部署没有配置一起看网关,这一项不起作用。"
+            "value" : "这个部署没有配置一起看网关，这一项不起作用。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這個部署沒有設定一起看閘道,這一項不起作用。"
+            "value" : "這個部署沒有設定一起看閘道，這一項不起作用。"
           }
         }
       }
@@ -23870,13 +23900,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这个链接从 {from} 起有效,直到有人让它失效。"
+            "value" : "这个链接从 {from} 起有效，直到有人让它失效。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這個連結從 {from} 起有效,直到有人讓它失效。"
+            "value" : "這個連結從 {from} 起有效，直到有人讓它失效。"
           }
         }
       }
@@ -23930,13 +23960,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这个链接一直有效,直到有人让它失效。"
+            "value" : "这个链接一直有效，直到有人让它失效。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這個連結一直有效,直到有人讓它失效。"
+            "value" : "這個連結一直有效，直到有人讓它失效。"
           }
         }
       }
@@ -24020,13 +24050,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这个节点不承载媒体,没什么可问的。"
+            "value" : "这个节点不承载媒体，没什么可问的。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這個節點不承載媒體,沒什麼可問的。"
+            "value" : "這個節點不承載媒體，沒什麼可問的。"
           }
         }
       }
@@ -24044,19 +24074,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このパスフレーズでは参加できません。主催者にお問い合わせください。"
+            "value" : "この合言葉では参加できません。ホストにお問い合わせください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "该口令已被禁止加入,请联系组织者。"
+            "value" : "该口令已被禁止加入，请联系主持人。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "該通行語已被禁止加入,請聯絡主辦者。"
+            "value" : "該密語已被禁止加入，請聯絡主持人。"
           }
         }
       }
@@ -24200,13 +24230,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在选择窗口里勾选共享音频,或者选择正在播放的浏览器标签页。"
+            "value" : "在选择窗口里勾选共享音频，或者选择正在播放的浏览器标签页。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在選擇視窗裡勾選分享音訊,或者選擇正在播放的瀏覽器分頁。"
+            "value" : "在選擇視窗裡勾選分享音訊，或者選擇正在播放的瀏覽器分頁。"
           }
         }
       }
@@ -24230,13 +24260,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "勾选后,此人从 Emby 选的片会经 CDN 中转给房间里的每个人,每人看多久就中转多久。"
+            "value" : "勾选后，此人从 Emby 选的片会经 CDN 中转给房间里的每个人，每人看多久就中转多久。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "勾選後,此人從 Emby 選的片會經 CDN 中轉給房間裡的每個人,每人看多久就中轉多久。"
+            "value" : "勾選後，此人從 Emby 選的片會經 CDN 中轉給房間裡的每個人，每人看多久就中轉多久。"
           }
         }
       }
@@ -24680,13 +24710,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "尝试次数太多,等一分钟再试。"
+            "value" : "尝试次数太多，等一分钟再试。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "嘗試次數太多,等一分鐘再試。"
+            "value" : "嘗試次數太多，等一分鐘再試。"
           }
         }
       }
@@ -25346,7 +25376,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "最高 120 幀"
+            "value" : "最高 120 fps"
           }
         }
       }
@@ -25376,7 +25406,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "最高 240 幀"
+            "value" : "最高 240 fps"
           }
         }
       }
@@ -25406,7 +25436,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "最高 60 幀"
+            "value" : "最高 60 fps"
           }
         }
       }
@@ -25814,7 +25844,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "進行役を待つ"
+            "value" : "ホストを待つ"
           }
         },
         "zh-Hans" : {
@@ -25844,7 +25874,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "中の人が入れてくれるのを待っています。"
+            "value" : "入室の許可を待っています。"
           }
         },
         "zh-Hans" : {
@@ -25868,25 +25898,25 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Waiting for the host to start the meeting."
+            "value" : "Waiting for the host…"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "進行役が会議を始めるのを待っています。"
+            "value" : "ホストを待っています…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在等主持人开始会议。"
+            "value" : "等待主持人开始…"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在等主持人開始會議。"
+            "value" : "等待主持人開始…"
           }
         }
       }
@@ -26204,7 +26234,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ブラウザーが実際に接続する先"
+            "value" : "ブラウザが実際に接続する先"
           }
         },
         "zh-Hans" : {
@@ -26246,7 +26276,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "告訴客戶端去撥什麼"
+            "value" : "告訴用戶端去撥什麼"
           }
         }
       }
@@ -26300,13 +26330,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这条命令实际运行的内容,完整版。以 root 运行任何东西之前,都值得先读一遍。"
+            "value" : "这条命令实际运行的内容，完整版。以 root 运行任何东西之前，都值得先读一遍。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這條指令實際執行的內容,完整版。以 root 執行任何東西之前,都值得先讀一遍。"
+            "value" : "這條指令實際執行的內容，完整版。以 root 執行任何東西之前，都值得先讀一遍。"
           }
         }
       }
@@ -26390,13 +26420,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "想做点什么?"
+            "value" : "想做点什么？"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "想做點什麼?"
+            "value" : "想做點什麼？"
           }
         }
       }
@@ -26450,13 +26480,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "有人在这次通话里放音乐时,会显示在这里。"
+            "value" : "有人在这次通话里放音乐时，会显示在这里。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "有人在這次通話裡放音樂時,會顯示在這裡。"
+            "value" : "有人在這次通話裡放音樂時，會顯示在這裡。"
           }
         }
       }
@@ -26480,13 +26510,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "有登录账号的人开始放视频后,会显示在这里。"
+            "value" : "有登录账号的人开始放视频后，会显示在这里。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "有登入帳號的人開始播放影片後,會顯示在這裡。"
+            "value" : "有登入帳號的人開始播放影片後，會顯示在這裡。"
           }
         }
       }
@@ -26570,13 +26600,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "视频有多种清晰度时,这里最多只取到这一档。从下一个打开的视频开始生效。"
+            "value" : "视频有多种清晰度时，这里最多只取到这一档。从下一个打开的视频开始生效。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "影片有多種清晰度時,這裡最多只取到這一檔。從下一個打開的影片開始生效。"
+            "value" : "影片有多種畫質時，這裡最多只取到這一檔。從下一個打開的影片開始生效。"
           }
         }
       }
@@ -26744,7 +26774,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "既存のルームに誰が参加できるか"
+            "value" : "既存の部屋に誰が参加できるか"
           }
         },
         "zh-Hans" : {
@@ -26900,13 +26930,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "连不上 YouTube 的人,以及从中国大陆的中转服务器进来的人,改由这个部署中转观看,画质按各自播放器的大小来定。不需要任何人单独开通。"
+            "value" : "连不上 YouTube 的人，以及从中国大陆的中转服务器进来的人，改由这个部署中转观看，画质按各自播放器的大小来定。不需要任何人单独开通。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "連不上 YouTube 的人,以及從中國大陸的中轉伺服器進來的人,改由這個部署中轉觀看,畫質依各自播放器的大小而定。不需要任何人單獨開通。"
+            "value" : "連不上 YouTube 的人，以及從中國大陸的中轉伺服器進來的人，改由這個部署中轉觀看，畫質依各自播放器的大小而定。不需要任何人單獨開通。"
           }
         }
       }
@@ -26996,7 +27026,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Windows 客戶端"
+            "value" : "Windows 用戶端"
           }
         }
       }
@@ -27194,19 +27224,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "{scope} のメンバーではないため、このルームには入れません。"
+            "value" : "{scope} のメンバーではないため、この部屋には入れません。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你不在 {scope} 组里,进不了这个房间。"
+            "value" : "你不在 {scope} 组里，进不了这个房间。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你不在 {scope} 群組裡,進不了這個房間。"
+            "value" : "你不在 {scope} 群組裡，進不了這個房間。"
           }
         }
       }
@@ -27290,13 +27320,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你能这么做是因为你是本站管理员。移出只会结束他这次通话,并不能阻止他再进来。"
+            "value" : "你能这么做是因为你是本站管理员。移出只会结束他这次通话，并不能阻止他再进来。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你能這麼做是因為你是本站管理員。移出只會結束他這次通話,並不能阻止他再進來。"
+            "value" : "你能這麼做是因為你是本站管理員。移出只會結束他這次通話，並不能阻止他再進來。"
           }
         }
       }
@@ -27410,13 +27440,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你可以查看,但不能修改。"
+            "value" : "你可以查看，但不能修改。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你可以檢視,但不能修改。"
+            "value" : "你可以檢視，但不能修改。"
           }
         }
       }
@@ -27506,7 +27536,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已退出房間。"
+            "value" : "已離開房間。"
           }
         }
       }
@@ -27584,7 +27614,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "あなたはもうこの部屋の主催者ではありません。"
+            "value" : "この部屋のホストではなくなりました。"
           }
         },
         "zh-Hans" : {
@@ -27740,13 +27770,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "马上就会回来,不用操作。"
+            "value" : "马上就会回来，不用操作。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "馬上就會回來,不用操作。"
+            "value" : "馬上就會回來，不用操作。"
           }
         }
       }
@@ -27950,13 +27980,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你的网络连不上视频所在的网站,其他人照常在看。"
+            "value" : "你的网络连不上视频所在的网站，其他人照常在看。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你的網路連不上影片所在的網站,其他人照常在看。"
+            "value" : "你的網路連不上影片所在的網站，其他人照常在看。"
           }
         }
       }
@@ -27980,13 +28010,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你的网络连不上 {site},其他人照常在看。"
+            "value" : "你的网络连不上 {site}，其他人照常在看。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你的網路連不上 {site},其他人照常在看。"
+            "value" : "你的網路連不上 {site}，其他人照常在看。"
           }
         }
       }
@@ -28040,13 +28070,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你的网络目前大约能发出 {have} Mbps,这次共享需要约 {need} Mbps,所以画面会卡顿。"
+            "value" : "你的网络目前大约能发出 {have} Mbps，这次共享需要约 {need} Mbps，所以画面会卡顿。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你的網路目前大約能送出 {have} Mbps,這次共享需要約 {need} Mbps,所以畫面會卡頓。"
+            "value" : "你的網路目前大約能送出 {have} Mbps，這次分享需要約 {need} Mbps，所以畫面會不順暢。"
           }
         }
       }
@@ -28124,7 +28154,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "あなたの会議は {when} に予定されています。参加すると開始します。"
+            "value" : "この会議は {when} に予定されています。参加すると開始します。"
           }
         },
         "zh-Hans" : {
@@ -28184,7 +28214,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "あなたのパスフレーズ"
+            "value" : "あなたの合言葉"
           }
         },
         "zh-Hans" : {
@@ -28196,7 +28226,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "你的通行語"
+            "value" : "你的密語"
           }
         }
       }
@@ -28220,13 +28250,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "口令不保存在这里,也没法发给你。忘了的话,由管理员重设一个。"
+            "value" : "口令不保存在这里，也没法发给你。忘了的话，由管理员重设一个。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "口令不保存在這裡,也沒法發給你。忘了的話,由管理員重設一個。"
+            "value" : "密語不保存在這裡，也沒法發給你。忘了的話，由管理員重設一個。"
           }
         }
       }
@@ -28280,13 +28310,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "登录已过期,请重新登录。"
+            "value" : "登录已过期，请重新登录。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "登入已過期,請重新登入。"
+            "value" : "登入已過期，請重新登入。"
           }
         }
       }
@@ -28844,7 +28874,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ルーム所在"
+            "value" : "部屋の所在"
           }
         },
         "zh-Hans" : {
@@ -28910,13 +28940,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "它回应 STUN 的 host:端口。留空则退回计时 WebSocket(数字约为真实值三倍)"
+            "value" : "它回应 STUN 的 host：端口。留空则退回计时 WebSocket(数字约为真实值三倍)"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "它回應 STUN 的 host:連接埠。留空則退回計時 WebSocket(數字約為真實值三倍)"
+            "value" : "它回應 STUN 的 host：連接埠。留空則退回計時 WebSocket(數字約為真實值三倍)"
           }
         }
       }
@@ -28946,7 +28976,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "iPad 客戶端"
+            "value" : "iPad 用戶端"
           }
         }
       }
@@ -28976,7 +29006,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "iPhone 客戶端"
+            "value" : "iPhone 用戶端"
           }
         }
       }
@@ -29150,13 +29180,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "共 {total} 次入会,显示最近 {count} 次"
+            "value" : "共 {total} 次入会，显示最近 {count} 次"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "共 {total} 次入會,顯示最近 {count} 次"
+            "value" : "共 {total} 次入會，顯示最近 {count} 次"
           }
         }
       }
@@ -29396,7 +29426,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "已運行"
+            "value" : "已執行"
           }
         }
       }
@@ -29426,7 +29456,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "口令"
+            "value" : "密語"
           }
         }
       }
@@ -29564,7 +29594,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ルーム"
+            "value" : "部屋"
           }
         },
         "zh-Hans" : {
@@ -30314,7 +30344,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "{name}（あなた）"
+            "value" : "{name}（自分）"
           }
         },
         "zh-Hans" : {
@@ -30614,7 +30644,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "{rooms} ルーム · {people} 人"
+            "value" : "{rooms} 部屋 · {people} 人"
           }
         },
         "zh-Hans" : {
@@ -30644,19 +30674,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "{room} は招待制です。主催者にリンクをもらってください。"
+            "value" : "{room} は招待制です。ホストに招待リンクを依頼してください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "{room} 需要邀请才能加入,向组织者要一个链接。"
+            "value" : "{room} 需要邀请才能加入，向主持人要一个链接。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "{room} 需要邀請才能加入,向組織者要一個連結。"
+            "value" : "{room} 需要邀請才能加入，向主持人要一個連結。"
           }
         }
       }
@@ -30674,19 +30704,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "{room} はまだ開かれていません。会議を開いている人にリンクを聞いてください。"
+            "value" : "{room} はまだ開かれていません。ホストにリンクを聞いてください。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "{room} 还没有开。请向开会的人要链接。"
+            "value" : "{room} 还没有开。请向主持人要链接。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "{room} 還沒有開。請向開會的人要連結。"
+            "value" : "{room} 還沒有開。請向主持人要連結。"
           }
         }
       }
@@ -30746,7 +30776,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "自上次重啟已中轉 {size}"
+            "value" : "自上次重新啟動已中轉 {size}"
           }
         }
       }
