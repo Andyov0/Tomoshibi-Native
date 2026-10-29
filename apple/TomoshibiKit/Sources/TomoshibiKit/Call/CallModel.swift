@@ -735,7 +735,7 @@ public final class CallModel {
     }
 
     #if os(iOS)
-    @ObservationIgnored private var interruptions: NSObjectProtocol?
+    @ObservationIgnored private var interruptions: [NSObjectProtocol] = []
 
     /// A telephone call, an alarm or Siri takes the audio session away; when
     /// it is handed back the engine is started again, with the microphone if
@@ -744,21 +744,52 @@ public final class CallModel {
     /// only asked the engine to start: the engine, still marked started
     /// across the interruption, returned at once, and the microphone was
     /// tapped onto an engine that was not running.
+    ///
+    /// The system does not promise an end for every beginning
+    /// (AVAudioSession.h), and a call whose interruption never ended stayed
+    /// silent for good; so coming back to the app tries again
+    /// (`resumeIfStillInterrupted`), which fails harmlessly while a telephone
+    /// call still has the sound. And the media services restarting under the
+    /// app take the engine with them (`servicesReset`).
     private func watchInterruptions() {
-        interruptions = NotificationCenter.default.addObserver(
+        let center = NotificationCenter.default
+        interruptions.append(center.addObserver(
             forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
         ) { [weak self] note in
             guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
                   let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
             MainActor.assumeIsolated {
-                guard let self else { return }
+                guard let self, !self.over else { return }
                 switch type {
                 case .began: self.audio.suspend()
                 case .ended: self.audio.resume()
                 @unknown default: break
                 }
             }
-        }
+        })
+        interruptions.append(center.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.over else { return }
+                self.audio.resumeIfStillInterrupted()
+            }
+        })
+        interruptions.append(center.addObserver(
+            forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.over else { return }
+                self.audio.servicesReset()
+            }
+        })
+    }
+
+    /// Lets the notices go with the call: each would otherwise stay with the
+    /// notification centre for the life of the app, one more every call.
+    private func stopWatchingInterruptions() {
+        interruptions.forEach(NotificationCenter.default.removeObserver)
+        interruptions = []
     }
     #endif
 
@@ -840,8 +871,18 @@ public final class CallModel {
             microphoneInput?.setMuted(muted: true)
             microphoneOn = false
             deviceFailed(.microphone, error)
+        case .interrupted:
+            // Said for as long as it lasts: the microphone's button stayed on
+            // over a call that heard and sent nothing, and nothing said why.
+            announce(CallToast(t("The call's sound is paused"),
+                               detail: t("A phone call or another app has the sound. It comes back when that is over."),
+                               kind: .warning, lasts: nil, key: Self.soundPausedKey))
+        case .resumed:
+            dismiss(key: Self.soundPausedKey)
         }
     }
+
+    static let soundPausedKey = "sound-paused"
 
     static let soundStoppedKey = "device.sound"
 
@@ -872,6 +913,9 @@ public final class CallModel {
 
     public func leave() async {
         over = true
+        #if os(iOS)
+        stopWatchingInterruptions()
+        #endif
         for last in beforeLeaving.values { await last() }
         beforeLeaving = [:]
         lossless.closeAll()
@@ -894,6 +938,9 @@ public final class CallModel {
         case let .ended(reason):
             endedReason = reason
             over = true
+            #if os(iOS)
+            stopWatchingInterruptions()
+            #endif
             audio.stop()
             camera.stop()
             #if os(macOS)

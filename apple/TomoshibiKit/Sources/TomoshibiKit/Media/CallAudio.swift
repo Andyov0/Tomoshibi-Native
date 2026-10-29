@@ -68,6 +68,11 @@ public final class CallAudio {
         case back
         /// It runs again, but the microphone would not go back on it.
         case microphoneLost(Error)
+        /// The system has the sound for a while (a telephone call, an
+        /// alarm, Siri), and nothing is heard or sent until it hands it back.
+        case interrupted
+        /// It has handed it back, or the engine started all the same.
+        case resumed
     }
 
     /// Told on the main actor; the call says these to the person.
@@ -142,6 +147,17 @@ public final class CallAudio {
     /// are moved across in the formats they played in, and their volumes go
     /// with them, being the nodes' own.
     private func freshEngine() {
+        let moved = replaceEngine()
+        engineRecorded = false
+        voiceProcessing = false
+        Self.log.notice("a new engine for playback only, with \(moved, privacy: .public) sounds moved across")
+    }
+    #endif
+
+    /// A new engine in place of the old, with every sound the old one played
+    /// moved across in the format it played in; how many were.
+    @discardableResult
+    private func replaceEngine() -> Int {
         let old = engine
         let moving = players.values.map { ($0.node as AVAudioNode, $0.format) } + others.values.map { ($0.node, $0.format) }
         for (node, _) in moving {
@@ -154,11 +170,8 @@ public final class CallAudio {
             engine.attach(node)
             engine.connect(node, to: engine.mainMixerNode, format: format)
         }
-        engineRecorded = false
-        voiceProcessing = false
-        Self.log.notice("a new engine for playback only, with \(moving.count, privacy: .public) sounds moved across")
+        return moving.count
     }
-    #endif
 
     deinit {
         if let configurationWatch { NotificationCenter.default.removeObserver(configurationWatch) }
@@ -360,6 +373,16 @@ public final class CallAudio {
             Self.log.notice("engine started without voice processing")
         }
         started = true
+        #if os(iOS)
+        // An engine that started is past any interruption, whether or not
+        // its end was heard: one left marked interrupted had every change of
+        // headphones afterwards ignored (`hardwareChanged`), and an engine
+        // that then stopped stayed stopped.
+        if interrupted {
+            interrupted = false
+            onNews?(.resumed)
+        }
+        #endif
         let wasGivenUp = recovery.gaveUp
         recovery.started()
         quietTry?.cancel()
@@ -588,12 +611,14 @@ public final class CallAudio {
     /// `started` left true across the interruption made the start at its end
     /// return at once, and the call came back silent both ways.
     func suspend() {
+        let already = interrupted
         interrupted = true
         quietTry?.cancel()
         quietTry = nil
         recovery = EngineRecovery()
         pause()
         Self.log.notice("the audio session was interrupted")
+        if !already { onNews?(.interrupted) }
     }
 
     /// The session is handed back: the engine starts again, and with it the
@@ -601,14 +626,61 @@ public final class CallAudio {
     /// hardware is quiet, and said if that fails too.
     func resume() {
         guard interrupted else { return }
-        interrupted = false
         Self.log.notice("the audio session is back; starting the engine again")
         do {
             try start()
         } catch {
             Self.log.error("the engine would not start after the interruption: \(String(describing: error), privacy: .public)")
+            interrupted = false
+            onNews?(.resumed)
             follow(recovery.failed(at: Self.clock()), error)
         }
+    }
+
+    /// The app is in front again and the session still marked interrupted:
+    /// the system does not promise an end for every interruption, and one
+    /// whose end never came left the call silent both ways for good. A start
+    /// that fails here (a telephone call still has the sound) changes
+    /// nothing; the end, or the next return to the app, tries again.
+    func resumeIfStillInterrupted() {
+        guard interrupted else { return }
+        Self.log.notice("back in front with the audio session still interrupted; trying the engine")
+        do {
+            try start()
+        } catch {
+            Self.log.notice("still interrupted: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    /// The media services restarted under the app, and every audio object it
+    /// held went with them (AVAudioSession.h): the engine is made again, the
+    /// sounds moved onto it, and started where it was running, the
+    /// microphone with it. Left alone, nothing was heard or sent again for
+    /// the rest of the call.
+    func servicesReset() {
+        let wanted = started || interrupted
+        Self.log.notice("the media services were reset; a new engine")
+        // The old engine's input is not touched, its tap included: it
+        // belongs to the services that went away. The microphone's track is
+        // kept, and goes on the new engine as it starts.
+        tapped = false
+        converter = nil
+        microphoneLevel = nil
+        started = false
+        interrupted = false
+        quietTry?.cancel()
+        quietTry = nil
+        recovery = EngineRecovery()
+        replaceEngine()
+        voiceProcessing = false
+        guard wanted else { return }
+        do {
+            try start()
+        } catch {
+            Self.log.error("the engine would not start after the reset: \(String(describing: error), privacy: .public)")
+            follow(recovery.failed(at: Self.clock()), error)
+        }
+        onNews?(.resumed)
     }
     #endif
 
