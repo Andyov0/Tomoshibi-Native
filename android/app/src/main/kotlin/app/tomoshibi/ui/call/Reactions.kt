@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -37,6 +38,8 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -167,7 +170,14 @@ internal fun HandControl(
                     },
                 contentAlignment = Alignment.Center,
             ) { Symbol("hand.raised.fill", size = 16f, weight = Font.Semibold, tint = handInk) }
-            if (beside) Box(
+            // The narrow half's press is its own width and no more. Compose
+            // widens anything narrower than a fingertip to one, centred on
+            // it, which took this half's reach fourteen points into the
+            // button for the messages beside it: the two overlapped by
+            // twenty-six pixels, and a screen reader's finger over the edge
+            // of the messages' button found the reactions (the health check
+            // of 2026-10-29). Its height is still widened to a fingertip.
+            if (beside) CompositionLocalProvider(LocalViewConfiguration provides narrowTouch(LocalViewConfiguration.current, 20.dp)) { Box(
                 Modifier
                     .size(20.dp, 44.dp)
                     .background(trayFill, RoundedCornerShape(topEnd = 22.dp, bottomEnd = 22.dp))
@@ -185,9 +195,14 @@ internal fun HandControl(
             ) {
                 Symbol("chevron.up", Modifier.graphicsLayer { rotationZ = turn }, size = 9f, weight = Font.Bold,
                     tint = if (open) Theme.foreground else Theme.muted)
-            }
+            } }
         }
     }
+}
+
+/** [base], but with the least a press reaches across held to [width]: the height keeps the fingertip. */
+internal fun narrowTouch(base: ViewConfiguration, width: Dp): ViewConfiguration = object : ViewConfiguration by base {
+    override val minimumTouchTargetSize: DpSize get() = DpSize(width, base.minimumTouchTargetSize.height)
 }
 
 /** The bar popover the six reactions are drawn in. */
