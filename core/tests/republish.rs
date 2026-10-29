@@ -70,7 +70,7 @@ async fn join(
     let deployment = Deployment::new(base.to_owned()).unwrap();
     let grant = deployment
         .clone()
-        .join(room.to_owned(), name.to_owned(), passphrase.to_owned(), None, String::new(), invite)
+        .join(room.to_owned(), name.to_owned(), passphrase.to_owned(), None, None, String::new(), invite)
         .await
         .expect("join");
     let call = join_call(

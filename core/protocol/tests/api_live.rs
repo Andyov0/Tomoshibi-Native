@@ -87,7 +87,7 @@ async fn a_join_is_granted_and_the_identity_sent_back_is_kept() {
 
     let first = d
         .clone()
-        .join(room.clone(), s("  Native Test  "), s(""), None, s(""), None)
+        .join(room.clone(), s("  Native Test  "), s(""), None, None, s(""), None)
         .await
         .unwrap();
     assert_eq!(first.room, room);
@@ -109,7 +109,9 @@ async fn a_join_is_granted_and_the_identity_sent_back_is_kept() {
     assert_eq!(said["name"], "Native Test");
     assert_eq!(said["video"]["room"], room.as_str());
 
-    // Sent back, it is kept: a reconnect is the same participant.
+    // Sent back with the proof it came with, it is kept: a reconnect is the
+    // same participant. A server older than proofs hands out none and keeps
+    // the identity on its own.
     let again = d
         .clone()
         .join(
@@ -117,20 +119,49 @@ async fn a_join_is_granted_and_the_identity_sent_back_is_kept() {
             s("Native Test"),
             s(""),
             Some(first.identity.clone()),
+            first.proof.clone(),
             s(""),
             None,
         )
         .await
         .unwrap();
     assert_eq!(again.identity, first.identity);
+    assert_eq!(again.proof, first.proof, "the same identity, the same proof");
 
     // Not sent, a new one is minted; and an invented one is replaced.
     let fresh = d
         .clone()
-        .join(room.clone(), s("Native Test"), s(""), None, s(""), None)
+        .join(room.clone(), s("Native Test"), s(""), None, None, s(""), None)
         .await
         .unwrap();
     assert_ne!(fresh.identity, first.identity);
+
+    // Where the server hands out proofs, an issued identity sent back without
+    // its own is somebody who read it off the roster, and gets a fresh one:
+    // with none, and with another guest's (internal/room/room.go
+    // `GuestProof`). Where it does not, the identity is kept as before.
+    for (proof, what) in [(None, "no proof"), (fresh.proof.clone(), "another guest's proof")] {
+        let copied = d
+            .clone()
+            .join(
+                room.clone(),
+                s("Native Test"),
+                s(""),
+                Some(first.identity.clone()),
+                proof,
+                s(""),
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            copied.identity == first.identity,
+            first.proof.is_none(),
+            "{what}: {} for {}",
+            copied.identity,
+            first.identity
+        );
+    }
     let invented = d
         .clone()
         .join(
@@ -138,6 +169,7 @@ async fn a_join_is_granted_and_the_identity_sent_back_is_kept() {
             s("Native Test"),
             s(""),
             Some(s("alice")),
+            None,
             s(""),
             None,
         )
@@ -153,6 +185,7 @@ async fn a_join_is_granted_and_the_identity_sent_back_is_kept() {
             s("Native Test"),
             s(""),
             None,
+            None,
             s(""),
             None,
         )
@@ -162,7 +195,7 @@ async fn a_join_is_granted_and_the_identity_sent_back_is_kept() {
 
     assert_eq!(
         d.clone()
-            .join(s("not a room"), s("A"), s(""), None, s(""), None)
+            .join(s("not a room"), s("A"), s(""), None, None, s(""), None)
             .await
             .unwrap_err(),
         refused(400, "invalid_room")
@@ -173,6 +206,7 @@ async fn a_join_is_granted_and_the_identity_sent_back_is_kept() {
             format!("{room}@nativetest"),
             s("A"),
             s(""),
+            None,
             None,
             s(""),
             None
@@ -198,6 +232,7 @@ async fn a_host_invites_answers_the_door_and_is_refused_what_is_not_theirs() {
             s("Native Host"),
             passphrase,
             None,
+            None,
             s(""),
             None,
         )
@@ -205,6 +240,8 @@ async fn a_host_invites_answers_the_door_and_is_refused_what_is_not_theirs() {
         .unwrap();
     let bearer = held.token.clone();
     assert!(signature_of(held.identity.clone()).unwrap().proven);
+    // The passphrase keeps this identity, and nothing else is needed for it.
+    assert_eq!(held.proof, None);
 
     let standing = host
         .clone()
@@ -248,6 +285,7 @@ async fn a_host_invites_answers_the_door_and_is_refused_what_is_not_theirs() {
             room.clone(),
             s("Native Guest"),
             s(""),
+            None,
             None,
             s(""),
             Some(made.token.clone()),

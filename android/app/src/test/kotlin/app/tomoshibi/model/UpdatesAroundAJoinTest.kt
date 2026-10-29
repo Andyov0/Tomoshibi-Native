@@ -43,7 +43,7 @@ class UpdatesAroundAJoinTest {
     private class SlowDeployment(private val answer: CompletableDeferred<JoinGrant>) : Deployment(NoHandle) {
         override fun baseUrl(): String = BASE
 
-        override suspend fun join(room: String, name: String, passphrase: String, identity: String?, relay: String, invite: String?): JoinGrant =
+        override suspend fun join(room: String, name: String, passphrase: String, identity: String?, proof: String?, relay: String, invite: String?): JoinGrant =
             answer.await()
     }
 

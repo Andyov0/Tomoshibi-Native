@@ -116,6 +116,20 @@ pub struct JoinGrant {
     /// the next join, so a reconnect is the same person rather than a second
     /// one arriving while the first is cleaned up.
     pub identity: String,
+    /// What has to go back with `identity` for the next join to keep it, where
+    /// the server issued it (a guest's, drawn from nothing); absent for one a
+    /// passphrase or an account keeps, and from a server older than proofs.
+    ///
+    /// The identity is on every roster in the room, so anybody could send it
+    /// back as their own, and the media server would seat them and remove the
+    /// guest who had it; the server now keeps an issued identity only for
+    /// whoever shows this beside it, and issues a fresh one otherwise
+    /// (internal/room/room.go `GuestProof`). The app keeps the two together,
+    /// where it keeps the identity and for as long, and forgets the proof
+    /// whenever an answer comes without one, as api.ts does: kept apart, a
+    /// guest app was a new participant at every reconnect and lost a pin an
+    /// operator had set for it. Never shown, never logged.
+    pub proof: Option<String>,
     /// The room actually authorised, after the server lower-cased it.
     pub room: String,
     /// What to call the machine this call was sent to.
@@ -165,6 +179,7 @@ impl JoinGrant {
             url: required("url")?,
             token: required("token")?,
             identity: required("identity")?,
+            proof: some_text(body.get("proof")),
             room: required("room")?,
             relay: some_text(body.get("relay")),
             region: some_text(body.get("region")),
@@ -271,13 +286,15 @@ pub fn knock_give_up_after_ms() -> u64 {
 }
 
 /// The join's body. Field order is the order api.ts writes the object in, and
-/// a missing identity is left out rather than sent as null, as
+/// a missing identity or proof is left out rather than sent as null, as
 /// `JSON.stringify` leaves out `undefined`: the body is then byte for byte the
 /// one a browser sends.
 #[derive(Serialize)]
 struct JoinBody<'a> {
     #[serde(skip_serializing_if = "Option::is_none")]
     identity: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    proof: Option<&'a str>,
     name: &'a str,
     passphrase: &'a str,
     relay: &'a str,
@@ -330,12 +347,14 @@ impl Api {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn join(
         &self,
         room: &str,
         name: &str,
         passphrase: &str,
         identity: Option<&str>,
+        proof: Option<&str>,
         relay: &str,
         invite: Option<&str>,
     ) -> Result<JoinGrant, ProtocolError> {
@@ -360,8 +379,12 @@ impl Api {
             path.push_str(&encode_uri_component(invite));
         }
 
+        // A proof is about the identity it came with and goes nowhere
+        // without it.
+        let identity = identity.filter(|identity| !identity.is_empty());
         let body = serde_json::to_vec(&JoinBody {
-            identity: identity.filter(|identity| !identity.is_empty()),
+            identity,
+            proof: identity.and(proof.filter(|proof| !proof.is_empty())),
             name,
             passphrase,
             relay,
@@ -376,9 +399,63 @@ impl Api {
         JoinGrant::read(&answer.json::<Value>("the join")?)
     }
 
+    /// A request to one of the host endpoints, authorised by the call whose
+    /// join token `bearer` is, with whichever of its two tokens the deployment
+    /// takes (bearer.rs). A bearer that is no call's join token is sent as it
+    /// is, once.
+    async fn host_send(
+        &self,
+        method: Method,
+        room: &str,
+        rest: &str,
+        bearer: &str,
+        body: Option<String>,
+    ) -> Result<super::Answer, ProtocolError> {
+        let path = room_path(room, rest);
+        let send = |token: &str| {
+            let request = self.bearer_request(method.clone(), &path, token);
+            let body = body.clone();
+            async move {
+                let mut request = request?;
+                if let Some(body) = body {
+                    request = request.body(body);
+                }
+                self.send(request).await
+            }
+        };
+
+        let Some(tokens) = super::bearer::of(bearer) else {
+            return send(bearer).await;
+        };
+        let first = tokens.first();
+        let answer = send(&first).await?;
+        if !super::bearer::not_yours(&answer) {
+            tokens.took(&first);
+            return Ok(answer);
+        }
+
+        // The token or the person: the standing question says which, with a
+        // 401 for a token it does not take. Asked itself, it has said so.
+        let token_refused = if rest == "/host" && method == Method::GET {
+            answer.status == 401
+        } else {
+            let standing = self.bearer_request(Method::GET, &room_path(room, "/host"), &first)?;
+            self.send(standing).await?.status == 401
+        };
+        let Some(other) = token_refused.then(|| tokens.other(&first)).flatten() else {
+            return Ok(answer);
+        };
+
+        let again = send(&other).await?;
+        if !super::bearer::not_yours(&again) {
+            tokens.took(&other);
+        }
+        Ok(again)
+    }
+
     async fn host_standing(&self, room: &str, bearer: &str) -> Result<HostStanding, ProtocolError> {
         let answer = self
-            .send(self.bearer_request(Method::GET, &room_path(room, "/host"), bearer)?)
+            .host_send(Method::GET, room, "/host", bearer, None)
             .await?
             .accepted("")?;
         let said = answer.json::<Value>("the host's standing")?;
@@ -400,12 +477,9 @@ impl Api {
         body: Option<String>,
         fallback: &str,
     ) -> Result<super::Answer, ProtocolError> {
-        let mut request = self.bearer_request(method, &room_path(room, rest), bearer)?;
-        if let Some(body) = body {
-            request = request.body(body);
-        }
-
-        self.send(request).await?.accepted(fallback)
+        self.host_send(method, room, rest, bearer, body)
+            .await?
+            .accepted(fallback)
     }
 
     async fn invite_info(&self, token: &str) -> Result<InviteInfo, ProtocolError> {
@@ -454,7 +528,9 @@ impl Deployment {
     /// Asks to be authorised for a room.
     ///
     /// `identity` is the one a previous join on this device returned, sent
-    /// back so a reconnect is the same participant. `relay` is a relay's name
+    /// back so a reconnect is the same participant, and `proof` the proof that
+    /// join returned with it (`JoinGrant::proof`), without which the server
+    /// keeps no identity it issued. `relay` is a relay's name
     /// somebody chose, or empty to send the fastest by measurement, which is
     /// taken here as the web client takes it. `invite` is an invite token, sent
     /// in the query; the deployment then keeps it in a cookie of its own, which
@@ -462,12 +538,14 @@ impl Deployment {
     ///
     /// Never retried. With a passphrase every attempt is charged to the
     /// deployment's guessing budget.
+    #[allow(clippy::too_many_arguments)]
     pub async fn join(
         self: Arc<Self>,
         room: String,
         name: String,
         passphrase: String,
         identity: Option<String>,
+        proof: Option<String>,
         relay: String,
         invite: Option<String>,
     ) -> Result<JoinGrant, ProtocolError> {
@@ -478,6 +556,7 @@ impl Deployment {
                     &name,
                     &passphrase,
                     identity.as_deref(),
+                    proof.as_deref(),
                     &relay,
                     invite.as_deref(),
                 )
@@ -694,12 +773,18 @@ impl Deployment {
         bearer: Option<String>,
     ) -> Result<u32, ProtocolError> {
         on_core(async move {
-            let path = room_path(&room, "/invites");
-            let request = match bearer.as_deref() {
-                Some(bearer) => self.api.bearer_request(Method::DELETE, &path, bearer)?,
-                None => self.api.request(Method::DELETE, &path)?,
-            };
-            let answer = self.api.send(request).await?.accepted("revoke_failed")?;
+            let answer = match bearer.as_deref() {
+                Some(bearer) => {
+                    self.api
+                        .host_send(Method::DELETE, &room, "/invites", bearer, None)
+                        .await?
+                }
+                None => {
+                    let path = room_path(&room, "/invites");
+                    self.api.send(self.api.request(Method::DELETE, &path)?).await?
+                }
+            }
+            .accepted("revoke_failed")?;
             let revoked = answer
                 .value()
                 .and_then(|said| said.get("revoked").and_then(Value::as_f64))
@@ -789,12 +874,9 @@ impl Deployment {
         bearer: String,
     ) -> Result<Vec<Knocker>, ProtocolError> {
         on_core(async move {
-            let request =
-                self.api
-                    .bearer_request(Method::GET, &room_path(&room, "/knocks"), &bearer)?;
             let said = self
                 .api
-                .send(request)
+                .host_send(Method::GET, &room, "/knocks", &bearer, None)
                 .await?
                 .accepted("")?
                 .json::<Value>("the door")?;
@@ -825,14 +907,16 @@ impl Deployment {
         admit: bool,
     ) -> Result<DoorState, ProtocolError> {
         on_core(async move {
-            let path = room_path(&room, &format!("/knocks/{}", encode_uri_component(&id)));
-            let request = self
-                .api
-                .bearer_request(Method::POST, &path, &bearer)?
-                .body(json!({ "admit": admit }).to_string());
+            let rest = format!("/knocks/{}", encode_uri_component(&id));
             let said = self
                 .api
-                .send(request)
+                .host_send(
+                    Method::POST,
+                    &room,
+                    &rest,
+                    &bearer,
+                    Some(json!({ "admit": admit }).to_string()),
+                )
                 .await?
                 .accepted("")?
                 .json::<Value>("the door")?;

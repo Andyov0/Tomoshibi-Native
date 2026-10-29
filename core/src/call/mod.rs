@@ -81,6 +81,13 @@ pub struct Call {
     /// one taken back while a reconnect was publishing it again is taken down
     /// once it is up (publish.rs `withdraw`).
     withdrawn: Mutex<HashSet<String>>,
+    /// The token the deployment signed for this call (`token`).
+    joined_with: String,
+    /// It and the media server's, known to the host requests by the first
+    /// (protocol api/bearer.rs); the entry goes with the call.
+    _tokens: Arc<tomoshibi_protocol::api::bearer::CallTokens>,
+    /// What the platform's network monitor has seen (`path_seen`).
+    network: Arc<tomoshibi_protocol::network::NetworkWatch>,
 }
 
 /// A lock that a panic elsewhere left poisoned, taken all the same.
@@ -167,7 +174,13 @@ impl Call {
             .await
             .map_err(|e| CallError::Connect { detail: e.to_string() })?;
 
-        let call = Arc::new(Call {
+        let call = Arc::new_cyclic(|this: &std::sync::Weak<Call>| Call {
+            _tokens: {
+                let this = this.clone();
+                tomoshibi_protocol::api::bearer::register(options.token.clone(), move || {
+                    this.upgrade().map(|call| call.room.token())
+                })
+            },
             room,
             room_name: options.room.clone(),
             observer,
@@ -180,6 +193,8 @@ impl Call {
             senders: Mutex::new(Vec::new()),
             meter: tomoshibi_protocol::quality::ConnectionMeter::new(),
             withdrawn: Mutex::new(HashSet::new()),
+            joined_with: options.token.clone(),
+            network: Arc::default(),
         });
 
         call.observer.on_event(CallEvent::StateChanged { state: CallState::Connected });
@@ -388,6 +403,14 @@ impl Call {
         .await
     }
 
+    /// The media server's latest token for this call, sent alone: for the
+    /// tests that show what a deployment makes of it (core/tests/host_roles.rs);
+    /// not exported to the apps.
+    #[doc(hidden)]
+    pub fn media_token(&self) -> String {
+        self.room.token()
+    }
+
     fn publication(&self, sid: &str) -> Option<RemoteTrackPublication> {
         self.room
             .remote_participants()
@@ -398,11 +421,25 @@ impl Call {
 
 #[uniffi::export]
 impl Call {
-    /// The current join token, refreshed by the server while the call lasts.
-    /// The host controls authorise with it, and unlike the web client's copy
-    /// it does not go stale five minutes in (host.go `whoIs`).
+    /// What the host's controls and the door are authorised with: the token
+    /// the deployment signed for this call, for the whole of the call, as the
+    /// web sends the one its join returned (host.ts `bearer`, room.ts
+    /// `tokenFor`).
+    ///
+    /// The host requests made with it may go with the media server's token
+    /// instead, which replaces the one a call holds as soon as the call is up
+    /// and every five minutes (livekit-server `RoomManager.refreshToken`).
+    /// Deployments disagree about the two. One that checks the control node's
+    /// proof in the JWT ID (host.go `whoIs`) takes only this one, past its
+    /// expiry too while this participant is in the room, and refused every
+    /// request made with the media server's from the first second of a call.
+    /// One that does not takes any token that verifies, so this one only until
+    /// it expires, five minutes in, and the media server's for the whole call.
+    /// So this is the key: the call registers both tokens under it, and a host
+    /// request finds them and sends the one the deployment takes, finding out
+    /// which by the first refusal (protocol api/bearer.rs).
     pub fn token(&self) -> String {
-        self.room.token()
+        self.joined_with.clone()
     }
 
     pub fn room_name(&self) -> String {
@@ -575,6 +612,37 @@ impl Call {
     pub fn network_changed(&self) {
         let _core = crate::runtime::enter();
         self.room.network_changed();
+    }
+
+    /// What the platform's network monitor says of the default path, every
+    /// time it says anything, from the moment the call is up: the core works
+    /// out whether it is a change and calls `network_changed` once it has
+    /// stood for half a second (protocol network.rs). A monitor speaks far
+    /// more often than the route changes, and each `network_changed` in a
+    /// connected call is a resume, so the decision is made once, here, for
+    /// every platform, rather than by each of them.
+    pub fn path_seen(self: Arc<Self>, path: tomoshibi_protocol::network::NetworkPath) {
+        let _core = crate::runtime::enter();
+        let call = Arc::downgrade(&self);
+        self.network.seen(path, move || {
+            if let Some(call) = call.upgrade() {
+                call.network_changed();
+            }
+        });
+    }
+
+    /// The device woke from sleep. Its route is likely the one it went to
+    /// sleep on, so no monitor reports a change, while the call's sockets did
+    /// not survive the sleep; the path standing now, or the next one that is
+    /// online, counts as a change.
+    pub fn woke(self: Arc<Self>) {
+        let _core = crate::runtime::enter();
+        let call = Arc::downgrade(&self);
+        self.network.woke(move || {
+            if let Some(call) = call.upgrade() {
+                call.network_changed();
+            }
+        });
     }
 
     /// Whether the app is in the background: readings taken there are not

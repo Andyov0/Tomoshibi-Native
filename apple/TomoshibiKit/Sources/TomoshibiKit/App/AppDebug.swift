@@ -70,6 +70,11 @@ import UIKit
 ///                                a choice in the settings
 ///     close-problem              the cross on the line saying why a press
 ///                                did not take
+///     network online <route> | network offline | network woke
+///                                what the path monitor, or the Mac waking,
+///                                tells the call (NetworkWatch), so a test can
+///                                change the network under a call without
+///                                changing the machine's
 ///     update                     where the app's update stands
 ///     update-check | update-accept | update-later | update-cancel |
 ///     update-reveal              the settings' Check for Updates, and the
@@ -165,6 +170,15 @@ enum AppDebug {
             guard let call = app.call, let relay = rest.first else { return "move <relay>, in a call" }
             call.onMoved?(relay)
             return "moving"
+        case "network":
+            guard let call = app.call else { return "network ..., in a call" }
+            switch rest.first {
+            case "online": call.call.pathSeen(path: NetworkPath(online: true, route: rest.dropFirst().joined(separator: " ")))
+            case "offline": call.call.pathSeen(path: NetworkPath(online: false, route: ""))
+            case "woke": call.call.woke()
+            default: return "network online <route> | offline | woke"
+            }
+            return "said \(rest.joined(separator: " "))"
         case "knock":
             Task { await app.knock() }
             return "knocking"
@@ -345,6 +359,7 @@ enum AppDebug {
         if let call = app.call {
             let microphones = call.localTracks.values.filter { $0.source == .microphone }
             parts.append("call=\(call.room) as \(call.localIdentity), model \(UInt(bitPattern: ObjectIdentifier(call).hashValue) % 100_000)")
+            parts.append("callState=\(call.state)")
             parts.append("microphoneOn=\(call.microphoneOn)")
             parts.append("microphoneTracks=\(microphones.count) unmuted=\(microphones.filter { !$0.muted }.count)")
             parts.append("toasts=\(call.toasts.map(\.title).joined(separator: " / "))")

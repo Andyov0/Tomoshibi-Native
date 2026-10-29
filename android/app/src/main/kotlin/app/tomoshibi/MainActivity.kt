@@ -20,6 +20,7 @@ import app.tomoshibi.media.DeviceAccess
 import app.tomoshibi.media.Foreground
 import app.tomoshibi.model.AppModel
 import app.tomoshibi.model.DebugLaunch
+import app.tomoshibi.model.host.HostFeature
 import app.tomoshibi.ui.TomoshibiApp
 import app.tomoshibi.ui.lobby.LobbyDebug
 import app.tomoshibi.ui.lobby.PortraitDebug
@@ -224,6 +225,18 @@ private object Debug {
                 { Log.i(TAG, "debug: invite refused: ${it.message}") },
             )
             "knock" -> app.knock()
+            // The host's controls as the panel reaches them, for a test to see
+            // which the deployment lets through (HostFeature logs refusals).
+            "host" -> app.call?.let { call ->
+                val host = HostFeature.of(call)
+                when (rest) {
+                    "standing" -> host.refreshStanding()
+                    "invite" -> {
+                        host.invite { true }
+                        Log.i(TAG, "debug: host invite link=${host.link != null}")
+                    }
+                }
+            }
             "cancel" -> app.cancelJoin()
             "state" -> Log.i(TAG, describe(app))
         }

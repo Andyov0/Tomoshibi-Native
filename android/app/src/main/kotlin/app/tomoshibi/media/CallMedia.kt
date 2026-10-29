@@ -20,6 +20,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import uniffi.tomoshibi_core.Call
 import uniffi.tomoshibi_core.MediaKind
 
 private const val TAG = "Tomoshibi"
@@ -53,6 +54,9 @@ class CallMedia(context: Context, val muted: Boolean = false) {
     }
 
     fun sharing(): Sharing = Sharing(context)
+
+    /** The device's default network, told to [call] until it is stopped. */
+    fun watchNetwork(call: Call): NetworkWatch = NetworkWatch(context, call).also { it.start() }
     fun pictureInPicture(): PictureInPicture = PictureInPicture()
 
     /**

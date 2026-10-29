@@ -535,8 +535,13 @@ internal sealed class CallModel : Observable, IDisposable
         // whenever a browser offers one and holds the sound's Opus track back
         // at the server meanwhile, sink or no sink.
         core.SetLosslessSink(model.Lossless);
+        model._network = new NetworkWatch(core);
+        model._network.Start();
         return model;
     }
+
+    /// <summary>The machine's internet connection, told to the call for as long as it lasts.</summary>
+    private NetworkWatch? _network;
 
     /// <summary>On a core thread: sinks are attached here, at once, and the model hears afterwards on the UI thread.</summary>
     private void Arrived(CallEvent e)
@@ -1010,9 +1015,10 @@ internal sealed class CallModel : Observable, IDisposable
 
     /// <summary>
     /// Ends the meeting for everybody (ControlBar.kt <c>endForEverybody</c>):
-    /// the server closes the room with the call's current join token, which
-    /// it refreshes while the call lasts, and after a moment, so that the
-    /// server's disconnect normally arrives first, this participant leaves.
+    /// the server closes the room with what the core gives the host's
+    /// controls (the join's own token while it is good, Call.token), and
+    /// after a moment, so that the server's disconnect normally arrives
+    /// first, this participant leaves.
     /// </summary>
     public async Task EndForEverybody()
     {
@@ -1083,6 +1089,7 @@ internal sealed class CallModel : Observable, IDisposable
         _media.CameraLost -= CameraLost;
         _media.MicrophoneLost -= MicrophoneLost;
         _media.DevicesChanged -= DevicesChanged;
+        _network?.Dispose();
         _playback?.Dispose();
         _camera?.Dispose();
         _microphone?.Dispose();
@@ -1113,6 +1120,7 @@ internal sealed class CallModel : Observable, IDisposable
                 break;
             case CallEvent.Ended ended:
                 _over_ = true;
+                _network?.Dispose();
                 StopMedia();
                 _ = Quietly(Sharing.Stop);
                 Log.Line($"call ended: {ended.Reason}");

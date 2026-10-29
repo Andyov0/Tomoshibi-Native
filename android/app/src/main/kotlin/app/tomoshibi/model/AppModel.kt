@@ -352,12 +352,13 @@ class AppModel(
     val lobby: LobbyModel by lazy { LobbyModel(this, this.defaults) }
 
     /**
-     * A rehearsal's identity, for its own joins only, as a fresh browser tab
-     * has one of its own: two test apps in one room that shared the
-     * machine's kept identity joined as the same participant, and the server
-     * put the first out as a duplicate the moment the second arrived.
+     * A rehearsal's identity and its proof, for its own joins only, as a
+     * fresh browser tab has one of its own: two test apps in one room that
+     * shared the machine's kept identity joined as the same participant, and
+     * the server put the first out as a duplicate the moment the second
+     * arrived.
      */
-    private var rehearsalIdentity: String? = null
+    private var rehearsalIdentity = KeptIdentity()
 
     init {
         Rehearsal.install(rehearsal, this.defaults)
@@ -374,7 +375,6 @@ class AppModel(
     private val base: String get() = deployment?.baseUrl() ?: serverAddress
     private val passphraseKey: String get() = "passphrase:$base"
     private val cookieKey: String get() = "account:$base"
-    private val identityKey: String get() = "tomoshibi.identity.$base"
 
     private fun rememberDevices() {
         deviceMemory.remember(DeviceMemory.Joining(camera = startWithCamera, microphone = startWithMicrophone))
@@ -851,16 +851,21 @@ class AppModel(
             val signed = account != null
             val scopedGuest = arrivedInvited && scopeOf(room).isNotEmpty()
             Log.i(TAG, "joining ${Logged.private(room)}")
+            val kept = if (rehearsal) rehearsalIdentity else KeptIdentity.read(defaults, base)
             val grant = deployment.join(
                 room, joiningName,
                 if (signed || scopedGuest) "" else passphrase,
-                if (rehearsal) rehearsalIdentity else defaults.string(identityKey),
+                kept.identity,
+                kept.proof,
                 relay ?: relayChoice ?: "",
                 invite,
             )
-            // Every join's identity is kept: signing in or out makes the
-            // server issue a new one, and a stale one sent back is refused.
-            if (rehearsal) rehearsalIdentity = grant.identity else defaults.set(identityKey, grant.identity)
+            // Every join's identity is kept, with its proof or with none:
+            // signing in or out makes the server issue a new one, a stale one
+            // sent back is refused, and an issued one sent back without the
+            // proof it came with is replaced by a fresh one.
+            val answered = KeptIdentity(grant.identity, grant.proof)
+            if (rehearsal) rehearsalIdentity = answered else KeptIdentity.keep(answered, defaults, base)
             if (attempt != joinAttempt) return
             val options = CallOptions(
                 grant.url, grant.token, grant.room,
