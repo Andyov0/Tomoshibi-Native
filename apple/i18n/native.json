@@ -47,7 +47,7 @@
       "en": "Somebody else runs this room.",
       "zh-Hans": "这个房间由别人主持。",
       "zh-Hant": "這個房間由別人主持。",
-      "ja": "この部屋は別の人が主催しています。"
+      "ja": "この部屋のホストは別の人です。"
     },
     "More": {
       "en": "More",
@@ -59,7 +59,7 @@
       "en": "Paste the link you were sent.",
       "zh-Hans": "粘贴别人发给你的链接。",
       "zh-Hant": "貼上別人傳給你的連結。",
-      "ja": "送られてきたリンクを貼り付けてください。"
+      "ja": "受け取ったリンクを貼り付け"
     },
     "Same as the system": {
       "en": "Same as the system",
@@ -172,14 +172,14 @@
     "Home": {
       "en": "Home",
       "zh-Hans": "主页",
-      "zh-Hant": "主頁",
+      "zh-Hant": "首頁",
       "ja": "ホーム"
     },
     "Scheduled meetings": {
       "en": "Scheduled meetings",
       "zh-Hans": "预定的会议",
       "zh-Hant": "預定的會議",
-      "ja": "予定した会議"
+      "ja": "予約した会議"
     },
     "Paste and open": {
       "en": "Paste and open",
@@ -189,21 +189,15 @@
     },
     "Were you sent a link?": {
       "en": "Were you sent a link?",
-      "zh-Hans": "有人给了你邀请链接?",
-      "zh-Hant": "有人給了你邀請連結?",
-      "ja": "リンクを受け取りましたか?"
+      "zh-Hans": "有人给了你邀请链接？",
+      "zh-Hant": "有人給了你邀請連結？",
+      "ja": "リンクを受け取りましたか？"
     },
     "Start new meeting": {
       "en": "Start new meeting",
       "zh-Hans": "开始新会议",
       "zh-Hant": "開始新會議",
       "ja": "新しい会議"
-    },
-    "Your camera": {
-      "en": "Your camera",
-      "zh-Hans": "你的摄像头画面",
-      "zh-Hant": "你的攝影機畫面",
-      "ja": "あなたのカメラ"
     },
     "Start one from the sidebar when you are ready.": {
       "en": "Start one from the sidebar when you are ready.",
@@ -216,18 +210,6 @@
       "zh-Hans": "准备好了就从下面开始一个会议。",
       "zh-Hant": "準備好了就從下面開始一個會議。",
       "ja": "準備ができたら下から始めましょう。"
-    },
-    "Join as {name}": {
-      "en": "Join as {name}",
-      "zh-Hans": "以 {name} 的身份加入",
-      "zh-Hant": "以 {name} 的身分加入",
-      "ja": "{name} として参加"
-    },
-    "Flip camera": {
-      "en": "Flip camera",
-      "zh-Hans": "切换前后摄像头",
-      "zh-Hant": "切換前後鏡頭",
-      "ja": "カメラを切り替え"
     },
     "All of them": {
       "en": "All of them",
@@ -369,8 +351,8 @@
     },
     "This app cannot play this kind of video. Everybody else goes on watching.": {
       "en": "This app cannot play this kind of video. Everybody else goes on watching.",
-      "zh-Hans": "这个应用放不了这种格式的视频,其他人照常在看。",
-      "zh-Hant": "這個應用程式放不了這種格式的影片,其他人照常在看。",
+      "zh-Hans": "这个应用放不了这种格式的视频，其他人照常在看。",
+      "zh-Hant": "這個應用程式放不了這種格式的影片，其他人照常在看。",
       "ja": "このアプリではこの形式の動画を再生できません。ほかの人はそのまま視聴を続けます。"
     },
     "The call's sound stopped": {
@@ -401,7 +383,7 @@
       "en": "Room name or invite link",
       "zh-Hans": "房间名或邀请链接",
       "zh-Hant": "房間名稱或邀請連結",
-      "ja": "ルーム名または招待リンク"
+      "ja": "部屋の名前または招待リンク"
     },
     "Remove {room} from recent": {
       "en": "Remove {room} from recent",

@@ -6961,36 +6961,6 @@
         }
       }
     },
-    "Flip camera" : {
-      "extractionState" : "manual",
-      "generatesSymbol" : false,
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Flip camera"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "カメラを切り替え"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "切换前后摄像头"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "切換前後鏡頭"
-          }
-        }
-      }
-    },
     "For Android 10 or later." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -8396,7 +8366,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "主頁"
+            "value" : "首頁"
           }
         }
       }
@@ -9327,36 +9297,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重新加入"
-          }
-        }
-      }
-    },
-    "Join as {name}" : {
-      "extractionState" : "manual",
-      "generatesSymbol" : false,
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Join as {name}"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "{name} として参加"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "以 {name} 的身份加入"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "以 {name} 的身分加入"
           }
         }
       }
@@ -14414,7 +14354,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "送られてきたリンクを貼り付けてください。"
+            "value" : "受け取ったリンクを貼り付け"
           }
         },
         "zh-Hans" : {
@@ -16304,7 +16244,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ルーム名または招待リンク"
+            "value" : "部屋の名前または招待リンク"
           }
         },
         "zh-Hans" : {
@@ -16814,7 +16754,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "予定した会議"
+            "value" : "予約した会議"
           }
         },
         "zh-Hans" : {
@@ -18914,7 +18854,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "この部屋は別の人が主催しています。"
+            "value" : "この部屋のホストは別の人です。"
           }
         },
         "zh-Hans" : {
@@ -23570,13 +23510,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "这个应用放不了这种格式的视频,其他人照常在看。"
+            "value" : "这个应用放不了这种格式的视频，其他人照常在看。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "這個應用程式放不了這種格式的影片,其他人照常在看。"
+            "value" : "這個應用程式放不了這種格式的影片，其他人照常在看。"
           }
         }
       }
@@ -26204,19 +26144,19 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "リンクを受け取りましたか?"
+            "value" : "リンクを受け取りましたか？"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "有人给了你邀请链接?"
+            "value" : "有人给了你邀请链接？"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "有人給了你邀請連結?"
+            "value" : "有人給了你邀請連結？"
           }
         }
       }
@@ -27927,36 +27867,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "瀏覽器需要你先點一下。"
-          }
-        }
-      }
-    },
-    "Your camera" : {
-      "extractionState" : "manual",
-      "generatesSymbol" : false,
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Your camera"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "あなたのカメラ"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的摄像头画面"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你的攝影機畫面"
           }
         }
       }
