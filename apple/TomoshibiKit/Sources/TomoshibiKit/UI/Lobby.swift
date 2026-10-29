@@ -1513,11 +1513,9 @@ struct PhoneLobby: View {
                         }
                     }
                     .onGeometryChange(for: BookFold?.self) { proxy in
-                        MainActor.assumeIsolated {
-                            let fold = Fold.of(proxy)
-                            guard fold.posture(in: proxy.size) == .book, let crease = fold.crease else { return nil }
-                            return BookFold(crease: crease, width: proxy.size.width)
-                        }
+                        let fold = Fold.of(proxy)
+                        guard fold.posture(in: proxy.size) == .book, let crease = fold.crease else { return nil }
+                        return BookFold(crease: crease, width: proxy.size.width)
                     } action: { book = $0 }
                     .animation(Theme.settle, value: book)
                     .padding(.horizontal, 16)
@@ -2639,13 +2637,11 @@ struct ScheduleView: View {
             }
         }
         .onGeometryChange(for: CGRect?.self) { proxy in
-            MainActor.assumeIsolated {
-                let fold = Fold.of(proxy)
-                // A form of its own width at least before the fold, as
-                // the form has on a flat screen.
-                guard fold.posture(in: proxy.size) == .book, let crease = fold.crease, crease.minX >= 368 else { return nil }
-                return crease
-            }
+            let fold = Fold.of(proxy)
+            // A form of its own width at least before the fold, as
+            // the form has on a flat screen.
+            guard fold.posture(in: proxy.size) == .book, let crease = fold.crease, crease.minX >= 368 else { return nil }
+            return crease
         } action: { book = $0 }
         .animation(Theme.settle, value: book)
     }

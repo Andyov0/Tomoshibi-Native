@@ -94,7 +94,6 @@ enum SystemColumn {
     /// reports while the phone lies flat as well when asked for the
     /// inactive ones (`ReservedRegion.QueryOptions.includeInactive`, iOS
     /// 27.1). The outer display reports none (iPhone Duo simulator).
-    @MainActor
     static func divided(_ proxy: GeometryProxy) -> Bool {
         if #available(iOS 27.1, *) {
             return !proxy.reservedRegions(kind: .division, options: .includeInactive).isEmpty
@@ -177,7 +176,6 @@ struct ColumnOutside: Equatable {
 
     init() {}
 
-    @MainActor
     init(_ proxy: GeometryProxy) {
         frame = proxy.frame(in: .global)
         leading = proxy.safeAreaInsets.leading
@@ -341,19 +339,17 @@ private struct SystemColumnBar<Head: View, Foot: View>: ViewModifier {
             .overlay(alignment: .topLeading) {
                 Color.clear
                     .onGeometryChange(for: ColumnSides.self) { [keptEdge, inside] proxy in
-                        MainActor.assumeIsolated {
-                            // Any height: the height asked for is judged
-                            // against the tallest the column has been.
-                            let wide = CGSize(width: SystemColumn.leastWidth, height: 0)
-                            // The column kept, inside this view where it is
-                            // not part of its safe area (`keptOut`).
-                            return ColumnSides(leading: SystemColumn.frame(proxy, edge: .leading, least: wide,
-                                                                           kept: keptEdge == .leading ? inside : 0,
-                                                                           own: keptEdge == .leading),
-                                               trailing: SystemColumn.frame(proxy, edge: .trailing, least: wide,
-                                                                            kept: keptEdge == .trailing ? inside : 0,
-                                                                            own: keptEdge == .trailing))
-                        }
+                        // Any height: the height asked for is judged
+                        // against the tallest the column has been.
+                        let wide = CGSize(width: SystemColumn.leastWidth, height: 0)
+                        // The column kept, inside this view where it is
+                        // not part of its safe area (`keptOut`).
+                        return ColumnSides(leading: SystemColumn.frame(proxy, edge: .leading, least: wide,
+                                                                       kept: keptEdge == .leading ? inside : 0,
+                                                                       own: keptEdge == .leading),
+                                           trailing: SystemColumn.frame(proxy, edge: .trailing, least: wide,
+                                                                        kept: keptEdge == .trailing ? inside : 0,
+                                                                        own: keptEdge == .trailing))
                     } action: { now in
                         sides = sides.remeasured(leading: now.leading, trailing: now.trailing)
                         if FoldDebug.logsGeometry {
@@ -407,7 +403,7 @@ private struct SystemColumnBar<Head: View, Foot: View>: ViewModifier {
             .background {
                 Color.clear
                     .onGeometryChange(for: ColumnOutside.self) { proxy in
-                        MainActor.assumeIsolated { ColumnOutside(proxy) }
+                        ColumnOutside(proxy)
                     } action: { now in
                         if measured {
                             outside = now

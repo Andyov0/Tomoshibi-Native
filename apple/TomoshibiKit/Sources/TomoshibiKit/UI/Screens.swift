@@ -92,7 +92,7 @@ public struct AppRoot: View {
                 // screen to judge the system's vertical bar by, a sheet among
                 // them (VerticalBarWindow).
                 .onGeometryChange(for: WindowShape.self) { proxy in
-                    MainActor.assumeIsolated { WindowShape(size: proxy.size, divided: SystemColumn.divided(proxy)) }
+                    WindowShape(size: proxy.size, divided: SystemColumn.divided(proxy))
                 } action: { shape in
                     VerticalBarWindow.shared.size = SystemColumn.windowSize(measured: shape.size)
                     VerticalBarWindow.shared.divided = shape.divided
