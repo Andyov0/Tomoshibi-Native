@@ -238,9 +238,14 @@ fun ProblemToast(app: AppModel, modifier: Modifier = Modifier, clearance: Dp = 2
 }
 
 /**
- * The microphone and camera as they will be on joining, as switches; off is
- * drawn in red, because this is the last moment to notice before everybody
- * else does (`DeviceSwitches`).
+ * The microphone and camera as they will be on joining, as switches
+ * (`DeviceSwitches`). Off is the solid plate of the foreground the call's own
+ * bar draws (BarButton), white by night and near black by day: this is the
+ * last moment to notice before everybody else does, and the one switch drawn
+ * red here and grey in the call looked like two different things a screen
+ * apart (the owner, 2026-10-29). Forty-four across over a picture, the
+ * call's own button, where it was 38 or 40 by the screen, and the large 52
+ * where it stands alone on the card; the symbol four tenths of either.
  */
 @Composable
 fun DeviceSwitches(app: AppModel, modifier: Modifier = Modifier, size: Dp = 44.dp, shade: Color = Color.Transparent) {
@@ -250,7 +255,7 @@ fun DeviceSwitches(app: AppModel, modifier: Modifier = Modifier, size: Dp = 44.d
             GlassButton(
                 { app.startWithMicrophone = !app.startWithMicrophone },
                 shape = GlassButtonShape.Circle(size),
-                destructive = !mic,
+                off = !mic,
                 label = if (mic) t("Mute microphone") else t("Unmute microphone"),
                 shade = shade,
             ) { SwappingSymbol(if (mic) "mic.fill" else "mic.slash.fill", size = size.value * 0.4f, weight = Font.Semibold) }
@@ -258,10 +263,10 @@ fun DeviceSwitches(app: AppModel, modifier: Modifier = Modifier, size: Dp = 44.d
             GlassButton(
                 { app.startWithCamera = !app.startWithCamera },
                 shape = GlassButtonShape.Circle(size),
-                destructive = !camera,
+                off = !camera,
                 label = if (camera) t("Turn camera off") else t("Turn camera on"),
                 shade = shade,
-            ) { SwappingSymbol(if (camera) "video.fill" else "video.slash.fill", size = size.value * 0.38f, weight = Font.Semibold) }
+            ) { SwappingSymbol(if (camera) "video.fill" else "video.slash.fill", size = size.value * 0.4f, weight = Font.Semibold) }
         }
     }
 }

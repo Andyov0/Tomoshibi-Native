@@ -399,7 +399,7 @@ private fun JoinPicture(app: AppModel, wide: Boolean) {
                 app,
                 Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp)
                     .glassSurface(Capsule, shade = pictureShade(app.startWithCamera)).padding(6.dp),
-                size = 38.dp,
+                size = 44.dp,
             )
         }
     } else {

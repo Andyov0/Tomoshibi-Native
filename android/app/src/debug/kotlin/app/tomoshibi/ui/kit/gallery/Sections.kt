@@ -350,7 +350,7 @@ private fun BarPage(options: GalleryOptions) = Page {
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            BarButton("mic.slash.fill", t("Unmute microphone"), {}, quiet = true)
+            BarButton("mic.slash.fill", t("Unmute microphone"), {}, off = true)
             BarButton("video.fill", t("Turn camera off"), {}, lit = true)
             BarButton("bubble.left.fill", t("Show messages"), {}, dot = true)
             BarButton("ellipsis", t("More"), {}, pressed = true)

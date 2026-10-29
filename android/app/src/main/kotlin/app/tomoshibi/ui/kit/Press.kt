@@ -54,6 +54,40 @@ import kotlinx.coroutines.launch
 // here, drawn only while a keyboard or a remote has moved focus onto the
 // control: Compose gives a clickable focus only outside touch mode.
 
+/**
+ * How far a control gives under a finger, one value for every control the
+ * kit draws (the web's `.pressable`, 0.95). The bar's buttons gave to 0.93,
+ * the pictures' to 0.94 and the glass buttons to 0.96: three presses that
+ * each looked right alone and, side by side on one screen, looked like three
+ * kits.
+ */
+internal const val PressedScale = 0.95f
+
+/**
+ * How faint a control that cannot be pressed is drawn, one value everywhere
+ * (the web's `disabled:opacity-40`): 0.3, 0.4, 0.45 and 0.7 had each been
+ * chosen on its own. The primary action is the exception: it turns grey
+ * rather than fading (GlassButton).
+ */
+internal const val DisabledAlpha = 0.4f
+
+/**
+ * How far a plate moves towards the foreground under the pointer and under
+ * the finger, as fractions of the way (the web's hover and press, 10 and 16
+ * per cent towards `fg`): the same two steps on a bar button, a glass button
+ * and a menu row, so that pressing anything reads as the same act.
+ */
+internal const val HoverLift = 0.10f
+internal const val PressLift = 0.16f
+
+/**
+ * A wash of the foreground at [alpha] moved [lift] of the way further
+ * towards the foreground: what a plate of that wash looks like hovered or
+ * pressed, worked out as the colour it ends up rather than as a second
+ * layer, which over the bar's glass would have doubled the glass's blur.
+ */
+internal fun lifted(alpha: Float, lift: Float): Float = alpha + (1f - alpha) * lift
+
 /** The least a control should be pressed by, Android's own: 48 points, a fingertip. */
 internal val Fingertip = 48.dp
 

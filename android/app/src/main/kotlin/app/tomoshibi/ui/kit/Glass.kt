@@ -3,6 +3,7 @@ package app.tomoshibi.ui.kit
 import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.scaleIn
@@ -376,10 +377,18 @@ sealed interface GlassButtonShape {
 /**
  * A button made of glass (`GlassButtonStyle`, `.glassCircle` and
  * `.glassCapsule`): `prominent` wears the person's chosen colour,
- * `destructive` is red, for leaving and nothing else. Pressed, it gives a
- * little, and inside a content layer brightens as well, as the plain
- * surfaces of the Apple apps do. `label` is what a screen reader says for a
- * button of a symbol alone.
+ * `destructive` is red, for leaving and nothing else, and `off` is a switch
+ * for one's own microphone or camera that is off, a solid plate of the
+ * foreground with its symbol in the page's colour (BarButton says why, and
+ * why not red). Under the pointer and the finger it moves a step and then
+ * another towards the foreground, and gives a little when pressed. `label`
+ * is what a screen reader says for a button of a symbol alone.
+ *
+ * Disabled it fades, except the prominent one, which turns to the raised
+ * grey with muted words instead: the colour at under half was a brown plate
+ * whose dark arrow was 1.55 to one on it, and a faded amber still reads as
+ * the thing to press, only weaker, so somebody pressed it and nothing
+ * happened (the owner, 2026-10-29; the web's primary button).
  */
 @Composable
 fun GlassButton(
@@ -388,6 +397,7 @@ fun GlassButton(
     shape: GlassButtonShape = GlassButtonShape.Capsule(),
     prominent: Boolean = false,
     destructive: Boolean = false,
+    off: Boolean = false,
     enabled: Boolean = true,
     label: String? = null,
     spacing: Dp = 6.dp,
@@ -395,13 +405,34 @@ fun GlassButton(
     content: @Composable RowScope.() -> Unit,
 ) {
     val on = enabled && LocalEnabled.current
-    val inContent = LocalContentLayer.current
-    val tint = if (destructive) Theme.danger else if (prominent) Theme.tally else null
-    val ink = if (destructive) Theme.dangerForeground else if (prominent) Theme.tallyForeground else Theme.foreground
+    val waiting = prominent && !destructive && !on
+    val tint by animateColorAsState(
+        when {
+            destructive -> Theme.danger
+            waiting -> Theme.surfaceHigh
+            prominent -> Theme.tally
+            off -> Theme.foreground
+            else -> Color.Transparent
+        },
+        Theme.settle(), label = "tint",
+    )
+    val ink by animateColorAsState(
+        when {
+            destructive -> Theme.dangerForeground
+            waiting -> Theme.muted
+            prominent -> Theme.tallyForeground
+            off -> Theme.background
+            else -> Theme.foreground
+        },
+        Theme.settle(), label = "ink",
+    )
     val press = rememberPress()
-    val scale by animateFloatAsState(if (press.pressed) 0.96f else 1f, Theme.settle(), label = "press")
-    val light by animateFloatAsState(if (press.pressed && inContent) 0.06f else 0f, Theme.settle(), label = "light")
-    val alpha by animateFloatAsState(if (on) 1f else 0.45f, Theme.settle(), label = "enabled")
+    val scale by animateFloatAsState(if (press.pressed && on) PressedScale else 1f, Motion.hover(), label = "press")
+    val light by animateFloatAsState(
+        if (!on) 0f else if (press.pressed) PressLift else if (press.hovered) HoverLift else 0f,
+        Motion.hover(), label = "light",
+    )
+    val alpha by animateFloatAsState(if (on || waiting) 1f else DisabledAlpha, Theme.settle(), label = "enabled")
     val outline = when (shape) {
         is GlassButtonShape.Circle -> CircleShape
         is GlassButtonShape.Capsule -> Capsule
@@ -414,7 +445,7 @@ fun GlassButton(
         modifier
             .glassLayer(alpha = { alpha }, scale = { scale })
             .then(sized)
-            .glassSurface(outline, tint, interactive = true, shade = shade)
+            .glassSurface(outline, tint.takeIf { it.alpha > 0f }, interactive = true, shade = shade)
             .brightened(outline, Theme.dark) { light }
             .pressable(press, outline, on, Role.Button, label, onClick = onClick)
             .then(if (shape is GlassButtonShape.Capsule) Modifier.padding(horizontal = shape.height * 0.45f) else Modifier),
