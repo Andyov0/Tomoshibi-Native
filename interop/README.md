@@ -17,6 +17,15 @@ against a local deployment on 127.0.0.1:8080.
   the size and rate decoded at each: the check that a share's ladder arrives as
   the web publishes it. `base` is the deployment's address, for a deployment
   that is not on 127.0.0.1:8080.
+- `follow.mjs <port> <base> <room> [invite]` — takes the browser into a room
+  on the deployment at `base` as an ordinary participant and leaves it there,
+  with its peer connections kept for `sent.js` and `channels.js`.
+- `sent.js` — evaluated in the page: the tracks the media server is sending
+  the browser now, by SID, read off its peer connections' remote
+  descriptions. A track its sender unpublished leaves the list; one it only
+  stopped feeding stays, which is a frozen camera told from a camera that is
+  off. With `core/examples/republish.rs` it is the check that a camera, a
+  share and a voice can still be taken back after a full reconnect.
 - `peek.mjs <port> <expression>` — evaluates one expression in the page.
 - `listen.py <port>` — answers every request with 401 and prints what was asked
   for; used to prove the core sends no `/rtc/validate`.

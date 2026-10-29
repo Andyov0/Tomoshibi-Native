@@ -1763,7 +1763,13 @@ impl RoomSession {
                 let mut set = tokio::task::JoinSet::new();
 
                 for (_, publication) in published_tracks {
-                    let track = publication.track().unwrap();
+                    // Tomoshibi: a publication the person unpublished after
+                    // the list above was taken has no track any more. The
+                    // unwrap that stood here panicked this task, `Reconnected`
+                    // was never sent and the call said "Reconnecting..." for
+                    // good; the track is gone, which is what was asked, so
+                    // there is nothing to publish again.
+                    let Some(track) = publication.track() else { continue };
 
                     let lp = session.local_participant.clone();
                     let republish_session = session.clone();

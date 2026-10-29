@@ -32,4 +32,11 @@ over the old one and carrying every change forward.
   from nothing an Android app holds; without this every frame was copied
   through memory four times on its way in.
 
+- `livekit` 0.9.5 — a full reconnect publishes every local track again
+  (`room/mod.rs` `handle_restarted`) and skips one that was unpublished after
+  its list was taken, where it used to unwrap the missing track: the task
+  panicked, `Reconnected` never came and the call said it was reconnecting
+  for good. Taking a track back during a reconnect is exactly what the core's
+  `withdraw` (call/publish.rs) allows.
+
 All three are Apache-2.0, as each `Cargo.toml` declares; the published crates carry no separate licence file.

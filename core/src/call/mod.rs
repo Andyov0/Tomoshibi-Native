@@ -21,8 +21,8 @@ mod panel;
 mod window;
 
 use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
+    collections::{HashMap, HashSet},
+    sync::{Arc, Mutex, MutexGuard},
 };
 
 use livekit::{
@@ -77,6 +77,22 @@ pub struct Call {
     meter: std::sync::Arc<tomoshibi_protocol::quality::ConnectionMeter>,
     /// The lossless streams this participant offers, for routing asks.
     senders: Mutex<Vec<Arc<Mutex<tomoshibi_protocol::lossless::sender::LosslessSender>>>>,
+    /// The WebRTC ids of the tracks this participant has taken back, so that
+    /// one taken back while a reconnect was publishing it again is taken down
+    /// once it is up (publish.rs `withdraw`).
+    withdrawn: Mutex<HashSet<String>>,
+}
+
+/// A lock that a panic elsewhere left poisoned, taken all the same.
+///
+/// Everything these locks hold is replaced whole or added to one entry at a
+/// time, so a panic between two statements cannot leave it half written, and
+/// a poisoned lock is still a usable one (relays.rs `chosen` reasons the same
+/// way). Unwrapping instead made one panic, on any thread, into a panic in
+/// every later call that touched the lock, and a panic in an exported call
+/// crosses into the app as a crash.
+pub(crate) fn held<T>(lock: &Mutex<T>) -> MutexGuard<'_, T> {
+    lock.lock().unwrap_or_else(|poison| poison.into_inner())
 }
 
 /// Opens the call described by `options` and starts telling `observer` about
@@ -144,6 +160,7 @@ impl Call {
             lossless: lossless::Lossless::new(options.sealing_word.as_ref().is_some_and(|w| !w.is_empty())),
             senders: Mutex::new(Vec::new()),
             meter: tomoshibi_protocol::quality::ConnectionMeter::new(),
+            withdrawn: Mutex::new(HashSet::new()),
         });
 
         call.observer.on_event(CallEvent::StateChanged { state: CallState::Connected });
@@ -255,6 +272,20 @@ impl Call {
             RoomEvent::LocalTrackUnpublished { publication, .. } => {
                 say(CallEvent::LocalTrackUnpublished { sid: publication.sid().to_string() })
             }
+            // A full reconnect publishes every local track again under a new
+            // SID; the app has already been told by the unpublished and
+            // published events around this one, and the inputs find their
+            // track by what it is rather than by its SID. What is left is a
+            // track the person took back while it was being published again,
+            // which nobody can have found until now (publish.rs `withdraw`).
+            RoomEvent::LocalTrackRepublished { publication, track, .. } => {
+                if held(&self.withdrawn).contains(&track.rtc_track().id()) {
+                    let call = self.clone();
+                    tokio::spawn(async move {
+                        let _ = call.room.local_participant().unpublish_track(&publication.sid()).await;
+                    });
+                }
+            }
             RoomEvent::ActiveSpeakersChanged { speakers } => say(CallEvent::Speaking {
                 identities: speakers.iter().map(|p| p.identity().to_string()).collect(),
             }),
@@ -320,6 +351,22 @@ impl Call {
             }
             _ => {}
         }
+    }
+
+    /// The full reconnect a relay restart, a sleep or a long outage forces,
+    /// made on demand: the SDK's own client-side simulation of the server
+    /// saying `Leave{Reconnect}`. For the tests that need one without
+    /// restarting a server (core/tests/republish.rs); not exported to the
+    /// apps.
+    #[doc(hidden)]
+    pub async fn simulate_full_reconnect(self: Arc<Self>) -> Result<(), CallError> {
+        on_core(async move {
+            self.room
+                .simulate_scenario(livekit::SimulateScenario::FullReconnect)
+                .await
+                .map_err(|e| CallError::Failed { detail: e.to_string() })
+        })
+        .await
     }
 
     fn publication(&self, sid: &str) -> Option<RemoteTrackPublication> {
