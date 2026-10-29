@@ -1,0 +1,60 @@
+{
+ "mac": [
+  {
+   "version": "0.1.4",
+   "build": "1",
+   "file": "Tomoshibi-0.1.4.dmg",
+   "size": 47,
+   "sha256": "626f04dbef0be8b57b8b46308210f557915504ac5b87a8f5e458979f9b83d57a",
+   "sig": "OQ1gFyFaIAzOtmtDsEvPVUwPJfJrAF1icoo0xbyWuNE5tpwAcOCvlwdw01It9X1dJ20lPgABw41A7EwPTzOsDA=="
+  },
+  {
+   "version": "0.1.6",
+   "build": "4",
+   "file": "Tomoshibi-0.1.6.dmg",
+   "size": 43,
+   "sha256": "708c50cbed1270b418876723e9f75c49b55f03a7cfeb36b7bf48627c54f5bfa4",
+   "notes": {
+    "en": "Notes are not signed.",
+    "ja": "Notes in any language are not signed."
+   },
+   "sig": "gtYFh/fEXgiFaEuDn9yRjGDTTlsLsSKgP3eM82GZA+1uOr3LAwuqcSdq9vwPxsvNL7iPvjFXbiC0IPrZToH7DA=="
+  }
+ ],
+ "android": [
+  {
+   "version": "0.1.6",
+   "file": "Tomoshibi-0.1.6.apk",
+   "size": 42,
+   "sha256": "20C71A873A8420039C5BACD5CDBCA6AF81093509B0924D5030AE21674D16A8EA",
+   "sig": "i9U0oBIBA3qMsK+Zc8RJDbXvRvy6vWQQn0aH5aZ9DQedJgXjR/R4QPv1NVe5iNekYE6KkcKIysbvoLCmnbWNDQ=="
+  },
+  {
+   "version": "0.1.6",
+   "build": "2",
+   "file": "Tomoshibi-0.1.6.2.apk",
+   "size": 38,
+   "sha256": "169eadfebbed3d4b60d9e89f583d7fa440cdc95f54b568e570c1ed02167e15b2",
+   "sig": "s/nX0w7bcxHGFeRhRBOd8XwPccKFGDZGUHa6zxZ/sxl5C/lGDZciLxjw20C96EFV2GjI2ZMJFObWh3S5xPmaCQ=="
+  }
+ ],
+ "windows": [
+  {
+   "version": "0.1.4",
+   "build": 2,
+   "file": "Tomoshibi-Setup-0.1.4.2.exe",
+   "size": 56,
+   "sha256": "6db6fb3e1c44b578ab839110a1fde68c0b08ef58b054794db16fc07258752b8e",
+   "sig": "2cWGRTYOi2NAs+6A+IUlqIPACgGW7MW28V88G2HcbmDJYs8FxwUPjE4X1+/ZsYHnHBwHnSlLE00Cs/aXjOP7Dg=="
+  }
+ ],
+ "ios": [
+  {
+   "version": "0.1.6",
+   "build": "4",
+   "notes": {
+    "en": "TestFlight installs this one."
+   }
+  }
+ ]
+}

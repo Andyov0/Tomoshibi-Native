@@ -14,6 +14,17 @@
 //! offers a download nobody can install, and downloaded at all spends a
 //! request on a phone for a file the deployment does not have. Each test
 //! below fails if its guard is taken out; that was tried.
+//!
+//! Every build here is signed with the tests' own release key, as the
+//! release tooling signs a deployment's, so that the same tests pass for a
+//! core built with no key, which ignores the signatures, and for one built
+//! with the tests' key (TOMOSHIBI_UPDATE_KEY set to `TEST_PUBLIC`, below),
+//! which holds every check and download to them. Built with any other key,
+//! nothing here could be signed for it, and the server says so at once
+//! rather than every test failing for a reason it does not name. What a key
+//! refuses is tested in the core's own tests (src/api/updates.rs); what is
+//! here is that the key built in is the one every check and download is
+//! held to.
 
 use std::{
     collections::HashMap,
@@ -26,6 +37,8 @@ use std::{
     time::Duration,
 };
 
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use ring::signature::Ed25519KeyPair;
 use serde_json::{json, Value};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -33,7 +46,7 @@ use tokio::{
 };
 use tomoshibi_protocol::{
     api::{
-        update_notes, version_is_newer, AppBuild, Deployment, UpdateCheck, UpdateError,
+        update_key, update_notes, version_is_newer, AppBuild, Deployment, UpdateCheck, UpdateError,
         UpdatePlatform, UpdateProgress,
     },
     ProtocolError,
@@ -109,6 +122,15 @@ struct Stub {
 
 impl Stub {
     async fn start(handler: impl Fn(&Seen) -> Reply + Send + Sync + 'static) -> Self {
+        if let Some(key) = update_key() {
+            assert_eq!(
+                key, TEST_PUBLIC,
+                "this core was built with a release key these tests cannot sign for; build them \
+                 with TOMOSHIBI_HOST=meet.example.com and no TOMOSHIBI_UPDATE_KEY, or with \
+                 TOMOSHIBI_UPDATE_KEY={TEST_PUBLIC}"
+            );
+        }
+
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let base = format!("http://{}", listener.local_addr().unwrap());
         let seen = Arc::new(Mutex::new(Vec::new()));
@@ -219,14 +241,53 @@ fn contents(seed: u8, length: usize) -> Vec<u8> {
         .collect()
 }
 
+/// The tests' own release key, never a deployment's: the private half from
+/// this seed, the public half below.
+const TEST_SEED: &[u8; 32] = b"tomoshibi update tests' own key!";
+const TEST_PUBLIC: &str = "559eabd75294200c1aa880c697863f2cff8a968adc13c279a058deff6e44ee1a";
+
+fn section(platform: UpdatePlatform) -> &'static str {
+    match platform {
+        UpdatePlatform::Mac => "mac",
+        UpdatePlatform::Android => "android",
+        UpdatePlatform::Windows => "windows",
+        UpdatePlatform::Ios => "ios",
+    }
+}
+
+/// The tests' key's signature of a build, over the lines the release
+/// tooling signs, written out here apart from the core's own.
+fn sign(platform: &str, version: &str, file: &str, size: u64, sha256: &str) -> String {
+    let lines = format!(
+        "tomoshibi-update-v1\nplatform={platform}\nversion={version}\nfile={file}\nsize={size}\nsha256={}\n",
+        sha256.to_ascii_lowercase()
+    );
+    let pair = Ed25519KeyPair::from_seed_unchecked(TEST_SEED).unwrap();
+    BASE64.encode(pair.sign(lines.as_bytes()).as_ref())
+}
+
+/// A build as a check hands it over, signed for what it now says.
+fn signed(build: AppBuild) -> AppBuild {
+    let signature = sign(
+        section(build.platform),
+        &build.version,
+        &build.file_name,
+        build.size,
+        &build.sha256,
+    );
+    AppBuild { signature, ..build }
+}
+
 fn build_of(bytes: &[u8], version: &str) -> AppBuild {
-    AppBuild {
+    signed(AppBuild {
         platform: UpdatePlatform::Android,
         version: version.into(),
         size: bytes.len() as u64,
         sha256: sha256(bytes),
         notes: HashMap::new(),
-    }
+        file_name: format!("Tomoshibi-{version}.apk"),
+        signature: String::new(),
+    })
 }
 
 /// `http.ServeContent` with the hash as the ETag: a range is honoured only
@@ -340,12 +401,16 @@ fn notes_are_chosen_for_the_reader() {
 // The check.
 
 fn latest(platform: &str, version: &str) -> Value {
+    let sha256 = "1C66C521".to_owned() + &"0".repeat(56);
+    let file = format!("Tomoshibi-{version}.bin");
     json!({
         "platform": platform,
         "version": version,
         "size": 56093610,
-        "sha256": "1C66C521".to_owned() + &"0".repeat(56),
+        "sha256": sha256,
         "notes": { "zh-Hans": "  修好了  ", "en": "Fixed.", "ja": 7, "zh-Hant": "" },
+        "file": file,
+        "sig": sign(platform, version, &file, 56093610, &sha256),
     })
 }
 
@@ -557,6 +622,8 @@ async fn an_ios_build_is_a_version_and_notes_with_nothing_to_download() {
                 size: 0,
                 sha256: s(""),
                 notes: notes.clone(),
+                file_name: s(""),
+                signature: s(""),
             }
         }),
         "0.1.0.10 is after 0.1.0.9 by number, on iOS as anywhere"
@@ -697,8 +764,11 @@ async fn a_file_that_is_not_the_build_is_deleted_and_refused() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn more_than_was_offered_is_deleted_and_refused() {
     let bytes = contents(3, 40_000);
-    let mut build = build_of(&bytes, "0.1.0.8");
-    build.size = 30_000;
+    // Described, and signed, as thirty thousand bytes.
+    let build = signed(AppBuild {
+        size: 30_000,
+        ..build_of(&bytes, "0.1.0.8")
+    });
     // No ETag and no length the client could read before the body: what is
     // left to stop it is counting what arrives.
     let stub = Stub::start(move |_| {
@@ -727,8 +797,11 @@ async fn more_than_was_offered_is_deleted_and_refused() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_file_of_another_length_is_another_build() {
     let bytes = contents(12, 40_000);
-    let mut build = build_of(&bytes, "0.1.0.8");
-    build.size = 30_000;
+    // Described, and signed, as thirty thousand bytes.
+    let build = signed(AppBuild {
+        size: 30_000,
+        ..build_of(&bytes, "0.1.0.8")
+    });
     let stub = Stub::start(move |_| Reply::bytes(200, bytes.clone())).await;
     let dir = scratch("otherlength");
     let destination = dir.join("Tomoshibi.apk");
@@ -1039,6 +1112,8 @@ async fn an_ios_build_is_never_downloaded_or_asked_for() {
         size: 0,
         sha256: s(""),
         notes: HashMap::new(),
+        file_name: s(""),
+        signature: s(""),
     };
     let mut made = build_of(&bytes, "0.1.0.8");
     made.platform = UpdatePlatform::Ios;
@@ -1061,4 +1136,93 @@ async fn an_ios_build_is_never_downloaded_or_asked_for() {
         stub.seen()
     );
     assert!(!dir.exists(), "a download of an iOS build touched the disk");
+}
+
+// ----------------------------------------------------------------------------
+// The key built in.
+
+/// The same build, unsigned and then signed, checked and downloaded through
+/// the deployment as the apps do it. A core built with no key offers and
+/// downloads both; a core built with a key offers and downloads only the
+/// signed one, and asks the deployment for nothing of the other. Run both
+/// ways: as the tests are usually built, and with TOMOSHIBI_UPDATE_KEY set to
+/// `TEST_PUBLIC`.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_key_built_in_is_what_every_check_and_download_is_held_to() {
+    let bytes = Arc::new(contents(21, 20_000));
+    let signed_build = build_of(&bytes, "0.1.0.8");
+    let unsigned_build = AppBuild {
+        signature: s(""),
+        ..signed_build.clone()
+    };
+    let unsigned = json!({
+        "platform": "android",
+        "version": "0.1.0.8",
+        "size": bytes.len(),
+        "sha256": sha256(&bytes),
+        "file": signed_build.file_name,
+    });
+    let mut signed = unsigned.clone();
+    signed["sig"] = json!(signed_build.signature);
+
+    for (answer, build, is_signed) in [
+        (unsigned, unsigned_build, false),
+        (signed, signed_build, true),
+    ] {
+        let served = bytes.clone();
+        let stub = Stub::start(move |seen| {
+            if seen.target.ends_with("/file") {
+                serve_file(seen, &served)
+            } else {
+                Reply::json(200, answer.clone())
+            }
+        })
+        .await;
+        let deployment = stub.deployment();
+        let dir = scratch(if is_signed {
+            "keyed-signed"
+        } else {
+            "keyed-unsigned"
+        });
+        let destination = dir.join("Tomoshibi-0.1.0.8.apk");
+
+        let checked = deployment
+            .clone()
+            .check_for_update(UpdatePlatform::Android, s("0.1.0.7"))
+            .await;
+        let downloaded = deployment
+            .download_update(build.clone(), destination.to_string_lossy().into())
+            .run(Arc::new(Watch::default()))
+            .await;
+
+        if is_signed || update_key().is_none() {
+            assert_eq!(
+                checked,
+                Ok(UpdateCheck::Available {
+                    build: build.clone()
+                }),
+                "signed: {is_signed}, key: {:?}",
+                update_key()
+            );
+            assert_eq!(downloaded, Ok(()), "signed: {is_signed}");
+            assert_eq!(std::fs::read(&destination).unwrap(), *bytes);
+        } else {
+            assert!(
+                matches!(checked, Err(ProtocolError::Unexpected { .. })),
+                "an unsigned build was offered by a core with a key: {checked:?}"
+            );
+            assert!(
+                matches!(&downloaded, Err(UpdateError::Unexpected { detail }) if detail.contains("release key")),
+                "an unsigned build was downloaded by a core with a key: {downloaded:?}"
+            );
+            assert!(
+                stub.files().is_empty(),
+                "the deployment was asked for an unsigned build"
+            );
+            assert!(
+                !dir.exists(),
+                "the download of an unsigned build touched the disk"
+            );
+        }
+    }
 }
