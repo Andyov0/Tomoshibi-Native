@@ -10,9 +10,9 @@ namespace Tomoshibi.UI.Kit;
 /// Android's ui/kit/Symbols.kt maps them to Material icons, drawn here from
 /// Segoe Fluent Icons, Windows 11's own set, so that a control means on
 /// Windows what it looks like on Windows. Where the set has no such glyph (a
-/// camera turned off, a raised hand) the nearest is drawn with what it
-/// lacks: a slash across the camera, the hand from Segoe UI Emoji in its own
-/// colour.
+/// camera turned off) the nearest is drawn with what it lacks, a slash
+/// across the camera; where it has nothing near (a crown, a raised hand),
+/// the symbol is drawn as a path, in the ink as every glyph is.
 /// </summary>
 internal static class Symbols
 {
@@ -142,26 +142,40 @@ internal static class Symbols
         ["signature"] = "",
     };
 
+    /// <summary>Material's rounded back_hand, the raised hand Android draws (Icons.Rounded.BackHand), as path markup on its 24-unit grid.</summary>
+    private const string Hand = "M21,16 c0,4.42 -3.58,8 -8,8 c-3.26,0 -6.19,-1.99 -7.4,-5.02 l-3.03,-7.61 C2.26,10.58 3,9.79 3.81,10.05 l0.79,0.26 c0.56,0.18 1.02,0.61 1.24,1.16 l1.28,3.21 C7.2,14.88 7.38,15 7.58,15 H8 V3.25 C8,2.56 8.56,2 9.25,2 s1.25,0.56 1.25,1.25 v8.25 c0,0.28 0.22,0.5 0.5,0.5 c0.28,0 0.5,-0.22 0.5,-0.5 V1.25 C11.5,0.56 12.06,0 12.75,0 S14,0.56 14,1.25 V11.5 c0,0.28 0.22,0.5 0.5,0.5 c0.28,0 0.5,-0.22 0.5,-0.5 V2.75 c0,-0.69 0.56,-1.25 1.25,-1.25 c0.69,0 1.25,0.56 1.25,1.25 v8.75 c0,0.28 0.22,0.5 0.5,0.5 c0.28,0 0.5,-0.22 0.5,-0.5 V5.75 c0,-0.69 0.56,-1.25 1.25,-1.25 S21,5.06 21,5.75 V16 Z";
+
     public static FrameworkElement Make(string name, double size, Brush ink)
     {
         switch (name)
         {
             case "hand.raised.fill":
             case "hand.raised":
-                // Segoe Fluent Icons has no raised hand, and the emoji font
-                // has no outline of one to draw in a single colour (asked
-                // for one, it drew a stroke): the hand is the emoji itself,
-                // as the tiles' hand mark is on every platform.
-                return new TextBlock
+            {
+                // Nor a raised hand. It was the emoji, in its own yellow,
+                // the one coloured thing on a bar of single-colour glyphs,
+                // and it stayed yellow whatever the bar's state said; the
+                // emoji font has no outline of one to draw in the ink. So
+                // it is drawn: the hand Android's bar shows, Material's
+                // rounded back_hand (Apache 2.0), on its 24-unit grid, in
+                // the ink like every other symbol. The tiles' hand mark is
+                // still the emoji, as it is on every platform and the web.
+                var filled = name == "hand.raised.fill";
+                var hand = new Microsoft.UI.Xaml.Shapes.Path
                 {
-                    Text = "✋",
-                    FontFamily = new FontFamily("Segoe UI Emoji"),
-                    FontSize = size,
-                    Foreground = ink,
+                    Data = (Geometry)Microsoft.UI.Xaml.Markup.XamlBindingHelper.ConvertValue(typeof(Geometry), Hand),
+                    Fill = filled ? ink : null,
+                    Stroke = filled ? null : ink,
+                    StrokeThickness = filled ? 0 : 1.3,
+                    StrokeLineJoin = PenLineJoin.Round,
+                    Stretch = Stretch.Uniform,
+                    Width = size * 0.9,
+                    Height = size * 1.12,
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center,
-                    IsTextScaleFactorEnabled = false,
-                }.Quiet();
+                };
+                return hand.Quiet();
+            }
             case "video.slash.fill":
             case "video.slash":
             {
