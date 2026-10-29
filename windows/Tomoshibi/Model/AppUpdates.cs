@@ -272,13 +272,18 @@ internal sealed partial class PackageInstaller : IUpdateInstaller
 /// let through by hand at the SmartScreen prompt; an MSIX cannot be, since
 /// Windows refuses one whose signature it does not trust.
 ///
-/// What is run is what the core checked: the size and SHA-256 the deployment
-/// gave over TLS, beside the build. With no signature to read, that is the
-/// whole of the trust, and the setup's own version stamp is read only to
-/// refuse a file that is not the setup offered: its product version is the
-/// version as the deployment offers it, 0.1.4 for a first build and 0.1.4.2
-/// for a later one (setup.ps1), which is what every app out there compares
-/// it with, this one and those from before builds were said alike.
+/// What is run is what the core checked. The trust comes from the release's
+/// offline key: the core verifies its Ed25519 signature over the platform,
+/// the version, the file, its size and its SHA-256 before it offers a build
+/// at all, and again before the finished download is renamed into place, so
+/// a deployment or a shelf that was tampered with cannot hand out a build of
+/// its own. The setup itself is still unsigned, by the owner's choice above;
+/// nothing here reads an Authenticode signature. The setup's own version
+/// stamp is read only to refuse a file that is not the setup offered: its
+/// product version is the version as the deployment offers it, 0.1.4 for a
+/// first build and 0.1.4.2 for a later one (setup.ps1), which is what every
+/// app out there compares it with, this one and those from before builds
+/// were said alike.
 /// Downloaded by the app rather than a browser, it carries no mark of the
 /// web, so SmartScreen does not ask again. The setup runs silently, shows a
 /// small window of its own, closes this app if it is still open, and opens
