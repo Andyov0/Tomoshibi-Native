@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -45,12 +46,16 @@ import app.tomoshibi.basics.Theme
  * surfaces a blur cannot sample, and there is one of these on every tile,
  * which is the many live blurs Apple's guidance and the hot phone both warn
  * against; over a moving picture the two read the same.
+ *
+ * Thirty-six across, the shared scale's and the web's stage buttons, and
+ * pressed over a fingertip on a phone (fingertip): at thirty-two, pressed at
+ * thirty-two, it was the smallest thing on a phone's call to aim at.
  */
 @Composable
 fun PictureButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    size: Dp = 32.dp,
+    size: Dp = 36.dp,
     words: Boolean = false,
     label: String? = null,
     enabled: Boolean = true,
@@ -58,27 +63,39 @@ fun PictureButton(
 ) {
     val on = enabled && LocalEnabled.current
     val press = rememberPress()
-    val shade by animateFloatAsState(if (press.lit) 0.64f else 0.52f, Motion.hover(), label = "shade")
-    val scale by animateFloatAsState(if (press.pressed) 0.94f else 1f, Theme.settle(), label = "press")
+    // Black at a little over half, a step and another towards the light
+    // under the pointer and the finger, as every control moves (HoverLift,
+    // PressLift).
+    val light by animateFloatAsState(if (press.pressed) PressLift else if (press.hovered) HoverLift else 0f, Motion.hover(), label = "light")
+    val scale by animateFloatAsState(if (press.pressed) PressedScale else 1f, Motion.hover(), label = "press")
     val shape = if (words) Capsule else CircleShape
-    Row(
+    val reach = fingertip(size)
+    Box(
         modifier
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-            }
-            .alpha(if (on) 1f else 0.45f)
-            .height(size)
-            .widthIn(min = size)
-            .background(Color.Black.copy(alpha = shade), shape)
-            .border(1.dp, Color.White.copy(alpha = 0.14f), shape)
-            .pressable(press, shape, on, Role.Button, label, onClick = onClick)
-            .padding(horizontal = if (words) 12.dp else 0.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
-        verticalAlignment = Alignment.CenterVertically,
+            .heightIn(min = reach)
+            .widthIn(min = reach)
+            .alpha(if (on) 1f else DisabledAlpha)
+            .pressable(press, shape, on, Role.Button, label, onClick = onClick),
+        contentAlignment = Alignment.Center,
     ) {
-        // Light words whatever the appearance: what is under them is a picture.
-        KitInk(Theme.onPicture) { KitFont(Font(12.5f, Font.Semibold)) { content() } }
+        Row(
+            Modifier
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .height(size)
+                .widthIn(min = size)
+                .background(Color.Black.copy(alpha = 0.52f), shape)
+                .background(Color.White.copy(alpha = light), shape)
+                .border(1.dp, Color.White.copy(alpha = 0.14f), shape)
+                .padding(horizontal = if (words) 12.dp else 0.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // Light words whatever the appearance: what is under them is a picture.
+            KitInk(Theme.onPicture) { KitFont(Font(12.5f, Font.Semibold)) { content() } }
+        }
     }
 }
 
@@ -93,7 +110,7 @@ fun PageArrow(symbol: String, label: String, onClick: () -> Unit, modifier: Modi
     val press = rememberPress()
     val shown by animateFloatAsState(if (press.lit) 1f else 0.6f, Theme.settle(), label = "shown")
     val scale by animateFloatAsState(
-        if (press.pressed) 0.94f else if (press.hovered) 1.06f else 1f,
+        if (press.pressed) PressedScale else if (press.hovered) 1.06f else 1f,
         Theme.settle(), label = "scale",
     )
     Box(
