@@ -229,7 +229,7 @@ struct HandControl: View {
             } label: {
                 // Towards where the tray opens: up over a row, and towards
                 // the pictures from a column.
-                Image(systemName: row ? "chevron.up" : "chevron.backward")
+                Image(systemName: row ? "chevron.up" : "chevron.left")
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(open ? Theme.foreground : Theme.muted)
                     .rotationEffect(.degrees(open ? 180 : 0))
