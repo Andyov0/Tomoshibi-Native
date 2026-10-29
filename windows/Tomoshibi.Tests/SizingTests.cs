@@ -80,6 +80,68 @@ public class SizingTests
         Assert.Equal((double)expected, Sizing.Bar.Length(compact, round), 3);
     }
 
+    [Fact]
+    public void TheNameOnAPictureIsACapsuleAndAlwaysWhite()
+    {
+        Assert.Equal(24f, Sizing.NamePlate.Height);
+        Assert.Equal(8f, Sizing.NamePlate.Inset);
+        Assert.Equal(Shade.Black.WithAlpha(0.70f), Sizing.NamePlate.Fill);
+        Assert.Equal(Theme.Dark.Foreground, Sizing.NamePlate.Ink);
+        // On the brightest picture there is, the plate's black at seven
+        // tenths over white: the name reads at well over 4.5:1, where the
+        // tally it turned while its owner spoke read at about 2:1.
+        var plate = Over(Sizing.NamePlate.Fill, Shade.White);
+        Assert.True(Contrast(Sizing.NamePlate.Ink, plate) >= 7, $"{Contrast(Sizing.NamePlate.Ink, plate):F2}");
+        Assert.True(Contrast(Accent.Amber.Color(), Over(Shade.Black.WithAlpha(0.5f), Shade.White)) < 2.5);
+    }
+
+    [Fact]
+    public void TheSpeakersNameIsNeverColouredTheTally()
+    {
+        var tile = Source(Path.Combine("UI", "Room", "Tile.cs"));
+        Assert.DoesNotMatch(new Regex(@"_name\.Foreground\s*="), tile);
+        Assert.Contains("Sizing.NamePlate.Fill", tile);
+    }
+
+    [Fact]
+    public void TheStagesButtonsComeOutForThePointerOrTheKeyboard()
+    {
+        Assert.Equal(36f, Sizing.Stage.Button);
+        Assert.True(Sizing.Stage.Shown(pointerOver: true, barOut: true, focusInside: false));
+        Assert.False(Sizing.Stage.Shown(pointerOver: false, barOut: true, focusInside: false));
+        // Away with the bar when nobody has moved.
+        Assert.False(Sizing.Stage.Shown(pointerOver: true, barOut: false, focusInside: false));
+        // Never away from the keyboard that is on one of them.
+        Assert.True(Sizing.Stage.Shown(pointerOver: false, barOut: false, focusInside: true));
+    }
+
+    [Fact]
+    public void ThePointerIsOnThePictureDrawnOnTop()
+    {
+        // A call of two: the other person filling the room, one's own card in its corner.
+        var spots = new[]
+        {
+            ("them", new Rect(0, 0, 1200, 800)),
+            ("me", new Rect(980, 40, 212, 119)),
+        };
+        Assert.Equal("me", Sizing.Stage.Under(spots, 1000, 60));
+        Assert.Equal("them", Sizing.Stage.Under(spots, 500, 400));
+        Assert.Null(Sizing.Stage.Under(spots, 1300, 400));
+    }
+
+    [Fact]
+    public void InACallOfTwoTheButtonsClimbOverTheBarOnlyWhereItReachesThem()
+    {
+        var picture = new Rect(0, 0, 1200, 800);
+        // A wide window: the bar in its middle is clear of the right-hand corner.
+        Assert.Equal(0f, Sizing.Stage.FootLift(picture, 36, 370, 830, barOut: true));
+        // A narrow one: the bar runs under them, and they sit above its band.
+        var narrow = new Rect(0, 0, 520, 800);
+        Assert.Equal(Plan.Island - Plan.Gap, Sizing.Stage.FootLift(narrow, 36, 30, 490, barOut: true));
+        // The bar stepped aside: nothing to climb over.
+        Assert.Equal(0f, Sizing.Stage.FootLift(narrow, 36, 30, 490, barOut: false));
+    }
+
     /// <summary>
     /// No gradient anywhere the owner looks (2026-10-29), the glass's rim
     /// among them, which faded from white at 26 per cent to 7. The one left is
