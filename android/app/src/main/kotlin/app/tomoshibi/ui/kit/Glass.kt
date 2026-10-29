@@ -3,6 +3,7 @@ package app.tomoshibi.ui.kit
 import android.os.Build
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.scaleIn
@@ -30,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ColorFilter
@@ -94,6 +94,23 @@ object GlassSupport {
 
 /** Whether this part of the screen is content: SwiftUI's `inContentLayer`. */
 val LocalContentLayer = compositionLocalOf { false }
+
+/**
+ * Whether the kit's glass here is drawn opaque instead: a menu, a panel, a
+ * notice. The web keeps its one glass for the controls floating over a call
+ * and draws everything those controls open as solid surfaces (the polish of
+ * 2026-10-29), because words on glass over a moving picture are read through
+ * whatever the picture is doing, and a menu over a white slide went grey
+ * under its own rows. The shape, the edge and the shadow stay; only what is
+ * behind no longer shows through.
+ */
+val LocalOpaque = compositionLocalOf { false }
+
+/** Draws the glass inside [content] as an opaque surface ([LocalOpaque]). */
+@Composable
+fun Opaque(content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalOpaque provides true, content = content)
+}
 
 /**
  * What the glass on this screen refracts: the content marked with
@@ -262,8 +279,9 @@ fun Modifier.plainSurface(shape: Shape, tint: Color? = null): Modifier {
 @Composable
 internal fun Modifier.liquidGlass(shape: Shape, tint: Color?, backdrop: HazeState?, shade: Color = Color.Transparent): Modifier {
     val palette = LocalPalette.current
-    val blurred = backdrop != null && GlassSupport.blurs
-    val standIn = palette.surface.copy(alpha = 0.80f)
+    val opaque = LocalOpaque.current
+    val blurred = backdrop != null && GlassSupport.blurs && !opaque
+    val standIn = palette.surface.copy(alpha = if (opaque) 1f else 0.80f)
     val blur = remember(palette) { glassBlur(palette, standIn) }
     return this
         .dropShadow(shape, glassShadow(palette))
@@ -290,16 +308,18 @@ private fun glassShadow(palette: Palette) =
 private val GlassShadow = Shadow(radius = 14.dp, color = Color.Black, offset = DpOffset(0.dp, 6.dp), alpha = 0.28f)
 
 /**
- * The edge of the glass in the dark, catching the light from above: brighter
- * along the top than the bottom, as Liquid Glass's edge is, and as bright on
- * average as the stand-in's sixteen per cent hairline (twenty-eight where
- * tinted). In the light the edge is a flat hairline instead, a little
- * darker than the page round the plain glass and a little lighter than the
- * colour round the tinted: a light edge on white glass is no edge at all,
- * and the palette has no gradients to give it.
+ * The edge of the glass in the dark: one flat hairline of white, sixteen per
+ * cent round the plain glass and twenty-eight round the tinted, which is how
+ * bright on average the edge was when it ran from brighter along the top to
+ * dimmer along the bottom, catching the light as Liquid Glass's edge does.
+ * That was a gradient, a thin one, and the owner's rule is no gradients
+ * anywhere (2026-10-29); flat, it is the hairline the light's glass and the
+ * web's island already have. In the light the edge is a little darker than
+ * the page round the plain glass and a little lighter than the colour round
+ * the tinted: a light edge on white glass is no edge at all.
  */
-private val GlassRim = Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.26f), Color.White.copy(alpha = 0.07f)))
-private val GlassRimLit = Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.40f), Color.White.copy(alpha = 0.16f)))
+private val GlassRim = Color.White.copy(alpha = 0.16f)
+private val GlassRimLit = Color.White.copy(alpha = 0.28f)
 
 private val Saturate = ColorMatrix().apply { setToSaturation(1.5f) }
 
@@ -376,10 +396,18 @@ sealed interface GlassButtonShape {
 /**
  * A button made of glass (`GlassButtonStyle`, `.glassCircle` and
  * `.glassCapsule`): `prominent` wears the person's chosen colour,
- * `destructive` is red, for leaving and nothing else. Pressed, it gives a
- * little, and inside a content layer brightens as well, as the plain
- * surfaces of the Apple apps do. `label` is what a screen reader says for a
- * button of a symbol alone.
+ * `destructive` is red, for leaving and nothing else, and `off` is a switch
+ * for one's own microphone or camera that is off, a solid plate of the
+ * foreground with its symbol in the page's colour (BarButton says why, and
+ * why not red). Under the pointer and the finger it moves a step and then
+ * another towards the foreground, and gives a little when pressed. `label`
+ * is what a screen reader says for a button of a symbol alone.
+ *
+ * Disabled it fades, except the prominent one, which turns to the raised
+ * grey with muted words instead: the colour at under half was a brown plate
+ * whose dark arrow was 1.55 to one on it, and a faded amber still reads as
+ * the thing to press, only weaker, so somebody pressed it and nothing
+ * happened (the owner, 2026-10-29; the web's primary button).
  */
 @Composable
 fun GlassButton(
@@ -388,6 +416,7 @@ fun GlassButton(
     shape: GlassButtonShape = GlassButtonShape.Capsule(),
     prominent: Boolean = false,
     destructive: Boolean = false,
+    off: Boolean = false,
     enabled: Boolean = true,
     label: String? = null,
     spacing: Dp = 6.dp,
@@ -395,13 +424,34 @@ fun GlassButton(
     content: @Composable RowScope.() -> Unit,
 ) {
     val on = enabled && LocalEnabled.current
-    val inContent = LocalContentLayer.current
-    val tint = if (destructive) Theme.danger else if (prominent) Theme.tally else null
-    val ink = if (destructive) Theme.dangerForeground else if (prominent) Theme.tallyForeground else Theme.foreground
+    val waiting = prominent && !destructive && !on
+    val tint by animateColorAsState(
+        when {
+            destructive -> Theme.danger
+            waiting -> Theme.surfaceHigh
+            prominent -> Theme.tally
+            off -> Theme.foreground
+            else -> Color.Transparent
+        },
+        Theme.settle(), label = "tint",
+    )
+    val ink by animateColorAsState(
+        when {
+            destructive -> Theme.dangerForeground
+            waiting -> Theme.muted
+            prominent -> Theme.tallyForeground
+            off -> Theme.background
+            else -> Theme.foreground
+        },
+        Theme.settle(), label = "ink",
+    )
     val press = rememberPress()
-    val scale by animateFloatAsState(if (press.pressed) 0.96f else 1f, Theme.settle(), label = "press")
-    val light by animateFloatAsState(if (press.pressed && inContent) 0.06f else 0f, Theme.settle(), label = "light")
-    val alpha by animateFloatAsState(if (on) 1f else 0.45f, Theme.settle(), label = "enabled")
+    val scale by animateFloatAsState(if (press.pressed && on) PressedScale else 1f, Motion.hover(), label = "press")
+    val light by animateFloatAsState(
+        if (!on) 0f else if (press.pressed) PressLift else if (press.hovered) HoverLift else 0f,
+        Motion.hover(), label = "light",
+    )
+    val alpha by animateFloatAsState(if (on || waiting) 1f else DisabledAlpha, Theme.settle(), label = "enabled")
     val outline = when (shape) {
         is GlassButtonShape.Circle -> CircleShape
         is GlassButtonShape.Capsule -> Capsule
@@ -414,7 +464,7 @@ fun GlassButton(
         modifier
             .glassLayer(alpha = { alpha }, scale = { scale })
             .then(sized)
-            .glassSurface(outline, tint, interactive = true, shade = shade)
+            .glassSurface(outline, tint.takeIf { it.alpha > 0f }, interactive = true, shade = shade)
             .brightened(outline, Theme.dark) { light }
             .pressable(press, outline, on, Role.Button, label, onClick = onClick)
             .then(if (shape is GlassButtonShape.Capsule) Modifier.padding(horizontal = shape.height * 0.45f) else Modifier),

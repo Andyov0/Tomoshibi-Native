@@ -111,6 +111,7 @@ import app.tomoshibi.ui.kit.GlassBackdrop
 import app.tomoshibi.ui.kit.MenuCard
 import app.tomoshibi.ui.kit.MenuItem
 import app.tomoshibi.ui.kit.MenuRule
+import app.tomoshibi.ui.kit.Opaque
 import app.tomoshibi.ui.kit.PageArrow
 import app.tomoshibi.ui.kit.PageIndicator
 import app.tomoshibi.ui.kit.PopoverAlignment
@@ -198,6 +199,14 @@ internal class RoomState {
     var page by mutableIntStateOf(0)
     /** The stage given the whole screen (the web's "Fill the screen"). */
     var filled by mutableStateOf(false)
+    /**
+     * The other person in a call of two, while the screen is filled with them
+     * from the button at the foot of their picture: put on the stage to be
+     * filled, and taken off it again when the screen is given back, so that
+     * the call returns to the two it was rather than to a stage and a strip
+     * nobody asked for.
+     */
+    var pairFilled by mutableStateOf<String?>(null)
     val idle = IdleWatch()
     val presses = Presses()
     /** Where the corner's messages are drawn, in the window, while there are any: the notices rise above them where the two would meet. */
@@ -364,6 +373,15 @@ private fun Room(app: AppModel, call: CallModel, state: RoomState, host: HostFea
         // has to find the way out of: with the controls hidden, there was
         // none (Room.tsx `exit`).
         LaunchedEffect(state.pin.pinned) { if (state.pin.pinned == null && state.filled) state.filled = false }
+        // However the screen is given back (the button, Back, the picture
+        // leaving), a call of two filled from its own button goes back to
+        // being a call of two.
+        LaunchedEffect(state.filled) {
+            if (!state.filled) state.pairFilled?.let { id ->
+                if (state.pin.pinned == id) state.pin = state.pin.pin(null)
+                state.pairFilled = null
+            }
+        }
         // The sharer whose screen is on this participant's stage, or "" (the
         // web's `watched`): written to the `watching` attribute so a sharer
         // can see who is looking at their screen. Only a share actually on
@@ -695,16 +713,18 @@ private fun Content(
 
         Panel(app, call, state, host, shape, inset)
 
-        // Always there, so each card leaves with its own animation.
+        // Always there, so each card leaves with its own animation. What
+        // people said and what the call says are solid, as the web's are: on
+        // glass they were read through whatever the picture under them was.
         val corner = shape.corner.settled("corner")
         Box(Modifier.at(corner), contentAlignment = Alignment.BottomStart) {
-            SaidColumn(
+            Opaque { SaidColumn(
                 call.arriving.map { SaidLine(it.id, it.identity, it.name, it.text) },
                 Modifier
                     .widthIn(max = min(320f, corner.width - 32).dp)
                     .padding(start = 12.dp, bottom = (Plan.ISLAND + 8).dp),
                 onBounds = { state.saidBounds = it },
-            )
+            ) }
         }
 
         // The corner for what the call says, drawn after the panels so a tall
@@ -715,11 +735,11 @@ private fun Content(
         val toastsEnd by animateDpAsState(if (beside) (panelWidth + 24 + 8).dp else 16.dp, Theme.settle(), label = "toasts")
         val toastsClear by animateDpAsState(shape.toastsClear.dp, Theme.settle(), label = "toasts")
         Box(Modifier.at(shape.toasts.settled("toasts")), contentAlignment = Alignment.BottomEnd) {
-            ToastStack(
+            Opaque { ToastStack(
                 call,
                 Modifier.padding(end = toastsEnd, bottom = toastsClear),
                 saidBounds = state.saidBounds,
-            )
+            ) }
         }
 
         Menu(call, state, host, record, pictures, ::fill, ::unfill)
@@ -858,8 +878,26 @@ private fun Tile(
     // The finger's place in the room, in pixels, for the menu to open
     // beside it: the tile says where in itself it was pressed.
     val menu = { at: Offset -> openMenu(picture.id, Offset(spot.left * density + at.x, spot.top * density + at.y)) }
+    // The other person in a call of two fills the room without being on
+    // the stage, and filling the screen was offered only to a picture on the
+    // stage: the commonest call there is could not be made fullscreen without
+    // first pressing it into a stage with a strip under it (Room.tsx). Their
+    // button sits at the foot of their picture, clear of one's own card in
+    // the corner above and lifted over the bar with their name.
+    val pair = !filled && state.pin.pinned == null && room.spots.size == Plan.ALONE_TOGETHER && picture.role is Picture.Role.Remote
     val controls: @Composable androidx.compose.foundation.layout.BoxScope.(Boolean) -> Unit = {
         StageControlsOver(call, state, picture, revealed, edge, fill, unfill)
+        AnimatedVisibility(
+            pair && shown,
+            Modifier.align(Alignment.BottomEnd).padding(edge).padding(12.dp),
+            enter = Theme.arrive, exit = Theme.depart,
+        ) {
+            StageControls(null, filled = false, switchTo = {}, fill = {
+                state.pin = state.pin.pin(picture.id)
+                state.pairFilled = picture.id
+                fill()
+            })
+        }
     }
     // Where the picture is in the window, for its name to keep clear of
     // what people said in the corner.
@@ -1047,6 +1085,11 @@ private fun Panel(
     // a book, the second page.
     val area = shape.panel.settled("panel")
     val clear by animateDpAsState(((if (narrow) 38 else 0) + if (shape.panel.top == 0f) inset.top else 0f).dp, Theme.settle(), label = "panel")
+    // How far a panel on a phone travels: up from the foot of the room as a
+    // phone's sheet does, and back down when it closes (the web's panels on
+    // a phone, 2026-10-29). From the trailing edge it crossed the pictures
+    // sideways, which on a phone is the way a page is left, not a panel shown.
+    val rise = with(LocalDensity.current) { (area.height + 24f).dp.roundToPx() }
     // The same composition wherever it moves, which is what keeps a
     // message half typed, the watch panel's page and what was pasted into
     // it, and the music panel's search, as the phone is stood up or laid
@@ -1070,8 +1113,9 @@ private fun Panel(
         // which drew the whole panel, blur and all, into a buffer of its
         // size every frame and cut its shadow off square.
         transitionSpec = {
-            (slideInHorizontally(Theme.settle()) { it } togetherWith slideOutHorizontally(Theme.leave()) { it })
-                .using(SizeTransform(clip = false) { _, _ -> snap() })
+            val moves = if (narrow) slideInVertically(Theme.settle()) { rise } togetherWith slideOutVertically(Theme.leave()) { rise }
+            else slideInHorizontally(Theme.settle()) { it } togetherWith slideOutHorizontally(Theme.leave()) { it }
+            moves.using(SizeTransform(clip = false) { _, _ -> snap() })
         },
         contentAlignment = Alignment.TopEnd,
         label = "panel",
@@ -1097,7 +1141,9 @@ private fun Panel(
                 .holdsPresses()
                 .verticalScroll(rememberScrollState()),
         ) {
-            when (open) {
+            // Opaque (LocalOpaque): the words in a panel were read through
+            // whatever the picture under it was doing.
+            Opaque { when (open) {
                 // A book gives the conversation a page of its own, and it
                 // runs down the page rather than stopping a third of the way.
                 RoomPanel.Messages -> ChatPanel(
@@ -1109,7 +1155,7 @@ private fun Panel(
                 RoomPanel.Music -> MusicPanel(app, call, close, tallest = tallest.dp)
                 RoomPanel.Host -> HostPanel(host, close)
                 RoomPanel.Devices -> DevicesPanel(app, call, close)
-            }
+            } }
         }
     }
     }

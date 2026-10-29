@@ -249,7 +249,7 @@ fun MeetingSheet(app: AppModel, draft: MeetingDraft, close: () -> Unit, wide: Bo
                                         .padding(bottom = 12.dp)
                                         .glassSurface(Capsule, shade = pictureShade(app.startWithCamera))
                                         .padding(6.dp),
-                                    size = 38.dp,
+                                    size = 44.dp,
                                 )
                             }
                         }

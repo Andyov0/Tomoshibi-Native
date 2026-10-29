@@ -102,8 +102,9 @@ fun MonthCalendar(
             }
             Spacer(Modifier.weight(1f))
             // A fingertip apart on a phone and the cover screen, where the two
-            // small circles were each pressed over less than forty points.
-            Row(horizontalArrangement = Arrangement.spacedBy(if (narrowWindow()) 20.dp else 8.dp)) {
+            // small circles were each pressed over less than forty points;
+            // thirty-two across, the shared scale's small control.
+            Row(horizontalArrangement = Arrangement.spacedBy(if (narrowWindow()) 16.dp else 8.dp)) {
                 for (step in listOf(-1L, 1L)) {
                     val target = month.plusMonths(step)
                     val allowed = if (step < 0) earliest?.let { !target.isBefore(YearMonth.from(it)) } ?: true
@@ -113,7 +114,7 @@ fun MonthCalendar(
                             forward = step > 0
                             month = target
                         },
-                        shape = GlassButtonShape.Circle(28.dp),
+                        shape = GlassButtonShape.Circle(32.dp),
                         enabled = allowed,
                         label = if (step < 0) t("Previous month") else t("Next month"),
                     ) { Symbol(if (step < 0) "chevron.left" else "chevron.right", size = 11f, weight = Font.Bold) }
@@ -141,13 +142,14 @@ fun MonthCalendar(
             // under its own weekday.
             val lead = Math.floorMod(shown.atDay(1).dayOfWeek.value - first.value, 7)
             val cells: List<LocalDate?> = List(lead) { null } + (1..shown.lengthOfMonth()).map { shown.atDay(it) }
-            // On a phone and the cover screen the days are as tall as they are
-            // wide, which seven a row across a card there makes 44 points, the
-            // most the width leaves for a fingertip; thirty points tall with
-            // four between them, a press between two weeks went to either.
+            // A fingertip tall on a phone and the cover screen, where seven a
+            // row across a card leave each day about 44 points wide; thirty
+            // points tall with four between them, a press between two weeks
+            // went to either. Forty-four on a wider screen, which is still
+            // pressed with a finger (the web's days, 2026-10-29).
             val narrow = narrowWindow()
-            val tall = if (narrow) 44.dp else 30.dp
-            Column(verticalArrangement = Arrangement.spacedBy(if (narrow) 0.dp else 4.dp)) {
+            val tall = if (narrow) Fingertip else 44.dp
+            Column(verticalArrangement = Arrangement.spacedBy(0.dp)) {
                 for (week in cells.chunked(7)) {
                     Row(horizontalArrangement = Arrangement.spacedBy(if (narrow) 0.dp else 2.dp)) {
                         for (index in 0 until 7) {

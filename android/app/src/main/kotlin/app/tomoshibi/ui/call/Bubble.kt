@@ -44,6 +44,7 @@ import app.tomoshibi.model.CallModel
 import app.tomoshibi.ui.kit.ContinuousShape
 import app.tomoshibi.ui.kit.Font
 import app.tomoshibi.ui.kit.KitText
+import app.tomoshibi.ui.kit.PressedScale
 import app.tomoshibi.ui.kit.Symbol
 import app.tomoshibi.ui.kit.glassSurface
 import app.tomoshibi.ui.room.Avatars
@@ -88,7 +89,7 @@ internal fun CallBubble(call: CallModel, shown: MutableTransitionState<Boolean>,
         enter = fadeIn(Theme.settle()) + scaleIn(Theme.settle(), initialScale = 0.6f, transformOrigin = origin),
         exit = fadeOut(Theme.leave()) + scaleOut(Theme.leave(), targetScale = 0.8f, transformOrigin = origin),
     ) {
-        val squeeze by animateFloatAsState(if (pressed) 0.94f else 1f, Theme.settle(), label = "press")
+        val squeeze by animateFloatAsState(if (pressed) PressedScale else 1f, Theme.settle(), label = "press")
         // Room for the glass's shadow, which the window would otherwise cut
         // off at its edge.
         Box(Modifier.padding(10.dp).graphicsLayer {

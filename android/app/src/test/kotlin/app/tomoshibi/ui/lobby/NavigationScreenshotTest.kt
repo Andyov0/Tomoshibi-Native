@@ -235,6 +235,24 @@ class NavigationScreenshotTest(private val language: Language) {
         shoot("prejoin", app)
     }
 
+    /** The microphone and the camera both off on the lobby's card: the last moment to notice before a call. */
+    @Test
+    fun lobbyDevicesOff() {
+        val app = fakeApp()
+        app.startWithMicrophone = false
+        app.startWithCamera = false
+        shoot("lobby-devices-off", app)
+    }
+
+    @Test
+    fun prejoinDevicesOff() {
+        val app = fakeApp(screen = Screen.Prejoin)
+        app.room = "design-review"
+        app.startWithMicrophone = false
+        app.startWithCamera = false
+        shoot("prejoin-devices-off", app)
+    }
+
     @Test @Config(qualifiers = WIDE)
     fun prejoinWide() {
         val app = fakeApp(screen = Screen.Prejoin)

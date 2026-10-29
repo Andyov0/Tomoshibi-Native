@@ -217,7 +217,7 @@ internal fun PageBar(title: String, back: () -> Unit) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .barShade(listOf(Color.Black.copy(alpha = 0.55f), Color.Transparent)),
+                .barShade(),
         ) {
             Column(Modifier.fillMaxWidth()) {
                 Spacer(Modifier.windowInsetsTopHeight(WindowInsets.safeDrawing))

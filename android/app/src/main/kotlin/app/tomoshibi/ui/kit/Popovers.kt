@@ -216,6 +216,9 @@ internal sealed interface Placement {
     }
 }
 
+/** A popover's corner: the shared scale's fourteen, which the rows inside it are concentric with (MenuCard). */
+internal val PopoverRadius = 14.dp
+
 /** The glass's shadow reaches 14 points soft and 6 down (Glass.kt). */
 private val ShadowRoom = 24.dp
 
@@ -307,7 +310,12 @@ private fun PopoverPanel(id: String, popovers: Popovers, placement: Placement, w
                 }
                 .padding(ShadowRoom),
         ) {
-            GlassShell(
+            // Opaque, as everything the call's controls open is (LocalOpaque),
+            // and rounded at fourteen, the web's menus: ten inside the four of
+            // its margin round each row (MenuCard), so that the corners are
+            // concentric. At eighteen round rows of ten inside six, they were
+            // not, and the four corners read as two shapes.
+            Opaque { GlassShell(
                 Modifier
                     .width(if (room > 0.dp) min(width, room) else width)
                     .glassLayer(
@@ -328,10 +336,10 @@ private fun PopoverPanel(id: String, popovers: Popovers, placement: Placement, w
                             false
                         }
                     },
-                cornerRadius = 18.dp,
+                cornerRadius = PopoverRadius,
             ) {
                 Box(Modifier.heightIn(max = if (tallest > 0.dp) tallest else Dp.Infinity).verticalScroll(rememberScrollState())) { panel() }
-            }
+            } }
         }
     }
 }

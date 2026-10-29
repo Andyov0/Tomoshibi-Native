@@ -75,10 +75,10 @@ class RoomScreenshotTest(private val language: Language) {
 
     private fun file(name: String) = "$DIRECTORY/$name-${language.code}.png"
 
-    private fun shoot(name: String, call: CallModel, settle: Long = 2500, before: () -> Unit = {}) {
+    private fun shoot(name: String, call: CallModel, settle: Long = 2500, pictures: RoomPictures = standInPictures, before: () -> Unit = {}) {
         val app = app()
         compose.setContent {
-            InMeeting { CompositionLocalProvider(LocalRoomPictures provides standInPictures) { RoomView(app, call) } }
+            InMeeting { CompositionLocalProvider(LocalRoomPictures provides pictures) { RoomView(app, call) } }
         }
         compose.mainClock.advanceTimeBy(600)
         compose.waitForIdle()
@@ -128,6 +128,19 @@ class RoomScreenshotTest(private val language: Language) {
         val call = room(3, camerasOff = setOf(0, 1, 2))
         call.apply(CallEvent.Speaking(listOf("p-mei")))
         shoot("wide-cameras-off-speaking", call)
+    }
+
+    /**
+     * A call of two over a bright picture, the other person talking: the
+     * name on its plate has to be read on a white wall as on a dark room,
+     * and the button that fills the screen sits at the foot of the picture,
+     * clear of one's own card in the corner above and of the bar below.
+     */
+    @Test
+    fun twoOnABrightPicture() {
+        val call = room(1)
+        call.apply(CallEvent.Speaking(listOf("p-mei")))
+        shoot("two-bright", call, pictures = brightPictures)
     }
 
     @Test
@@ -272,6 +285,15 @@ class RoomScreenshotTest(private val language: Language) {
         call.apply(CallEvent.Chat("1", "p-mei", "Mei Lin", "Can everybody see the slides?", 1_760_000_000_000))
         RoomState.of(call).panel = RoomPanel.Messages
         shoot("wide-messages", call)
+    }
+
+    /** The whole bar, the microphone and camera off and the sound panel open from it. */
+    @Test
+    @Config(qualifiers = WIDE)
+    fun wideWithSound() {
+        val call = room(3)
+        RoomState.of(call).panel = RoomPanel.Sound
+        shoot("wide-sound", call)
     }
 
     @Test

@@ -30,12 +30,14 @@ import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 
 /*
- * A panel of the call arriving as the Swift one does: in from the trailing
- * edge and faded, at its full size from its first frame. It used to grow, as
- * well, from nothing in its corner on AnimatedContent's spring, measured
- * again every frame of its slide and its glass and shadow cut by the clip
- * that unrolled it; and the devices panel asked the system for its lists in
- * the frame it opened in. The room now reads those ahead.
+ * A panel of the call arriving at its full size from its first frame: in
+ * from the trailing edge and faded on a wide screen, as the Swift one does,
+ * and up from the foot on a phone, as the web's panels on a phone do
+ * (2026-10-29). It used to grow, as well, from nothing in its corner on
+ * AnimatedContent's spring, measured again every frame of its slide and its
+ * glass and shadow cut by the clip that unrolled it; and the devices panel
+ * asked the system for its lists in the frame it opened in. The room now
+ * reads those ahead.
  */
 @RunWith(AndroidJUnit4::class)
 @Config(sdk = [35], qualifiers = PHONE)
@@ -56,7 +58,13 @@ class PanelArrivalTest {
     private val panel = hasTestTag(HOLDS_PRESSES) and hasAnyDescendant(hasTestTag("devices.close"))
 
     @Test
-    fun theRoomReadsTheDevicesAheadAndThePanelSlidesInWhole() {
+    fun theRoomReadsTheDevicesAheadAndThePanelSlidesInWhole() = slidesIn(fromTheFoot = true)
+
+    @Test
+    @Config(qualifiers = WIDE)
+    fun onAWideScreenThePanelComesInFromTheTrailingEdge() = slidesIn(fromTheFoot = false)
+
+    private fun slidesIn(fromTheFoot: Boolean) {
         val cameras = CountedCameras()
         val call = callModel()
         PEOPLE.take(1).forEach { (id, name) -> call.joins(id, name) }
@@ -80,12 +88,18 @@ class PanelArrivalTest {
         assertEquals("the system was asked as the panel opened", 1, cameras.asked)
         compose.mainClock.advanceTimeBy(1500)
         val settled = compose.onNode(panel).getUnclippedBoundsInRoot()
-        assertTrue("not coming in from the trailing edge: ${early.left} against ${settled.left}", early.left > settled.left)
+        if (fromTheFoot) {
+            assertTrue("not coming up from the foot: ${early.top} against ${settled.top}", early.top > settled.top)
+            assertEquals("moving sideways as it comes up", settled.left.value, early.left.value, 0.5f)
+        } else {
+            assertTrue("not coming in from the trailing edge: ${early.left} against ${settled.left}", early.left > settled.left)
+        }
         assertEquals("measured again as it moved", settled.height.value, early.height.value, 0.5f)
         assertEquals("measured again as it moved", settled.width.value, early.width.value, 0.5f)
         // Only the screen's edge cuts it while it comes in, not a clip
         // growing from its corner.
-        assertEquals("unrolled from its corner", settled.height.value, earlyShown.height.value, 0.5f)
+        if (!fromTheFoot) assertEquals("unrolled from its corner", settled.height.value, earlyShown.height.value, 0.5f)
+        else assertEquals("unrolled from its corner", settled.width.value, earlyShown.width.value, 0.5f)
         // And once it is in, asked again for anything plugged in since.
         assertEquals(2, cameras.asked)
         assertEquals("asked on the main thread", 0, cameras.askedElsewhere)

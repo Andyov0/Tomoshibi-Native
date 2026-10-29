@@ -223,7 +223,7 @@ fun RoundButton(
     // Pressed over a fingertip in a narrow window, drawn at its own size (fingertip).
     Box(
         modifier
-            .alpha(if (!on) 0.3f else if (faint) 0.45f else 1f)
+            .alpha(if (!on) DisabledAlpha else if (faint) 0.45f else 1f)
             .size(fingertip(size))
             .pressable(press, CircleShape, on, Role.Button, label, onClick = onClick),
         contentAlignment = Alignment.Center,
@@ -304,7 +304,9 @@ fun PillButton(
 
 /**
  * The top of a panel beside the call: a symbol, its name, and the close
- * (`PanelHeading`). `trailing` goes before the close.
+ * (`PanelHeading`). `trailing` goes before the close, which is thirty-two
+ * across, the web's panels' (2026-10-29), and pressed over a fingertip on a
+ * phone (RoundButton): at twenty-six it was the smallest close in the app.
  */
 @Composable
 fun PanelHeading(
@@ -333,7 +335,7 @@ fun PanelHeading(
         }
         KitText(title, Modifier.weight(1f), font = Font(14f, Font.Semibold), lines = 1)
         trailing()
-        RoundButton("xmark", closeLabel, close, size = 26.dp)
+        RoundButton("xmark", closeLabel, close, size = 32.dp)
     }
 }
 

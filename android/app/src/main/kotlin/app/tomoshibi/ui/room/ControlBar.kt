@@ -45,6 +45,7 @@ import app.tomoshibi.media.Sharing
 import app.tomoshibi.model.AppModel
 import app.tomoshibi.model.CallModel
 import app.tomoshibi.model.CallToast
+import app.tomoshibi.ui.call.Half
 import app.tomoshibi.ui.call.HandControl
 import app.tomoshibi.ui.call.TRAY
 import app.tomoshibi.ui.kit.BarAxis
@@ -217,25 +218,26 @@ internal fun ControlBar(
             if (call.microphoneOn) "mic.fill" else "mic.slash.fill",
             if (call.microphoneOn) t("Mute microphone") else t("Unmute microphone"),
             { device { call.setMicrophone(!call.microphoneOn) } },
-            quiet = !call.microphoneOn, size = size,
+            off = !call.microphoneOn, size = size,
         )
         BarButton(
             if (call.cameraOn) "video.fill" else "video.slash.fill",
             if (call.cameraOn) t("Turn camera off") else t("Turn camera on"),
             { device { call.setCamera(!call.cameraOn) } },
-            quiet = !call.cameraOn, size = size,
+            off = !call.cameraOn, size = size,
         )
         ShareControl(call, offers.screenShare, popovers, axis, size)
         // The hand and, behind the narrow half beside it, the reactions
         // (HandButton.tsx).
         HandControl(call, popovers, axis, beside = beside, size = size) { work -> act(work) }
         // The one dot that says something was said while the messages were
-        // closed, in the signal colour (ControlBar.tsx ~383).
+        // closed, in the signal colour (ControlBar.tsx ~383). Open, the
+        // button is held down rather than lit, as every panel's is (BarButton).
         BarButton(
             "bubble.left.fill",
             if (panel == RoomPanel.Messages) t("Hide messages") else t("Show messages"),
             { onPanel(if (panel == RoomPanel.Messages) null else RoomPanel.Messages) },
-            lit = panel == RoomPanel.Messages, dot = call.unread && panel != RoomPanel.Messages, size = size,
+            pressed = panel == RoomPanel.Messages, dot = call.unread && panel != RoomPanel.Messages, size = size,
         )
         if (compact) {
             MoreControl(call, panel, onPanel, offers, popovers, axis, size, reactions = !beside)
@@ -295,7 +297,9 @@ internal object BarLength {
         along += size // microphone
         along += size // camera
         along += size // share
-        along += if (!horizontal) 44f else if (reactionsBeside) 60f else size // the hand, and its reactions beside it
+        // The hand, and its reactions' half beside it along a row and under
+        // it down a column (HandControl): the bar's button and thirty-two.
+        along += if (reactionsBeside || !horizontal) size + Half.value else size
         along += size // messages
         if (compact) {
             along += size // more
@@ -328,7 +332,7 @@ private fun Panels(call: CallModel, panel: RoomPanel?, onPanel: (RoomPanel?) -> 
         "speaker.wave.2.fill",
         if (panel == RoomPanel.Sound) t("Hide sound") else t("Show sound"),
         { flip(RoomPanel.Sound) },
-        lit = panel == RoomPanel.Sound, size = size,
+        pressed = panel == RoomPanel.Sound, size = size,
     )
     Offered(!call.sealed && (offers.watch || panel == RoomPanel.Watch), axis) {
         // The show is playing while its panel is closed (ControlBar.tsx ~430).
@@ -336,7 +340,7 @@ private fun Panels(call: CallModel, panel: RoomPanel?, onPanel: (RoomPanel?) -> 
             "play.rectangle.fill",
             if (panel == RoomPanel.Watch) t("Hide watch together") else t("Show watch together"),
             { flip(RoomPanel.Watch) },
-            lit = panel == RoomPanel.Watch, dot = offers.watchPlaying && panel != RoomPanel.Watch, size = size,
+            pressed = panel == RoomPanel.Watch, dot = offers.watchPlaying && panel != RoomPanel.Watch, size = size,
         )
     }
     Offered(offers.music || panel == RoomPanel.Music, axis) {
@@ -344,12 +348,12 @@ private fun Panels(call: CallModel, panel: RoomPanel?, onPanel: (RoomPanel?) -> 
             "music.note",
             if (panel == RoomPanel.Music) t("Hide music") else t("Show music"),
             { flip(RoomPanel.Music) },
-            lit = panel == RoomPanel.Music, dot = offers.musicPlaying && panel != RoomPanel.Music, size = size,
+            pressed = panel == RoomPanel.Music, dot = offers.musicPlaying && panel != RoomPanel.Music, size = size,
         )
     }
     Offered(offers.host || panel == RoomPanel.Host, axis) {
         Box {
-            BarButton("crown.fill", t("Running this room"), { flip(RoomPanel.Host) }, lit = panel == RoomPanel.Host, size = size)
+            BarButton("crown.fill", t("Running this room"), { flip(RoomPanel.Host) }, pressed = panel == RoomPanel.Host, size = size)
             // Counted as well as coloured (HostPanel.tsx ~400): somebody
             // waiting outside is the one thing in the room that is lost if
             // nobody notices.
@@ -360,7 +364,7 @@ private fun Panels(call: CallModel, panel: RoomPanel?, onPanel: (RoomPanel?) -> 
             ) { Count(offers.knocking) }
         }
     }
-    BarButton("gearshape.fill", t("Devices"), { flip(RoomPanel.Devices) }, lit = panel == RoomPanel.Devices, size = size)
+    BarButton("gearshape.fill", t("Devices"), { flip(RoomPanel.Devices) }, pressed = panel == RoomPanel.Devices, size = size)
 }
 
 /** How many are at the door, in the signal colour ringed in the bar's grey. */
@@ -698,7 +702,9 @@ private fun MoreControl(call: CallModel, panel: RoomPanel?, onPanel: (RoomPanel?
             }
         },
     ) {
-        BarButton("ellipsis", t("More"), { popovers.toggle(MORE) }, lit = open, pressed = popovers.open == MORE, dot = busy, size = size)
+        // Held down while its menu or a panel behind it is open: neither is
+        // something happening in the call, so neither is amber (BarButton).
+        BarButton("ellipsis", t("More"), { popovers.toggle(MORE) }, pressed = open || popovers.open == MORE, dot = busy, size = size)
     }
 }
 

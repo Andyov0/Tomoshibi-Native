@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -78,6 +79,7 @@ import app.tomoshibi.ui.kit.GlassButtonShape
 import app.tomoshibi.ui.kit.KitText
 import app.tomoshibi.ui.kit.PictureButton
 import app.tomoshibi.ui.kit.Symbol
+import app.tomoshibi.ui.kit.narrowWindow
 import app.tomoshibi.ui.call.FloatingReactions
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -232,16 +234,23 @@ internal fun TileFrame(
 }
 
 /**
- * The name at the foot of a picture, and what is true of it (`NameLabel`):
- * in the person's colour while they speak, a dot for a proven name, a badge
- * for one worn by somebody else, and one mark for having no sound from here,
- * where the reader's own doing wins: a microphone somebody else turned off is
- * nothing to act on, a person talking into silence that you caused is.
+ * The name at the foot of a picture, and what is true of it (`NameLabel`): a
+ * dot for a proven name, a badge for one worn by somebody else, and one mark
+ * for having no sound from here, where the reader's own doing wins: a
+ * microphone somebody else turned off is nothing to act on, a person talking
+ * into silence that you caused is.
+ *
+ * The name is white whoever is speaking. It turned the person's colour while
+ * they spoke, which on a bright picture was under two to one on its plate
+ * and could not be read, and said again what the tally's edge round the
+ * picture already says (the owner, 2026-10-29). The plate is black at seventy
+ * per cent, where at half a white name on a white wall was 3.6 to one; a
+ * capsule twenty-four high, eight from the picture's edge.
  */
 @Composable
 private fun NameLabel(marks: TileMarks, compact: Boolean) {
     // Light words on the dimming whatever the appearance: what is under them is a picture.
-    val ink by animateColorAsState(if (marks.speaking) Theme.tally else Theme.onPicture, Theme.settle(), label = "name")
+    val ink = Theme.onPicture
     Row(
         Modifier
             // Over the picture, a dimming rather than glass: one piece of
@@ -249,9 +258,10 @@ private fun NameLabel(marks: TileMarks, compact: Boolean) {
             // beneath it on every frame, which is what Apple's guidance says
             // to limit, and a name on a picture is content. The dark fill is
             // what the guidance gives for legibility over rich content.
-            .background(Color.Black.copy(alpha = 0.5f), Capsule)
+            .background(Color.Black.copy(alpha = 0.7f), Capsule)
             .border(0.5.dp, Color.White.copy(alpha = 0.1f), Capsule)
-            .padding(horizontal = if (compact) 5.dp else 7.dp, vertical = if (compact) 2.dp else 3.5.dp),
+            .heightIn(min = if (compact) 18.dp else 24.dp)
+            .padding(horizontal = if (compact) 6.dp else 8.dp, vertical = if (compact) 1.dp else 2.dp),
         horizontalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -301,7 +311,7 @@ private fun NameLabel(marks: TileMarks, compact: Boolean) {
             when (mark) {
                 2 -> Symbol("speaker.slash.fill", size = if (compact) 9f else 10.5f, weight = Font.Semibold, tint = Theme.danger,
                     contentDescription = t("Muted by you"))
-                1 -> Symbol("mic.slash.fill", size = if (compact) 9f else 10.5f, weight = Font.Semibold, tint = Theme.muted,
+                1 -> Symbol("mic.slash.fill", size = if (compact) 9f else 10.5f, weight = Font.Semibold, tint = Theme.onPicture,
                     contentDescription = t("microphone off"))
                 else -> Box(Modifier.size(0.dp))
             }
@@ -552,19 +562,26 @@ internal fun MyShareFace(compact: Boolean = false, stop: (() -> Unit)?) {
  * web a press on one carried on to the picture beneath, and "Their screen"
  * pinned the other picture only for the picture's own press to pin this one
  * straight back.
+ *
+ * Thirty-six round, pressed over a fingertip on a phone (PictureButton). On a
+ * phone the other picture's button is its symbol alone, still named to a
+ * screen reader: with its words it ran into the page count in the middle of
+ * the top edge (the web's, 2026-10-29).
  */
 @Composable
 internal fun StageControls(other: Surface.Kind?, filled: Boolean, switchTo: () -> Unit, fill: () -> Unit, modifier: Modifier = Modifier) {
+    val words = !narrowWindow()
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
         AnimatedVisibility(other != null, enter = Theme.arrive, exit = Theme.depart) {
             val screen = other == Surface.Kind.Screen
-            PictureButton(switchTo, words = true) {
-                Symbol(if (screen) "rectangle.on.rectangle" else "person.fill", size = 11.5f, weight = Font.Semibold)
-                KitText(if (screen) t("Their screen") else t("Their camera"), lines = 1)
+            val name = if (screen) t("Their screen") else t("Their camera")
+            PictureButton(switchTo, words = words, label = if (words) null else name) {
+                Symbol(if (screen) "rectangle.on.rectangle" else "person.fill", size = if (words) 11.5f else 13f, weight = Font.Semibold)
+                if (words) KitText(name, lines = 1)
             }
         }
         PictureButton(fill, label = if (filled) t("Leave fullscreen") else t("Fill the screen")) {
-            Symbol(if (filled) "arrow.down.right.and.arrow.up.left" else "arrow.up.left.and.arrow.down.right", size = 12.5f, weight = Font.Bold)
+            Symbol(if (filled) "arrow.down.right.and.arrow.up.left" else "arrow.up.left.and.arrow.down.right", size = 13f, weight = Font.Bold)
         }
     }
 }

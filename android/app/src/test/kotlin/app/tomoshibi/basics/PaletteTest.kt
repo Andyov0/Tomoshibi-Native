@@ -46,7 +46,7 @@ class PaletteTest {
         assertEquals(Color(0xFFE5E5EA), light.surfaceHigh)
         assertEquals(Color.Black.copy(alpha = 0.10f), light.border)
         assertEquals(Color(0xFF1C1C1E), light.foreground)
-        assertEquals(Color(60, 60, 67).copy(alpha = 0.6f), light.muted)
+        assertEquals(Color(60, 60, 67).copy(alpha = 0.75f), light.muted)
         assertEquals(Color(0xFF34C759), light.good)
         assertEquals(Color(0xFFFF3B30), light.danger)
         assertEquals(Color.White, light.dangerForeground)
@@ -104,6 +104,22 @@ class PaletteTest {
         assertTrue(contrast(light.danger, page) < 4.5)
         assertEquals(Color(0xFF34C759), light.good)
         assertEquals(Color(0xFFFF3B30), light.danger)
+    }
+
+    /**
+     * Secondary words in the light, on the page and on a white card: at
+     * Apple's sixty per cent they were about 3.2 to one, and the web moved
+     * its own to three quarters for it (2026-10-29).
+     */
+    @Test
+    fun theLightSecondaryWordsRead() {
+        val light = Palette.Light
+        for ((name, ground) in listOf("page" to light.background, "card" to light.surface)) {
+            val words = light.muted.compositeOver(ground)
+            val ratio = contrast(words, ground)
+            assertTrue("secondary words are ${"%.2f".format(ratio)} to one on the $name", ratio >= 4.5)
+        }
+        assertTrue(contrast(Color(60, 60, 67).copy(alpha = 0.6f).compositeOver(light.background), light.background) < 4.5)
     }
 
     private fun contrast(a: Color, b: Color): Double {

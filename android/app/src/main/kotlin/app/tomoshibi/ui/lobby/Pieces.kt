@@ -40,7 +40,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.RectangleShape
@@ -238,9 +237,14 @@ fun ProblemToast(app: AppModel, modifier: Modifier = Modifier, clearance: Dp = 2
 }
 
 /**
- * The microphone and camera as they will be on joining, as switches; off is
- * drawn in red, because this is the last moment to notice before everybody
- * else does (`DeviceSwitches`).
+ * The microphone and camera as they will be on joining, as switches
+ * (`DeviceSwitches`). Off is the solid plate of the foreground the call's own
+ * bar draws (BarButton), white by night and near black by day: this is the
+ * last moment to notice before everybody else does, and the one switch drawn
+ * red here and grey in the call looked like two different things a screen
+ * apart (the owner, 2026-10-29). Forty-four across over a picture, the
+ * call's own button, where it was 38 or 40 by the screen, and the large 52
+ * where it stands alone on the card; the symbol four tenths of either.
  */
 @Composable
 fun DeviceSwitches(app: AppModel, modifier: Modifier = Modifier, size: Dp = 44.dp, shade: Color = Color.Transparent) {
@@ -250,7 +254,7 @@ fun DeviceSwitches(app: AppModel, modifier: Modifier = Modifier, size: Dp = 44.d
             GlassButton(
                 { app.startWithMicrophone = !app.startWithMicrophone },
                 shape = GlassButtonShape.Circle(size),
-                destructive = !mic,
+                off = !mic,
                 label = if (mic) t("Mute microphone") else t("Unmute microphone"),
                 shade = shade,
             ) { SwappingSymbol(if (mic) "mic.fill" else "mic.slash.fill", size = size.value * 0.4f, weight = Font.Semibold) }
@@ -258,10 +262,10 @@ fun DeviceSwitches(app: AppModel, modifier: Modifier = Modifier, size: Dp = 44.d
             GlassButton(
                 { app.startWithCamera = !app.startWithCamera },
                 shape = GlassButtonShape.Circle(size),
-                destructive = !camera,
+                off = !camera,
                 label = if (camera) t("Turn camera off") else t("Turn camera on"),
                 shade = shade,
-            ) { SwappingSymbol(if (camera) "video.fill" else "video.slash.fill", size = size.value * 0.38f, weight = Font.Semibold) }
+            ) { SwappingSymbol(if (camera) "video.fill" else "video.slash.fill", size = size.value * 0.4f, weight = Font.Semibold) }
         }
     }
 }
@@ -311,14 +315,14 @@ fun latencyColour(ms: Double): Color = if (ms <= 150) Theme.goodInk else if (ms 
 
 /**
  * What the top bar of a page lays over the page where it runs up under the
- * status bar: in the dark the fade into black it always was, `dark` from top
- * to bottom; in the light the page's own ground, flat and nearly opaque,
- * since the daylight palette has no gradients (2026-10-26) and a fade into
- * black over a light page is a smudge.
+ * status bar: the page's own ground, flat and nearly opaque, in either
+ * appearance. The dark had a fade into black from top to bottom; the owner's
+ * rule is no gradients anywhere (2026-10-29), which the light had already
+ * kept to since 2026-10-26, and the web took its own dark glow out of the top
+ * of the lobby for the same rule.
  */
 @Composable
-internal fun Modifier.barShade(dark: List<Color>): Modifier =
-    if (Theme.dark) background(Brush.verticalGradient(dark)) else background(Theme.ground.copy(alpha = 0.94f))
+internal fun Modifier.barShade(): Modifier = background(Theme.ground.copy(alpha = 0.94f))
 
 /**
  * Everything on these screens arrives in an order: in from fourteen points

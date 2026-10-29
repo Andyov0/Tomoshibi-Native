@@ -25,15 +25,29 @@ import app.tomoshibi.basics.Theme
 // pick one of a list from is ChoiceRow (Choosing.kt).
 
 /**
- * One round button of the control bar: a lit plate in the chosen colour
- * while what it stands for is on, a plain one otherwise, a little brighter
- * under the pointer and while its popover is open (`BarButton`). Inside the
- * bar's glass the buttons are plates rather than glass of their own: glass
- * on glass reads as smudge.
+ * One round button of the control bar (`BarButton`). Inside the bar's glass
+ * the buttons are plates rather than glass of their own: glass on glass
+ * reads as smudge.
  *
- * `quiet` is off and drawn quieter for it: a muted microphone is a choice,
- * not a fault, so it is unlit rather than red (ControlBar.tsx `Toggle`).
- * `pressed` is its popover being open. `dot` is [BarDot] in its corner.
+ * Four looks, each meaning one thing (the owner, 2026-10-29):
+ * - plain: a faint plate of the foreground, a step brighter under the
+ *   pointer and another under the finger;
+ * - [pressed], a popover or a panel it opened is open: held at the finger's
+ *   step, the neutral grey of a button held down, so the button that closes
+ *   it is the one that looks pressed. It was amber, and a bar with the
+ *   messages open beside a raised hand had two amber buttons meaning two
+ *   different things; amber is kept for what is happening in the call;
+ * - [lit]: something is happening (a share going out), in the signal colour;
+ * - [off]: the microphone or the camera is off, a solid plate of the
+ *   foreground with the symbol in the page's colour, as the phone's own call
+ *   screen draws a muted microphone: the one state on the bar somebody has to
+ *   read from across the room. It was the plain plate with a dimmer symbol,
+ *   which at arm's length was the same button; not red, which is for leaving
+ *   and for faults, and a muted microphone is a choice.
+ *
+ * `dot` is [BarDot] in its corner. The symbol is four tenths of the button,
+ * as the web's island draws it: at a third it read as a button with little
+ * on it.
  */
 @Composable
 fun BarButton(
@@ -42,7 +56,7 @@ fun BarButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     lit: Boolean = false,
-    quiet: Boolean = false,
+    off: Boolean = false,
     pressed: Boolean = false,
     dot: Boolean = false,
     size: Dp = 44.dp,
@@ -50,19 +64,21 @@ fun BarButton(
 ) {
     val on = enabled && LocalEnabled.current
     val press = rememberPress()
+    val held = pressed || (press.pressed && on)
     val plate by animateColorAsState(
         when {
             lit -> Theme.tally
-            pressed -> Theme.wash.copy(alpha = 0.24f)
-            press.lit && on -> Theme.wash.copy(alpha = 0.18f)
-            else -> Theme.wash.copy(alpha = 0.12f)
+            off -> Theme.foreground.copy(alpha = if (held) 0.78f else if (press.hovered && on) 0.88f else 1f)
+            held -> Theme.wash.copy(alpha = lifted(PLATE, PressLift))
+            press.hovered && on -> Theme.wash.copy(alpha = lifted(PLATE, HoverLift))
+            else -> Theme.wash.copy(alpha = PLATE)
         },
         if (lit || pressed) Theme.settle() else Motion.hover(),
         label = "plate",
     )
-    val edge by animateFloatAsState(if (lit) 0.3f else if (pressed) 0.2f else 0.08f, Theme.settle(), label = "edge")
+    val edge by animateFloatAsState(if (lit) 0.3f else if (off) 0f else if (pressed) 0.2f else 0.08f, Theme.settle(), label = "edge")
     val ink by animateColorAsState(
-        if (lit) Theme.tallyForeground else if (quiet) Theme.muted else Theme.foreground,
+        if (lit) Theme.tallyForeground else if (off) Theme.background else Theme.foreground,
         Theme.settle(),
         label = "ink",
     )
@@ -77,16 +93,19 @@ fun BarButton(
                     onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            SwappingSymbol(symbol, size = size.value * 0.36f, weight = Font.Semibold, tint = ink)
+            SwappingSymbol(symbol, size = size.value * 0.40f, weight = Font.Semibold, tint = ink)
         }
         BarDot(dot, Modifier.align(Alignment.TopEnd))
     }
 }
 
+/** The plain bar button's plate: the foreground at this strength, over the bar's glass. */
+private const val PLATE = 0.12f
+
 /** A press that answers: the button gives a little under the finger (`BarPress`). */
 @Composable
 internal fun Modifier.barPress(press: Press): Modifier {
-    val scale by animateFloatAsState(if (press.pressed) 0.93f else 1f, Motion.hover(), label = "press")
+    val scale by animateFloatAsState(if (press.pressed) PressedScale else 1f, Motion.hover(), label = "press")
     return graphicsLayer {
         scaleX = scale
         scaleY = scale
