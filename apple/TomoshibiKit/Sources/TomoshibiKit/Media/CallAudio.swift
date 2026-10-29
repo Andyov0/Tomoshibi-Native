@@ -417,7 +417,7 @@ public final class CallAudio {
     /// real call ever had (2026-10-17: three muted runs in three failed
     /// before the move, three in three started with it after).
     private func muteForTests() {
-        if ProcessInfo.processInfo.environment["TOMOSHIBI_MUTE"] != nil {
+        if Rehearsal.silenced {
             engine.mainMixerNode.outputVolume = 0
         }
     }

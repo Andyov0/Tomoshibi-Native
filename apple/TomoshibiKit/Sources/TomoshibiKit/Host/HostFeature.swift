@@ -139,7 +139,9 @@ public final class HostFeature {
             return AnyView(DoorList(feature: self))
         }
         applyHearing()
+        #if DEBUG
         HostDebug.start(self)
+        #endif
     }
 
     private func heard(_ event: CallEvent) {
@@ -429,17 +431,19 @@ public final class HostFeature {
         }
     }
 
-    /// Puts the link on the pasteboard. TOMOSHIBI_DEBUG_PASTEBOARD names a
-    /// private pasteboard to use instead, so a test run on somebody's own Mac
-    /// does not replace whatever they had copied.
+    /// Puts the link on the pasteboard. In a rehearsal,
+    /// TOMOSHIBI_DEBUG_PASTEBOARD names a private pasteboard to use instead, so
+    /// a test run on somebody's own Mac does not replace whatever they had
+    /// copied; a release build that read it copied an invitation where the
+    /// person could never paste it, and said it had.
     private static func copy(_ text: String) -> Bool {
         #if os(macOS)
-        let board: NSPasteboard
-        if let name = ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_PASTEBOARD"], !name.isEmpty {
+        var board = NSPasteboard.general
+        #if DEBUG
+        if Rehearsal.running, let name = ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_PASTEBOARD"], !name.isEmpty {
             board = NSPasteboard(name: NSPasteboard.Name(name))
-        } else {
-            board = NSPasteboard.general
         }
+        #endif
         board.clearContents()
         return board.setString(text, forType: .string)
         #else

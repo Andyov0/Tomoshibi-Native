@@ -486,10 +486,12 @@ public struct RoomView: View {
         .animation(Theme.settle, value: watchersInRow)
         .animation(Theme.settle, value: record.joining)
         .onChange(of: panel) { model.chatOpen = panel == .messages }
+        #if DEBUG
         // TOMOSHIBI_DEBUG_PANEL=messages|sound|watch|music|host|devices opens
-        // that panel on arrival, so a script can look at it without a pointer.
+        // that panel on arrival, so a script can look at it without a pointer;
+        // in a rehearsal only, as the stage's other switches (StageDebug).
         .onAppear {
-            switch ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_PANEL"] {
+            switch StageDebug.environment["TOMOSHIBI_DEBUG_PANEL"] {
             case "messages": panel = .messages
             case "sound": panel = .sound
             case "watch": panel = .watch
@@ -499,8 +501,9 @@ public struct RoomView: View {
             default: break
             }
             // TOMOSHIBI_DEBUG_POPOVER=<id> opens one of the bar's popovers.
-            if let id = ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_POPOVER"] { popovers.show(id) }
+            if let id = StageDebug.environment["TOMOSHIBI_DEBUG_POPOVER"] { popovers.show(id) }
         }
+        #endif
     }
 
     /// Beside the call where the window has room for it, and on a screen

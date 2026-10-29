@@ -673,20 +673,21 @@ private struct MoreControl: View {
 ///   must not write down; and `state`, which logs what the call is doing
 ///   under the subsystem's `rehearsal` category.
 enum ControlDebug {
-    static let environment = ProcessInfo.processInfo.environment
     static let log = Logger(subsystem: "app.tomoshibi", category: "rehearsal")
 
-    static var on: Bool {
-        #if DEBUG
-        environment["TOMOSHIBI_BASE"] != nil
-        #else
-        false
-        #endif
-    }
+    static var on: Bool { Rehearsal.running }
+
+    #if DEBUG
+    static let environment = Rehearsal.running ? ProcessInfo.processInfo.environment : [:]
 
     static var axis: Axis? { on && environment["TOMOSHIBI_DEBUG_AXIS"] == "vertical" ? .vertical : nil }
     static var sealedLook: Bool { on && environment["TOMOSHIBI_DEBUG_SEALED"] != nil }
     static var hosting: Bool { on && environment["TOMOSHIBI_DEBUG_HOSTING"] != nil }
+    #else
+    static let axis: Axis? = nil
+    static let sealedLook = false
+    static let hosting = false
+    #endif
 
     #if DEBUG
     static var slowDevices: Double? { slow.first }

@@ -223,9 +223,11 @@ struct HandControl: View {
             }
         }
         .animation(Theme.settle, value: open)
+        #if DEBUG
         .onChange(of: HostDebug.panelWanted(for: model.call)) { _, wanted in
             if let wanted { panel = wanted.panel }
         }
+        #endif
     }
 
     private var tray: some View {

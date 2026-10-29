@@ -331,10 +331,13 @@ public final class AppModel {
         started = true
         updates?.start()
         remote.start()
-        let environment = ProcessInfo.processInfo.environment
+        // The switches a test starts the app with, compiled into a debug
+        // build alone, as every other is: a release build kept their names
+        // and a reading of the environment that only `rehearsal` stood in
+        // front of.
         #if DEBUG
         if rehearsal { AppDebug.start(self) }
-        #endif
+        let environment = ProcessInfo.processInfo.environment
         if rehearsal, let base = environment["TOMOSHIBI_BASE"] {
             serverAddress = base
             name = environment["TOMOSHIBI_NAME"] ?? "Native App"
@@ -394,6 +397,7 @@ public final class AppModel {
             }
             return
         }
+        #endif
         await connect()
     }
 
@@ -1123,9 +1127,11 @@ public final class AppModel {
                 if await self.look() != nil {
                     // TOMOSHIBI_DEBUG_WAIT=press: the button pressed once the
                     // meeting is known, for a test of the whole wait.
+                    #if DEBUG
                     if self.rehearsal, ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_WAIT"] == "press" {
                         Task { await self.goArranged() }
                     }
+                    #endif
                     return
                 }
                 if self.waiting.gone != nil { return }

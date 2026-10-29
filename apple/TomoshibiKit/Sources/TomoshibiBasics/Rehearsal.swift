@@ -26,4 +26,18 @@ public enum Rehearsal {
     /// Where a call's own choices are read from and kept: the person's
     /// defaults, or nowhere at all in a rehearsal.
     public static var choices: UserDefaults? { running ? nil : .standard }
+
+    /// TOMOSHIBI_MUTE, which every interop script and UI test sets: the call's
+    /// engine and the shared video play at nothing, so a test's beeps and
+    /// videos stay out of the speakers of the machine it runs on. A rehearsal
+    /// switch like every other, compiled out of a release build: read there,
+    /// a variable left in the shell a released app was started from had it
+    /// hear nobody in any call, with nothing on screen to say why.
+    public static let silenced: Bool = {
+        #if DEBUG
+        running && ProcessInfo.processInfo.environment["TOMOSHIBI_MUTE"] != nil
+        #else
+        false
+        #endif
+    }()
 }
