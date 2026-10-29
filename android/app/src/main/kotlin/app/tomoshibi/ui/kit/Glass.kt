@@ -31,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.dropShadow
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.graphics.ColorFilter
@@ -291,16 +290,18 @@ private fun glassShadow(palette: Palette) =
 private val GlassShadow = Shadow(radius = 14.dp, color = Color.Black, offset = DpOffset(0.dp, 6.dp), alpha = 0.28f)
 
 /**
- * The edge of the glass in the dark, catching the light from above: brighter
- * along the top than the bottom, as Liquid Glass's edge is, and as bright on
- * average as the stand-in's sixteen per cent hairline (twenty-eight where
- * tinted). In the light the edge is a flat hairline instead, a little
- * darker than the page round the plain glass and a little lighter than the
- * colour round the tinted: a light edge on white glass is no edge at all,
- * and the palette has no gradients to give it.
+ * The edge of the glass in the dark: one flat hairline of white, sixteen per
+ * cent round the plain glass and twenty-eight round the tinted, which is how
+ * bright on average the edge was when it ran from brighter along the top to
+ * dimmer along the bottom, catching the light as Liquid Glass's edge does.
+ * That was a gradient, a thin one, and the owner's rule is no gradients
+ * anywhere (2026-10-29); flat, it is the hairline the light's glass and the
+ * web's island already have. In the light the edge is a little darker than
+ * the page round the plain glass and a little lighter than the colour round
+ * the tinted: a light edge on white glass is no edge at all.
  */
-private val GlassRim = Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.26f), Color.White.copy(alpha = 0.07f)))
-private val GlassRimLit = Brush.verticalGradient(listOf(Color.White.copy(alpha = 0.40f), Color.White.copy(alpha = 0.16f)))
+private val GlassRim = Color.White.copy(alpha = 0.16f)
+private val GlassRimLit = Color.White.copy(alpha = 0.28f)
 
 private val Saturate = ColorMatrix().apply { setToSaturation(1.5f) }
 

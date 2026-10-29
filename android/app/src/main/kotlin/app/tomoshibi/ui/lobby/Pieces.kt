@@ -40,7 +40,6 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.RectangleShape
@@ -316,14 +315,14 @@ fun latencyColour(ms: Double): Color = if (ms <= 150) Theme.goodInk else if (ms 
 
 /**
  * What the top bar of a page lays over the page where it runs up under the
- * status bar: in the dark the fade into black it always was, `dark` from top
- * to bottom; in the light the page's own ground, flat and nearly opaque,
- * since the daylight palette has no gradients (2026-10-26) and a fade into
- * black over a light page is a smudge.
+ * status bar: the page's own ground, flat and nearly opaque, in either
+ * appearance. The dark had a fade into black from top to bottom; the owner's
+ * rule is no gradients anywhere (2026-10-29), which the light had already
+ * kept to since 2026-10-26, and the web took its own dark glow out of the top
+ * of the lobby for the same rule.
  */
 @Composable
-internal fun Modifier.barShade(dark: List<Color>): Modifier =
-    if (Theme.dark) background(Brush.verticalGradient(dark)) else background(Theme.ground.copy(alpha = 0.94f))
+internal fun Modifier.barShade(): Modifier = background(Theme.ground.copy(alpha = 0.94f))
 
 /**
  * Everything on these screens arrives in an order: in from fourteen points

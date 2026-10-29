@@ -358,7 +358,7 @@ private fun NavigationBar(app: AppModel, account: Account, state: LobbyState, sc
             Modifier
                 .matchParentSize()
                 .alpha(title)
-                .barShade(listOf(Color.Black.copy(alpha = 0.92f), Color.Black.copy(alpha = 0.6f), Color.Transparent)),
+                .barShade(),
         )
         Column(Modifier.fillMaxWidth()) {
             Spacer(Modifier.windowInsetsTopHeight(WindowInsets.safeDrawing))
