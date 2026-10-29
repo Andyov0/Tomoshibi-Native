@@ -164,7 +164,7 @@ struct ControlBar: View {
             #endif
             // The hand and, behind the narrow half beside it, the reactions
             // (HandButton.tsx).
-            HandControl(model: model, act: act, panel: $panel, axis: axis)
+            HandControl(model: model, act: act, panel: $panel, popovers: popovers, axis: axis, size: size)
             BarButton(symbol: "bubble.left.fill", label: panel == .messages ? t("Hide messages") : t("Show messages"),
                       lit: panel == .messages, size: size) {
                 panel = panel == .messages ? nil : .messages
