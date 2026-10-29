@@ -23,6 +23,7 @@ mod window;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex, MutexGuard},
+    time::{Duration, Instant},
 };
 
 use livekit::{
@@ -53,6 +54,12 @@ pub trait CallObserver: Send + Sync {
     fn on_event(&self, event: CallEvent);
 }
 
+/// How much sooner than its stated life the join's own token is given up for
+/// the media server's (`Call::token`): the life is counted from the moment
+/// the call began opening, a little after the token was signed, and a
+/// request made with a token in its last seconds may arrive after them.
+const JOIN_TOKEN_MARGIN: Duration = Duration::from_secs(10);
+
 /// The least time a shared screen and its sound are held before they are
 /// played (web/src/live/delay.ts). A screen is read, not talked over, and a
 /// steady picture is worth a fifth of a second; cameras and voices are never
@@ -81,6 +88,11 @@ pub struct Call {
     /// one taken back while a reconnect was publishing it again is taken down
     /// once it is up (publish.rs `withdraw`).
     withdrawn: Mutex<HashSet<String>>,
+    /// The token the deployment signed for this call, and until when it is
+    /// good by the server's own arithmetic (`token`); `None` where it does
+    /// not say.
+    joined_with: String,
+    joined_until: Option<Instant>,
 }
 
 /// A lock that a panic elsewhere left poisoned, taken all the same.
@@ -163,6 +175,12 @@ impl Call {
             room_options.rtc_config.ice_transport_type = IceTransportsType::Relay;
         }
 
+        // Counted from before the connect, which is after the token was
+        // signed: the deadline can only come early, never late.
+        let joined_until = tomoshibi_protocol::api::token_lifetime(&options.token)
+            .and_then(|life| life.checked_sub(JOIN_TOKEN_MARGIN))
+            .map(|life| Instant::now() + life);
+
         let (room, events) = Room::connect(&options.url, &options.token, room_options)
             .await
             .map_err(|e| CallError::Connect { detail: e.to_string() })?;
@@ -180,6 +198,8 @@ impl Call {
             senders: Mutex::new(Vec::new()),
             meter: tomoshibi_protocol::quality::ConnectionMeter::new(),
             withdrawn: Mutex::new(HashSet::new()),
+            joined_with: options.token.clone(),
+            joined_until,
         });
 
         call.observer.on_event(CallEvent::StateChanged { state: CallState::Connected });
@@ -388,6 +408,14 @@ impl Call {
         .await
     }
 
+    /// The media server's latest token for this call, which `token` stopped
+    /// handing to the host's controls: for the tests that show a deployment
+    /// refusing it (core/tests/host_roles.rs); not exported to the apps.
+    #[doc(hidden)]
+    pub fn media_token(&self) -> String {
+        self.room.token()
+    }
+
     fn publication(&self, sid: &str) -> Option<RemoteTrackPublication> {
         self.room
             .remote_participants()
@@ -398,11 +426,32 @@ impl Call {
 
 #[uniffi::export]
 impl Call {
-    /// The current join token, refreshed by the server while the call lasts.
-    /// The host controls authorise with it, and unlike the web client's copy
-    /// it does not go stale five minutes in (host.go `whoIs`).
+    /// What the host's controls and the door are authorised with: the token
+    /// the deployment signed for this call while it is good, and the media
+    /// server's latest one after that.
+    ///
+    /// The media server replaces the token a call holds with one of its own
+    /// as soon as the call is up, and again every five minutes (livekit-server
+    /// `RoomManager.refreshToken`). This used to send that one, which a
+    /// deployment accepted for the whole call where the web's copy went stale
+    /// five minutes in. A deployment now takes at its host endpoints only a
+    /// token it signed itself, told by a proof in the token's JWT ID that the
+    /// media server's carries no trace of (host.go `whoIs`, room.go
+    /// `Vouched`); asked with the media server's, it answered "not yours" to
+    /// every request from the first second of a call, and the host of a room
+    /// was never offered a single control. The join's own token is what the
+    /// web sends (host.ts `bearer`, room.ts `tokenFor`), and is good for as
+    /// long as the deployment's `token_ttl`, five minutes unless it says
+    /// otherwise. After that the media server's is sent again: a deployment
+    /// without the proof takes it for the rest of the call, as it always did,
+    /// and one with it refuses it as it refuses an expired one, leaving the
+    /// account session this app holds, if any, as the authority (host.go
+    /// `mayHost`), exactly as for the web.
     pub fn token(&self) -> String {
-        self.room.token()
+        match self.joined_until {
+            Some(until) if Instant::now() < until => self.joined_with.clone(),
+            _ => self.room.token(),
+        }
     }
 
     pub fn room_name(&self) -> String {

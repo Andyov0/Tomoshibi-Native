@@ -6,7 +6,9 @@
 //! web/src/account/Account.tsx. The server's side is internal/app/app.go (the
 //! join, `deployment`, the error codes), host.go, invite.go and knock.go.
 
-use std::{fmt, sync::Arc};
+use std::{fmt, sync::Arc, time::Duration};
+
+use base64::Engine;
 
 use reqwest::Method;
 use serde::Serialize;
@@ -187,6 +189,33 @@ impl JoinGrant {
             forward: forward.filter(|forward| !forward.url.is_empty()),
         })
     }
+}
+
+/// How long a join token was issued for: its expiry less the moment it was
+/// issued, both as the server wrote them (`exp`, and `iat` or else `nbf`), so
+/// that the device's own clock, which may be minutes out, has no part in it.
+/// `None` for anything that is not a token saying both, or says nothing
+/// sensible.
+///
+/// Read without checking the signature, which only the server can do: the
+/// answer decides which of two tokens this app shows the server, and the
+/// server judges whichever it is shown.
+pub fn token_lifetime(token: &str) -> Option<Duration> {
+    let claims = token.split('.').nth(1)?;
+    let claims: Value = serde_json::from_slice(
+        &base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .decode(claims.trim_end_matches('='))
+            .ok()?,
+    )
+    .ok()?;
+    let at = |key: &str| claims.get(key).and_then(Value::as_i64);
+    let expires = at("exp")?;
+    let issued = at("iat").or_else(|| at("nbf"))?;
+
+    u64::try_from(expires.checked_sub(issued)?)
+        .ok()
+        .filter(|seconds| *seconds > 0)
+        .map(Duration::from_secs)
 }
 
 /// What this participant may do in the room they are in (host.ts `Standing`).

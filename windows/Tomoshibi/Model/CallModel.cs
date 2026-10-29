@@ -1010,9 +1010,10 @@ internal sealed class CallModel : Observable, IDisposable
 
     /// <summary>
     /// Ends the meeting for everybody (ControlBar.kt <c>endForEverybody</c>):
-    /// the server closes the room with the call's current join token, which
-    /// it refreshes while the call lasts, and after a moment, so that the
-    /// server's disconnect normally arrives first, this participant leaves.
+    /// the server closes the room with what the core gives the host's
+    /// controls (the join's own token while it is good, Call.token), and
+    /// after a moment, so that the server's disconnect normally arrives
+    /// first, this participant leaves.
     /// </summary>
     public async Task EndForEverybody()
     {
