@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.tomoshibi.basics.Logged
 import app.tomoshibi.basics.t
 import app.tomoshibi.model.CallModel
 import app.tomoshibi.model.CallToast
@@ -245,7 +246,7 @@ class HostFeature private constructor(val call: CallModel) {
         } catch (fault: CancellationException) {
             throw fault
         } catch (fault: Exception) {
-            Log.w(TAG, "host: $who refused: ${fault.message}")
+            Log.w(TAG, "host: ${Logged.private(who)} refused: ${fault.message}")
             say(explain(fault), danger = true)
         } finally {
             busy = null

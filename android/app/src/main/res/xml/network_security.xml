@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A release build: nothing in plain HTTP. The core reaches its one
+     deployment over TLS by itself, and what the app fetches in Java (a song,
+     a poster, a picture to watch) comes from that deployment too; a video
+     linked over plain HTTP fails here, as the web's mixed content does, and
+     is played through the deployment's relay instead (WatchPlayer). -->
+<!-- Unused only to a lint of a debug build, which is given the other. -->
+<network-security-config xmlns:tools="http://schemas.android.com/tools" tools:ignore="UnusedResources">
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

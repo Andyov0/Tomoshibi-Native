@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.tomoshibi.BuildConfig
+import app.tomoshibi.basics.Logged
 import app.tomoshibi.basics.NoticeTimes
 import app.tomoshibi.basics.Pace
 import app.tomoshibi.basics.t
@@ -849,7 +850,7 @@ class AppModel(
             // ignored, so none is sent (PreJoin.tsx `scopedGuest`).
             val signed = account != null
             val scopedGuest = arrivedInvited && scopeOf(room).isNotEmpty()
-            Log.i(TAG, "joining $room")
+            Log.i(TAG, "joining ${Logged.private(room)}")
             val grant = deployment.join(
                 room, joiningName,
                 if (signed || scopedGuest) "" else passphrase,
@@ -902,7 +903,7 @@ class AppModel(
             // were told of the lobby again for the moment between, and a
             // download held for the join started up only to be held again.
             joining = false
-            Log.i(TAG, "in call ${grant.room} as ${model.localIdentity} with ${model.people.size} others")
+            Log.i(TAG, "in call ${Logged.private(grant.room)} as ${Logged.private(model.localIdentity)} with ${model.people.size} others")
             // After joining rather than before, so somebody is in the room
             // the moment they join and their devices come up a beat later,
             // each on its own, never through the catch below (App.tsx
@@ -1429,9 +1430,16 @@ data class OpenedLink(val origin: String, val room: String, val invite: String?,
             return OpenedLink(origin, room, first("invite"), first("meeting"))
         }
 
-        /** Percent-decoding as a URL's query items are read: a plus is a plus, not a space. */
-        private fun decode(text: String): String = try {
-            URLDecoder.decode(text.replace("+", "%2B"), Charsets.UTF_8)
+        /**
+         * Percent-decoding as a URL's query items are read: a plus is a plus,
+         * not a space. By the charset's name, the form every Android has: the
+         * overload taking a Charset is Android 13's, and on 10 to 12 it threw
+         * NoSuchMethodError, an Error the catch here does not take, which
+         * closed the app on every invitation and meeting link it was opened
+         * with (the 0.1.6 build). Lint's NewApi is fatal in the build for it.
+         */
+        internal fun decode(text: String): String = try {
+            URLDecoder.decode(text.replace("+", "%2B"), "UTF-8")
         } catch (_: Exception) {
             text
         }

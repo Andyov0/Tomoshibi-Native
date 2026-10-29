@@ -51,7 +51,15 @@ class VideoHub private constructor(private val call: Call) {
      * window over and releases it on detach or when the call ends.
      */
     fun attach(owner: Any, sid: String, window: Long, shape: PictureShape) {
-        detach(owner)
+        // Whatever the owner drew before goes, but the hub stays: a new hub's
+        // first attach found no pictures, and the detach it went through let
+        // the hub go from the table before the window was added to it. Every
+        // view then held a hub nobody else could find, so no size was ever
+        // asked for and no window was ever taken back from the core, which
+        // drew into each destroyed surface for the rest of the call (forty
+        // errors a second after the small window; the health check of
+        // 2026-10-29).
+        drop(owner)
         val fan = fans.getOrPut(sid) { Fan() }
         fan.windows[owner] = window
         call.attachVideoWindow(sid, window.toULong(), object : PictureShape {
@@ -68,19 +76,29 @@ class VideoHub private constructor(private val call: Call) {
 
     /** Stops drawing whatever [owner] drew. */
     fun detach(owner: Any) {
+        drop(owner)
+        // The last picture of the call gone, the hub goes too: a hub holds
+        // its call, and the table of hubs kept every call that had shown a
+        // remote camera alive after it was left (2026-10-17).
+        if (fans.isEmpty() && hubs[call] === this) hubs.remove(call)
+    }
+
+    /** Takes back every window [owner] drew into, keeping the hub. */
+    private fun drop(owner: Any) {
         val iterator = fans.entries.iterator()
         while (iterator.hasNext()) {
             val (sid, fan) = iterator.next()
             val window = fan.windows.remove(owner) ?: continue
             fan.wants.remove(owner)
             call.detachVideoWindow(sid, window.toULong())
-            if (fan.windows.isEmpty()) iterator.remove() else ask(sid)
-            if (fan.windows.isEmpty()) shapes.remove(sid)
+            if (fan.windows.isEmpty()) {
+                iterator.remove()
+                shapes.remove(sid)
+                asked.remove(sid)
+            } else {
+                ask(sid)
+            }
         }
-        // The last picture of the call gone, the hub goes too: a hub holds
-        // its call, and the table of hubs kept every call that had shown a
-        // remote camera alive after it was left (2026-10-17).
-        if (fans.isEmpty()) forget(call)
     }
 
     /** [owner]'s wish for [sid], in device pixels: the size it is drawn at. */

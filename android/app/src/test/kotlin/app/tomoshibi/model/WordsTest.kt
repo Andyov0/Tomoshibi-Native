@@ -136,6 +136,24 @@ class WordsTest {
     }
 
     @Test
+    fun aLinkIsReadOnEveryAndroidTheAppRunsOn() {
+        // Words in a room's invitation as a browser writes them, and an
+        // escape that is not one, which is kept as it was typed.
+        val written = OpenedLink.parse("https://meet.example.com/?invite=%E4%BD%A0%E5%A5%BD%20x+y#/r")!!
+        assertEquals("\u4f60\u597d x+y", written.invite)
+        assertEquals("50%", OpenedLink.decode("50%"))
+        // Read on Android 10 to 12 too: URLDecoder.decode(String, Charset) is
+        // Android 13's, and the app is for 10 and later. Its descriptor in
+        // the compiled reader is the call that closed the app there.
+        val compiled = OpenedLink::class.java.classLoader!!
+            .getResourceAsStream("app/tomoshibi/model/OpenedLink\$Companion.class")!!
+            .use { it.readBytes() }
+            .toString(Charsets.ISO_8859_1)
+        assertTrue(compiled.contains("java/net/URLDecoder"))
+        assertFalse(compiled.contains("(Ljava/lang/String;Ljava/nio/charset/Charset;)Ljava/lang/String;"))
+    }
+
+    @Test
     fun aLinkToAnotherServerIsNotThisOnesHoweverItIsWritten() {
         assertFalse(OpenedLink.parse("https://meet.example.com.example.org/?invite=x")!!.isFor("https://meet.example.com/"))
         assertFalse(OpenedLink.parse("http://meet.example.com/?invite=x")!!.isFor("https://meet.example.com/"))

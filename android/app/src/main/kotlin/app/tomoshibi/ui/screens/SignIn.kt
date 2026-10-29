@@ -1,6 +1,20 @@
 package app.tomoshibi.ui.screens
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.layout.ime
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -180,8 +194,12 @@ fun SignInView(app: AppModel) {
             // the sign-in, and a notice there would have lain under it.
             val says = noticeShown(app) || app.updates?.shown == true
             val head: @Composable () -> Unit = { SignInHead(app, clear = 56.dp) }
+            // The keyboard's height, nought while it is down.
+            val keyboard = WindowInsets.ime.getBottom(LocalDensity.current)
             Folded(
-                flat = { FlatSignIn(wide, says, head, heading, form) { PasteLink(scope, clipboard, ::openLink) } },
+                flat = {
+                    FlatSignIn(wide, says, keyboard, app.problem != null, head, heading, form) { PasteLink(scope, clipboard, ::openLink) }
+                },
                 // Folded, the greeting on one side of the hinge and the
                 // fields on the other: on a table both above it, where the
                 // keyboard coming up over the lower half leaves them; in a
@@ -213,31 +231,63 @@ fun SignInView(app: AppModel) {
                 },
             )
             LanguageMenu(Modifier.align(Alignment.TopEnd).windowInsetsPadding(WindowInsets.safeDrawing).padding(16.dp))
+            // Above the paste at the foot; with the keyboard up, which puts the
+            // paste away, just above the keyboard, under the sign-in's button
+            // (FlatSignIn keeps the button clear of it).
+            val clearance by animateDpAsState(
+                if (wide) 28.dp else if (keyboard > 0) ToastOverKeyboard else 100.dp,
+                Theme.settle(), label = "clearance",
+            )
             ProblemToast(
                 app,
                 Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal)),
-                clearance = if (wide) 28.dp else 100.dp,
+                clearance = clearance,
             )
         }
     }
 }
+
+/** Where the sign-in's problem sits over the keyboard, and the room kept for it under the button. */
+private val ToastOverKeyboard = 16.dp
+private val ToastRoom = 72.dp
 
 /**
  * The sign-in as a flat screen draws it: what the deployment and the
  * updates say at the head ([says]), the greeting and the fields in one
  * column, and on a phone the paste at the foot. The greeting comes up closer
  * under the head while it says something, as the head opens and closes.
+ *
+ * With the keyboard up ([keyboard], its height) the fields and the button
+ * are kept in sight together, with room under the button for a problem to be
+ * said ([problem]) without lying over it: the scroll that brings a field above
+ * the keyboard brought the field alone, so the card was cut off flat under
+ * it, and a refused passphrase was said on top of the button it had to be
+ * pressed again with (the health check of 2026-10-29). The paste at the foot
+ * goes while the keyboard is up, as the room it took is wanted for that.
  */
 @Composable
 private fun FlatSignIn(
     wide: Boolean,
     says: Boolean,
+    keyboard: Int,
+    problem: Boolean,
     head: @Composable () -> Unit,
     heading: @Composable () -> Unit,
     form: @Composable () -> Unit,
     paste: @Composable () -> Unit,
 ) {
     val top by animateDpAsState(if (says) 32.dp else 72.dp, Theme.settle(), label = "top")
+    val density = LocalDensity.current
+    val card = remember { BringIntoViewRequester() }
+    var cardSize by remember { mutableStateOf(IntSize.Zero) }
+    // Again as the keyboard moves and when a problem arrives: each request
+    // takes over from the one before, and the last is made once the
+    // keyboard has settled.
+    LaunchedEffect(keyboard, problem, cardSize) {
+        if (keyboard <= 0 || wide || cardSize.height == 0) return@LaunchedEffect
+        val room = with(density) { ToastRoom.toPx() }
+        card.bringIntoView(Rect(0f, 0f, cardSize.width.toFloat(), cardSize.height + room))
+    }
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
         Column(
             Modifier
@@ -245,7 +295,7 @@ private fun FlatSignIn(
                 .fillMaxWidth()
                 .putsKeyboardAway()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, end = 16.dp, bottom = if (wide) 140.dp else 40.dp),
+                .padding(start = 16.dp, end = 16.dp, bottom = if (wide) 140.dp else ToastRoom),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             head()
@@ -256,10 +306,16 @@ private fun FlatSignIn(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 heading()
-                form()
+                Box(Modifier.bringIntoViewRequester(card).onSizeChanged { cardSize = it }) { form() }
             }
         }
-        if (!wide) paste()
+        if (!wide) {
+            AnimatedVisibility(
+                keyboard <= 0,
+                enter = expandVertically(Theme.settle(), Alignment.Top) + fadeIn(Theme.settle()),
+                exit = shrinkVertically(Theme.leave(), Alignment.Top) + fadeOut(Theme.leave()),
+            ) { paste() }
+        }
     }
 }
 

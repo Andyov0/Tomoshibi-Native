@@ -20,6 +20,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import app.tomoshibi.R
 import app.tomoshibi.basics.t
 import java.lang.ref.WeakReference
+import java.security.MessageDigest
+import java.security.SecureRandom
 
 private const val TAG = "Tomoshibi"
 
@@ -134,6 +136,22 @@ object CallWindow {
     /** The extra on the activity's intent that carries a call control (the notification's Unmute). */
     const val CONTROL_EXTRA = "app.tomoshibi.call.control"
 
+    /** The extra beside it that proves the app's own notification put it there ([controlProof]). */
+    const val CONTROL_PROOF_EXTRA = "app.tomoshibi.call.proof"
+
+    /**
+     * A secret of this process, which the notification's Unmute carries and
+     * nothing outside the app can know. The activity has to be exported, as
+     * the launcher's and the links' way in, so any other app could start it
+     * with a control on its intent: taken at its word, that turned the
+     * microphone of somebody's muted call on, or hung up, from an app in
+     * front of Tomoshibi. Every other button goes to the receiver nobody else
+     * can reach (CallActions); Unmute alone goes through the activity,
+     * because Android 14 lets the microphone be taken only by an app in
+     * front, and it is the one control the activity takes ([admitted]).
+     */
+    val controlProof: String = ByteArray(24).also { SecureRandom().nextBytes(it) }.joinToString("") { "%02x".format(it) }
+
     fun install(activity: ComponentActivity) {
         this.activity = WeakReference(activity)
         activity.addOnPictureInPictureModeChangedListener { info ->
@@ -164,9 +182,26 @@ object CallWindow {
     /** A control the activity was opened with, from the call's notification. */
     private fun controlIn(intent: Intent?) {
         val name = intent?.getStringExtra(CONTROL_EXTRA) ?: return
+        val proof = intent.getStringExtra(CONTROL_PROOF_EXTRA)
         intent.removeExtra(CONTROL_EXTRA)
-        val control = CallKeeper.Control.entries.firstOrNull { it.name == name } ?: return
+        intent.removeExtra(CONTROL_PROOF_EXTRA)
+        val control = admitted(name, proof, controlProof)
+        if (control == null) {
+            Log.w(TAG, "a call control the app did not send was ignored")
+            return
+        }
         CallKeeper.control(control)
+    }
+
+    /**
+     * The control [name] carried with [proof], if the app's own notification
+     * sent it: the notification's Unmute, with this process's [expected]
+     * proof, compared in constant time. Anything else is nobody's to take.
+     */
+    internal fun admitted(name: String, proof: String?, expected: String): CallKeeper.Control? {
+        if (name != CallKeeper.Control.Unmute.name || proof == null) return null
+        if (!MessageDigest.isEqual(proof.toByteArray(), expected.toByteArray())) return null
+        return CallKeeper.Control.Unmute
     }
 
     /**

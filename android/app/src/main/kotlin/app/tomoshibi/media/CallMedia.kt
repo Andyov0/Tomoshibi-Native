@@ -289,7 +289,10 @@ class CallMedia(context: Context, val muted: Boolean = false) {
             .setAction(Intent.ACTION_MAIN)
             .addCategory(Intent.CATEGORY_LAUNCHER)
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-        if (control != null) intent.putExtra(CallWindow.CONTROL_EXTRA, control.name)
+        if (control != null) {
+            intent.putExtra(CallWindow.CONTROL_EXTRA, control.name)
+            intent.putExtra(CallWindow.CONTROL_PROOF_EXTRA, CallWindow.controlProof)
+        }
         return intent
     }
 

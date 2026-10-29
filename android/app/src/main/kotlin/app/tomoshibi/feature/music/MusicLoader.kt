@@ -95,10 +95,12 @@ interface OriginalSamples : Closeable {
  * AAC, MP3, Ogg, Opus and WAV by what the bytes are rather than by a file's
  * name, as the web's `decodeAudioData` does.
  *
- * Asked for floats, which the platform's FLAC decoder gives scaled by a power
- * of two on both signs, so the core's one-scale `to_int24` recovers every
- * integer of a 16- or 24-bit file for the lossless stream; a decoder that
- * gives 16-bit integers anyway is read by the same power of two.
+ * A real decoder is asked for floats, which the platform's FLAC decoder
+ * gives scaled by a power of two on both signs, so the core's one-scale
+ * `to_int24` recovers every integer of a 16- or 24-bit file for the lossless
+ * stream; a decoder that gives 16-bit integers anyway is read by the same
+ * power of two. A track the extractor has already decoded ([requested]) is
+ * left in the encoding it says it is in, and read as the decoder then says.
  */
 class PcmReader(input: FileInputStream) : Closeable {
     private val extractor = MediaExtractor()
@@ -106,7 +108,9 @@ class PcmReader(input: FileInputStream) : Closeable {
     private val info = MediaCodec.BufferInfo()
     private var inputDone = false
     private var outputDone = false
-    private var encoding = AudioFormat.ENCODING_PCM_16BIT
+    private var encoding: Int
+    /** The track's type as the extractor gave it, for the log: audio/raw when it decoded the file itself. */
+    val mime: String
 
     /** The rate and channels the decoder said it gives; the file's own until it says. */
     var rate: Int
@@ -131,9 +135,13 @@ class PcmReader(input: FileInputStream) : Closeable {
         rate = format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
         channels = format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
         seconds = if (format.containsKey(MediaFormat.KEY_DURATION)) format.getLong(MediaFormat.KEY_DURATION) / 1e6 else 0.0
-        format.setInteger(MediaFormat.KEY_PCM_ENCODING, AudioFormat.ENCODING_PCM_FLOAT)
+        mime = format.getString(MediaFormat.KEY_MIME)!!
+        val own = if (format.containsKey(MediaFormat.KEY_PCM_ENCODING)) format.getInteger(MediaFormat.KEY_PCM_ENCODING) else null
+        val asked = requested(mime)
+        if (asked != null) format.setInteger(MediaFormat.KEY_PCM_ENCODING, asked)
+        encoding = asked ?: own ?: AudioFormat.ENCODING_PCM_16BIT
         codec = try {
-            MediaCodec.createDecoderByType(format.getString(MediaFormat.KEY_MIME)!!).also {
+            MediaCodec.createDecoderByType(mime).also {
                 it.configure(format, null, null, 0)
                 it.start()
             }
@@ -170,47 +178,13 @@ class PcmReader(input: FileInputStream) : Closeable {
                 val buffer = codec.getOutputBuffer(index)!!
                 buffer.position(info.offset)
                 buffer.limit(info.offset + info.size)
-                val piece = stereo(buffer.slice().order(ByteOrder.nativeOrder()))
+                val piece = stereo(buffer.slice().order(ByteOrder.nativeOrder()), encoding, channels)
                 codec.releaseOutputBuffer(index, false)
                 if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) outputDone = true
                 if (piece.isNotEmpty()) return piece
             }
         }
         return null
-    }
-
-    /** The decoder's samples as two channels of floats: one copied to both, more folded down. */
-    private fun stereo(bytes: ByteBuffer): FloatArray {
-        val width = when (encoding) {
-            AudioFormat.ENCODING_PCM_FLOAT, AudioFormat.ENCODING_PCM_32BIT -> 4
-            AudioFormat.ENCODING_PCM_24BIT_PACKED -> 3
-            AudioFormat.ENCODING_PCM_8BIT -> 1
-            else -> 2
-        }
-        val count = channels.coerceAtLeast(1)
-        val frames = bytes.remaining() / width / count
-        val out = FloatArray(frames * 2)
-        val sample = FloatArray(count)
-        for (frame in 0 until frames) {
-            for (c in 0 until count) {
-                sample[c] = when (encoding) {
-                    AudioFormat.ENCODING_PCM_FLOAT -> bytes.getFloat()
-                    AudioFormat.ENCODING_PCM_32BIT -> bytes.getInt() / 2_147_483_648f
-                    AudioFormat.ENCODING_PCM_24BIT_PACKED -> {
-                        val low = bytes.get().toInt() and 0xff
-                        val mid = bytes.get().toInt() and 0xff
-                        val high = bytes.get().toInt()
-                        ((high shl 16) or (mid shl 8) or low) / 8_388_608f
-                    }
-                    AudioFormat.ENCODING_PCM_8BIT -> ((bytes.get().toInt() and 0xff) - 128) / 128f
-                    else -> bytes.getShort() / 32_768f
-                }
-            }
-            val (left, right) = fold(sample, count)
-            out[frame * 2] = left
-            out[frame * 2 + 1] = right
-        }
-        return out
     }
 
     override fun close() {
@@ -222,8 +196,70 @@ class PcmReader(input: FileInputStream) : Closeable {
         extractor.release()
     }
 
+    /** Which encoding the decoder is in, as a word for the log. */
+    val encodingName: String
+        get() = when (encoding) {
+            AudioFormat.ENCODING_PCM_FLOAT -> "float"
+            AudioFormat.ENCODING_PCM_32BIT -> "32-bit"
+            AudioFormat.ENCODING_PCM_24BIT_PACKED -> "24-bit"
+            AudioFormat.ENCODING_PCM_8BIT -> "8-bit"
+            else -> "16-bit"
+        }
+
     companion object {
         private const val WAIT_US = 10_000L
+
+        /**
+         * The encoding to ask the decoder for, or null to leave the track's
+         * own. A real decoder is asked for floats (see the class). A track the
+         * extractor hands over as audio/raw has been decoded already -- the
+         * platform's FLAC extractor does that, in 16-bit integers for a 16-bit
+         * file -- and goes through the raw decoder, which passes the bytes on
+         * as they are and reports whatever encoding it was asked for. Asked
+         * for floats, it said floats over 16-bit integers: every FLAC played
+         * half as long, an octave up and clipped to a square wave, on every
+         * listener's speakers (the health check of 2026-10-29). So such a
+         * track is asked for nothing and read as it says it is.
+         */
+        fun requested(mime: String): Int? =
+            if (mime == MediaFormat.MIMETYPE_AUDIO_RAW) null else AudioFormat.ENCODING_PCM_FLOAT
+
+        /**
+         * The decoder's samples, [channels] interleaved in [encoding], as two
+         * channels of floats: one copied to both, more folded down.
+         */
+        fun stereo(bytes: ByteBuffer, encoding: Int, channels: Int): FloatArray {
+            val width = when (encoding) {
+                AudioFormat.ENCODING_PCM_FLOAT, AudioFormat.ENCODING_PCM_32BIT -> 4
+                AudioFormat.ENCODING_PCM_24BIT_PACKED -> 3
+                AudioFormat.ENCODING_PCM_8BIT -> 1
+                else -> 2
+            }
+            val count = channels.coerceAtLeast(1)
+            val frames = bytes.remaining() / width / count
+            val out = FloatArray(frames * 2)
+            val sample = FloatArray(count)
+            for (frame in 0 until frames) {
+                for (c in 0 until count) {
+                    sample[c] = when (encoding) {
+                        AudioFormat.ENCODING_PCM_FLOAT -> bytes.getFloat()
+                        AudioFormat.ENCODING_PCM_32BIT -> bytes.getInt() / 2_147_483_648f
+                        AudioFormat.ENCODING_PCM_24BIT_PACKED -> {
+                            val low = bytes.get().toInt() and 0xff
+                            val mid = bytes.get().toInt() and 0xff
+                            val high = bytes.get().toInt()
+                            ((high shl 16) or (mid shl 8) or low) / 8_388_608f
+                        }
+                        AudioFormat.ENCODING_PCM_8BIT -> ((bytes.get().toInt() and 0xff) - 128) / 128f
+                        else -> bytes.getShort() / 32_768f
+                    }
+                }
+                val (left, right) = fold(sample, count)
+                out[frame * 2] = left
+                out[frame * 2 + 1] = right
+            }
+            return out
+        }
 
         /**
          * Two channels from however many there are. Left alone, a mono file
@@ -501,7 +537,7 @@ object MusicLoader {
                     resampler?.finish(::emit)
                     if (frames == 0L) throw IOException("nothing decoded from a ${kind ?: "file"}")
                     if (at > 0) pieces.add(piece)
-                    Log.i(TAG, "music: decoded a ${kind ?: "file"} at ${reader.rate} Hz, ${frames / 48} ms")
+                    Log.i(TAG, "music: decoded a ${kind ?: "file"} (${reader.mime}, ${reader.encodingName}) at ${reader.rate} Hz, ${frames / 48} ms")
                     return Decoded(Pcm48(pieces, frames.toInt()), original, reader.rate, kind)
                 }
             }

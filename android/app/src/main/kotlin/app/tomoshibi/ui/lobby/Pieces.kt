@@ -243,7 +243,7 @@ fun ProblemToast(app: AppModel, modifier: Modifier = Modifier, clearance: Dp = 2
  * else does (`DeviceSwitches`).
  */
 @Composable
-fun DeviceSwitches(app: AppModel, modifier: Modifier = Modifier, size: Dp = 44.dp) {
+fun DeviceSwitches(app: AppModel, modifier: Modifier = Modifier, size: Dp = 44.dp, shade: Color = Color.Transparent) {
     GlassGroup(8.dp) {
         Row(modifier, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             val mic = app.startWithMicrophone
@@ -252,6 +252,7 @@ fun DeviceSwitches(app: AppModel, modifier: Modifier = Modifier, size: Dp = 44.d
                 shape = GlassButtonShape.Circle(size),
                 destructive = !mic,
                 label = if (mic) t("Mute microphone") else t("Unmute microphone"),
+                shade = shade,
             ) { SwappingSymbol(if (mic) "mic.fill" else "mic.slash.fill", size = size.value * 0.4f, weight = Font.Semibold) }
             val camera = app.startWithCamera
             GlassButton(
@@ -259,6 +260,7 @@ fun DeviceSwitches(app: AppModel, modifier: Modifier = Modifier, size: Dp = 44.d
                 shape = GlassButtonShape.Circle(size),
                 destructive = !camera,
                 label = if (camera) t("Turn camera off") else t("Turn camera on"),
+                shade = shade,
             ) { SwappingSymbol(if (camera) "video.fill" else "video.slash.fill", size = size.value * 0.38f, weight = Font.Semibold) }
         }
     }

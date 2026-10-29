@@ -103,6 +103,7 @@ import app.tomoshibi.ui.kit.fingertip
 import app.tomoshibi.ui.kit.holdsPresses
 import app.tomoshibi.ui.kit.glassSurface
 import app.tomoshibi.ui.kit.keepDeparting
+import app.tomoshibi.ui.kit.pictureShade
 import app.tomoshibi.ui.kit.putsKeyboardAway
 import app.tomoshibi.ui.kit.rounded
 import app.tomoshibi.ui.settings.SettingsState
@@ -385,7 +386,7 @@ private fun NavigationBar(app: AppModel, account: Account, state: LobbyState, sc
 private fun Hero(app: AppModel, state: LobbyState, modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().height(292.dp)) {
         CameraStage(app, Modifier.matchParentSize(), cornerRadius = 30.dp, glassWhenOff = true, glassHeld = state.covered)
-        DeviceSwitches(app, Modifier.align(Alignment.TopEnd).padding(12.dp), size = 40.dp)
+        DeviceSwitches(app, Modifier.align(Alignment.TopEnd).padding(12.dp), size = 40.dp, shade = pictureShade(app.startWithCamera))
         GlassGroup(8.dp) {
             Row(
                 Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(12.dp),
