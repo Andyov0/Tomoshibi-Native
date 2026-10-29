@@ -2431,6 +2431,36 @@
         }
       }
     },
+    "Another app has it. It comes back when that is over." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Another app has it. It comes back when that is over."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ほかのアプリが使用中です。終わると自動的に戻ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "别的程序正在使用它，结束后会自动恢复。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別的程式正在使用它，結束後會自動恢復。"
+          }
+        }
+      }
+    },
     "Answer" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -13047,6 +13077,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "即時"
+          }
+        }
+      }
+    },
+    "Now using {camera}." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Now using {camera}."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{camera} を使用しています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "现在使用 {camera}。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在使用 {camera}。"
           }
         }
       }
@@ -27927,6 +27987,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "你的攝影機畫面"
+          }
+        }
+      }
+    },
+    "Your camera is paused" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your camera is paused"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カメラが一時停止しています"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的摄像头已暂停"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的攝影機已暫停"
+          }
+        }
+      }
+    },
+    "Your camera was disconnected." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your camera was disconnected."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カメラの接続が切れました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的摄像头已断开连接。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的攝影機已中斷連線。"
           }
         }
       }

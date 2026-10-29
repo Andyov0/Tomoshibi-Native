@@ -385,6 +385,30 @@
       "zh-Hant": "麥克風或揚聲器一直在切換。打開麥克風再試一次。",
       "ja": "マイクかスピーカーが切り替わり続けました。マイクをオンにしてもう一度お試しください。"
     },
+    "Your camera is paused": {
+      "en": "Your camera is paused",
+      "zh-Hans": "你的摄像头已暂停",
+      "zh-Hant": "你的攝影機已暫停",
+      "ja": "カメラが一時停止しています"
+    },
+    "Another app has it. It comes back when that is over.": {
+      "en": "Another app has it. It comes back when that is over.",
+      "zh-Hans": "别的程序正在使用它，结束后会自动恢复。",
+      "zh-Hant": "別的程式正在使用它，結束後會自動恢復。",
+      "ja": "ほかのアプリが使用中です。終わると自動的に戻ります。"
+    },
+    "Your camera was disconnected.": {
+      "en": "Your camera was disconnected.",
+      "zh-Hans": "你的摄像头已断开连接。",
+      "zh-Hant": "你的攝影機已中斷連線。",
+      "ja": "カメラの接続が切れました。"
+    },
+    "Now using {camera}.": {
+      "en": "Now using {camera}.",
+      "zh-Hans": "现在使用 {camera}。",
+      "zh-Hant": "現在使用 {camera}。",
+      "ja": "{camera} を使用しています。"
+    },
     "Leave this call to open that link.": {
       "en": "Leave this call to open that link.",
       "zh-Hans": "离开这个通话后，再打开那个链接。",

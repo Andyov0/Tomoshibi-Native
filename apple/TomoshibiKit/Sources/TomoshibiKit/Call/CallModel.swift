@@ -364,6 +364,7 @@ public final class CallModel {
         self.sealed = sealed
         lossless.audio = audio
         audio.onNews = { [weak self] news in self?.heard(news) }
+        camera.onTrouble = { [weak self] trouble in self?.cameraTrouble(trouble) }
     }
 
     /// Joins the call that `options` describes.
@@ -760,6 +761,59 @@ public final class CallModel {
         }
     }
     #endif
+
+    /// What the camera did that nobody here asked for (CameraCapture
+    /// `Trouble`), answered as the web answers a camera track that ends or
+    /// is muted under it: another camera if there is one, the camera off and
+    /// said if there is not, and a picture held back from everybody while the
+    /// system has the camera, so that they see the person's tile rather than
+    /// the last frame, frozen, until it comes back.
+    private func cameraTrouble(_ trouble: CameraCapture.Trouble) {
+        guard let input = cameraInput, !over else { return }
+        switch trouble {
+        case let .interrupted(background):
+            input.setMuted(muted: true)
+            // Going to the background is the person's own doing, and they
+            // are not here to read it.
+            if !background {
+                announce(CallToast(t("Your camera is paused"), detail: t("Another app has it. It comes back when that is over."),
+                                   kind: .warning, lasts: nil, key: DeviceKind.camera.noticeKey, closable: true))
+            }
+        case .resumed:
+            input.setMuted(muted: false)
+            dismiss(key: DeviceKind.camera.noticeKey)
+        case .gone, .failed:
+            let lost = camera.device?.uniqueID
+            let now = Date()
+            // Once in a while: a camera that fails as soon as it is started
+            // again would otherwise be started again for ever.
+            if now.timeIntervalSince(lastCameraRescue) > 10, let other = CameraCapture.fallback(besides: trouble.isGone ? lost : nil) {
+                lastCameraRescue = now
+                do {
+                    try camera.start(device: other, into: input)
+                    input.setMuted(muted: false)
+                    if trouble.isGone {
+                        announce(CallToast(t("Your camera was disconnected."), detail: t("Now using {camera}.", ["camera": other.localizedName]),
+                                           kind: .warning, lasts: NoticeTimes.atMost, key: DeviceKind.camera.noticeKey))
+                    }
+                    return
+                } catch {
+                    CameraCapture.log.error("no other camera would start: \(String(describing: error), privacy: .public)")
+                }
+            }
+            Task {
+                try? await setCamera(false)
+                if trouble.isGone {
+                    announce(CallToast(t("Can't use your camera"), detail: t("Your camera was disconnected."),
+                                       kind: .failure, lasts: NoticeTimes.atMost, key: DeviceKind.camera.noticeKey, closable: true))
+                } else {
+                    deviceFailed(.camera, CocoaError(.featureUnsupported))
+                }
+            }
+        }
+    }
+
+    @ObservationIgnored private var lastCameraRescue = Date.distantPast
 
     /// What the engine said without being asked (CallAudio `News`).
     ///
