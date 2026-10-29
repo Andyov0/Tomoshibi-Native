@@ -855,7 +855,17 @@ internal sealed class LobbyScreen : Screen
         return tap;
     }
 
-    /// <summary>The join bar at the foot (Lobby.kt <c>JoinBar</c>): a room's name or a link, and in.</summary>
+    /// <summary>
+    /// The join bar at the foot (Lobby.kt <c>JoinBar</c>): a room's name or a
+    /// link, and in, on a band of the page's own ground across the window's
+    /// foot. Without the band only the field had a surface, its acrylic; the
+    /// arrow beside it and the gaps round both had none, and the list
+    /// scrolling under the bar showed its words through them. The band is
+    /// the page's colour, flat and whole (no fade into the list: the day
+    /// mode has no gradients, and the owner finds them cheap), a little
+    /// taller than the bar, so the list ends at a straight line above it as
+    /// the iPhone's ends at its safe area's inset.
+    /// </summary>
     private Grid JoinBar()
     {
         var field = new RoomField(T("Room name or invite link"), _typed, _account.Scopes, _account.Admin, capsule: true);
@@ -870,8 +880,11 @@ internal sealed class LobbyScreen : Screen
         var fieldGlass = new Border { Child = field, Background = K.Acrylic(), CornerRadius = new CornerRadius(27) };
         var row = K.Line(10, K.Flex(fieldGlass), K.Fixed(_joinTyped));
         row.VerticalAlignment = VerticalAlignment.Bottom;
-        row.Margin = new Thickness(16, 0, 16, 6);
-        return new Grid { Children = { row }, VerticalAlignment = VerticalAlignment.Bottom };
+        row.Margin = new Thickness(16, 10, 16, 6);
+        // The narrow lobby's own ground (BuildNarrow): black at night, the
+        // light scheme's grey by day.
+        var band = new Border { Background = Ink.Light ? Ink.Background : Ink.Brush(Shade.Black) };
+        return new Grid { Children = { band, row }, VerticalAlignment = VerticalAlignment.Bottom };
     }
 
     private void JoinTyped()
