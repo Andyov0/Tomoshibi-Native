@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Tomoshibi.Basics;
 using Tomoshibi.Media;
@@ -139,6 +140,13 @@ internal sealed class ControlBar : Grid
         _microphone.Click += async (_, _) => await Device(() => _call.SetMicrophone(!_call.MicrophoneOn));
         _camera = Bar("video.fill", "");
         _camera.Click += async (_, _) => await Device(() => _call.SetCamera(!_call.CameraOn));
+        // The Mac's Ctrl-for-Command shortcuts (CallKeys), on the buttons
+        // themselves: a press of the keys is a press of the button, through
+        // the same one-at-a-time guard, wherever the call has the keyboard
+        // and while the bar is stepped aside; Windows writes them into the
+        // buttons' tooltips and tells Narrator of them.
+        _microphone.KeyboardAccelerators.Add(Shortcut(CallKeys.Microphone));
+        _camera.KeyboardAccelerators.Add(Shortcut(CallKeys.Camera));
         _share = Bar("rectangle.on.rectangle", T("Share your screen"));
         _share.Click += (_, _) => Overlay.Current?.Toggle("share", _share, () => new SharePanel(_call, _room.App.Remote), width: 376, edge: Edge.Above, align: Align.Centre);
         _row.Children.Add(_microphone);
@@ -219,6 +227,12 @@ internal sealed class ControlBar : Grid
         _row.Children.Add(_leave);
         Update();
     }
+
+    private static KeyboardAccelerator Shortcut(char key) => new()
+    {
+        Key = (Windows.System.VirtualKey)key,
+        Modifiers = Windows.System.VirtualKeyModifiers.Control,
+    };
 
     /// <summary>A button a feature offers, arriving along the bar as the bar grows round it.</summary>
     private static UIElement Offered(FrameworkElement button) => button.Arrives(0.8f);
