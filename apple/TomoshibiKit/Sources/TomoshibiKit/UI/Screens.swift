@@ -476,12 +476,18 @@ private struct Heading: View {
 }
 
 /// A quiet way back.
+///
+/// As wide as its words, whatever it is offered: the capsule holds its
+/// label to one line, and in Japanese the stack around it offered less than
+/// the word takes beside the chevron, so the button read as a chevron and an
+/// ellipsis. English and Chinese happened to fit.
 private struct BackButton: View {
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Label(t("Back"), systemImage: "chevron.left").font(.system(size: 13))
+                .fixedSize()
         }
         .buttonStyle(.glassCapsule(32))
     }
