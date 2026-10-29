@@ -580,6 +580,9 @@ struct MonthCalendar: View {
         }
         .buttonStyle(.glassCircle(28))
         .disabled(!allowed)
+        // Named as Android names them (Calendar.kt): a symbol alone was read
+        // out by its English name, or not at all, in every language.
+        .accessibilityLabel(months < 0 ? t("Previous month") : t("Next month"))
     }
 
     private func startOfMonth(_ date: Date) -> Date {

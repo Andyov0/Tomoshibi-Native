@@ -92,7 +92,7 @@ public struct AppRoot: View {
                 // screen to judge the system's vertical bar by, a sheet among
                 // them (VerticalBarWindow).
                 .onGeometryChange(for: WindowShape.self) { proxy in
-                    MainActor.assumeIsolated { WindowShape(size: proxy.size, divided: SystemColumn.divided(proxy)) }
+                    WindowShape(size: proxy.size, divided: SystemColumn.divided(proxy))
                 } action: { shape in
                     VerticalBarWindow.shared.size = SystemColumn.windowSize(measured: shape.size)
                     VerticalBarWindow.shared.divided = shape.divided
@@ -117,17 +117,10 @@ public struct AppRoot: View {
                 WaitingScreen(app: app).environment(\.colorScheme, outside).transition(Theme.arrive)
             case .call:
                 if let call = app.call {
+                    // The call's end is the model's (CallModel `onEnded`),
+                    // heard with or without a window drawing the room.
                     RoomView(model: call)
                         .transition(Theme.arrive)
-                        .onChange(of: call.endedReason) {
-                            guard let reason = call.endedReason else { return }
-                            // A move the server announced comes back on its
-                            // own (CallModel's `onMoved`); anything else is the
-                            // end of this call, and says which end it was.
-                            let gone = ["RoomDeleted", "RoomClosed", "ParticipantRemoved"].contains { reason.contains($0) }
-                            if let moving = call.moving, Date().timeIntervalSince(moving.at) < 15, gone { return }
-                            Task { await app.ended(because: reason, in: call) }
-                        }
                 } else if let to = app.movingTo {
                     MovingOverlay(to: to).meetingAppearance().transition(Theme.arrive)
                 } else {
@@ -483,12 +476,18 @@ private struct Heading: View {
 }
 
 /// A quiet way back.
+///
+/// As wide as its words, whatever it is offered: the capsule holds its
+/// label to one line, and in Japanese the stack around it offered less than
+/// the word takes beside the chevron, so the button read as a chevron and an
+/// ellipsis. English and Chinese happened to fit.
 private struct BackButton: View {
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             Label(t("Back"), systemImage: "chevron.left").font(.system(size: 13))
+                .fixedSize()
         }
         .buttonStyle(.glassCapsule(32))
     }

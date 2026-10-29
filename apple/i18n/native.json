@@ -1,5 +1,25 @@
 {
   "comment": "Phrases only the native apps say: menu items, window titles and anything else a browser never shows. The web client's own dictionaries are read directly by generate.mjs and are not copied here; a phrase the web already has belongs there, and the generator refuses one that appears in both. Each entry is keyed by its English, exactly as t() is called, and gives all four languages: \"en\" (normally the key itself), \"zh-Hans\", \"zh-Hant\" and \"ja\". Placeholders are written {likeThis} and must appear unchanged in every language. After editing, run: node apple/i18n/generate.mjs",
+  "infoPlist": {
+    "NSCameraUsageDescription": {
+      "en": "Tomoshibi uses the camera so that others in a call can see you.",
+      "zh-Hans": "Tomoshibi 使用摄像头，让通话中的其他人看到你。",
+      "zh-Hant": "Tomoshibi 使用攝影機，讓通話中的其他人看到你。",
+      "ja": "Tomoshibi は、通話中のほかの人にあなたが見えるようにカメラを使います。"
+    },
+    "NSLocalNetworkUsageDescription": {
+      "en": "Tomoshibi talks to a meeting server on your network.",
+      "zh-Hans": "Tomoshibi 会连接你所在网络中的会议服务器。",
+      "zh-Hant": "Tomoshibi 會連線到你所在網路中的會議伺服器。",
+      "ja": "Tomoshibi は、ネットワーク上の会議サーバーと通信します。"
+    },
+    "NSMicrophoneUsageDescription": {
+      "en": "Tomoshibi uses the microphone so that others in a call can hear you.",
+      "zh-Hans": "Tomoshibi 使用麦克风，让通话中的其他人听到你的声音。",
+      "zh-Hant": "Tomoshibi 使用麥克風，讓通話中的其他人聽到你的聲音。",
+      "ja": "Tomoshibi は、通話中のほかの人にあなたの声が聞こえるようにマイクを使います。"
+    }
+  },
   "phrases": {
     "Could not reach the server.": {
       "en": "Could not reach the server.",
@@ -366,6 +386,42 @@
       "zh-Hans": "麦克风或扬声器一直在切换。打开麦克风再试一次。",
       "zh-Hant": "麥克風或揚聲器一直在切換。打開麥克風再試一次。",
       "ja": "マイクかスピーカーが切り替わり続けました。マイクをオンにしてもう一度お試しください。"
+    },
+    "The call's sound is paused": {
+      "en": "The call's sound is paused",
+      "zh-Hans": "通话声音已暂停",
+      "zh-Hant": "通話聲音已暫停",
+      "ja": "通話の音声が一時停止しています"
+    },
+    "A phone call or another app has the sound. It comes back when that is over.": {
+      "en": "A phone call or another app has the sound. It comes back when that is over.",
+      "zh-Hans": "电话或别的程序正在使用声音，结束后会自动恢复。",
+      "zh-Hant": "電話或別的程式正在使用聲音，結束後會自動恢復。",
+      "ja": "電話やほかのアプリが音声を使用中です。終わると自動的に戻ります。"
+    },
+    "Your camera is paused": {
+      "en": "Your camera is paused",
+      "zh-Hans": "你的摄像头已暂停",
+      "zh-Hant": "你的攝影機已暫停",
+      "ja": "カメラが一時停止しています"
+    },
+    "Another app has it. It comes back when that is over.": {
+      "en": "Another app has it. It comes back when that is over.",
+      "zh-Hans": "别的程序正在使用它，结束后会自动恢复。",
+      "zh-Hant": "別的程式正在使用它，結束後會自動恢復。",
+      "ja": "ほかのアプリが使用中です。終わると自動的に戻ります。"
+    },
+    "Your camera was disconnected.": {
+      "en": "Your camera was disconnected.",
+      "zh-Hans": "你的摄像头已断开连接。",
+      "zh-Hant": "你的攝影機已中斷連線。",
+      "ja": "カメラの接続が切れました。"
+    },
+    "Now using {camera}.": {
+      "en": "Now using {camera}.",
+      "zh-Hans": "现在使用 {camera}。",
+      "zh-Hant": "現在使用 {camera}。",
+      "ja": "{camera} を使用しています。"
     },
     "Leave this call to open that link.": {
       "en": "Leave this call to open that link.",

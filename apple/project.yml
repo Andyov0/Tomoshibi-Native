@@ -52,6 +52,8 @@ targets:
         # system offers a per-app language for Tomoshibi in its settings.
         CFBundleDevelopmentRegion: en
         CFBundleLocalizations: [en, zh-Hans, zh-Hant, ja]
+        # In English here; App/InfoPlist.xcstrings has them in all four
+        # languages, from apple/i18n/native.json, whose English must match.
         NSMicrophoneUsageDescription: Tomoshibi uses the microphone so that others in a call can hear you.
         NSCameraUsageDescription: Tomoshibi uses the camera so that others in a call can see you.
         CFBundleURLTypes:
@@ -132,6 +134,9 @@ targets:
           - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
+        # In English here, and in all four languages in App/InfoPlist.xcstrings
+        # (apple/i18n/native.json): the system's prompts were English to
+        # everybody.
         NSMicrophoneUsageDescription: Tomoshibi uses the microphone so that others in a call can hear you.
         NSCameraUsageDescription: Tomoshibi uses the camera so that others in a call can see you.
         NSLocalNetworkUsageDescription: Tomoshibi talks to a meeting server on your network.

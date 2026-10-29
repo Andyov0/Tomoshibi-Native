@@ -103,7 +103,114 @@ public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         output.videoSettings = [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange]
         output.alwaysDiscardsLateVideoFrames = true
         output.setSampleBufferDelegate(self, queue: queue)
+        watchSession()
     }
+
+    deinit {
+        watches.forEach(NotificationCenter.default.removeObserver)
+        if let deviceWatch { NotificationCenter.default.removeObserver(deviceWatch) }
+    }
+
+    // MARK: Trouble
+
+    /// What became of the camera while it ran that nobody here asked for.
+    ///
+    /// Nothing listened for any of it: a camera unplugged, a Continuity
+    /// Camera that walked off, a capture that failed or a camera another app
+    /// took left everybody else looking at the last frame, frozen, while the
+    /// button here still said the camera was on (Android's camera state and
+    /// Windows's CameraLost answer the same things).
+    public enum Trouble: Sendable {
+        /// The camera went away.
+        case gone
+        /// The capture failed while it ran.
+        case failed(String)
+        /// The system took the camera for a while: another app, or (on an
+        /// iPad or a phone) the app in the background or sharing the screen
+        /// with others. `background` is the ordinary going away of the app,
+        /// which needs no saying.
+        case interrupted(background: Bool)
+        /// The interruption is over and the camera runs again.
+        case resumed
+
+        var isGone: Bool {
+            if case .gone = self { return true }
+            return false
+        }
+    }
+
+    /// Told on the main queue; the call answers (CallModel `cameraTrouble`).
+    public var onTrouble: (@MainActor (Trouble) -> Void)?
+
+    private var watches: [NSObjectProtocol] = []
+    private var deviceWatch: NSObjectProtocol?
+
+    private func watchSession() {
+        let center = NotificationCenter.default
+        watches.append(center.addObserver(forName: AVCaptureSession.runtimeErrorNotification, object: session, queue: .main) { [weak self] note in
+            let error = note.userInfo?[AVCaptureSessionErrorKey] as? AVError
+            let said = error.map { "\($0.code.rawValue) \($0.localizedDescription)" } ?? "unknown"
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                Self.log.error("the camera's capture failed: \(said, privacy: .public)")
+                // Said by the device itself (`watchDevice`), once: heard
+                // here as well, the camera gone was answered twice, and the
+                // second answer turned off the camera the first had just
+                // moved the call to.
+                if error?.code == .deviceWasDisconnected { return }
+                #if os(iOS)
+                // The media services restarting under the app takes every
+                // session with them; Apple's answer is to start it again,
+                // once (AVCaptureSession.h). A second failure is said.
+                if error?.code == .mediaServicesWereReset, !self.restartedAfterReset {
+                    self.restartedAfterReset = true
+                    let session = self.session
+                    self.queue.async { session.startRunning() }
+                    return
+                }
+                #endif
+                self.onTrouble?(.failed(said))
+            }
+        })
+        watches.append(center.addObserver(forName: AVCaptureSession.wasInterruptedNotification, object: session, queue: .main) { [weak self] note in
+            #if os(iOS)
+            let reason = (note.userInfo?[AVCaptureSessionInterruptionReasonKey] as? Int)
+                .flatMap(AVCaptureSession.InterruptionReason.init(rawValue:))
+            let background = reason == .videoDeviceNotAvailableInBackground
+            let said = reason.map { String($0.rawValue) } ?? "none given"
+            #else
+            let background = false
+            let said = "none given"
+            #endif
+            MainActor.assumeIsolated {
+                Self.log.notice("the camera was interrupted, reason \(said, privacy: .public)")
+                self?.onTrouble?(.interrupted(background: background))
+            }
+        })
+        watches.append(center.addObserver(forName: AVCaptureSession.interruptionEndedNotification, object: session, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                Self.log.notice("the camera's interruption is over")
+                self?.onTrouble?(.resumed)
+            }
+        })
+    }
+
+    /// The one restart a reset of the media services is given, until a
+    /// camera starts again.
+    private var restartedAfterReset = false
+
+    /// Watches `device` for going away, in place of whatever was watched.
+    private func watchDevice(_ device: AVCaptureDevice) {
+        if let deviceWatch { NotificationCenter.default.removeObserver(deviceWatch) }
+        deviceWatch = NotificationCenter.default.addObserver(forName: AVCaptureDevice.wasDisconnectedNotification, object: device, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                Self.log.notice("the camera was disconnected")
+                self?.onTrouble?(.gone)
+            }
+        }
+    }
+
+    static let log = Logger(subsystem: "app.tomoshibi", category: "camera")
 
     public static func cameras() -> [AVCaptureDevice] {
         #if os(macOS)
@@ -140,6 +247,14 @@ public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         #else
         return AVCaptureDevice.default(for: .video)
         #endif
+    }
+
+    /// The camera to go on with once `lost` has gone or failed: the one a
+    /// call starts with, else any other still connected; nil where there is
+    /// no other.
+    static func fallback(besides lost: String?) -> AVCaptureDevice? {
+        if let usual = fallback(), usual.uniqueID != lost, usual.isConnected { return usual }
+        return cameras().first { $0.uniqueID != lost && $0.isConnected }
     }
 
     #if os(iOS)
@@ -228,6 +343,8 @@ public final class CameraCapture: NSObject, AVCaptureVideoDataOutputSampleBuffer
         session.commitConfiguration()
         self.device = device
         preferred = device.uniqueID
+        restartedAfterReset = false
+        watchDevice(device)
         #if os(iOS)
         constituentWatch = device.isVirtualDevice
             ? device.observe(\.activePrimaryConstituent, options: [.initial, .new]) { device, _ in

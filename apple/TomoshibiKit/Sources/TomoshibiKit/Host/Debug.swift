@@ -1,3 +1,4 @@
+#if DEBUG
 import Foundation
 import Observation
 import TomoshibiCore
@@ -44,6 +45,12 @@ import AppKit
 /// TOMOSHIBI_DEBUG_PASTEBOARD=<name> as well, "Invite somebody" copies to a
 /// private pasteboard of that name instead of the person's own, and `state`
 /// reads it back.
+///
+/// In a debug build driven by a test (`Rehearsal.running`) only, as AppDebug
+/// is. A release build once compiled all of this and read the variable: any
+/// process that could start the released Mac app could have it invite a
+/// stranger, close the room, let people in and click its own share and camera
+/// buttons, with the permissions the person had given the app.
 @MainActor
 @Observable
 final class HostDebug {
@@ -55,7 +62,7 @@ final class HostDebug {
     /// The last panel asked for, which the hand control opens.
     private(set) var panelRequest: PanelRequest?
 
-    private static let path = ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_HOST"]
+    private static let path = Rehearsal.running ? ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_HOST"] : nil
     /// How far the file has been read, for the whole process: a call that is
     /// moved is joined again with a new driver, and one that started from the
     /// top replayed the move that ended the last call, and moved it again.
@@ -249,3 +256,4 @@ final class HostDebug {
         return out.joined(separator: "\n")
     }
 }
+#endif

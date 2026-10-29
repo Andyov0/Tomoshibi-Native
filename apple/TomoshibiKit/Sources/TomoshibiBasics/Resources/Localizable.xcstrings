@@ -751,6 +751,36 @@
         }
       }
     },
+    "A phone call or another app has the sound. It comes back when that is over." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A phone call or another app has the sound. It comes back when that is over."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "電話やほかのアプリが音声を使用中です。終わると自動的に戻ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "电话或别的程序正在使用声音，结束后会自动恢复。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "電話或別的程式正在使用聲音，結束後會自動恢復。"
+          }
+        }
+      }
+    },
     "A point is the mean over its own bucket and the band behind the line is the highest single reading inside it, which is where a burst shows. Totals are since this process started. The trend outlives a restart: fine detail recently, coarser the further back it goes, out to six months." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -2427,6 +2457,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Android 需要你允許一次。請在接下來的頁面裡開啟「允許安裝這個來源的應用程式」，然後回到 Tomoshibi。"
+          }
+        }
+      }
+    },
+    "Another app has it. It comes back when that is over." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Another app has it. It comes back when that is over."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ほかのアプリが使用中です。終わると自動的に戻ります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "别的程序正在使用它，结束后会自动恢复。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "別的程式正在使用它，結束後會自動恢復。"
           }
         }
       }
@@ -13021,6 +13081,36 @@
         }
       }
     },
+    "Now using {camera}." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Now using {camera}."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "{camera} を使用しています。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "现在使用 {camera}。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在使用 {camera}。"
+          }
+        }
+      }
+    },
     "Off" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -21991,6 +22081,36 @@
         }
       }
     },
+    "The call's sound is paused" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The call's sound is paused"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通話の音声が一時停止しています"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通话声音已暂停"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通話聲音已暫停"
+          }
+        }
+      }
+    },
     "The call's sound stopped" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -27867,6 +27987,66 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "瀏覽器需要你先點一下。"
+          }
+        }
+      }
+    },
+    "Your camera is paused" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your camera is paused"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カメラが一時停止しています"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的摄像头已暂停"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的攝影機已暫停"
+          }
+        }
+      }
+    },
+    "Your camera was disconnected." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your camera was disconnected."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カメラの接続が切れました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的摄像头已断开连接。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的攝影機已中斷連線。"
           }
         }
       }

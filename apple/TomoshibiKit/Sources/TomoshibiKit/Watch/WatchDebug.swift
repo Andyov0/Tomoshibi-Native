@@ -38,8 +38,7 @@ import TomoshibiCore
 ///   for the deployment's own. What crosses the call is unchanged: the show
 ///   carries the stand-in's ticket as it would the gateway's.
 ///
-/// In a debug build driven by a test (`Rehearsal.running`), two more:
-/// `TOMOSHIBI_DEBUG_WATCH_KNOWN=<link>|<link>` has the stand-in know those
+/// And two more: `TOMOSHIBI_DEBUG_WATCH_KNOWN=<link>|<link>` has the stand-in know those
 /// links' tickets from the start, as a viewer's deployment knows a ticket
 /// somebody else read, and `TOMOSHIBI_DEBUG_WATCH_SLOW=<seconds>` holds every
 /// question about a ticket that long, as a slow gateway would.
@@ -47,8 +46,18 @@ import TomoshibiCore
 /// `TOMOSHIBI_MUTE`, which the interop scripts always set, also silences the
 /// shared video: the call's own engine is silenced by it (CallAudio), and a
 /// player left out would play a test's video through the person's speakers.
+///
+/// All of it in a debug build driven by a test (`Rehearsal.running`) and
+/// nowhere else. A release build once read every one of these: a variable in
+/// the environment a released Mac app was started from could sign it in with
+/// a passphrase anybody could read off the process, load YouTube's API from
+/// any address into a page with the deployment's origin and the watch bridge,
+/// empty any file the person could write, and send the room a ticket no
+/// browser would ever send. The release build has the stand-in below, which
+/// answers as if no switch were set and names none of them.
+#if DEBUG
 enum WatchDebug {
-    private static let environment = ProcessInfo.processInfo.environment
+    private static let environment = Rehearsal.running ? ProcessInfo.processInfo.environment : [:]
 
     static let signIn: (name: String, passphrase: String)? = {
         guard let value = environment["TOMOSHIBI_DEBUG_WATCH_SIGNIN"], let colon = value.firstIndex(of: ":") else { return nil }
@@ -58,7 +67,7 @@ enum WatchDebug {
     static let panel = environment["TOMOSHIBI_DEBUG_WATCH_PANEL"] != nil
     static let panelAtMedia = environment["TOMOSHIBI_DEBUG_WATCH_PANEL"] == "media"
     static let youtubeAPI = environment["TOMOSHIBI_DEBUG_YOUTUBE_API"]
-    static let silenced = environment["TOMOSHIBI_MUTE"] != nil
+    static let silenced = Rehearsal.silenced
 
     static let links = environment["TOMOSHIBI_DEBUG_WATCH_LINKS"] != nil
     private static let relay = environment["TOMOSHIBI_DEBUG_WATCH_RELAY"]
@@ -81,24 +90,18 @@ enum WatchDebug {
     /// What a stand-in ticket plays, or nil for a ticket that is not one.
     @MainActor static func info(_ ticket: String) -> WatchInfo? {
         guard links else { return nil }
-        #if DEBUG
-        if Rehearsal.running, !loadedKnown, let known = environment["TOMOSHIBI_DEBUG_WATCH_KNOWN"] {
+        if !loadedKnown, let known = environment["TOMOSHIBI_DEBUG_WATCH_KNOWN"] {
             loadedKnown = true
             for link in known.split(separator: "|").map(String.init) { _ = resolve(link) }
         }
-        #endif
         guard let link = tickets[ticket], let url = URL(string: link) else { return nil }
         return .known(video(link, url))
     }
 
     /// How long a question about a ticket is held (`TOMOSHIBI_DEBUG_WATCH_SLOW`).
     static var slow: Duration? {
-        #if DEBUG
-        guard Rehearsal.running, let seconds = environment["TOMOSHIBI_DEBUG_WATCH_SLOW"].flatMap(Double.init) else { return nil }
+        guard let seconds = environment["TOMOSHIBI_DEBUG_WATCH_SLOW"].flatMap(Double.init) else { return nil }
         return .milliseconds(Int(seconds * 1000))
-        #else
-        return nil
-        #endif
     }
 
     @MainActor private static func video(_ link: String, _ url: URL) -> ResolvedVideo {
@@ -113,11 +116,8 @@ enum WatchDebug {
         // gateway's answer says: only a video with a length is one the show
         // moves on from by itself once it has run its course, and a test of
         // that had no way to give one.
-        var duration = 0.0
-        #if DEBUG
-        if Rehearsal.running { duration = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
-            .first { $0.name == "duration" }?.value.flatMap(Double.init) ?? 0 }
-        #endif
+        let duration = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
+            .first { $0.name == "duration" }?.value.flatMap(Double.init) ?? 0
         return ResolvedVideo(ticket: ticket, title: url.deletingPathExtension().lastPathComponent, duration: duration,
                              cover: "", link: link, live: false, relay: false,
                              play: ResolvedPlay(kind: hls ? .hls : .file, url: link, id: nil), proxy: proxy, grantor: nil)
@@ -151,3 +151,20 @@ enum WatchDebug {
 
     @MainActor private static var controlRead = 0
 }
+#else
+/// The release build's switches: none set, and none named.
+enum WatchDebug {
+    static let signIn: (name: String, passphrase: String)? = nil
+    static let panel = false
+    static let panelAtMedia = false
+    static let youtubeAPI: String? = nil
+    static let silenced = false
+    static let links = false
+    @MainActor static func resolve(_ text: String) -> ResolvedLink { .notPlayable(reason: .notAVideo) }
+    @MainActor static func info(_ ticket: String) -> WatchInfo? { nil }
+    static var slow: Duration? { nil }
+    static let logging = false
+    static func log(_ line: String) {}
+    @MainActor static func presses() -> [String] { [] }
+}
+#endif

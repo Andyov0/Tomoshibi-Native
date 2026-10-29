@@ -21,6 +21,10 @@ NAME=Tomoshibi
 
 "$HERE/check-core.sh" "$APP"
 
+# Before anything is packed: a build that still names a test switch is a
+# debug build, or a release that still reads one (check-release.sh).
+"$HERE/../check-release.sh" "$APP"
+
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 STAGE="$WORK/stage"

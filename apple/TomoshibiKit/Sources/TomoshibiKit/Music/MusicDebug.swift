@@ -52,11 +52,18 @@ import AppKit
 ///   all) and whose songs are those files, decoded as a fetched track is,
 ///   first bytes and all. Nothing about what the desk says to the room or
 ///   what is published changes; only where the song comes from.
+///
+/// A release build compiles none of it, not even the names: the driver
+/// below is the debug build's, and the release build's stands in answering
+/// as if nothing were set (apple/check-release.sh refuses a release binary
+/// that names any TOMOSHIBI_ switch, which is how a switch left readable
+/// there is found before it ships).
 @MainActor
 final class MusicDebug {
-    private let environment = Rehearsal.running ? ProcessInfo.processInfo.environment : [:]
-
     nonisolated static let filesSource = "files"
+
+    #if DEBUG
+    private let environment = Rehearsal.running ? ProcessInfo.processInfo.environment : [:]
 
     /// The directory a test's library is read from, if one is.
     var files: URL? {
@@ -66,30 +73,6 @@ final class MusicDebug {
     /// The stand-in library, where there is one.
     var fileLibraries: [MusicLibrary]? {
         files.map { _ in [MusicLibrary(id: Self.filesSource, name: "Files", signedIn: true)] }
-    }
-
-    /// The files whose names hold the words, as a library's hits.
-    nonisolated static func search(_ query: String, in directory: URL) -> [TomoshibiCore.MusicTrack] {
-        let names = ((try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []).sorted()
-        let words = query.trimmingCharacters(in: .whitespaces).lowercased()
-        return names.filter { !$0.hasPrefix(".") && (words == "*" || $0.lowercased().contains(words)) }.map { name in
-            let length = (try? AVAudioFile(forReading: directory.appendingPathComponent(name)))
-                .map { Double($0.length) / $0.processingFormat.sampleRate } ?? 0
-            return TomoshibiCore.MusicTrack(id: name, title: (name as NSString).deletingPathExtension, artists: ["Test files"],
-                              album: (name as NSString).pathExtension.uppercased(), cover: "", duration: length)
-        }
-    }
-
-    /// One of them, as a fetched song is decoded: copied to a name that says
-    /// nothing of what it is, as a download arrives, and named by its bytes.
-    nonisolated static func load(_ name: String, in directory: URL, keepOriginal: Bool) async throws -> MusicLoader.Outcome {
-        let source = directory.appendingPathComponent(name)
-        let fetched = FileManager.default.temporaryDirectory.appendingPathComponent("tomoshibi-fetched-\(UUID().uuidString).tmp")
-        try FileManager.default.copyItem(at: source, to: fetched)
-        defer { try? FileManager.default.removeItem(at: fetched) }
-        let decoded = try MusicLoader.decodeFile(at: fetched, said: nil, mime: nil, keepOriginal: keepOriginal)
-        return .ready(DecodedSong(samples: decoded.samples, original: decoded.original, rate: decoded.rate,
-                                  quality: MusicLoader.describe(decoded)))
     }
 
     var fakeLossless: Bool { environment["TOMOSHIBI_DEBUG_MUSIC_FAKE_LOSSLESS"] != nil }
@@ -297,5 +280,47 @@ final class MusicDebug {
         #else
         return false
         #endif
+    }
+    #else
+    var files: URL? { nil }
+    var fileLibraries: [MusicLibrary]? { nil }
+    var fakeLossless: Bool { false }
+    func feedLossless(_ call: CallModel, from identity: String) {}
+    func logLossless(_ call: CallModel) {}
+    var logging: Bool { false }
+    var meterMicrophone: Bool { false }
+    func log(_ text: @autoclosure () -> String) {}
+    func prepareEngine(_ audio: CallAudio) {}
+    var meterMonitor: Bool { false }
+    func every(_ n: Int) -> Bool { false }
+    func signIn(_ deployment: Deployment) async {}
+    func drive(_ desk: SongDesk) async {}
+    #endif
+}
+
+/// The stand-in library's files, searched and decoded; no switch of their own.
+extension MusicDebug {
+    /// The files whose names hold the words, as a library's hits.
+    nonisolated static func search(_ query: String, in directory: URL) -> [TomoshibiCore.MusicTrack] {
+        let names = ((try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []).sorted()
+        let words = query.trimmingCharacters(in: .whitespaces).lowercased()
+        return names.filter { !$0.hasPrefix(".") && (words == "*" || $0.lowercased().contains(words)) }.map { name in
+            let length = (try? AVAudioFile(forReading: directory.appendingPathComponent(name)))
+                .map { Double($0.length) / $0.processingFormat.sampleRate } ?? 0
+            return TomoshibiCore.MusicTrack(id: name, title: (name as NSString).deletingPathExtension, artists: ["Test files"],
+                              album: (name as NSString).pathExtension.uppercased(), cover: "", duration: length)
+        }
+    }
+
+    /// One of them, as a fetched song is decoded: copied to a name that says
+    /// nothing of what it is, as a download arrives, and named by its bytes.
+    nonisolated static func load(_ name: String, in directory: URL, keepOriginal: Bool) async throws -> MusicLoader.Outcome {
+        let source = directory.appendingPathComponent(name)
+        let fetched = FileManager.default.temporaryDirectory.appendingPathComponent("tomoshibi-fetched-\(UUID().uuidString).tmp")
+        try FileManager.default.copyItem(at: source, to: fetched)
+        defer { try? FileManager.default.removeItem(at: fetched) }
+        let decoded = try MusicLoader.decodeFile(at: fetched, said: nil, mime: nil, keepOriginal: keepOriginal)
+        return .ready(DecodedSong(samples: decoded.samples, original: decoded.original, rate: decoded.rate,
+                                  quality: MusicLoader.describe(decoded)))
     }
 }

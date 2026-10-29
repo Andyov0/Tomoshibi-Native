@@ -130,7 +130,10 @@ final class LobbyTouchTests: XCTestCase {
     func testJoinBarOpensAPastedLink() throws {
         let app = lobby()
         typingInTheJoinBar(app)
-        app.textFields.firstMatch.typeText("http://127.0.0.1:8080/#/pasted-link-room")
+        // A link to the deployment the app is talking to, whichever the run
+        // gave it: a link to another is refused, as it should be.
+        let base = app.launchEnvironment["TOMOSHIBI_BASE"] ?? "http://127.0.0.1:8080"
+        app.textFields.firstMatch.typeText("\(base)/#/pasted-link-room")
         app.buttons["Join"].firstMatch.tap()
         // The link's room, on the screen before a call, as a link handed over
         // by the system opens it.

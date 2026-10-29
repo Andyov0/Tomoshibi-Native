@@ -108,7 +108,12 @@ struct Fold: Equatable {
 extension Fold {
     /// The fold crossing the view `proxy` measures, from the system's
     /// division regions where it has them (iOS 27.1), or a rehearsal's.
-    @MainActor
+    ///
+    /// From any thread, as nothing it reads belongs to the main one: it is
+    /// asked in `onGeometryChange`'s transform, which SwiftUI may run while
+    /// it renders an animation off the main thread, and a transform that
+    /// asserted the main actor there stopped the app (an animal drawn on the
+    /// sidebar lobby's stage, fading as the camera came on, did it).
     static func of(_ proxy: GeometryProxy) -> Fold {
         if let rehearsed = FoldDebug.crease(in: proxy) { return Fold(crease: rehearsed) }
         #if os(iOS)
@@ -180,12 +185,18 @@ enum FoldDebug {
 
     /// The window the stand-in fold is drawn down the middle of, as the
     /// app's root measures it: the fold is the screen's, wherever on the
-    /// screen the view asking about it is.
-    @MainActor static var window: CGSize = .zero
+    /// screen the view asking about it is. Held under a lock, because it is
+    /// written on the main thread and read wherever a geometry is measured.
+    private static let measuredWindow = OSAllocatedUnfairLock(initialState: CGSize.zero)
+    static var window: CGSize {
+        get { measuredWindow.withLock { $0 } }
+        set { measuredWindow.withLock { $0 = newValue } }
+    }
 
-    @MainActor
     static func crease(in proxy: GeometryProxy) -> CGRect? {
-        guard posture != nil, window.width > 0 else { return nil }
+        guard posture != nil else { return nil }
+        let window = self.window
+        guard window.width > 0 else { return nil }
         let band: CGFloat = 24
         let screen: CGRect
         switch posture {
@@ -284,11 +295,9 @@ private struct KeptToOnePage: ViewModifier {
             .offset(x: page?.minX ?? 0)
             .frame(maxWidth: .infinity, alignment: page == nil ? .center : .leading)
             .onGeometryChange(for: CGRect?.self) { [side, direction] proxy in
-                MainActor.assumeIsolated {
-                    let fold = Fold.of(proxy)
-                    guard fold.down else { return nil }
-                    return fold.roomy(side, in: proxy.size, direction: direction)
-                }
+                let fold = Fold.of(proxy)
+                guard fold.down else { return nil }
+                return fold.roomy(side, in: proxy.size, direction: direction)
             } action: { page = $0 }
             .animation(Theme.settle, value: page)
     }

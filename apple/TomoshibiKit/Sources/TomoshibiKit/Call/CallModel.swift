@@ -300,6 +300,14 @@ public final class CallModel {
     /// The call ended because the server moved it; the app joins again.
     public var onMoved: ((_ relay: String) -> Void)?
 
+    /// The call ended for good, with the core's reason: anything but a move,
+    /// which `onMoved` hears instead. The app's model listens here rather
+    /// than the room's view, which on the Mac is gone with its window: a
+    /// call that ended behind a closed window was never ended in the app,
+    /// which then neither quit nor showed anything but the dead room when
+    /// the window came back.
+    public var onEnded: ((_ reason: String) -> Void)?
+
     /// Everybody else who wants to hear what the call says: the protocols
     /// layered over it (watching together, the song desk, hosting) each
     /// subscribe here and pick out what concerns them. Called on the main
@@ -356,6 +364,7 @@ public final class CallModel {
         self.sealed = sealed
         lossless.audio = audio
         audio.onNews = { [weak self] news in self?.heard(news) }
+        camera.onTrouble = { [weak self] trouble in self?.cameraTrouble(trouble) }
     }
 
     /// Joins the call that `options` describes.
@@ -726,7 +735,7 @@ public final class CallModel {
     }
 
     #if os(iOS)
-    @ObservationIgnored private var interruptions: NSObjectProtocol?
+    @ObservationIgnored private var interruptions: [NSObjectProtocol] = []
 
     /// A telephone call, an alarm or Siri takes the audio session away; when
     /// it is handed back the engine is started again, with the microphone if
@@ -735,23 +744,107 @@ public final class CallModel {
     /// only asked the engine to start: the engine, still marked started
     /// across the interruption, returned at once, and the microphone was
     /// tapped onto an engine that was not running.
+    ///
+    /// The system does not promise an end for every beginning
+    /// (AVAudioSession.h), and a call whose interruption never ended stayed
+    /// silent for good; so coming back to the app tries again
+    /// (`resumeIfStillInterrupted`), which fails harmlessly while a telephone
+    /// call still has the sound. And the media services restarting under the
+    /// app take the engine with them (`servicesReset`).
     private func watchInterruptions() {
-        interruptions = NotificationCenter.default.addObserver(
+        let center = NotificationCenter.default
+        interruptions.append(center.addObserver(
             forName: AVAudioSession.interruptionNotification, object: nil, queue: .main
         ) { [weak self] note in
             guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
                   let type = AVAudioSession.InterruptionType(rawValue: raw) else { return }
             MainActor.assumeIsolated {
-                guard let self else { return }
+                guard let self, !self.over else { return }
                 switch type {
                 case .began: self.audio.suspend()
                 case .ended: self.audio.resume()
                 @unknown default: break
                 }
             }
-        }
+        })
+        interruptions.append(center.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.over else { return }
+                self.audio.resumeIfStillInterrupted()
+            }
+        })
+        interruptions.append(center.addObserver(
+            forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, !self.over else { return }
+                self.audio.servicesReset()
+            }
+        })
+    }
+
+    /// Lets the notices go with the call: each would otherwise stay with the
+    /// notification centre for the life of the app, one more every call.
+    private func stopWatchingInterruptions() {
+        interruptions.forEach(NotificationCenter.default.removeObserver)
+        interruptions = []
     }
     #endif
+
+    /// What the camera did that nobody here asked for (CameraCapture
+    /// `Trouble`), answered as the web answers a camera track that ends or
+    /// is muted under it: another camera if there is one, the camera off and
+    /// said if there is not, and a picture held back from everybody while the
+    /// system has the camera, so that they see the person's tile rather than
+    /// the last frame, frozen, until it comes back.
+    private func cameraTrouble(_ trouble: CameraCapture.Trouble) {
+        guard let input = cameraInput, !over else { return }
+        switch trouble {
+        case let .interrupted(background):
+            input.setMuted(muted: true)
+            // Going to the background is the person's own doing, and they
+            // are not here to read it.
+            if !background {
+                announce(CallToast(t("Your camera is paused"), detail: t("Another app has it. It comes back when that is over."),
+                                   kind: .warning, lasts: nil, key: DeviceKind.camera.noticeKey, closable: true))
+            }
+        case .resumed:
+            input.setMuted(muted: false)
+            dismiss(key: DeviceKind.camera.noticeKey)
+        case .gone, .failed:
+            let lost = camera.device?.uniqueID
+            let now = Date()
+            // Once in a while: a camera that fails as soon as it is started
+            // again would otherwise be started again for ever.
+            if now.timeIntervalSince(lastCameraRescue) > 10, let other = CameraCapture.fallback(besides: trouble.isGone ? lost : nil) {
+                lastCameraRescue = now
+                do {
+                    try camera.start(device: other, into: input)
+                    input.setMuted(muted: false)
+                    if trouble.isGone {
+                        announce(CallToast(t("Your camera was disconnected."), detail: t("Now using {camera}.", ["camera": other.localizedName]),
+                                           kind: .warning, lasts: NoticeTimes.atMost, key: DeviceKind.camera.noticeKey))
+                    }
+                    return
+                } catch {
+                    CameraCapture.log.error("no other camera would start: \(String(describing: error), privacy: .public)")
+                }
+            }
+            Task {
+                try? await setCamera(false)
+                if trouble.isGone {
+                    announce(CallToast(t("Can't use your camera"), detail: t("Your camera was disconnected."),
+                                       kind: .failure, lasts: NoticeTimes.atMost, key: DeviceKind.camera.noticeKey, closable: true))
+                } else {
+                    deviceFailed(.camera, CocoaError(.featureUnsupported))
+                }
+            }
+        }
+    }
+
+    @ObservationIgnored private var lastCameraRescue = Date.distantPast
 
     /// What the engine said without being asked (CallAudio `News`).
     ///
@@ -778,8 +871,18 @@ public final class CallModel {
             microphoneInput?.setMuted(muted: true)
             microphoneOn = false
             deviceFailed(.microphone, error)
+        case .interrupted:
+            // Said for as long as it lasts: the microphone's button stayed on
+            // over a call that heard and sent nothing, and nothing said why.
+            announce(CallToast(t("The call's sound is paused"),
+                               detail: t("A phone call or another app has the sound. It comes back when that is over."),
+                               kind: .warning, lasts: nil, key: Self.soundPausedKey))
+        case .resumed:
+            dismiss(key: Self.soundPausedKey)
         }
     }
+
+    static let soundPausedKey = "sound-paused"
 
     static let soundStoppedKey = "device.sound"
 
@@ -810,6 +913,9 @@ public final class CallModel {
 
     public func leave() async {
         over = true
+        #if os(iOS)
+        stopWatchingInterruptions()
+        #endif
         for last in beforeLeaving.values { await last() }
         beforeLeaving = [:]
         lossless.closeAll()
@@ -832,6 +938,9 @@ public final class CallModel {
         case let .ended(reason):
             endedReason = reason
             over = true
+            #if os(iOS)
+            stopWatchingInterruptions()
+            #endif
             audio.stop()
             camera.stop()
             #if os(macOS)
@@ -844,6 +953,8 @@ public final class CallModel {
             let gone = ["RoomDeleted", "RoomClosed", "ParticipantRemoved"].contains { reason.contains($0) }
             if let moving, Date().timeIntervalSince(moving.at) < 15, gone {
                 onMoved?(moving.relay)
+            } else {
+                onEnded?(reason)
             }
         case let .participantJoined(participant):
             let arriving = person(participant.identity) == nil

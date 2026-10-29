@@ -72,9 +72,9 @@ private struct PaneOfGlass<S: Shape>: View {
     }
 }
 
-#if os(macOS)
-/// The animals on the Mac's lobby, which has no card: on the stage's own
-/// ground while the camera is off, in the band between the greeting at the
+/// The animals on the lobby beside a sidebar, which has no card (the Mac's,
+/// an iPad's, and an iPhone Duo's inner display held upright): on the
+/// stage's own ground while the camera is off, in the band between the greeting at the
 /// stage's head (HomeStage: 56 points down, two lines) and the switches at
 /// its foot (28 points up, a 60-point capsule), with room to spare above and
 /// below, so that they never stand on either. Centred on the whole stage, a
@@ -83,26 +83,39 @@ private struct PaneOfGlass<S: Shape>: View {
 /// on one 690 tall, small in so much ground. The drawing sits between 8 and
 /// 76 of its canvas's 100 (the animals end above the phone card's buttons),
 /// so the canvas is placed by that and not by its own middle.
+///
+/// The same rule on all three (art/README.md, "On a desktop lobby with no
+/// card"): only the Mac drew them, and the Duo's inner display upright and
+/// an iPad showed an empty stage under the greeting.
 struct StageDrawing: View {
     /// What the greeting and the switches take, with a margin.
     static let head: CGFloat = 130
     static let foot: CGFloat = 96
-    /// The window is the one in front, open and not covered.
+    /// Something covers the stage (a sheet over the lobby): the drawing
+    /// holds still, as the phone's card does.
+    var held = false
+    /// The window is the one in front, open and not covered. A phone or an
+    /// iPad has one window in front, and the scene's phase says the rest
+    /// (PortraitCycle).
     @State private var watched = true
 
     var body: some View {
         GeometryReader { space in
             let band = max(space.size.height - Self.head - Self.foot, 0)
             let side = min(band / 0.75, space.size.width * 0.5, 480)
-            PortraitCycle(held: !watched)
+            PortraitCycle(held: held || !watched)
                 .frame(width: side, height: side)
                 .position(x: space.size.width / 2, y: Self.head + band / 2 + side * 0.08)
         }
+        #if os(macOS)
         .background(WindowWatch { watched = $0 })
+        #endif
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
 }
+
+#if os(macOS)
 
 /// Tells whether the window it is in can be seen being drawn on
 /// (PortraitPlayback `watched`): the key window, not in the Dock, not wholly

@@ -64,7 +64,13 @@ public final class AppModel {
         // and a sign-out has to take the session out of its reach at once.
         didSet { handOver() }
     }
-    public private(set) var call: CallModel?
+    public private(set) var call: CallModel? {
+        didSet { followCall() }
+    }
+    /// Awake for as long as there is a call, or a move between two of the
+    /// same meeting (StayAwake).
+    @ObservationIgnored let awake = StayAwake()
+    private func followCall() { awake.hold(call != nil || movingTo != nil) }
     /// Where Sign out was pressed, while it is asked whether to (SignOutPrompt):
     /// the lobby's window or the settings'.
     public enum SignOutPlace: Equatable, Sendable { case lobby, settings }
@@ -331,10 +337,13 @@ public final class AppModel {
         started = true
         updates?.start()
         remote.start()
-        let environment = ProcessInfo.processInfo.environment
+        // The switches a test starts the app with, compiled into a debug
+        // build alone, as every other is: a release build kept their names
+        // and a reading of the environment that only `rehearsal` stood in
+        // front of.
         #if DEBUG
         if rehearsal { AppDebug.start(self) }
-        #endif
+        let environment = ProcessInfo.processInfo.environment
         if rehearsal, let base = environment["TOMOSHIBI_BASE"] {
             serverAddress = base
             name = environment["TOMOSHIBI_NAME"] ?? "Native App"
@@ -394,6 +403,7 @@ public final class AppModel {
             }
             return
         }
+        #endif
         await connect()
     }
 
@@ -926,7 +936,18 @@ public final class AppModel {
                 guard let model else { return }
                 Task { await self?.rejoin(from: model, to: relay) }
             }
+            // The end of the call is the model's to follow, as on Android
+            // (AppModel.kt, the call's onEnded) and Windows (EndedBy), not
+            // the room view's, which a closed window on the Mac takes away.
+            model.onEnded = { [weak self, weak model] reason in
+                guard let model else { return }
+                Task { await self?.ended(because: reason, in: model) }
+            }
             call = model
+            // One that ended while it was being set up, before anybody heard.
+            if let reason = model.endedReason, model.moving == nil {
+                Task { await ended(because: reason, in: model) }
+            }
             landed = true
             room = grant.room
             lobby.remember(room: grant.room)
@@ -1040,7 +1061,9 @@ public final class AppModel {
     /// over: between leaving the old room and entering the new one the room
     /// view is gone, and the screen was blank for those seconds. The web keeps
     /// its moving notice above every page for the same reason (App.tsx).
-    public private(set) var movingTo: String?
+    public private(set) var movingTo: String? {
+        didSet { followCall() }
+    }
 
     public func leave() async {
         await end(.left)
@@ -1054,7 +1077,7 @@ public final class AppModel {
     /// duplicate by the join that replaced it) ended the call that replaced
     /// it, which was the one still working.
     public func ended(because reason: String, in model: CallModel? = nil) async {
-        if let model, model !== call { return }
+        if let model, model !== call || model === leaving { return }
         let ending: Ending = if reason.contains("RoomDeleted") || reason.contains("RoomClosed") {
             .closed
         } else if reason.contains("ParticipantRemoved") {
@@ -1067,8 +1090,14 @@ public final class AppModel {
         await end(ending)
     }
 
+    /// The call being left, while it is: leaving makes the core say the
+    /// call ended (ClientInitiated), which must not end it a second time.
+    @ObservationIgnored private var leaving: CallModel?
+
     private func end(_ how: Ending) async {
         ending = how
+        leaving = call
+        defer { leaving = nil }
         await call?.leave()
         call = nil
         screen = .ended
@@ -1123,9 +1152,11 @@ public final class AppModel {
                 if await self.look() != nil {
                     // TOMOSHIBI_DEBUG_WAIT=press: the button pressed once the
                     // meeting is known, for a test of the whole wait.
+                    #if DEBUG
                     if self.rehearsal, ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_WAIT"] == "press" {
                         Task { await self.goArranged() }
                     }
+                    #endif
                     return
                 }
                 if self.waiting.gone != nil { return }

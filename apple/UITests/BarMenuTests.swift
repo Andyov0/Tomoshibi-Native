@@ -7,7 +7,8 @@ import XCTest
 /// (Glass.swift `glassBacking`): the More menu's items, the reactions and
 /// Leave's choices were drawn and did nothing.
 ///
-/// Against the local deployment on 127.0.0.1:8080, as everything in interop.
+/// Against the local deployment on 127.0.0.1:8080, as everything in interop,
+/// or the one TEST_RUNNER_TOMOSHIBI_BASE names.
 final class BarMenuTests: XCTestCase {
     private func joined(_ room: String) -> XCUIApplication {
         let app = XCUIApplication()
@@ -53,8 +54,28 @@ final class BarMenuTests: XCTestCase {
         let thumbs = app.buttons["\u{1F44D}"]
         XCTAssertTrue(thumbs.waitForExistence(timeout: 5), "the reactions tray")
         thumbs.tap()
-        // Only sending one closes the tray; nothing else closes it.
         XCTAssertTrue(thumbs.waitForNonExistence(timeout: 5), "pressing a reaction sends it and closes the tray")
+    }
+
+    /// The tray is one of the bar's popovers, as on Android and Windows:
+    /// opening another puts it away, it puts another away, and a press
+    /// anywhere off it closes it. Kept apart, it stayed open beside More and
+    /// Leave, and only its own arrow or a reaction closed it.
+    func testTheTrayIsOneOfTheBarsPopovers() throws {
+        let app = joined("uitest-bar-tray")
+        let thumbs = app.buttons["\u{1F44D}"]
+        let sound = app.buttons["Sound"]
+        app.buttons["Reactions"].tap()
+        XCTAssertTrue(thumbs.waitForExistence(timeout: 5), "the reactions tray")
+        app.buttons["More"].tap()
+        XCTAssertTrue(sound.waitForExistence(timeout: 5), "the More menu")
+        XCTAssertTrue(thumbs.waitForNonExistence(timeout: 5), "the tray stayed open beside the More menu")
+        app.buttons["Reactions"].tap()
+        XCTAssertTrue(thumbs.waitForExistence(timeout: 5), "the reactions tray, over the More menu")
+        XCTAssertTrue(sound.waitForNonExistence(timeout: 5), "the More menu stayed open beside the tray")
+        // On the room, well away from the bar and the tray.
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3)).tap()
+        XCTAssertTrue(thumbs.waitForNonExistence(timeout: 5), "a press off the tray left it open")
     }
 
     func testLeaveFromItsPopover() throws {

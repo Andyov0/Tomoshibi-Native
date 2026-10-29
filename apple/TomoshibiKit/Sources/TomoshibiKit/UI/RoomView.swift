@@ -301,9 +301,13 @@ public struct RoomView: View {
                 .allowsHitTesting(false)
                 .zIndex(-4)
             #endif
+            // Where the bar's lane begins while the bar lies across the foot
+            // of the room, which a picture can run under: not down the side,
+            // in the system's column or on a fold, where it lies elsewhere.
+            let foot: CGFloat? = shape.folded == nil && island > Plan.gap ? size.height - island : nil
             ForEach(pictures) { picture in
                 if let spot = room.spots[picture.id] {
-                    tile(picture, spot: spot, room: room, suspects: suspects, shown: shown, hides: hides, inset: inset)
+                    tile(picture, spot: spot, room: room, suspects: suspects, shown: shown, hides: hides, inset: inset, foot: foot)
                         .frame(width: spot.width, height: spot.height)
                         .offset(x: spot.minX, y: spot.minY)
                         // Above the room and under everything laid over it, and
@@ -486,10 +490,12 @@ public struct RoomView: View {
         .animation(Theme.settle, value: watchersInRow)
         .animation(Theme.settle, value: record.joining)
         .onChange(of: panel) { model.chatOpen = panel == .messages }
+        #if DEBUG
         // TOMOSHIBI_DEBUG_PANEL=messages|sound|watch|music|host|devices opens
-        // that panel on arrival, so a script can look at it without a pointer.
+        // that panel on arrival, so a script can look at it without a pointer;
+        // in a rehearsal only, as the stage's other switches (StageDebug).
         .onAppear {
-            switch ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_PANEL"] {
+            switch StageDebug.environment["TOMOSHIBI_DEBUG_PANEL"] {
             case "messages": panel = .messages
             case "sound": panel = .sound
             case "watch": panel = .watch
@@ -499,8 +505,9 @@ public struct RoomView: View {
             default: break
             }
             // TOMOSHIBI_DEBUG_POPOVER=<id> opens one of the bar's popovers.
-            if let id = ProcessInfo.processInfo.environment["TOMOSHIBI_DEBUG_POPOVER"] { popovers.show(id) }
+            if let id = StageDebug.environment["TOMOSHIBI_DEBUG_POPOVER"] { popovers.show(id) }
         }
+        #endif
     }
 
     /// Beside the call where the window has room for it, and on a screen
@@ -753,7 +760,8 @@ public struct RoomView: View {
     // MARK: Pictures
 
     @ViewBuilder
-    private func tile(_ picture: Picture, spot: CGRect, room: Plan.Room, suspects: Set<String>, shown: Bool, hides: Bool, inset: EdgeInsets) -> some View {
+    private func tile(_ picture: Picture, spot: CGRect, room: Plan.Room, suspects: Set<String>, shown: Bool, hides: Bool, inset: EdgeInsets,
+                      foot: CGFloat?) -> some View {
         let onStage = picture.id == pin.pinned
         let compact = spot.height < 140
         // The stage's own controls: under the pointer on a Mac, and out of
@@ -768,13 +776,19 @@ public struct RoomView: View {
         }
         let radius = filled && onStage ? 0 : Theme.tileRadius
         let ground = filled && onStage ? Color.black : Theme.surface
-        // And above the controls while they are out, where the bar is wide
-        // enough to reach the name at the foot of a filled stage, as it is
-        // on a phone: the name slides up with the bar and back down after it.
-        let lift = filled && onStage && shown && room.spots[picture.id].map { $0.width < 900 } == true ? Plan.island - Plan.gap : 0
+        // And above the controls while they are out, wherever a picture runs
+        // under the bar across the foot and the bar is wide enough to reach
+        // the name there, as it is on a phone: the stage filling the screen,
+        // and the other person filling a call of two, whose name sat half
+        // under the bar for as long as the call lasted. The name slides up
+        // with the bar and back down after it.
+        // (A point's leeway, for the strip, which ends exactly where the
+        // lane begins.)
+        let underBar = foot.map { spot.maxY > $0 + 1 } == true && spot.width < 900
+        let lift = underBar && shown ? Plan.island - Plan.gap : 0
         let edge = filled && onStage
             ? EdgeInsets(top: inset.top, leading: inset.leading, bottom: inset.bottom + lift, trailing: inset.trailing)
-            : EdgeInsets()
+            : EdgeInsets(top: 0, leading: 0, bottom: lift, trailing: 0)
         // The card in the corner of a call of two.
         let floating = pin.pinned == nil && room.spots.count == Plan.aloneTogether && picture.id == Self.me
         // The top left of a picture there is under the room's name and the

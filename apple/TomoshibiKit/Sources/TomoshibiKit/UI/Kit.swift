@@ -84,7 +84,7 @@ extension View {
     /// Escape closes the open popover: the Mac's exit command, a hardware
     /// keyboard's Escape on the iPad.
     @ViewBuilder
-    fileprivate func closesOnEscape(_ popovers: Popovers) -> some View {
+    func closesOnEscape(_ popovers: Popovers) -> some View {
         #if os(macOS)
         onExitCommand { popovers.close() }
         #else

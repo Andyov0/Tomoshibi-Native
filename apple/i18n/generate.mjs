@@ -18,8 +18,16 @@
  * The output is sorted throughout, so that regenerating from unchanged
  * dictionaries writes the same bytes and a diff shows only real changes.
  *
- *   node apple/i18n/generate.mjs           write the catalog
- *   node apple/i18n/generate.mjs --check   fail if the catalog is out of date
+ * The system's own prompts for the camera, the microphone and the local
+ * network are the app's words too, and were English to everybody: they are
+ * read from the app's Info.plist, which the build makes from project.yml in
+ * English, and a second catalog, App/InfoPlist.xcstrings, gives each in the
+ * other three languages. Its words are native.json's "infoPlist", keyed by
+ * the Info.plist key, and the English there has to be project.yml's, word
+ * for word, so that the two cannot drift apart.
+ *
+ *   node apple/i18n/generate.mjs           write both catalogs
+ *   node apple/i18n/generate.mjs --check   fail if either is out of date
  *
  * The server repository is looked for beside this one, as tomoshibi-relay;
  * TOMOSHIBI_RELAY=/path/to/it points elsewhere.
@@ -33,6 +41,8 @@ const relay = resolve(process.env.TOMOSHIBI_RELAY ?? join(here, "../../../tomosh
 const live = join(relay, "web/src/live");
 const nativePath = join(here, "native.json");
 const catalogPath = join(here, "../TomoshibiKit/Sources/TomoshibiBasics/Resources/Localizable.xcstrings");
+const infoPlistPath = join(here, "../App/InfoPlist.xcstrings");
+const projectPath = join(here, "../project.yml");
 
 /*
  * The languages the apps are written in, in the order the web lists them. The
@@ -145,6 +155,39 @@ for (const [phrase, translations] of Object.entries(nativePhrases)) {
 }
 stop();
 
+/*
+ * The Info.plist's words: every one in the four languages and no other, none
+ * with a placeholder (the system fills nothing in), and its English the one
+ * project.yml gives the key wherever it gives it.
+ */
+const infoPlist = native.infoPlist ?? {};
+const project = readFileSync(projectPath, "utf8");
+if (typeof infoPlist !== "object" || Array.isArray(infoPlist)) fail(`native.json: "infoPlist" must be an object of Info.plist key to translations`);
+for (const [key, translations] of Object.entries(infoPlist)) {
+	if (typeof translations !== "object" || translations === null || Array.isArray(translations)) {
+		fail(`native.json: infoPlist ${key} must map each language to its translation`);
+		continue;
+	}
+	for (const locale of LOCALES) {
+		if (typeof translations[locale] !== "string" || translations[locale].trim() === "") fail(`native.json: infoPlist ${key} has no ${locale}`);
+	}
+	for (const locale of Object.keys(translations)) {
+		if (!LOCALES.includes(locale)) fail(`native.json: infoPlist ${key} gives ${JSON.stringify(locale)}, which is not a language the apps speak`);
+	}
+	for (const locale of LOCALES) {
+		if (placeholders(translations[locale] ?? "").length > 0) fail(`native.json: infoPlist ${key} in ${locale} has a placeholder, which the system would show as it is`);
+	}
+	const said = [...project.matchAll(new RegExp(`^\\s*${key}:\\s*(.+?)\\s*$`, "gm"))].map((match) => match[1]);
+	if (said.length === 0) fail(`project.yml gives no ${key}, which native.json translates`);
+	for (const english of said) {
+		if (english !== translations.en) fail(`project.yml gives ${key} as ${JSON.stringify(english)}, and native.json's English is ${JSON.stringify(translations.en)}`);
+	}
+}
+for (const match of project.matchAll(/^\s*(NS\w+UsageDescription):/gm)) {
+	if (!(match[1] in infoPlist)) fail(`project.yml asks with ${match[1]}, which native.json's infoPlist does not translate`);
+}
+stop();
+
 /* Every phrase, in every language, from wherever it came. */
 
 const phrases = new Map();
@@ -217,18 +260,50 @@ function render(value, indent) {
 	return `{\n${lines.join(",\n")}\n${indent}}`;
 }
 
-const output = `${render(catalog, "")}\n`;
-const shown = relative(process.cwd(), catalogPath);
-const counts = `${phrases.size} phrases (${english.length} from the web, ${phrases.size - english.length} native) in ${LOCALES.length} languages`;
+const infoPlistCatalog = [
+	["sourceLanguage", "en"],
+	[
+		"strings",
+		Object.keys(infoPlist).sort(byCodeUnit).map((key) => [
+			key,
+			[
+				["extractionState", "manual"],
+				["generatesSymbol", false],
+				[
+					"localizations",
+					[...LOCALES].sort(byCodeUnit).map((locale) => [
+						locale,
+						[["stringUnit", [["state", "translated"], ["value", infoPlist[key][locale]]]]],
+					]),
+				],
+			],
+		]),
+	],
+	["version", "1.0"],
+];
+
+const outputs = [
+	[catalogPath, `${render(catalog, "")}\n`,
+		`${phrases.size} phrases (${english.length} from the web, ${phrases.size - english.length} native) in ${LOCALES.length} languages`],
+	[infoPlistPath, `${render(infoPlistCatalog, "")}\n`, `${Object.keys(infoPlist).length} Info.plist strings in ${LOCALES.length} languages`],
+];
 
 if (process.argv.includes("--check")) {
-	const current = existsSync(catalogPath) ? readFileSync(catalogPath, "utf8") : "";
-	if (current !== output) {
-		console.error(`generate.mjs: ${shown} is out of date; run node apple/i18n/generate.mjs`);
-		process.exit(1);
+	let stale = false;
+	for (const [path, output, counts] of outputs) {
+		const shown = relative(process.cwd(), path);
+		const current = existsSync(path) ? readFileSync(path, "utf8") : "";
+		if (current !== output) {
+			console.error(`generate.mjs: ${shown} is out of date; run node apple/i18n/generate.mjs`);
+			stale = true;
+		} else {
+			console.log(`${shown} is up to date: ${counts}.`);
+		}
 	}
-	console.log(`${shown} is up to date: ${counts}.`);
+	if (stale) process.exit(1);
 } else {
-	writeFileSync(catalogPath, output);
-	console.log(`Wrote ${shown}: ${counts}.`);
+	for (const [path, output, counts] of outputs) {
+		writeFileSync(path, output);
+		console.log(`Wrote ${relative(process.cwd(), path)}: ${counts}.`);
+	}
 }

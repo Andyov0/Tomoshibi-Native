@@ -26,9 +26,26 @@ final class ReactionBoard {
 
     private(set) var shown: [Shown] = []
 
-    /// Whether the six are open above the hand. Kept here rather than in the
-    /// control, so that a test can open them (TOMOSHIBI_DEBUG_HOST).
-    var trayOpen = false
+    /// The id the tray goes by among the screen's popovers.
+    static let tray = "reactions"
+
+    /// The screen's popovers, which the tray is one of (HandControl tells
+    /// it): opening the six closes whatever else was open above the bar, and
+    /// a press anywhere else or Escape closes them, as the other popovers
+    /// close and as Android and Windows have the tray. Kept apart, the tray
+    /// stayed open beside "More" and "Leave", and only its own arrow put it
+    /// away.
+    @ObservationIgnored weak var popovers: Popovers?
+
+    /// Whether the six are open above the hand. Asked of the board rather
+    /// than the control, so that a test can open them (TOMOSHIBI_DEBUG_HOST).
+    var trayOpen: Bool {
+        get { popovers?.open == Self.tray }
+        set {
+            guard let popovers, newValue != trayOpen else { return }
+            if newValue { popovers.show(Self.tray) } else { popovers.close() }
+        }
+    }
 
     /// A long press on the hand opened the tray, and the press's own release
     /// is still to come: the hand's button fires on that release too, and
@@ -165,15 +182,30 @@ struct HandControl: View {
     /// machine whose accessibility answers with the application for every
     /// element, and the panels are the room view's to open.
     @Binding var panel: RoomView.Panel?
+    /// The screen's popovers, which the tray is one of (ReactionBoard).
+    let popovers: Popovers
     /// The bar's axis: down the side, the tray opens towards the pictures
     /// rather than over the buttons above it.
     var axis: Axis = .horizontal
+    /// The bar's buttons' size, which the hand keeps to across the bar (its
+    /// height in a row, its width in a column): the compact bar's forty.
+    var size: CGFloat = 44
 
     private var board: ReactionBoard { ReactionBoard.of(model.call) }
-    private var open: Bool { board.trayOpen }
+    private var open: Bool { popovers.open == ReactionBoard.tray }
+
+    /// The hand and the narrow half that opens the reactions, side by side
+    /// in a row and one above the other in a column: side by side down the
+    /// side they were sixty points wide in a bar fifty wide, and stood out
+    /// of it on both sides. Each the bar's size across it, as every other
+    /// button is: at forty-four high in the compact bar's forty, the hand
+    /// stood out of the row.
+    private var row: Bool { axis == .horizontal }
+    private var radius: CGFloat { size / 2 }
 
     var body: some View {
-        HStack(spacing: 0) {
+        let stack = row ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
+        stack {
             Button {
                 guard !board.pressWasHold() else { return }
                 act { try await model.setHand(!model.handUp) }
@@ -181,8 +213,9 @@ struct HandControl: View {
                 Image(systemName: "hand.raised.fill")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(model.handUp ? Theme.tallyForeground : Theme.foreground)
-                    .frame(width: 40, height: 44)
-                    .background(UnevenRoundedRectangle(topLeadingRadius: 22, bottomLeadingRadius: 22)
+                    .frame(width: row ? size - 4 : size, height: row ? size : size - 4)
+                    .background(UnevenRoundedRectangle(topLeadingRadius: radius, bottomLeadingRadius: row ? radius : 0,
+                                                       bottomTrailingRadius: 0, topTrailingRadius: row ? 0 : radius)
                         .fill(model.handUp ? Theme.tally : Theme.ink.opacity(0.12)))
                     .contentShape(Rectangle())
             }
@@ -192,14 +225,17 @@ struct HandControl: View {
             .help(model.handUp ? t("Lower your hand") : t("Raise your hand"))
 
             Button {
-                board.trayOpen.toggle()
+                popovers.toggle(ReactionBoard.tray)
             } label: {
-                Image(systemName: "chevron.up")
+                // Towards where the tray opens: up over a row, and towards
+                // the pictures from a column.
+                Image(systemName: row ? "chevron.up" : "chevron.backward")
                     .font(.system(size: 9, weight: .bold))
                     .foregroundStyle(open ? Theme.foreground : Theme.muted)
                     .rotationEffect(.degrees(open ? 180 : 0))
-                    .frame(width: 20, height: 44)
-                    .background(UnevenRoundedRectangle(bottomTrailingRadius: 22, topTrailingRadius: 22)
+                    .frame(width: row ? 20 : size, height: row ? size : 20)
+                    .background(UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: row ? 0 : radius,
+                                                       bottomTrailingRadius: radius, topTrailingRadius: row ? radius : 0)
                         .fill(open ? Theme.ink.opacity(0.2) : Theme.ink.opacity(0.12)))
                     .contentShape(Rectangle())
             }
@@ -209,13 +245,15 @@ struct HandControl: View {
             .help(t("Reactions"))
         }
         .animation(Theme.settle, value: model.handUp)
-        .overlay(alignment: axis == .horizontal ? .bottom : .trailing) {
+        .overlay(alignment: row ? .bottom : .trailing) {
             if open {
-                let anchor: UnitPoint = axis == .horizontal ? .bottom : .trailing
+                let anchor: UnitPoint = row ? .bottom : .trailing
                 tray
                     .fixedSize()
-                    // Clear of the bar's own edge as well as the control's.
-                    .offset(x: axis == .horizontal ? 0 : -78, y: axis == .horizontal ? -58 : 0)
+                    // Clear of the bar's own edge as well as the control's,
+                    // by the same distance whatever the bar's size.
+                    .offset(x: row ? 0 : -(size + 34), y: row ? -(size + 14) : 0)
+                    .closesOnEscape(popovers)
                     .transition(.asymmetric(
                         insertion: .opacity.combined(with: .scale(scale: 0.94, anchor: anchor)).animation(Theme.settle),
                         removal: .opacity.combined(with: .scale(scale: 0.97, anchor: anchor)).animation(Theme.leave)
@@ -223,9 +261,13 @@ struct HandControl: View {
             }
         }
         .animation(Theme.settle, value: open)
+        .onAppear { board.popovers = popovers }
+        .onChange(of: ObjectIdentifier(model.call)) { board.popovers = popovers }
+        #if DEBUG
         .onChange(of: HostDebug.panelWanted(for: model.call)) { _, wanted in
             if let wanted { panel = wanted.panel }
         }
+        #endif
     }
 
     private var tray: some View {
@@ -233,7 +275,7 @@ struct HandControl: View {
             ForEach(reactionChoices(), id: \.self) { one in
                 ReactionChoice(what: one) {
                     board.send(one, in: model)
-                    board.trayOpen = false
+                    popovers.close()
                 }
             }
         }

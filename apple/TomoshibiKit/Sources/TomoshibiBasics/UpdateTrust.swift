@@ -38,9 +38,12 @@ public enum UpdateTrust {
         #endif
     }
 
-    /// The signing a build must carry to be installed.
-    public static func signing(environment: [String: String] = ProcessInfo.processInfo.environment) -> Signing {
+    /// The signing a build must carry to be installed, by the process's own
+    /// environment unless another is given. The environment is read only in
+    /// a debug build, so a release build does not look at it at all.
+    public static func signing(environment: [String: String]? = nil) -> Signing {
         #if DEBUG
+        let environment = environment ?? ProcessInfo.processInfo.environment
         if environment["TOMOSHIBI_DEBUG_UPDATE_DEVELOPMENT_SIGNED"] == "1" { return .development }
         #endif
         return .developerID
