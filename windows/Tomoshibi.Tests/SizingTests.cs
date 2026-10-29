@@ -142,6 +142,15 @@ public class SizingTests
         Assert.Equal(0f, Sizing.Stage.FootLift(narrow, 36, 30, 490, barOut: false));
     }
 
+    [Fact]
+    public void TheLobbysCornersCardsSwitchesAndDays()
+    {
+        Assert.Equal(18f, Sizing.Lobby.CardRadius);
+        Assert.Equal(32f, Sizing.Lobby.CornerButton);
+        Assert.Equal(44f, Sizing.Lobby.DeviceSwitch);
+        Assert.True(Sizing.Lobby.Day >= 44);
+    }
+
     /// <summary>
     /// No gradient anywhere the owner looks (2026-10-29), the glass's rim
     /// among them, which faded from white at 26 per cent to 7. The one left is

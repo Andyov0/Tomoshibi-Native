@@ -498,7 +498,9 @@ internal sealed class LobbyScreen : Screen
         start.Tip(T("Start a meeting"));
         start.HorizontalAlignment = HorizontalAlignment.Stretch;
         start.Click += (_, _) => OpenSheet(start: true, "");
-        var join = Tap.Words(T("Join"), "link", Look.Plain, 36);
+        // A way in, as the web's became: an arrow going in at a door, where
+        // a link said "copy this" more than "come in".
+        var join = Tap.Words(T("Join"), "arrow.right.to.line", Look.Plain, 36);
         join.Tip(T("Join a meeting"));
         join.HorizontalAlignment = HorizontalAlignment.Stretch;
         join.Click += (_, _) => OpenSheet(start: false, "");
@@ -698,7 +700,7 @@ internal sealed class LobbyScreen : Screen
         // The bar over the top, whose title comes in once the large one has scrolled away.
         var barTitle = K.Text("Tomoshibi", 17, K.Semibold, lines: 1).At(HorizontalAlignment.Center, VerticalAlignment.Center);
         Motion.Hide(barTitle);
-        var settings = new Tap(Faces.AccountAvatar(_account.Name, AvatarAddress, 30), Look.Plain, 40, circle: true, label: T("Settings"));
+        var settings = new Tap(Faces.AccountAvatar(_account.Name, AvatarAddress, Shared.Corner - 4), Look.Plain, Shared.Corner, circle: true, label: T("Settings"));
         settings.Click += (_, _) => OpenSettings();
         var barGround = new Border { Opacity = 0 };
         barGround.Background = BarGround();
@@ -779,7 +781,7 @@ internal sealed class LobbyScreen : Screen
         var header = trailing == null
             ? (UIElement)K.Text(title, 20, K.Bold).Pad(6, 0, 6, 0)
             : K.Line(0, K.Flex(K.Text(title, 20, K.Bold).At(HorizontalAlignment.Left, VerticalAlignment.Center)), K.Fixed(trailing)).Pad(6, 0, 6, 0);
-        var card = new Border { CornerRadius = new CornerRadius(24), Background = Ink.Surface, Child = K.Column(0, rows) };
+        var card = new Border { CornerRadius = new CornerRadius(Sizing.Lobby.CardRadius), Background = Ink.Surface, Child = K.Column(0, rows) };
         return K.Column(8, header, card);
     }
 
@@ -849,7 +851,7 @@ internal sealed class LobbyScreen : Screen
         {
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            CornerRadius = new CornerRadius(24),
+            CornerRadius = new CornerRadius(Sizing.Lobby.CardRadius),
             Resting = Ink.Palette.Surface,
         };
         tap.Named(T("Server"));

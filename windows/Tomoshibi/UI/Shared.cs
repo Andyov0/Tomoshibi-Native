@@ -16,6 +16,14 @@ internal static class Shared
     /// <summary>The window's title bar, which the content runs under: what sits at the top keeps clear of it and of the caption buttons.</summary>
     public const double TitleBar = 32;
 
+    /// <summary>
+    /// A button in a screen's top corner (the language, the server, the
+    /// account) inside the glass it wears: one height for all of them, 32
+    /// drawn with the glass's hairline, where they were 36, 38 and 42
+    /// (Sizing.Lobby.CornerButton).
+    /// </summary>
+    public const double Corner = Sizing.Lobby.CornerButton - 2;
+
     /// <summary>A control over the content wearing the control layer's material: acrylic behind a clear button.</summary>
     public static Border OnGlass(Tap tap, double? radius = null)
     {
@@ -34,7 +42,9 @@ internal static class Shared
     /// </summary>
     public static Border LanguageMenu()
     {
-        var tap = Tap.Icon("globe", T("Language"), size: 36, glyph: 14);
+        // The corner's height drawn, the glass's hairline round it included
+        // (Shared.Corner), as the lobby's other corner buttons are.
+        var tap = Tap.Icon("globe", T("Language"), size: Corner, glyph: 13);
         tap.Click += (_, _) => Overlay.Current?.Toggle("language", tap, () =>
         {
             var words = Localization.Shared;
@@ -495,7 +505,7 @@ internal static class Shared
         if (lobby.Measured == null) _ = lobby.Measure();
         var row = K.Row(6);
         row.VerticalAlignment = VerticalAlignment.Center;
-        var tap = new Tap(row, Look.Plain, compact ? 30 : 34, padding: compact ? 12 : 14);
+        var tap = new Tap(row, Look.Plain, compact ? 30 : Corner, padding: compact ? 12 : 14);
         void Paint()
         {
             row.Children.Clear();

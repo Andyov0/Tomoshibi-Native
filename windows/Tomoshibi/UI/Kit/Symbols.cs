@@ -215,6 +215,29 @@ internal static class Symbols
                 };
                 return crown.Quiet();
             }
+            case "arrow.right.to.line":
+            {
+                // A way in, for joining a meeting: an arrow going in at a
+                // door, the web's sign-in symbol (lucide's log-in, ISC), on
+                // its 24-unit grid. Segoe has no such glyph; its nearest were
+                // a link, which says "copy this" more than "come in", and the
+                // eye the web had, which is the passphrase's.
+                var way = new Microsoft.UI.Xaml.Shapes.Path
+                {
+                    Data = (Geometry)Microsoft.UI.Xaml.Markup.XamlBindingHelper.ConvertValue(typeof(Geometry), "M 15,3 L 19,3 A 2,2 0 0 1 21,5 L 21,19 A 2,2 0 0 1 19,21 L 15,21 M 10,17 L 15,12 L 10,7 M 15,12 L 3,12"),
+                    Stroke = ink,
+                    StrokeThickness = Math.Max(1.2, size / 11),
+                    StrokeLineJoin = PenLineJoin.Round,
+                    StrokeStartLineCap = PenLineCap.Round,
+                    StrokeEndLineCap = PenLineCap.Round,
+                    Stretch = Stretch.Uniform,
+                    Width = size * 0.92,
+                    Height = size * 0.92,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                return way.Quiet();
+            }
             case "number":
                 return new TextBlock
                 {

@@ -136,7 +136,7 @@ internal sealed class ScheduleView : Grid, IRestyles
         if (!canArrange)
         {
             column.Children.Add(K.Text(T("Arranging meetings has not been opened to you."), 13, ink: Ink.Muted));
-            return K.Card(column, 24, 0.07f, 0.09f, new Thickness(18));
+            return K.Card(column, Sizing.Lobby.CardRadius, 0.07f, 0.09f, new Thickness(18));
         }
         column.Children.Add(Fields.Text(T("Room name"), _planning, text => _planning = text, mono: true));
         column.Children.Add(K.Text(T("Name it yourself, or leave it blank for one nobody has used."), 11.5, ink: Ink.Muted));
@@ -149,7 +149,7 @@ internal sealed class ScheduleView : Grid, IRestyles
             MaxDate = today.AddDays(AheadDays),
             Language = Localization.Shared.Language.Code(),
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            CalendarViewDayItemStyle = null,
+            CalendarViewDayItemStyle = Days(),
         };
         calendar.SelectedDates.Add(_day);
         calendar.SetDisplayDate(_day);
@@ -158,7 +158,7 @@ internal sealed class ScheduleView : Grid, IRestyles
             if (e.AddedDates.Count > 0) _day = e.AddedDates[0].Date;
             Say();
         };
-        column.Children.Add(new Border { Child = calendar, Background = Ink.Well(0.18f), CornerRadius = new CornerRadius(16), Padding = new Thickness(12) });
+        column.Children.Add(new Border { Child = calendar, Background = Ink.Well(0.18f), CornerRadius = new CornerRadius(14), Padding = new Thickness(12) });
 
         var time = new TimePicker
         {
@@ -182,7 +182,21 @@ internal sealed class ScheduleView : Grid, IRestyles
         _arrange.Click += (_, _) => Plan();
         column.Children.Add(_arrange);
         Say();
-        return K.Card(column, 24, 0.07f, 0.09f, new Thickness(18));
+        return K.Card(column, Sizing.Lobby.CardRadius, 0.07f, 0.09f, new Thickness(18));
+    }
+
+    /// <summary>
+    /// The calendar's days 44 high, where the system draws them 40 square,
+    /// the smallest things on the sheet (the web's became 44 as well). Only
+    /// their height: seven of them across at 44 and the margins would not fit
+    /// the narrow sheet. Laid over the system's own style, which still draws
+    /// them; this sets nothing else.
+    /// </summary>
+    private static Style Days()
+    {
+        var style = new Style(typeof(CalendarViewDayItem));
+        style.Setters.Add(new Setter(FrameworkElement.MinHeightProperty, (double)Sizing.Lobby.Day));
+        return style;
     }
 
     private static StackPanel Label(string text, string symbol)
@@ -274,12 +288,12 @@ internal sealed class ScheduleView : Grid, IRestyles
         {
             if (lobby.State == LobbyModel.Status.Loading)
             {
-                _list.Children.Add(K.Card(K.Spinner(16).At(HorizontalAlignment.Center, VerticalAlignment.Center), 22, 0.07f, 0.09f).Tall(140));
+                _list.Children.Add(K.Card(K.Spinner(16).At(HorizontalAlignment.Center, VerticalAlignment.Center), Sizing.Lobby.CardRadius, 0.07f, 0.09f).Tall(140));
                 return;
             }
             var empty = K.Column(10, K.Symbol("calendar.badge.clock", 26, Ink.Muted), K.Text(T("No meetings arranged yet."), 14, K.Semibold, align: TextAlignment.Center));
             empty.VerticalAlignment = VerticalAlignment.Center;
-            _list.Children.Add(K.Card(empty, 22, 0.07f, 0.09f).Tall(140));
+            _list.Children.Add(K.Card(empty, Sizing.Lobby.CardRadius, 0.07f, 0.09f).Tall(140));
             return;
         }
         var rows = K.Column(0);
@@ -288,7 +302,7 @@ internal sealed class ScheduleView : Grid, IRestyles
             rows.Children.Add(MeetingLine(lobby.Arrangements[i]));
             if (i < lobby.Arrangements.Count - 1) rows.Children.Add(K.Rule(_wide ? 0 : 60, 0.12f));
         }
-        _list.Children.Add(K.Card(rows, 22, 0.07f, 0.09f));
+        _list.Children.Add(K.Card(rows, Sizing.Lobby.CardRadius, 0.07f, 0.09f));
     }
 
     private static Border Notice(string text, string symbol, UIElement? trailing = null)
