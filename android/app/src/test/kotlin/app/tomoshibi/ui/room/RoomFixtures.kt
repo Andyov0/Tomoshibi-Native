@@ -146,3 +146,12 @@ private fun StandIn(seed: String, modifier: Modifier) {
     val colours = if (slide) listOf(Color(0xFFE9EEF4), Color(0xFF8FA6BF)) else washes[Math.floorMod(seed.hashCode(), washes.size)]
     Box(modifier.background(Brush.linearGradient(colours)))
 }
+
+/**
+ * A white wall behind everybody, as a room by day is: what is laid over a
+ * picture (a name, a button) has to be read on this as well as on a dark one.
+ */
+internal val brightPictures = RoomPictures(
+    remote = { _, _, _, modifier -> Box(modifier.background(Color(0xFFF4F1EA))) },
+    self = { _, modifier -> Box(modifier.background(Color(0xFFE6E9EE))) },
+)
