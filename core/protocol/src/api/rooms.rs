@@ -399,9 +399,63 @@ impl Api {
         JoinGrant::read(&answer.json::<Value>("the join")?)
     }
 
+    /// A request to one of the host endpoints, authorised by the call whose
+    /// join token `bearer` is, with whichever of its two tokens the deployment
+    /// takes (bearer.rs). A bearer that is no call's join token is sent as it
+    /// is, once.
+    async fn host_send(
+        &self,
+        method: Method,
+        room: &str,
+        rest: &str,
+        bearer: &str,
+        body: Option<String>,
+    ) -> Result<super::Answer, ProtocolError> {
+        let path = room_path(room, rest);
+        let send = |token: &str| {
+            let request = self.bearer_request(method.clone(), &path, token);
+            let body = body.clone();
+            async move {
+                let mut request = request?;
+                if let Some(body) = body {
+                    request = request.body(body);
+                }
+                self.send(request).await
+            }
+        };
+
+        let Some(tokens) = super::bearer::of(bearer) else {
+            return send(bearer).await;
+        };
+        let first = tokens.first();
+        let answer = send(&first).await?;
+        if !super::bearer::not_yours(&answer) {
+            tokens.took(&first);
+            return Ok(answer);
+        }
+
+        // The token or the person: the standing question says which, with a
+        // 401 for a token it does not take. Asked itself, it has said so.
+        let token_refused = if rest == "/host" && method == Method::GET {
+            answer.status == 401
+        } else {
+            let standing = self.bearer_request(Method::GET, &room_path(room, "/host"), &first)?;
+            self.send(standing).await?.status == 401
+        };
+        let Some(other) = token_refused.then(|| tokens.other(&first)).flatten() else {
+            return Ok(answer);
+        };
+
+        let again = send(&other).await?;
+        if !super::bearer::not_yours(&again) {
+            tokens.took(&other);
+        }
+        Ok(again)
+    }
+
     async fn host_standing(&self, room: &str, bearer: &str) -> Result<HostStanding, ProtocolError> {
         let answer = self
-            .send(self.bearer_request(Method::GET, &room_path(room, "/host"), bearer)?)
+            .host_send(Method::GET, room, "/host", bearer, None)
             .await?
             .accepted("")?;
         let said = answer.json::<Value>("the host's standing")?;
@@ -423,12 +477,9 @@ impl Api {
         body: Option<String>,
         fallback: &str,
     ) -> Result<super::Answer, ProtocolError> {
-        let mut request = self.bearer_request(method, &room_path(room, rest), bearer)?;
-        if let Some(body) = body {
-            request = request.body(body);
-        }
-
-        self.send(request).await?.accepted(fallback)
+        self.host_send(method, room, rest, bearer, body)
+            .await?
+            .accepted(fallback)
     }
 
     async fn invite_info(&self, token: &str) -> Result<InviteInfo, ProtocolError> {
@@ -722,12 +773,18 @@ impl Deployment {
         bearer: Option<String>,
     ) -> Result<u32, ProtocolError> {
         on_core(async move {
-            let path = room_path(&room, "/invites");
-            let request = match bearer.as_deref() {
-                Some(bearer) => self.api.bearer_request(Method::DELETE, &path, bearer)?,
-                None => self.api.request(Method::DELETE, &path)?,
-            };
-            let answer = self.api.send(request).await?.accepted("revoke_failed")?;
+            let answer = match bearer.as_deref() {
+                Some(bearer) => {
+                    self.api
+                        .host_send(Method::DELETE, &room, "/invites", bearer, None)
+                        .await?
+                }
+                None => {
+                    let path = room_path(&room, "/invites");
+                    self.api.send(self.api.request(Method::DELETE, &path)?).await?
+                }
+            }
+            .accepted("revoke_failed")?;
             let revoked = answer
                 .value()
                 .and_then(|said| said.get("revoked").and_then(Value::as_f64))
@@ -817,12 +874,9 @@ impl Deployment {
         bearer: String,
     ) -> Result<Vec<Knocker>, ProtocolError> {
         on_core(async move {
-            let request =
-                self.api
-                    .bearer_request(Method::GET, &room_path(&room, "/knocks"), &bearer)?;
             let said = self
                 .api
-                .send(request)
+                .host_send(Method::GET, &room, "/knocks", &bearer, None)
                 .await?
                 .accepted("")?
                 .json::<Value>("the door")?;
@@ -853,14 +907,16 @@ impl Deployment {
         admit: bool,
     ) -> Result<DoorState, ProtocolError> {
         on_core(async move {
-            let path = room_path(&room, &format!("/knocks/{}", encode_uri_component(&id)));
-            let request = self
-                .api
-                .bearer_request(Method::POST, &path, &bearer)?
-                .body(json!({ "admit": admit }).to_string());
+            let rest = format!("/knocks/{}", encode_uri_component(&id));
             let said = self
                 .api
-                .send(request)
+                .host_send(
+                    Method::POST,
+                    &room,
+                    &rest,
+                    &bearer,
+                    Some(json!({ "admit": admit }).to_string()),
+                )
                 .await?
                 .accepted("")?
                 .json::<Value>("the door")?;

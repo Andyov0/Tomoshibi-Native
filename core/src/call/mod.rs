@@ -83,6 +83,9 @@ pub struct Call {
     withdrawn: Mutex<HashSet<String>>,
     /// The token the deployment signed for this call (`token`).
     joined_with: String,
+    /// It and the media server's, known to the host requests by the first
+    /// (protocol api/bearer.rs); the entry goes with the call.
+    _tokens: Arc<tomoshibi_protocol::api::bearer::CallTokens>,
     /// What the platform's network monitor has seen (`path_seen`).
     network: Arc<tomoshibi_protocol::network::NetworkWatch>,
 }
@@ -171,7 +174,13 @@ impl Call {
             .await
             .map_err(|e| CallError::Connect { detail: e.to_string() })?;
 
-        let call = Arc::new(Call {
+        let call = Arc::new_cyclic(|this: &std::sync::Weak<Call>| Call {
+            _tokens: {
+                let this = this.clone();
+                tomoshibi_protocol::api::bearer::register(options.token.clone(), move || {
+                    this.upgrade().map(|call| call.room.token())
+                })
+            },
             room,
             room_name: options.room.clone(),
             observer,
@@ -394,9 +403,9 @@ impl Call {
         .await
     }
 
-    /// The media server's latest token for this call, which `token` never
-    /// hands to the host's controls: for the tests that show a deployment
-    /// refusing it (core/tests/host_roles.rs); not exported to the apps.
+    /// The media server's latest token for this call, sent alone: for the
+    /// tests that show what a deployment makes of it (core/tests/host_roles.rs);
+    /// not exported to the apps.
     #[doc(hidden)]
     pub fn media_token(&self) -> String {
         self.room.token()
@@ -417,18 +426,18 @@ impl Call {
     /// web sends the one its join returned (host.ts `bearer`, room.ts
     /// `tokenFor`).
     ///
-    /// Never the media server's, which replaces the token a call holds as
-    /// soon as the call is up and again every five minutes (livekit-server
-    /// `RoomManager.refreshToken`). A deployment takes at its host endpoints
-    /// only a token it signed itself, told by a proof in the JWT ID that the
-    /// media server's carries no trace of (host.go `whoIs`, room.go
-    /// `Vouched`); asked with the media server's, it answered "not yours" to
-    /// every request from the first second of a call, and the host of a room
-    /// was never offered a single control. It keeps taking its own token after
-    /// the token's expiry for as long as that identity is still in the room,
-    /// so the join's token serves the whole call; and where it does not, the
-    /// account session this app holds, if any, is the authority (host.go
-    /// `mayHost`), exactly as for the web.
+    /// The host requests made with it may go with the media server's token
+    /// instead, which replaces the one a call holds as soon as the call is up
+    /// and every five minutes (livekit-server `RoomManager.refreshToken`).
+    /// Deployments disagree about the two. One that checks the control node's
+    /// proof in the JWT ID (host.go `whoIs`) takes only this one, past its
+    /// expiry too while this participant is in the room, and refused every
+    /// request made with the media server's from the first second of a call.
+    /// One that does not takes any token that verifies, so this one only until
+    /// it expires, five minutes in, and the media server's for the whole call.
+    /// So this is the key: the call registers both tokens under it, and a host
+    /// request finds them and sends the one the deployment takes, finding out
+    /// which by the first refusal (protocol api/bearer.rs).
     pub fn token(&self) -> String {
         self.joined_with.clone()
     }

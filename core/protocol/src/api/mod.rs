@@ -38,6 +38,7 @@
 
 mod account;
 mod agent;
+pub mod bearer;
 mod meetings;
 mod music;
 mod remote;

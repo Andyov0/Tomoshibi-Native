@@ -733,6 +733,140 @@ async fn requests_carry_no_origin_and_no_fetch_metadata() {
 // ----------------------------------------------------------------------------
 // The host's controls.
 
+/// A deployment that takes `taken` at its host endpoints and refuses every
+/// other token as both deployments do: 401 to the standing question, 403
+/// `not_yours` to a control. `host` says whether the bearer of a taken token
+/// runs the room.
+fn host_endpoints(taken: &'static str, host: bool) -> impl Fn(&Seen) -> Reply + Send + Sync + 'static {
+    move |seen| {
+        let ours = seen.header("authorization") == Some(&*format!("Bearer {taken}"));
+        match (seen.method.as_str(), seen.path(), ours) {
+            ("GET", "/api/rooms/standup/host", true) => Reply::json(200, json!({ "yours": host, "admin": false })),
+            ("GET", "/api/rooms/standup/host", false) => Reply::json(401, json!({ "error": "not_yours" })),
+            (_, _, true) if host => Reply::json(
+                200,
+                json!({ "room": "standup", "expires": "2026-09-03T08:44:00Z", "token": "a-token" }),
+            ),
+            _ => Reply::json(403, json!({ "error": "not_yours" })),
+        }
+    }
+}
+
+/// What the stub was asked, as method, path and the token it was shown.
+fn asked(stub: &Stub) -> Vec<(String, String, String)> {
+    stub.seen()
+        .iter()
+        .map(|seen| {
+            let token = seen.header("authorization").unwrap_or_default().trim_start_matches("Bearer ").to_owned();
+            (seen.method.clone(), seen.path().to_owned(), token)
+        })
+        .collect()
+}
+
+fn ask(method: &str, path: &str, token: &str) -> (String, String, String) {
+    (method.into(), path.into(), token.into())
+}
+
+/// A deployment without the proofs refuses the join's token once it has
+/// expired and takes the media server's: the refused control is asked about
+/// with the standing question, which refuses the token, so it is made again
+/// with the media server's, and that is the token the call sends from then on.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_expired_join_token_gives_way_to_the_media_servers_and_that_is_remembered() {
+    let stub = Stub::start(host_endpoints("media-old", true)).await;
+    let _tokens = tomoshibi_protocol::api::bearer::register(s("join-old"), || Some(s("media-old")));
+    let d = stub.deployment();
+
+    d.clone().create_invite(s("standup"), s("join-old")).await.unwrap();
+    assert_eq!(
+        asked(&stub),
+        [
+            ask("POST", "/api/rooms/standup/invites", "join-old"),
+            ask("GET", "/api/rooms/standup/host", "join-old"),
+            ask("POST", "/api/rooms/standup/invites", "media-old"),
+        ]
+    );
+    d.clone().create_invite(s("standup"), s("join-old")).await.unwrap();
+    let standing = d.host_standing(s("standup"), s("join-old")).await.unwrap();
+    assert!(standing.yours);
+    assert_eq!(
+        asked(&stub)[3..],
+        [
+            ask("POST", "/api/rooms/standup/invites", "media-old"),
+            ask("GET", "/api/rooms/standup/host", "media-old"),
+        ]
+    );
+}
+
+/// A deployment with the proofs takes the join's token for the whole call and
+/// never the media server's: one request each, and nothing else is tried.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_join_token_that_is_taken_is_the_only_token_sent() {
+    let stub = Stub::start(host_endpoints("join-new", true)).await;
+    let _tokens = tomoshibi_protocol::api::bearer::register(s("join-new"), || Some(s("media-new")));
+    let d = stub.deployment();
+
+    d.clone().create_invite(s("standup"), s("join-new")).await.unwrap();
+    assert!(d.clone().host_standing(s("standup"), s("join-new")).await.unwrap().yours);
+    assert_eq!(
+        asked(&stub),
+        [
+            ask("POST", "/api/rooms/standup/invites", "join-new"),
+            ask("GET", "/api/rooms/standup/host", "join-new"),
+        ]
+    );
+}
+
+/// The standing question refused for its token is asked again with the other
+/// at once: a 401 there can only be about the token.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_standing_question_refused_for_its_token_is_asked_with_the_other() {
+    let stub = Stub::start(host_endpoints("media-ask", false)).await;
+    let _tokens = tomoshibi_protocol::api::bearer::register(s("join-ask"), || Some(s("media-ask")));
+    let standing = stub.deployment().host_standing(s("standup"), s("join-ask")).await.unwrap();
+    assert!(!standing.yours);
+    assert_eq!(
+        asked(&stub),
+        [
+            ask("GET", "/api/rooms/standup/host", "join-ask"),
+            ask("GET", "/api/rooms/standup/host", "media-ask"),
+        ]
+    );
+}
+
+/// Somebody who does not run the room is refused as "not yours" with a token
+/// the deployment takes: the standing question says the token is fine, so the
+/// refusal stands and the other token is never shown.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_refusal_of_the_person_is_not_retried_with_the_other_token() {
+    let stub = Stub::start(host_endpoints("join-guest", false)).await;
+    let _tokens = tomoshibi_protocol::api::bearer::register(s("join-guest"), || Some(s("media-guest")));
+
+    assert_eq!(
+        stub.deployment().create_invite(s("standup"), s("join-guest")).await.unwrap_err(),
+        refused(403, "not_yours")
+    );
+    assert_eq!(
+        asked(&stub),
+        [
+            ask("POST", "/api/rooms/standup/invites", "join-guest"),
+            ask("GET", "/api/rooms/standup/host", "join-guest"),
+        ]
+    );
+}
+
+/// A token that is no call's join token is sent as it is, once, refused or
+/// not, as the tests and anything else holding a bare token send one.
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_token_no_call_registered_is_sent_once() {
+    let stub = Stub::start(host_endpoints("someone-else", true)).await;
+    assert_eq!(
+        stub.deployment().create_invite(s("standup"), s("loose-token")).await.unwrap_err(),
+        refused(403, "not_yours")
+    );
+    assert_eq!(asked(&stub), [ask("POST", "/api/rooms/standup/invites", "loose-token")]);
+}
+
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_host_controls_carry_the_join_token() {
     let stub = Stub::start(|seen| match (seen.method.as_str(), seen.path()) {

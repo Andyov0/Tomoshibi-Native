@@ -7,10 +7,11 @@
 //! the first second. And an administrator runs somebody else's room there only
 //! by a session, never by the passphrase typed into the join form. Here every
 //! role sits in one real call and tries every host endpoint with what
-//! `Call::token` gives, which is always the join's own token, and with what the
-//! media server holds, against whichever deployment is running: one handing
-//! out guest proofs is taken to have both changes (they shipped together), one
-//! without them neither.
+//! `Call::token` gives, which is always the join's own token, the key under
+//! which the call's two tokens are found (protocol api/bearer.rs), and with the
+//! media server's token alone, against whichever deployment is running: one
+//! handing out guest proofs is taken to have both changes (they shipped
+//! together), one without them neither.
 //!
 //! Against a local deployment, `TOMOSHIBI_LOCAL_DEPLOYMENT` or
 //! http://127.0.0.1:8080, with rooms opened and joined by anyone, and two of
@@ -22,9 +23,10 @@
 //! and the verifier's minute of leeway (the deployment's `token_ttl`, five
 //! minutes by default) and asks again, still with the join's own token. A
 //! deployment with the proofs keeps taking its own token after its expiry
-//! while that identity is in the room; one that does not yet says so with
-//! `TOMOSHIBI_TEST_EXPIRED_TOKEN=refused`. One without the proofs refuses an
-//! expired token, as it always did.
+//! while that identity is in the room (one built before it did says so with
+//! `TOMOSHIBI_TEST_EXPIRED_TOKEN=refused`). One without the proofs refuses an
+//! expired token, as it always did, and the requests go on with the media
+//! server's, so a host runs the room for the whole call on either.
 
 use std::{
     sync::Arc,
@@ -142,15 +144,17 @@ async fn ask_everything(seat: &Seat, room: &str, bearer: &str, victim: &Seat) ->
     ]
 }
 
-/// Whether the deployment takes this token as one it signed, for this
-/// request: the media server's only where there are no proofs (it is valid,
-/// and refreshed every five minutes); the join's own while it is good, and
-/// past its expiry where the deployment keeps a participant's own token.
+/// Whether the deployment takes what was sent as a token of its own, for this
+/// request: the media server's alone only where there are no proofs (it is
+/// valid, and refreshed every five minutes); Call::token while the join's
+/// token is good, and after that, where there are proofs, while the deployment
+/// keeps a participant's own expired token, and where there are none, by the
+/// media server's, which the request then goes with.
 fn accepted(hardened: bool, media_token: bool, late: bool, expired_kept: bool) -> bool {
     match (media_token, late) {
         (true, _) => !hardened,
         (false, false) => true,
-        (false, true) => hardened && expired_kept,
+        (false, true) => !hardened || expired_kept,
     }
 }
 
