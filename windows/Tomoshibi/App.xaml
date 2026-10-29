@@ -114,9 +114,10 @@
                         and the press are the kit's own, the apps' numbers,
                         rather than the default template's states, which
                         would turn a lamplit button grey under the pointer.
-                        The brush moves to its new colour over the hover
-                        curve's 120 ms. The system's focus ring still draws
-                        round it for the keyboard.
+                        The brush moves to its new colour over the 140 ms a
+                        press takes everywhere (the web's pressable). The
+                        system's focus ring still draws round it for the
+                        keyboard.
                     -->
                     <Style x:Key="Tap" TargetType="Button">
                         <Setter Property="Background" Value="Transparent" />
@@ -137,7 +138,7 @@
                                         CornerRadius="{TemplateBinding CornerRadius}"
                                         Padding="{TemplateBinding Padding}">
                                         <Border.BackgroundTransition>
-                                            <BrushTransition Duration="0:0:0.12" />
+                                            <BrushTransition Duration="0:0:0.14" />
                                         </Border.BackgroundTransition>
                                         <ContentPresenter
                                             HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"

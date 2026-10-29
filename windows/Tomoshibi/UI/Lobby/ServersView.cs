@@ -4,6 +4,7 @@ using Tomoshibi.Model;
 using Tomoshibi.UI.Kit;
 using uniffi.tomoshibi_protocol;
 using static Tomoshibi.Basics.Words;
+using Look = Tomoshibi.Basics.Look;
 
 namespace Tomoshibi.UI.Lobby;
 

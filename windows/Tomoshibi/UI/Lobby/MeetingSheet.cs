@@ -5,6 +5,7 @@ using Tomoshibi.UI.Kit;
 using Tomoshibi.UI.Screens;
 using uniffi.tomoshibi_protocol;
 using static Tomoshibi.Basics.Words;
+using Look = Tomoshibi.Basics.Look;
 
 namespace Tomoshibi.UI.Lobby;
 
