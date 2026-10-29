@@ -108,8 +108,18 @@ internal sealed class RoomScreen : Screen
         BuildChrome();
         SizeChanged += (_, _) => Lay();
         _pictures.Tapped += (_, _) => Pressed(null);
-        PointerMoved += (_, _) => Poke();
-        PointerPressed += (_, _) => Poke();
+        // Somebody is here (useIdle.ts): the pointer moving or pressing, the
+        // wheel, a key, or the keyboard's focus moving. Keys and focus as
+        // well as the pointer: brought back only by the mouse, the controls
+        // stepped aside left a keyboard or Narrator user unable to mute or
+        // leave. Heard however the event was handled on its way, as the web
+        // listens on the window with capture, so a key a control took still
+        // counts.
+        AddHandler(PointerMovedEvent, new PointerEventHandler((_, _) => Poke()), true);
+        AddHandler(PointerPressedEvent, new PointerEventHandler((_, _) => Poke()), true);
+        AddHandler(PointerWheelChangedEvent, new PointerEventHandler((_, _) => Poke()), true);
+        AddHandler(KeyDownEvent, new KeyEventHandler((_, _) => Poke()), true);
+        GotFocus += (_, _) => Poke();
 
         // What was drawn and heard, every two seconds, for the tests to read.
         _stats = DispatcherQueue.CreateTimer();
@@ -195,6 +205,10 @@ internal sealed class RoomScreen : Screen
 
     private void BuildChrome()
     {
+        // Drawn again (a language, a colour), the bar is drawn out, as it is
+        // made: it was somebody's change that drew it.
+        _barShown = true;
+        _lastMoved = DateTime.UtcNow;
         // The top row: the room and the connection.
         _top = new Grid { VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(14, Shared.TitleBar + 12, 14, 0) };
         _badge = new SignalBadge(Call);
@@ -373,22 +387,26 @@ internal sealed class RoomScreen : Screen
 
     /// <summary>
     /// Raises the name on each picture that runs under the controls while
-    /// they are out (RoomView.kt <c>underBar</c>), where the bar is wide
-    /// enough to reach it: not on a picture wider than 900, whose name is
-    /// clear of a bar in its middle.
+    /// they are out (RoomView.kt <c>underBar</c>), the other person filling a
+    /// call of two among them, and lets it down again after them: against
+    /// the bar's capsule, and on a picture 900 or more across only where the
+    /// name's own plate reaches it (Plan.NameUnderBar). The bar was taken to
+    /// be the whole window's width (the bar's own element stretches across
+    /// it, the capsule in its middle), and a picture that wide was taken to
+    /// have its name clear, so a long name in a call of two in a window a
+    /// little over 900 across was drawn half under the bar.
     /// </summary>
-    private void LiftNames()
+    internal void LiftNames()
     {
         if (_bar == null) return;
-        var barWidth = _bar.ActualWidth > 0 ? _bar.ActualWidth : _bar.FullLength;
+        var barWidth = _bar.CapsuleLength;
         var left = (ActualWidth - barWidth) / 2;
         var right = left + barWidth;
         var bottom = ActualHeight - 20;
         foreach (var tile in _tiles.Values)
         {
-            var spot = tile.Spot;
-            var under = spot.Left < right && spot.Left + spot.Width > left && spot.Top + spot.Height > bottom - Plan.Island + 0.5;
-            tile.Lift(under && _barShown && spot.Width < 900 ? Plan.Island - Plan.Gap : 0);
+            var under = Plan.NameUnderBar(tile.Spot, tile.PlateWidth, tile.PlateInset, (float)left, (float)right, (float)bottom);
+            tile.Lift(under && _barShown ? Plan.Island - Plan.Gap : 0);
         }
     }
 
@@ -813,18 +831,89 @@ internal sealed class RoomScreen : Screen
 
     private void Idle()
     {
-        var hides = Appearance.Shared.ControlsPlacement == ControlsPlacement.Idle || _filled;
-        var alone = DateTime.UtcNow - _lastMoved > TimeSpan.FromSeconds(Plan.IdleAfter);
-        var shown = !hides || !alone || Overlay.Current?.Open != null || _panel != null;
-        if (shown != _barShown) ShowBar(shown);
+        var mayStepAside = Appearance.Shared.ControlsPlacement == ControlsPlacement.Idle || _filled;
+        var quiet = (DateTime.UtcNow - _lastMoved).TotalSeconds;
+        // The cheap half first, four times a second: the focus and the
+        // screen reader are asked only of a room that would otherwise step
+        // its controls aside.
+        var away = mayStepAside && quiet > Plan.IdleAfter && ControlsAway.Away(
+            mayStepAside,
+            quiet,
+            menuOpen: Overlay.Current?.Open != null,
+            panelOpen: _panel != null,
+            focusInside: KeyboardInBar(),
+            readerListening: ReaderListening());
+        if (away == _barShown) ShowBar(!away);
     }
 
+    /// <summary>
+    /// Whether the keyboard's focus is on one of the bar's controls, put
+    /// there by the keyboard: the web keeps its controls out while a focus it
+    /// shows is in them (ControlBar.tsx, <c>:focus-visible</c>), and not for
+    /// a focus a mouse press left on a button.
+    /// </summary>
+    private bool KeyboardInBar()
+    {
+        if (_barHost == null || XamlRoot is not { } root) return false;
+        if (FocusManager.GetFocusedElement(root) is not UIElement focused || focused.FocusState != FocusState.Keyboard) return false;
+        for (DependencyObject? at = focused; at != null; at = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(at))
+        {
+            if (ReferenceEquals(at, _barHost)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Whether a screen reader (Narrator, or any client following the focus
+    /// through UI Automation) is listening, which keeps the controls where
+    /// they are: somebody listening has no pointer to bring them back with.
+    /// </summary>
+    private static bool ReaderListening() =>
+        Microsoft.UI.Xaml.Automation.Peers.AutomationPeer.ListenerExists(Microsoft.UI.Xaml.Automation.Peers.AutomationEvents.AutomationFocusChanged);
+
+    /// <summary>
+    /// The bar out or stepped aside, as the web's goes: faded and moved down
+    /// on the leave curve, and back on the settle curve, but never collapsed.
+    /// Collapsed, it left the tree of what the keyboard and Narrator can
+    /// reach, so nothing but the mouse brought it back; stepped aside it is
+    /// still there to be tabbed to, which brings it back, and its shortcuts
+    /// (Ctrl+D, Ctrl+E) still work. It takes no presses while it is away, so
+    /// that a press meant to bring it back does not land on a button nobody
+    /// can see.
+    /// </summary>
     private void ShowBar(bool shown)
     {
         _barShown = shown;
-        if (_barHost != null) _barHost.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
+        if (_barHost != null)
+        {
+            _barHost.IsHitTestVisible = shown;
+            Step(_barHost, shown, 110);
+        }
         LiftNames();
-        if (_top != null && _filled) _top.Visibility = shown ? Visibility.Visible : Visibility.Collapsed;
+        if (_top != null)
+        {
+            var topShown = shown || !_filled;
+            _top.IsHitTestVisible = topShown;
+            Step(_top, topShown, -60);
+        }
+    }
+
+    /// <summary>Fades and moves an element in or out of its place by <paramref name="by"/> points down, on the apps' curves.</summary>
+    private static void Step(UIElement element, bool shown, float by)
+    {
+        Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.SetIsTranslationEnabled(element, true);
+        var visual = Microsoft.UI.Xaml.Hosting.ElementCompositionPreview.GetElementVisual(element);
+        var compositor = visual.Compositor;
+        var curve = shown ? Motion.SettleCurve(compositor) : Motion.LeaveCurve(compositor);
+        var duration = shown ? Motion.Settle : Motion.Leave;
+        var fade = compositor.CreateScalarKeyFrameAnimation();
+        fade.InsertKeyFrame(1f, shown ? 1f : 0f, curve);
+        fade.Duration = duration;
+        var move = compositor.CreateVector3KeyFrameAnimation();
+        move.InsertKeyFrame(1f, new System.Numerics.Vector3(0, shown ? 0 : by, 0), curve);
+        move.Duration = duration;
+        visual.StartAnimation("Opacity", fade);
+        visual.StartAnimation("Translation", move);
     }
 
     private void Report()

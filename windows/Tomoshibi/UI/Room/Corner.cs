@@ -133,7 +133,7 @@ internal sealed class ToastStack : Canvas
         }
     }
 
-    /// <summary>One notice's line (Toasts.kt <c>ToastLine</c>): the rail, the words, its button and its close mark.</summary>
+    /// <summary>One notice's line (Toasts.kt <c>ToastLine</c>): the rail, the words, its button and its close mark, read out as it arrives (Spoken).</summary>
     private Grid Line(CallToast toast)
     {
         var rail = new Border
@@ -174,9 +174,7 @@ internal sealed class ToastStack : Canvas
         }
         var line = K.Line(10, parts.ToArray());
         line.Padding = new Thickness(9, 10, toast.CanClose ? 7 : 12, 10);
-        line.Named(toast.Detail != null ? toast.Title + ". " + toast.Detail : toast.Title);
-        Microsoft.UI.Xaml.Automation.AutomationProperties.SetLiveSetting(line, Microsoft.UI.Xaml.Automation.Peers.AutomationLiveSetting.Polite);
-        return line;
+        return new Spoken(line, toast.Detail != null ? toast.Title + ". " + toast.Detail : toast.Title);
     }
 }
 

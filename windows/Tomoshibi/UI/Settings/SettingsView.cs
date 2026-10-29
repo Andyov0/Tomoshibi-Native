@@ -10,16 +10,13 @@ namespace Tomoshibi.UI.Settings;
 /// <summary>
 /// The settings (Android's ui/settings/SettingsView.kt): on a wide window a
 /// sidebar of the sections beside the page chosen, on a narrow one the list
-/// of them, each opening as a page of its own with the way back.
-///
-/// TODO(windows 2b): Watch together and Music have settings on the other
-/// platforms (how sharp a video watched together may get, how music sounds);
-/// both features are the next phase's on Windows, and their sections come
-/// with them rather than as choices about something that is not there.
+/// of them, each opening as a page of its own with the way back. The six
+/// sections of the other apps, in their order (Settings.swift
+/// <c>SettingsTopic</c>).
 /// </summary>
 internal sealed class SettingsView : Grid, IRestyles
 {
-    public enum Topic { General, Media, Account, About }
+    public enum Topic { General, Media, Watching, Music, Account, About }
 
     private readonly AppModel _app;
     private readonly Action _close;
@@ -41,6 +38,8 @@ internal sealed class SettingsView : Grid, IRestyles
     public string? Section => !_chosen ? null : _topic switch
     {
         Topic.Media => "media",
+        Topic.Watching => "watching",
+        Topic.Music => "music",
         Topic.Account => "account",
         Topic.About => "about",
         Topic.General => "general",
@@ -55,6 +54,8 @@ internal sealed class SettingsView : Grid, IRestyles
         _topic = section switch
         {
             "media" => Topic.Media,
+            "watching" => Topic.Watching,
+            "music" => Topic.Music,
             "account" => Topic.Account,
             "about" => Topic.About,
             "general" => Topic.General,
@@ -106,6 +107,8 @@ internal sealed class SettingsView : Grid, IRestyles
     {
         Topic.General => T("General"),
         Topic.Media => T("Audio & video"),
+        Topic.Watching => T("Watch together"),
+        Topic.Music => T("Music"),
         Topic.Account => T("Account"),
         _ => T("About"),
     };
@@ -114,6 +117,8 @@ internal sealed class SettingsView : Grid, IRestyles
     {
         Topic.General => T("Language, colour, and how a call is laid out."),
         Topic.Media => T("What starts on when you join, and which devices."),
+        Topic.Watching => T("How sharp a video watched together may get here."),
+        Topic.Music => T("How music sounds in a call."),
         Topic.Account => T("Who you are here, and what you can use."),
         _ => T("The app, and where its code can be read."),
     };
@@ -122,6 +127,8 @@ internal sealed class SettingsView : Grid, IRestyles
     {
         Topic.General => "slider.horizontal.3",
         Topic.Media => "video.fill",
+        Topic.Watching => "play.rectangle.fill",
+        Topic.Music => "music.note",
         Topic.Account => "person.crop.circle.fill",
         _ => "info.circle.fill",
     };
@@ -296,7 +303,7 @@ internal sealed class SettingsView : Grid, IRestyles
         column.Children.Add(card);
 
         var list = K.Column(0);
-        var topics = new[] { Topic.General, Topic.Media, Topic.About };
+        var topics = new[] { Topic.General, Topic.Media, Topic.Watching, Topic.Music, Topic.About };
         for (var i = 0; i < topics.Length; i++)
         {
             var topic = topics[i];
@@ -304,6 +311,8 @@ internal sealed class SettingsView : Grid, IRestyles
             {
                 Topic.General => Localization.Shared.FollowsSystem ? T("Same as the system") : Localization.Shared.Language.DisplayName(),
                 Topic.Media => string.Join(" · ", new[] { _app.StartWithMicrophone ? T("Microphone") : null, _app.StartWithCamera ? T("Camera") : null }.Where(s => s != null)) is { Length: > 0 } on ? on : Detail(topic),
+                Topic.Watching => WatchingSettings.Label(WatchCeilings.Stored(_app.DeviceMemory.Defaults)),
+                Topic.Music => MusicSettings.Label(MusicSettings.Best(_app)),
                 _ => Detail(topic),
             };
             var line = K.Line(13,
@@ -344,6 +353,8 @@ internal sealed class SettingsView : Grid, IRestyles
         {
             Topic.General => General.Page(_app),
             Topic.Media => MediaSettings.Page(_app),
+            Topic.Watching => WatchingSettings.Page(_app),
+            Topic.Music => MusicSettings.Page(_app),
             Topic.Account => AccountSettings.Page(_app),
             _ => About.Page(_app),
         };

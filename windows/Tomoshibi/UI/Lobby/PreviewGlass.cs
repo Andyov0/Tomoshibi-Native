@@ -17,19 +17,21 @@ using Windows.UI.ViewManagement;
 namespace Tomoshibi.UI.Lobby;
 
 /// <summary>
-/// The lobby's picture of yourself with the camera off: a pane of glass
-/// with little animals drawn on it, one after another, stroke by stroke,
-/// the way the iPhone writes its first "hello" (the iPhone's PreviewGlass;
-/// the owner asked for the same card here, 2026-10-27). On the narrow lobby
-/// it is the card itself, in-app acrylic over the page with a hairline
-/// border, as the phone's is glass; on the wide one there is no card, the
-/// camera filling the window behind the sidebar, and the animals stand on
-/// the stage beside it, where the picture would be.
+/// The lobby's picture of yourself with the camera off: a card with little
+/// animals drawn on it, one after another, stroke by stroke, the way the
+/// iPhone writes its first "hello" (the iPhone's PreviewGlass; the owner
+/// asked for the same card here, 2026-10-27). On the narrow lobby it is the
+/// card itself, drawn as art/README.md's "The card" says to draw the
+/// iPhone's clear glass elsewhere: solid #202020 with a point of white at 40
+/// per cent just inside its outline by night, solid white with no edge by
+/// day (Tomoshibi.Basics.GlassInk; Android's PreviewGlass.kt). On the wide
+/// one there is no card, the camera filling the window behind the sidebar,
+/// and the animals stand on the stage beside it, where the picture would be
+/// (PortraitStage).
 ///
 /// Who is drawn and when is art/portraits.json, which every platform plays
-/// as it is (Tomoshibi.Basics.PortraitArt); how the lines look is
-/// PortraitGlass: thin single lines of the text colour now, and the
-/// README's tube of glass before them, kept one switch away.
+/// as it is (Tomoshibi.Basics.PortraitArt); the lines are thin single lines
+/// of the text colour (GlassInk).
 ///
 /// Drawn by the compositor. Each piece of a stroke is a path whose TrimEnd
 /// follows one clock, a property the compositor moves itself, through the
@@ -42,16 +44,11 @@ namespace Tomoshibi.UI.Lobby;
 /// Windows' animation effects off the first animal stands finished.
 ///
 /// The lines are every stroke drawn so far united into one shape, so lines
-/// that cross are one line rather than a darker crossing (the single line
-/// is translucent) or a double edge (the tube's). Direct2D strokes a path
-/// but has no union of growing strokes, so every stroke is drawn in pure
-/// colours into a layer, and one colour matrix turns each colour into its
-/// part of the line, every part its own colour at its own strength wherever
-/// it lies. The single line is one part, red. The tube is four: wider than
-/// the line by its edge (the outline's outer half), as wide as the line
-/// (the inner half, over the fill), narrower by the edge (the fill), and
-/// the light; every stroke's widest goes down first and its light last, so
-/// where two lines cross the later fill covers the earlier edge.
+/// that cross are one line rather than a darker crossing (the line is
+/// translucent). Direct2D strokes a path but has no union of growing
+/// strokes, so every stroke is drawn opaque in pure red into a layer, where
+/// crossings are no redder than the rest, and one colour matrix turns the
+/// red into the line's colour at its strength.
 /// </summary>
 internal sealed class PreviewGlass : Grid
 {
@@ -85,7 +82,7 @@ internal sealed class PreviewGlass : Grid
     private readonly Border _canvas = new() { IsHitTestVisible = false };
     private readonly double _radius;
     private readonly string? _pose;
-    private readonly GlassLine _look = PortraitGlass.Of(Ink.Scheme);
+    private readonly GlassInk _ink = GlassInk.Of(Ink.Scheme);
     private readonly bool _still = !new UISettings().AnimationsEnabled;
     private Drawing? _drawing;
     private bool _loaded;
@@ -102,17 +99,15 @@ internal sealed class PreviewGlass : Grid
         CornerRadius = new CornerRadius(radius);
         if (pane)
         {
-            // The README's card: the thinnest frosted material there is and a
-            // one-point border of the text colour, flat, with no lit edge.
-            Background = new Microsoft.UI.Xaml.Media.AcrylicBrush
+            // The README's card, solid: nothing behind it shows through, and
+            // the rim, where there is one, is drawn inside the outline, as a
+            // Grid's border is.
+            Background = Ink.Brush(_ink.Card);
+            if (_ink.CardEdge is { } edge)
             {
-                TintColor = Ink.Of(Ink.Palette.Surface),
-                TintOpacity = 0.3,
-                TintLuminosityOpacity = 0.75,
-                FallbackColor = Ink.Of(Ink.Palette.Surface),
-            };
-            BorderBrush = Ink.Brush(_look.PaneEdge);
-            BorderThickness = new Thickness(_look.PaneEdgeWidth);
+                BorderBrush = Ink.Brush(edge);
+                BorderThickness = new Thickness(_ink.CardEdgeWidth);
+            }
         }
         Children.Add(_canvas);
         // Decoration, which says nothing a screen reader should read.
@@ -161,7 +156,7 @@ internal sealed class PreviewGlass : Grid
         if (_drawing != null || Art is not { } art || ActualWidth <= 0 || ActualHeight <= 0) return;
         try
         {
-            _drawing = new Drawing(ElementCompositionPreview.GetElementVisual(_canvas).Compositor, art, _look, DispatcherQueue);
+            _drawing = new Drawing(ElementCompositionPreview.GetElementVisual(_canvas).Compositor, art, _ink, DispatcherQueue);
         }
         catch (Exception fault)
         {
@@ -215,11 +210,10 @@ internal sealed class PreviewGlass : Grid
         public readonly ContainerVisual Root;
         private readonly Compositor _compositor;
         private readonly PortraitArt _art;
-        private readonly GlassLine _look;
         private readonly CompositionPropertySet _clock;
         private readonly CompositionRoundedRectangleGeometry _cut;
         private readonly CompositionEffectFactory _effects;
-        private readonly CompositionColorBrush[] _inks;
+        private readonly CompositionColorBrush _red;
         private readonly DispatcherQueueTimer _timer;
         private readonly CanvasDevice _device = CanvasDevice.GetSharedDevice();
         private Vector2 _size;
@@ -236,7 +230,7 @@ internal sealed class PreviewGlass : Grid
         private long? _since;
 
         /// <summary>One portrait: the visual they fade in, their layer, their shapes in the order they are drawn, and their strokes.</summary>
-        private sealed record Picture(int Index, LayerVisual Layer, CompositionEffectBrush Glass, CompositionContainerShape Fit, List<CompositionSpriteShape>[] Parts, Line[] Lines, ExpressionAnimation Shown)
+        private sealed record Picture(int Index, LayerVisual Layer, CompositionEffectBrush Glass, CompositionContainerShape Fit, List<CompositionSpriteShape> Shapes, Line[] Lines, ExpressionAnimation Shown)
         {
             /// <summary>Whether the fade's expression is on the glass, or it stands at a value of its own.</summary>
             public bool Fading { get; set; }
@@ -252,25 +246,18 @@ internal sealed class PreviewGlass : Grid
             public int State { get; set; } = -1;
         }
 
-        // The four parts of a line, in the order they go down, and the pure
-        // colour each is drawn in for the matrix (Matrix): the outline's
-        // outer half, its inner half over the fill, the fill, the light.
-        private const int Outer = 0, Inner = 1, Fill = 2, Light = 3;
-
-        public Drawing(Compositor compositor, PortraitArt art, GlassLine look, DispatcherQueue ui)
+        public Drawing(Compositor compositor, PortraitArt art, GlassInk ink, DispatcherQueue ui)
         {
             _compositor = compositor;
             _art = art;
-            _look = look;
             Root = compositor.CreateContainerVisual();
             _cut = compositor.CreateRoundedRectangleGeometry();
             Root.Clip = compositor.CreateGeometricClip(_cut);
             _clock = compositor.CreatePropertySet();
             _clock.InsertScalar("t", 0);
-            // The fade is the effect's last step, after the matrix. An opacity
-            // on the layer, or on a visual holding it, reached the pure
-            // colours before the matrix read them, and a fading portrait lost
-            // its edges and its light and went a flat dark grey.
+            // The fade is the effect's last step, after the matrix: an opacity
+            // on the layer, or on a visual holding it, reached the pure red
+            // before the matrix read it.
             _effects = compositor.CreateEffectFactory(new OpacityEffect
             {
                 Name = "fade",
@@ -278,24 +265,15 @@ internal sealed class PreviewGlass : Grid
                 Source = new ColorMatrixEffect
                 {
                     Source = new CompositionEffectSourceParameter("layer"),
-                    ColorMatrix = Matrix(look),
+                    ColorMatrix = Matrix(ink.Line),
                     // Applied to the layer's premultiplied pixels as they
-                    // are, so a pixel half covered by the edge becomes the
-                    // edge's colour at half its strength.
+                    // are, so a pixel half covered by a line becomes the
+                    // line's colour at half its strength.
                     AlphaMode = CanvasAlphaMode.Straight,
                     ClampOutput = true,
                 },
             }, new[] { "fade.Opacity" });
-            // The inner half of the outline is the edge over the fill: as much
-            // of the fill as the edge lets through, and all of the edge.
-            var through = (byte)Math.Round((1 - look.Edge.Alpha) * 255);
-            _inks = new[]
-            {
-                compositor.CreateColorBrush(Windows.UI.Color.FromArgb(255, 0, 255, 0)),
-                compositor.CreateColorBrush(Windows.UI.Color.FromArgb(255, through, 255, 0)),
-                compositor.CreateColorBrush(Windows.UI.Color.FromArgb(255, 255, 0, 0)),
-                compositor.CreateColorBrush(Windows.UI.Color.FromArgb(255, 0, 0, 255)),
-            };
+            _red = compositor.CreateColorBrush(Windows.UI.Color.FromArgb(255, 255, 0, 0));
             _timer = ui.CreateTimer();
             _timer.IsRepeating = false;
             _timer.Tick += (_, _) => Tick();
@@ -468,7 +446,7 @@ internal sealed class PreviewGlass : Grid
             var shapes = _compositor.CreateShapeVisual();
             shapes.RelativeSizeAdjustment = Vector2.One;
             var fit = _compositor.CreateContainerShape();
-            var parts = new[] { new List<CompositionSpriteShape>(), new List<CompositionSpriteShape>(), new List<CompositionSpriteShape>(), new List<CompositionSpriteShape>() };
+            var sprites = new List<CompositionSpriteShape>();
             // Seconds into this portrait's drawing, read round the cycle.
             var drawing = $"(Mod(c.t, {N(_art.Round)}) - {N(_art.StartOf(index) + _art.Gap)})";
             foreach (var stroke in person.Strokes)
@@ -489,24 +467,15 @@ internal sealed class PreviewGlass : Grid
                     trim.SetReferenceParameter("c", _clock);
                     line.Pieces.Add(geometry);
                     line.Trims.Add(trim);
-                    for (var part = 0; part < parts.Length; part++)
-                    {
-                        // A single line, or a tube without an edge or a light,
-                        // has no shapes for them.
-                        if ((part is Outer or Inner && !_look.Edged) || (part == Light && !_look.Lit)) continue;
-                        var shape = _compositor.CreateSpriteShape(geometry);
-                        shape.StrokeBrush = _inks[part];
-                        shape.StrokeStartCap = CompositionStrokeCap.Round;
-                        shape.StrokeEndCap = CompositionStrokeCap.Round;
-                        shape.StrokeLineJoin = CompositionStrokeLineJoin.Round;
-                        parts[part].Add(shape);
-                    }
+                    var shape = _compositor.CreateSpriteShape(geometry);
+                    shape.StrokeBrush = _red;
+                    shape.StrokeStartCap = CompositionStrokeCap.Round;
+                    shape.StrokeEndCap = CompositionStrokeCap.Round;
+                    shape.StrokeLineJoin = CompositionStrokeLineJoin.Round;
+                    sprites.Add(shape);
+                    fit.Shapes.Add(shape);
                     before += length;
                 }
-            }
-            foreach (var part in parts)
-            {
-                foreach (var shape in part) fit.Shapes.Add(shape);
             }
             shapes.Shapes.Add(fit);
             layer.Children.InsertAtTop(shapes);
@@ -515,7 +484,7 @@ internal sealed class PreviewGlass : Grid
                 ? $"1 - {Smoothstep($"({drawing} - {N(fading)}) / {N(person.Fade)}")}"
                 : $"{drawing} >= {N(fading)} ? 0 : 1");
             shown.SetReferenceParameter("c", _clock);
-            return new Picture(index, layer, glass, fit, parts, lines.ToArray(), shown);
+            return new Picture(index, layer, glass, fit, sprites, lines.ToArray(), shown);
         }
 
         /// <summary>smoothstep(u) = u²(3 − 2u), u held to nought and one, as an expression.</summary>
@@ -523,7 +492,7 @@ internal sealed class PreviewGlass : Grid
 
         private static string N(double value) => value.ToString("0.######", CultureInfo.InvariantCulture);
 
-        /// <summary>The card's size and corner: the portrait fitted to it, and every width that is not the drawing's own made again for the new scale.</summary>
+        /// <summary>The card's size and corner, and the portrait fitted to it.</summary>
         public void Lay(Vector2 size, float radius)
         {
             _size = size;
@@ -538,10 +507,8 @@ internal sealed class PreviewGlass : Grid
         }
 
         /// <summary>
-        /// The README's placement and widths: the line <c>w</c> is the file's
-        /// width at the card's scale; the outline is 0.75 points across,
-        /// centred on the line's edge; the light is 0.16 of the line, at
-        /// least 0.8 points, moved up and to the left by a fifth of it.
+        /// The README's placement and width: the line <c>w</c> is the file's
+        /// width, in the canvas's units, which the fit scales to the card.
         /// </summary>
         private void Fit(Picture portrait)
         {
@@ -554,48 +521,22 @@ internal sealed class PreviewGlass : Grid
             }
             portrait.Fit.Scale = new Vector2(scale, scale);
             portrait.Fit.Offset = new Vector2((float)fit.X, (float)fit.Y);
-            // In the canvas's units, which the fit scales to points.
             var line = (float)_art.LineWidth;
-            var edge = (float)_look.EdgeWidth / scale;
-            var widths = new[]
-            {
-                line + edge,
-                line,
-                _look.Edged ? Math.Max(line - edge, line / 4) : line,
-                Math.Max(line * (float)_look.LightWidth, (float)_look.LightLeast / scale),
-            };
-            var moved = new Vector2(line * (float)_look.LightX, line * (float)_look.LightY);
-            for (var part = 0; part < portrait.Parts.Length; part++)
-            {
-                foreach (var shape in portrait.Parts[part])
-                {
-                    shape.StrokeThickness = widths[part];
-                    if (part == Light) shape.Offset = moved;
-                }
-            }
+            foreach (var shape in portrait.Shapes) shape.StrokeThickness = line;
         }
 
         /// <summary>
-        /// The matrix from the pure colours to the glass, applied to
-        /// premultiplied pixels: each colour's strength is how much of the
-        /// pixel its part covers, so each row is its part's colour
-        /// premultiplied. Red is the fill, green the edge, blue the light,
-        /// whose row is the light over the fill.
+        /// The matrix from the pure red to the line, applied to premultiplied
+        /// pixels: the red's strength is how much of the pixel the line
+        /// covers, so its row is the line's colour premultiplied.
         /// </summary>
-        private static Matrix5x4 Matrix(GlassLine look)
+        private static Matrix5x4 Matrix(Shade line) => new()
         {
-            static (float R, float G, float B, float A) Pre(Shade c) => (c.Red * c.Alpha, c.Green * c.Alpha, c.Blue * c.Alpha, c.Alpha);
-            var fill = Pre(look.Fill);
-            var edge = Pre(look.Edge);
-            var light = Pre(look.Light);
-            var under = 1 - look.Light.Alpha;
-            return new Matrix5x4
-            {
-                M11 = fill.R, M12 = fill.G, M13 = fill.B, M14 = fill.A,
-                M21 = edge.R, M22 = edge.G, M23 = edge.B, M24 = edge.A,
-                M31 = light.R + fill.R * under, M32 = light.G + fill.G * under, M33 = light.B + fill.B * under, M34 = light.A + fill.A * under,
-            };
-        }
+            M11 = line.Red * line.Alpha,
+            M12 = line.Green * line.Alpha,
+            M13 = line.Blue * line.Alpha,
+            M14 = line.Alpha,
+        };
 
         /// <summary>A piece of a stroke in the canvas's units, as Direct2D draws it.</summary>
         private static CanvasGeometry Path(CanvasDevice device, IReadOnlyList<PathSegment> path)

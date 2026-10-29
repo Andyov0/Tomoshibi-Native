@@ -4,14 +4,15 @@ using System.Text.Json;
 namespace Tomoshibi.Basics;
 
 /// <summary>
-/// The portraits the lobby's camera card draws while the camera is off, one
-/// after another, in lines of glass: read from art/portraits.json at the
+/// The animals the lobby's camera card draws while the camera is off, one
+/// after another, in thin lines: read from art/portraits.json at the
 /// repository's top, the one file every platform plays as it is, so that
 /// every platform draws the same lines at the same moments (art/README.md,
 /// which this follows formula for formula).
 ///
-/// The file says what is drawn and when; the README also says how a line of
-/// glass looks (<see cref="PortraitGlass"/>). Paths are SVG path data in
+/// The file says what is drawn and when; the README also says how the lines
+/// and the card look (<see cref="GlassInk"/>) and where the drawing stands on
+/// a desktop lobby (<see cref="PortraitStage"/>). Paths are SVG path data in
 /// absolute M, L, C, Q and Z alone, on a canvas whose origin is its top left
 /// with y going down. Each portrait's turn is the gap of empty glass, then the
 /// strokes, each written along its length between its start and its end on
@@ -508,88 +509,71 @@ public static class PathData
     }
 }
 
-/// <summary>The two ways the lines have been drawn: a thin line of one colour, or a tube of glass.</summary>
-public enum LineKind { Single, Tube }
-
 /// <summary>
-/// How the lines look where there is no Liquid Glass. Every stroke drawn so
-/// far, at the line's width (the file's lineWidth at the card's scale) with
-/// round caps and joins, united into one shape, so two lines that cross are
-/// one line and not a double edge or a darker crossing; then, by
-/// <see cref="Kind"/>:
+/// The camera card's colours in one appearance where there is no Liquid
+/// Glass, as art/README.md gives them ("The lines", "The card"): the card's
+/// face, the lit rim just inside its outline where it has one, and the
+/// lines, every stroke drawn so far united into one shape at the line's
+/// width (the file's lineWidth at the card's scale), with round caps and
+/// joins, in the text colour at an opacity, so that two lines that cross are
+/// one line and not a darker crossing. Nothing else: no fill, no light along
+/// the lines, no shadow, no gradient.
 ///
-/// - <see cref="LineKind.Single"/> (the owner, 2026-10-27, for the animals):
-///   that shape in <see cref="Fill"/>, the text colour at 60 per cent by
-///   night and 50 by day, and nothing else: no glass, no light, no shadow;
-/// - <see cref="LineKind.Tube"/> (art/README.md, "Lines of glass", the table
-///   without Liquid Glass): the shape filled faintly with the text colour,
-///   its outline drawn <see cref="EdgeWidth"/> points across in
-///   <see cref="Edge"/>, and the strokes' centre lines again in
-///   <see cref="Light"/>, a little up and to the left, held inside the shape.
-///
-/// Either way the card under them is a pane of glass with a one-point border
-/// of the text colour at 16 per cent. No gradients anywhere.
+/// The card is what the iPhone's clear glass comes to on the phone's lobby,
+/// measured from its pixels: #202020 with a point of white at 40 per cent by
+/// night, #FFFFFF with no edge by day (Android's GlassInk, the same numbers).
+/// It was the thinnest frosted material with a hairline of the text colour at
+/// 16 per cent, which is what Apple before 26 draws and not what the README
+/// gives Windows. The lines were once tubes of glass, with a faint fill, an
+/// outline and a line of light, until the owner settled on thin single lines
+/// for the animals (2026-10-27).
 /// </summary>
-public sealed record GlassLine(
-    LineKind Kind,
-    Shade Fill,
-    Shade Edge,
-    double EdgeWidth,
-    Shade Light,
-    double LightWidth,
-    double LightLeast,
-    double LightX,
-    double LightY,
-    Shade PaneEdge,
-    double PaneEdgeWidth)
+public sealed record GlassInk(Shade Card, Shade? CardEdge, double CardEdgeWidth, Shade Line)
 {
-    /// <summary>Whether the line has an outline of its own.</summary>
-    public bool Edged => Kind == LineKind.Tube && EdgeWidth > 0 && Edge.Alpha > 0;
+    /// <summary>The lines' share of the text colour, by night (#F5F5F7) and by day (#1C1C1E).</summary>
+    public const float LineNight = 0.60f;
+    public const float LineDay = 0.50f;
 
-    /// <summary>Whether the line has a light along it.</summary>
-    public bool Lit => Kind == LineKind.Tube && Light.Alpha > 0;
+    public static readonly GlassInk Night = new(
+        Card: Theme.Hex(0x202020),
+        CardEdge: Shade.White.WithAlpha(0.40f),
+        CardEdgeWidth: 1,
+        Line: Theme.Dark.Foreground.WithAlpha(LineNight));
 
-    /// <summary>The README's tube of glass in one scheme: by day a little more fill and a brighter light.</summary>
-    public static GlassLine Tube(Scheme scheme)
-    {
-        var text = Theme.Of(scheme).Foreground;
-        var day = scheme == Scheme.Light;
-        return new(
-            Kind: LineKind.Tube,
-            Fill: text.WithAlpha(day ? 0.14f : 0.12f),
-            Edge: text.WithAlpha(0.30f),
-            EdgeWidth: 0.75,
-            Light: Shade.White.WithAlpha(day ? 0.90f : 0.60f),
-            LightWidth: 0.16,
-            LightLeast: 0.8,
-            LightX: -0.17,
-            LightY: -0.2,
-            PaneEdge: text.WithAlpha(0.16f),
-            PaneEdgeWidth: 1);
-    }
+    public static readonly GlassInk Day = new(
+        Card: Theme.Hex(0xFFFFFF),
+        CardEdge: null,
+        CardEdgeWidth: 0,
+        Line: Theme.Light.Foreground.WithAlpha(LineDay));
 
-    /// <summary>A thin line of the text colour, on the same pane.</summary>
-    public static GlassLine Single(Scheme scheme)
-    {
-        var text = Theme.Of(scheme).Foreground;
-        return Tube(scheme) with
-        {
-            Kind = LineKind.Single,
-            Fill = text.WithAlpha(scheme == Scheme.Light ? 0.50f : 0.60f),
-        };
-    }
+    /// <summary>The ink of the appearance the card is drawn in: the dark's or the light's whole, never a blend.</summary>
+    public static GlassInk Of(Scheme scheme) => scheme == Scheme.Light ? Day : Night;
 }
 
-public static class PortraitGlass
+/// <summary>
+/// Where the animals stand on a desktop lobby with no card (art/README.md,
+/// "On a desktop lobby with no card"; the Mac's StageDrawing): on the stage's
+/// own ground, the part of it beside the sidebar, in the band between the
+/// greeting at its head and the switches at its foot, a square canvas whose
+/// own drawing (y from 8 to 76 of its 100) has its middle in the band's.
+/// </summary>
+public static class PortraitStage
 {
-    /// <summary>Which lines the apps draw now: the one switch between them.</summary>
-    public const LineKind Lines = LineKind.Single;
+    /// <summary>What the greeting and the switches take, with a margin.</summary>
+    public const double Head = 130;
+    public const double Foot = 96;
 
-    public static readonly GlassLine Dark = Make(Scheme.Dark);
+    /// <summary>The largest the canvas is drawn, so that a tall window does not make giants of the animals.</summary>
+    public const double Most = 480;
 
-    public static readonly GlassLine Light = Make(Scheme.Light);
-
-    public static GlassLine Of(Scheme scheme) => scheme == Scheme.Light ? Light : Dark;
-
-    private static GlassLine Make(Scheme scheme) => Lines == LineKind.Single ? GlassLine.Single(scheme) : GlassLine.Tube(scheme);
+    /// <summary>
+    /// The canvas on a stage this large: its side, and where its middle is,
+    /// from the stage's top left. Nothing where the stage has no band.
+    /// </summary>
+    public static (double Side, double CentreX, double CentreY) Place(double stageWidth, double stageHeight)
+    {
+        var band = Math.Max(0, stageHeight - Head - Foot);
+        var side = Math.Max(0, Math.Min(Math.Min(band / 0.75, stageWidth * 0.5), Most));
+        return (side, stageWidth / 2, Head + band / 2 + side * 0.08);
+    }
 }

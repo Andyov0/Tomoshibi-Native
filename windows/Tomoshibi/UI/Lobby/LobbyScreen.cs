@@ -380,10 +380,10 @@ internal sealed class LobbyScreen : Screen
     private Grid HomeStage()
     {
         var grid = new Grid();
-        // The portraits drawn while the camera is off, standing on
-        // the stage where the picture would be, below the greeting and behind
-        // the switches.
-        _standing = new Grid { IsHitTestVisible = false, VerticalAlignment = VerticalAlignment.Bottom };
+        // The animals drawn while the camera is off, on the stage where the
+        // picture would be, between the greeting and the switches
+        // (PlaceStanding).
+        _standing = new Grid { IsHitTestVisible = false, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
         _stood = null;
         grid.Children.Add(_standing);
         grid.SizeChanged += (_, e) => PlaceStanding(e.NewSize);
@@ -443,15 +443,23 @@ internal sealed class LobbyScreen : Screen
     }
 
     /// <summary>
-    /// How tall the portraits stand on the wide stage: from a little under
-    /// the greeting to the window's foot, and at most 560 points, so that a
-    /// tall window does not make giants of them over an empty stage.
+    /// Where the animals stand on the wide stage: art/README.md's desktop
+    /// formula, which the Mac's lobby follows (PortraitStage): the canvas a
+    /// square in the band between the greeting and the switches, at most 480
+    /// across, the drawing's middle in the band's. They stood on the window's
+    /// foot, as tall as the stage under the greeting allowed up to 560, and
+    /// were drawn behind the switches, which the README keeps them clear of.
+    /// The space given the drawing is the square widened by the card's side
+    /// inset each way, which the drawing's own placement (bottom-center)
+    /// keeps clear, so that the canvas is the square itself.
     /// </summary>
     private void PlaceStanding(Windows.Foundation.Size stage)
     {
         if (_standing == null) return;
-        var top = Shared.TitleBar + 128;
-        _standing.Height = Math.Max(0, Math.Min(stage.Height - top, 560));
+        var (side, x, y) = PortraitStage.Place(stage.Width, stage.Height);
+        _standing.Width = side + 2 * PortraitArt.Inset;
+        _standing.Height = side;
+        _standing.Margin = new Thickness(x - side / 2 - PortraitArt.Inset, y - side / 2, 0, 0);
     }
 
     /// <summary>
@@ -855,7 +863,17 @@ internal sealed class LobbyScreen : Screen
         return tap;
     }
 
-    /// <summary>The join bar at the foot (Lobby.kt <c>JoinBar</c>): a room's name or a link, and in.</summary>
+    /// <summary>
+    /// The join bar at the foot (Lobby.kt <c>JoinBar</c>): a room's name or a
+    /// link, and in, on a band of the page's own ground across the window's
+    /// foot. Without the band only the field had a surface, its acrylic; the
+    /// arrow beside it and the gaps round both had none, and the list
+    /// scrolling under the bar showed its words through them. The band is
+    /// the page's colour, flat and whole (no fade into the list: the day
+    /// mode has no gradients, and the owner finds them cheap), a little
+    /// taller than the bar, so the list ends at a straight line above it as
+    /// the iPhone's ends at its safe area's inset.
+    /// </summary>
     private Grid JoinBar()
     {
         var field = new RoomField(T("Room name or invite link"), _typed, _account.Scopes, _account.Admin, capsule: true);
@@ -870,8 +888,11 @@ internal sealed class LobbyScreen : Screen
         var fieldGlass = new Border { Child = field, Background = K.Acrylic(), CornerRadius = new CornerRadius(27) };
         var row = K.Line(10, K.Flex(fieldGlass), K.Fixed(_joinTyped));
         row.VerticalAlignment = VerticalAlignment.Bottom;
-        row.Margin = new Thickness(16, 0, 16, 6);
-        return new Grid { Children = { row }, VerticalAlignment = VerticalAlignment.Bottom };
+        row.Margin = new Thickness(16, 10, 16, 6);
+        // The narrow lobby's own ground (BuildNarrow): black at night, the
+        // light scheme's grey by day.
+        var band = new Border { Background = Ink.Light ? Ink.Background : Ink.Brush(Shade.Black) };
+        return new Grid { Children = { band, row }, VerticalAlignment = VerticalAlignment.Bottom };
     }
 
     private void JoinTyped()
