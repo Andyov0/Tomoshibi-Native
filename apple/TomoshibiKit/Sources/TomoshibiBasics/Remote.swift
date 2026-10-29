@@ -245,9 +245,16 @@ public struct RemoteAnswer: Equatable, Sendable {
     /// look that failed (Updates `retry`): a fraction of an hour written by
     /// mistake would otherwise have every copy of the app asking the
     /// deployment every few seconds.
+    ///
+    /// And never over a year, as on Windows (Remote.cs `UpdateInterval`). A
+    /// huge figure, written to mean "never", is past what Int64 holds in
+    /// seconds, and converting it trapped; the answer is kept and applied at
+    /// the next start before the deployment is asked again, so the app
+    /// crashed at every launch and a corrected answer could never reach it.
     public var updateInterval: Duration? {
         guard let hours = params["update_check_hours"], hours.isFinite, hours > 0 else { return nil }
-        return .seconds(Int64(max(hours * 3600, 600).rounded()))
+        let year = 366.0 * 24 * 3600
+        return .seconds(Int64(min(max(hours * 3600, 600), year).rounded()))
     }
 }
 

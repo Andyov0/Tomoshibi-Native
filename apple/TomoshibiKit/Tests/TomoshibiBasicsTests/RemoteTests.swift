@@ -126,6 +126,34 @@ final class RemoteTests: XCTestCase {
         XCTAssertEqual(remote.answer.updateInterval, .seconds(2 * 60 * 60))
     }
 
+    /// update_check_hours past what a Duration's seconds hold (1e300, or
+    /// anything above about 2.6e15 hours) trapped while the answer was read,
+    /// which happens at every start from the kept answer, before the
+    /// deployment could say anything better.
+    func testAnUpdateIntervalIsHeldBetweenTenMinutesAndAYear() {
+        func interval(_ hours: Double) -> Duration? { RemoteAnswer(params: ["update_check_hours": hours]).updateInterval }
+        let year: Duration = .seconds(366 * 24 * 60 * 60)
+        XCTAssertEqual(interval(1e300), year)
+        XCTAssertEqual(interval(3e15), year)
+        XCTAssertEqual(interval(.greatestFiniteMagnitude), year)
+        XCTAssertEqual(interval(24 * 366), year)
+        XCTAssertEqual(interval(24 * 400), year)
+        XCTAssertEqual(interval(24 * 30), .seconds(30 * 24 * 60 * 60))
+        XCTAssertEqual(interval(0.001), .seconds(600))
+        XCTAssertNil(interval(.infinity))
+        XCTAssertNil(interval(.nan))
+        XCTAssertNil(interval(0))
+        XCTAssertNil(interval(-1))
+    }
+
+    func testAHugeUpdateIntervalKeptFromBeforeIsReadAtStart() async {
+        store.set("r1", forKey: Remote.keptKey)
+        source.kept["r1"] = RemoteAnswer(revision: "r1", params: ["update_check_hours": 1e300], kept: "r1")
+        let remote = model()
+        remote.restore()
+        XCTAssertEqual(remote.answer.updateInterval, .seconds(366 * 24 * 60 * 60))
+    }
+
     func testAnAnswerIsAppliedKeptAndReadBackOffline() async {
         var applied: [RemoteAnswer] = []
         source.answer = { self.reworded }
