@@ -83,6 +83,10 @@ android {
         versionCode = 9
         versionName = joined
         manifestPlaceholders["tomoshibiHost"] = deploymentHost.lowercase()
+        // No plain HTTP anywhere in a release build; the builds tested against
+        // a local deployment allow it to the testing computer alone
+        // (res/xml/network_security*.xml says why).
+        manifestPlaceholders["networkSecurity"] = "@xml/network_security"
         ndk { abiFilters += "arm64-v8a" }
     }
 
@@ -129,12 +133,14 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             matchingFallbacks += "debug"
             applicationIdSuffix = ".shrunk"
+            manifestPlaceholders["networkSecurity"] = "@xml/network_security_local"
         }
         debug {
             // `-PkitGallery`: a debug build installed beside the app rather
             // than over it, to look at the UI kit's gallery on a device where
             // somebody is testing the app itself.
             if (providers.gradleProperty("kitGallery").isPresent) applicationIdSuffix = ".kit"
+            manifestPlaceholders["networkSecurity"] = "@xml/network_security_local"
         }
     }
 

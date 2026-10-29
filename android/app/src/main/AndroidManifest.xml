@@ -38,7 +38,7 @@
         android:icon="@mipmap/launcher"
         android:label="Tomoshibi"
         android:theme="@style/Theme.Tomoshibi"
-        android:usesCleartextTraffic="true">
+        android:networkSecurityConfig="${networkSecurity}">
         <!-- One activity for the whole task (singleTask): an invitation opened
              from a browser or a chat app is handed to the activity already
              holding the call rather than starting a second one in that app's
