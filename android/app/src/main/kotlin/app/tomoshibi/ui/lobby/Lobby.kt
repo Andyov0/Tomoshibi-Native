@@ -414,7 +414,11 @@ private fun Hero(app: AppModel, state: LobbyState, modifier: Modifier = Modifier
     }
 }
 
-private val CardShape = rounded(24f)
+/**
+ * The lobby's cards of rows: the shared scale's large corner, eighteen, the
+ * web lobby's cards (2026-10-29). Twenty-four appeared nowhere else.
+ */
+private val CardShape = rounded(18f)
 
 @Composable
 private fun Section(title: String, modifier: Modifier = Modifier, trailing: @Composable () -> Unit = {}, rows: @Composable () -> Unit) {
@@ -830,8 +834,10 @@ private fun SidebarActions(app: AppModel, state: LobbyState) {
             Symbol("video.fill")
             KitText(t("Start"), lines = 1)
         }
+        // A door going in, as the web's: a chain link says "a link", and
+        // joining is going into a room, by its name or by a link.
         GlassButton({ state.open(MeetingMode.Join(""), app) }, Modifier.weight(1f), shape = GlassButtonShape.Capsule(36.dp), label = t("Join a meeting")) {
-            Symbol("link")
+            Symbol("door.left.hand.open")
             KitText(t("Join"), lines = 1)
         }
     }

@@ -36,6 +36,7 @@ import app.tomoshibi.model.AppModel
 import app.tomoshibi.model.GuestLinkRefusal
 import app.tomoshibi.model.LobbyModel
 import app.tomoshibi.ui.kit.Capsule
+import app.tomoshibi.ui.kit.DisabledAlpha
 import app.tomoshibi.ui.kit.CopyLinkButton
 import app.tomoshibi.ui.kit.Font
 import app.tomoshibi.ui.kit.GlassButton
@@ -214,7 +215,7 @@ private fun StopButton(busy: Boolean, enabled: Boolean, stop: () -> Unit) {
     val on = enabled && LocalEnabled.current
     val press = rememberPress()
     val fill by animateColorAsState(Theme.wash.copy(alpha = if (press.lit && on) 0.10f else 0.06f), Motion.hover(), label = "fill")
-    val alpha by animateFloatAsState(if (on) 1f else 0.45f, Theme.settle(), label = "enabled")
+    val alpha by animateFloatAsState(if (on) 1f else DisabledAlpha, Theme.settle(), label = "enabled")
     Row(
         Modifier
             .alpha(alpha)

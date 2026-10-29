@@ -228,7 +228,7 @@ fun ChoiceRow(
         Row(
             Modifier
                 .fillMaxWidth()
-                .alpha(if (on) 1f else 0.45f)
+                .alpha(if (on) 1f else DisabledAlpha)
                 .background(Theme.wash.copy(alpha = light))
                 .pressable(press, androidx.compose.ui.graphics.RectangleShape, on, Role.Button,
                     selected = if (checked) true else null, onClick = onClick)
