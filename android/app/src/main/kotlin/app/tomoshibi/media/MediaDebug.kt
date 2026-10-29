@@ -26,6 +26,7 @@ private const val TAG = "Tomoshibi"
  * blur, the small window and the heat, each of which is otherwise reached
  * only by a press on a screen that does not exist yet, or not at all.
  *
+ *     adb root   # once: the receiver is not exported, and the shell alone is not let in
  *     adb shell am broadcast -a app.tomoshibi.debug.MEDIA -p app.tomoshibi.android --es do 'share'
  *
  * `share`, `stopshare`, `sound`, `stopsound`, `quality <0|1080|1440|2160>
@@ -49,7 +50,12 @@ internal object MediaDebug {
                 scope.launch { perform(context, app, line) }
             }
         }
-        ContextCompat.registerReceiver(context, receiver, IntentFilter(ACTION), ContextCompat.RECEIVER_EXPORTED)
+        // Not exported: exported, any app on a phone with a debug or shrunk
+        // build could start a share, turn its sound on or change the route.
+        // The shell is kept out too (uid 2000 is not the system), so the
+        // broadcast is sent as root, which an emulator's userdebug image and
+        // `adb root` give; a store phone has no way in, which is the point.
+        ContextCompat.registerReceiver(context, receiver, IntentFilter(ACTION), ContextCompat.RECEIVER_NOT_EXPORTED)
     }
 
     private fun quality(word: String?): ShareQuality = when (word) {
