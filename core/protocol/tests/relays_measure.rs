@@ -916,6 +916,35 @@ async fn a_probe_that_does_not_parse_is_no_reading() {
     assert_eq!(read.iter().map(|one| one.millis).collect::<Vec<_>>(), vec![None, None]);
 }
 
+// A relay in mainland China signals through another because a TLS handshake
+// to it gets it taken off the air; one listed without a probe (or whose
+// probe is down) must still never see a socket from a client measuring the
+// list. It goes without a reading, here and in the picker, and the rest are
+// measured as before.
+#[tokio::test]
+async fn a_mainland_relay_is_never_opened_a_socket_to() {
+    let _turn = TURN.lock().await;
+    relays::forget();
+
+    let sh = Socket::start(Answer::Refuse(ms(1))).await;
+    let bj = Socket::start(Answer::Refuse(ms(1))).await;
+    let hk = Socket::start(Answer::Refuse(ms(150))).await;
+
+    let offered = [
+        Relay { region: Some("CN-East".into()), ..at("shanghai", &sh) },
+        Relay { region: Some(" cn/north".into()), ..at("beijing", &bj) },
+        Relay { region: Some("HK".into()), ..at("hongkong", &hk) },
+    ];
+    assert_eq!(relays::fastest(&offered).await.as_deref(), Some("hongkong"));
+
+    let read = relays::timings(&offered).await;
+    assert_eq!(read.iter().map(|one| one.millis.is_some()).collect::<Vec<_>>(), [false, false, true]);
+
+    settle().await;
+    assert_eq!((sh.count(), bj.count()), (0, 0), "a mainland relay was opened a socket to");
+    assert_eq!(hk.count(), 2 * relays::ROUNDS);
+}
+
 // Somebody choosing by hand is shown the numbers the automatic choice is made
 // from, freshly: the picker is opened when the automatic answer disappointed.
 #[tokio::test]

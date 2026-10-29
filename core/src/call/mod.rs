@@ -132,6 +132,25 @@ impl Call {
             }
         }
 
+        // Never a TLS handshake with a relay in mainland China: the providers
+        // in front of those machines take one off the air for answering it,
+        // for everybody. The join's address is a mainland relay's own only
+        // where the server found no relay to signal through, and a TURN
+        // forward over TLS (`turns:`) would be the same handshake on another
+        // port. Both are refused here rather than tried (relays.rs
+        // `tls_into_mainland`, `forwardable`). The web opens both as given
+        // and needs the same refusal; that change is the coordinator's.
+        if tomoshibi_protocol::relays::tls_into_mainland(&options.url) {
+            return Err(CallError::Connect {
+                detail: "the call's address is a relay in mainland China, which is never opened over TLS".into(),
+            });
+        }
+        if let Some(forward) = options.forward.as_ref().filter(|f| !tomoshibi_protocol::relays::forwardable(&f.url)) {
+            return Err(CallError::Connect {
+                detail: format!("the call's media relay {} is not a plain TURN or STUN server", forward.url),
+            });
+        }
+
         // When the room is held on another relay than the one this person
         // came in through, the join answer carries a TURN server on the entry
         // relay and the web connects through it alone (room.ts ~775-786).
