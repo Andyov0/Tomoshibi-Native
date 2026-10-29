@@ -127,6 +127,33 @@ class CornerTest {
     }
 
     @Test
+    fun aNameRisesAboveWhatWasSaidOverIt() {
+        // A call of two on a phone, in points: the other person fills the
+        // room, 0..400 across and 0..800 down, their name lifted 52 over the
+        // bar, 34 tall with its margin; a message at the left over the bar.
+        fun lift(said: List<Float>?) = CornerLanes.nameLift(
+            0f, 0f, 400f, 800f,
+            said?.get(0), said?.get(1), said?.get(2), said?.get(3),
+            lifted = 52f, name = 34f,
+        )
+        // Nothing said: where the bar puts it.
+        assertEquals(52f, lift(null))
+        // A message lying over the name: the name goes above it, by the gap.
+        assertEquals(800f - 690f + CornerLanes.GAP, lift(listOf(12f, 690f, 332f, 744f)))
+        // A message to the right of the picture's middle, or above the name,
+        // or below it, is not in its way.
+        assertEquals(52f, lift(listOf(220f, 690f, 380f, 744f)))
+        assertEquals(52f, lift(listOf(12f, 500f, 332f, 600f)))
+        assertEquals(52f, lift(listOf(12f, 760f, 332f, 790f)))
+        // A column too tall to clear without taking the name up the picture:
+        // the name stays, rather than reading as somebody else's.
+        assertEquals(52f, lift(listOf(12f, 300f, 332f, 744f)))
+        // Measured from the name as the bar lifts it, never from where the
+        // name has moved to, so that clearing the messages cannot undo itself.
+        assertEquals(lift(listOf(12f, 690f, 332f, 744f)), lift(listOf(12f, 690f, 332f, 744f)))
+    }
+
+    @Test
     fun theBoxStopsAtTwoThousandWithoutSplittingACharacter() {
         assertEquals(2000, ChatRules.clamp("a".repeat(2100)).length)
         assertEquals("short", ChatRules.clamp("short"))

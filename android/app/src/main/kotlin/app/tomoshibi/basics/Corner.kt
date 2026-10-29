@@ -131,6 +131,38 @@ object CornerLanes {
         if (saidRight + gap <= notices) return 0f
         return saidHeight + gap
     }
+
+    /**
+     * How far above the foot of a picture its name stands, given the
+     * messages in the corner: [lifted] as it would stand anyway (over the
+     * controls), or higher, clear of the messages, where they lie over it.
+     * A message arriving in a call of two was drawn over the other person's
+     * name, the one place the name was (the health check of 2026-10-29);
+     * the name moves rather than the message, as the notices do above.
+     *
+     * In one unit throughout: the picture's left, right, top and bottom, the
+     * messages' ([saidLeft] and so on, all null while there are none), how
+     * tall the name is with its margin ([name]) and the [gap] kept. The
+     * name is at the picture's leading foot, so only messages over the
+     * picture's first half are in its way; and it never rises past the
+     * picture's middle, where it would read as somebody else's.
+     */
+    fun nameLift(
+        left: Float, top: Float, right: Float, bottom: Float,
+        saidLeft: Float?, saidTop: Float?, saidRight: Float?, saidBottom: Float?,
+        lifted: Float, name: Float, gap: Float = GAP,
+    ): Float {
+        if (saidLeft == null || saidTop == null || saidRight == null || saidBottom == null) return lifted
+        if (saidBottom <= saidTop || saidRight <= saidLeft) return lifted
+        val nameBottom = bottom - lifted
+        val nameTop = nameBottom - name
+        val across = saidLeft < (left + right) / 2 && saidRight > left
+        val over = saidTop < nameBottom && saidBottom > nameTop
+        if (!across || !over) return lifted
+        val clear = bottom - saidTop + gap
+        if (clear + name > (bottom - top) / 2) return lifted
+        return maxOf(lifted, clear)
+    }
 }
 
 /** The parts of the web's chat that are rules rather than drawing. */

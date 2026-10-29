@@ -66,6 +66,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -81,6 +83,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import app.tomoshibi.basics.Appearance
 import app.tomoshibi.basics.ConnectionBadge
 import app.tomoshibi.basics.ControlsPlacement
+import app.tomoshibi.basics.CornerLanes
 import app.tomoshibi.basics.Plan
 import app.tomoshibi.basics.StagePin
 import app.tomoshibi.basics.Theme
@@ -785,6 +788,9 @@ private fun Tiles(
     }
 }
 
+/** A name at a picture's foot with the margin it is drawn in, in points (TileFrame), for keeping it clear of the corner's messages. */
+private const val NAME_HEIGHT = 34f
+
 @Composable
 private fun Tile(
     app: AppModel,
@@ -820,9 +826,22 @@ private fun Tile(
     // person filling a call of two runs under the bar as well, and their
     // name was drawn half behind it, on the iPhone as here.
     val underBar = bar != null && spot.left < bar.right && spot.right > bar.left && spot.bottom > bar.bottom - Plan.ISLAND + 0.5f
+    val overBar = if (underBar && shown && spot.width < 900) Plan.ISLAND - Plan.GAP else 0f
+    // And above what people said in the corner, where it lies over the name
+    // (CornerLanes.nameLift), measured as both are placed in the window.
+    var placed by remember { mutableStateOf<Rect?>(null) }
+    val density = LocalDensity.current.density
+    val said = state.saidBounds
+    val clearOfSaid = placed?.let { at ->
+        CornerLanes.nameLift(
+            at.left, at.top, at.right, at.bottom,
+            said?.left, said?.top, said?.right, said?.bottom,
+            lifted = overBar * density, name = NAME_HEIGHT * density, gap = CornerLanes.GAP * density,
+        ) / density
+    } ?: overBar
     val lift by animateFloatAsState(
-        if (underBar && shown && spot.width < 900) Plan.ISLAND - Plan.GAP else 0f,
-        if (shown) Theme.settle() else Theme.leave(), label = "lift",
+        maxOf(overBar, clearOfSaid),
+        if (shown || clearOfSaid > overBar) Theme.settle() else Theme.leave(), label = "lift",
     )
     val edge = if (filled && onStage) {
         PaddingValues(start = inset.leading.dp, top = inset.top.dp, end = inset.trailing.dp, bottom = (inset.bottom + lift).dp)
@@ -838,73 +857,76 @@ private fun Tile(
     val press = { pressed(picture.id) }
     // The finger's place in the room, in pixels, for the menu to open
     // beside it: the tile says where in itself it was pressed.
-    val density = LocalDensity.current.density
     val menu = { at: Offset -> openMenu(picture.id, Offset(spot.left * density + at.x, spot.top * density + at.y)) }
     val controls: @Composable androidx.compose.foundation.layout.BoxScope.(Boolean) -> Unit = {
         StageControlsOver(call, state, picture, revealed, edge, fill, unfill)
     }
-    when (val role = picture.role) {
-        Picture.Role.Watch -> {
-            TileFrame(TileMarks("", unlabelled = true), press, Modifier.fillMaxSize(), compact = compact, selected = onStage,
-                radius = radius, ground = Color.Black, edge = edge,
-                // The empty stage's "Add a video" and the controls' list of
-                // videos open the watch panel (WatchStageView's `openPanel`).
-                content = { WatchStage(app, call, Modifier.fillMaxSize(), openPanel = { state.panel = RoomPanel.Watch }) }, overlay = controls)
-        }
-        Picture.Role.Me -> {
-            val speaking = steady(record.meSpeaking && call.microphoneOn)
-            TileFrame(
-                TileMarks(
-                    t("{name} (you)", mapOf("name" to call.localName)),
-                    proven = CrateRules.proven(call.localIdentity),
-                    unverified = call.localIdentity in suspects,
-                    speaking = speaking, muted = !call.microphoneOn, hand = call.handUp, handBesideName = cornered,
-                ),
-                press, Modifier.fillMaxSize(), menu = menu, compact = compact, selected = onStage,
-                radius = radius, floating = floating, ground = ground, edge = edge,
-                content = { SelfPicture(call, compact) }, overlay = controls,
-            )
-        }
-        Picture.Role.MyShare -> {
-            TileFrame(
-                TileMarks(t("{name} (you)", mapOf("name" to t("{name} (screen)", mapOf("name" to call.localName))))),
-                press, Modifier.fillMaxSize(), menu = menu, compact = compact, selected = onStage,
-                radius = radius, ground = ground, edge = edge,
-                content = { MyShareFace(compact) { call.scope.launch { runCatching { call.sharing.stopScreen() } } } },
-                overlay = controls,
-            )
-        }
-        is Picture.Role.Remote -> {
-            val surface = role.surface
-            val person = surface.person
-            val name = person.name.ifEmpty { person.id }
-            val screen = surface.kind == Surface.Kind.Screen
-            val label = if (screen) t("{name} (screen)", mapOf("name" to name)) else name
-            val quiet = host.setting(person, if (screen) Sound.Screen else Sound.Voice).silenced
-            if (screen && !onStage) {
-                TileFrame(
-                    TileMarks(name, silenced = quiet), press, Modifier.fillMaxSize(), menu = menu,
-                    compact = compact, selected = false, radius = radius,
-                    content = { ShareCardFace(name, compact) },
-                )
-            } else {
-                val camera = surface.kind == Surface.Kind.Camera
-                val speaking = steady(camera && person.speaking)
+    // Where the picture is in the window, for its name to keep clear of
+    // what people said in the corner.
+    Box(Modifier.fillMaxSize().onGloballyPositioned { placed = it.boundsInWindow() }) {
+        when (val role = picture.role) {
+            Picture.Role.Watch -> {
+                TileFrame(TileMarks("", unlabelled = true), press, Modifier.fillMaxSize(), compact = compact, selected = onStage,
+                    radius = radius, ground = Color.Black, edge = edge,
+                    // The empty stage's "Add a video" and the controls' list of
+                    // videos open the watch panel (WatchStageView's `openPanel`).
+                    content = { WatchStage(app, call, Modifier.fillMaxSize(), openPanel = { state.panel = RoomPanel.Watch }) }, overlay = controls)
+            }
+            Picture.Role.Me -> {
+                val speaking = steady(record.meSpeaking && call.microphoneOn)
                 TileFrame(
                     TileMarks(
-                        label,
-                        proven = camera && CrateRules.proven(person.id),
-                        unverified = camera && person.id in suspects,
-                        speaking = speaking,
-                        muted = camera && (person.track(MediaSource.MICROPHONE)?.muted ?: true),
-                        silenced = quiet,
-                        hand = person.handUp,
-                        handBesideName = cornered,
+                        t("{name} (you)", mapOf("name" to call.localName)),
+                        proven = CrateRules.proven(call.localIdentity),
+                        unverified = call.localIdentity in suspects,
+                        speaking = speaking, muted = !call.microphoneOn, hand = call.handUp, handBesideName = cornered,
                     ),
                     press, Modifier.fillMaxSize(), menu = menu, compact = compact, selected = onStage,
-                    radius = radius, ground = ground, edge = edge,
-                    content = { SurfacePicture(surface, call, compact) }, overlay = controls,
+                    radius = radius, floating = floating, ground = ground, edge = edge,
+                    content = { SelfPicture(call, compact) }, overlay = controls,
                 )
+            }
+            Picture.Role.MyShare -> {
+                TileFrame(
+                    TileMarks(t("{name} (you)", mapOf("name" to t("{name} (screen)", mapOf("name" to call.localName))))),
+                    press, Modifier.fillMaxSize(), menu = menu, compact = compact, selected = onStage,
+                    radius = radius, ground = ground, edge = edge,
+                    content = { MyShareFace(compact) { call.scope.launch { runCatching { call.sharing.stopScreen() } } } },
+                    overlay = controls,
+                )
+            }
+            is Picture.Role.Remote -> {
+                val surface = role.surface
+                val person = surface.person
+                val name = person.name.ifEmpty { person.id }
+                val screen = surface.kind == Surface.Kind.Screen
+                val label = if (screen) t("{name} (screen)", mapOf("name" to name)) else name
+                val quiet = host.setting(person, if (screen) Sound.Screen else Sound.Voice).silenced
+                if (screen && !onStage) {
+                    TileFrame(
+                        TileMarks(name, silenced = quiet), press, Modifier.fillMaxSize(), menu = menu,
+                        compact = compact, selected = false, radius = radius,
+                        content = { ShareCardFace(name, compact) },
+                    )
+                } else {
+                    val camera = surface.kind == Surface.Kind.Camera
+                    val speaking = steady(camera && person.speaking)
+                    TileFrame(
+                        TileMarks(
+                            label,
+                            proven = camera && CrateRules.proven(person.id),
+                            unverified = camera && person.id in suspects,
+                            speaking = speaking,
+                            muted = camera && (person.track(MediaSource.MICROPHONE)?.muted ?: true),
+                            silenced = quiet,
+                            hand = person.handUp,
+                            handBesideName = cornered,
+                        ),
+                        press, Modifier.fillMaxSize(), menu = menu, compact = compact, selected = onStage,
+                        radius = radius, ground = ground, edge = edge,
+                        content = { SurfacePicture(surface, call, compact) }, overlay = controls,
+                    )
+                }
             }
         }
     }
