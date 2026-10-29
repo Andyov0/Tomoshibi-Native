@@ -194,8 +194,21 @@ class HostFeature private constructor(val call: CallModel) {
 
     private val bearer: String get() = call.call.token()
 
+    /** Whether the deployment has answered the standing question yet, so its first answer is logged even when it is "no". */
+    private var answered = false
+
     suspend fun refreshStanding() {
-        val said = attempt { call.deployment.hostStanding(call.room, bearer) } ?: return
+        val said = try {
+            call.deployment.hostStanding(call.room, bearer)
+        } catch (fault: CancellationException) {
+            throw fault
+        } catch (fault: Exception) {
+            // Kept as it was: a question that went unanswered is not a "no".
+            Log.i(TAG, "host: standing not answered: ${fault.message}")
+            return
+        }
+        if (!answered || said != standing) Log.i(TAG, "host: standing yours=${said.yours} admin=${said.admin}")
+        answered = true
         val became = said.yours && !standing.yours
         standing = said
         sayWhoIsWaiting()
