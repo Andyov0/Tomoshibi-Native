@@ -96,6 +96,23 @@ object GlassSupport {
 val LocalContentLayer = compositionLocalOf { false }
 
 /**
+ * Whether the kit's glass here is drawn opaque instead: a menu, a panel, a
+ * notice. The web keeps its one glass for the controls floating over a call
+ * and draws everything those controls open as solid surfaces (the polish of
+ * 2026-10-29), because words on glass over a moving picture are read through
+ * whatever the picture is doing, and a menu over a white slide went grey
+ * under its own rows. The shape, the edge and the shadow stay; only what is
+ * behind no longer shows through.
+ */
+val LocalOpaque = compositionLocalOf { false }
+
+/** Draws the glass inside [content] as an opaque surface ([LocalOpaque]). */
+@Composable
+fun Opaque(content: @Composable () -> Unit) {
+    CompositionLocalProvider(LocalOpaque provides true, content = content)
+}
+
+/**
  * What the glass on this screen refracts: the content marked with
  * [glassSource]. Null where nothing is, and the glass is then the stand-in.
  */
@@ -262,8 +279,9 @@ fun Modifier.plainSurface(shape: Shape, tint: Color? = null): Modifier {
 @Composable
 internal fun Modifier.liquidGlass(shape: Shape, tint: Color?, backdrop: HazeState?, shade: Color = Color.Transparent): Modifier {
     val palette = LocalPalette.current
-    val blurred = backdrop != null && GlassSupport.blurs
-    val standIn = palette.surface.copy(alpha = 0.80f)
+    val opaque = LocalOpaque.current
+    val blurred = backdrop != null && GlassSupport.blurs && !opaque
+    val standIn = palette.surface.copy(alpha = if (opaque) 1f else 0.80f)
     val blur = remember(palette) { glassBlur(palette, standIn) }
     return this
         .dropShadow(shape, glassShadow(palette))

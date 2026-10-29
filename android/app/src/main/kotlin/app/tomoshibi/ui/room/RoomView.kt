@@ -111,6 +111,7 @@ import app.tomoshibi.ui.kit.GlassBackdrop
 import app.tomoshibi.ui.kit.MenuCard
 import app.tomoshibi.ui.kit.MenuItem
 import app.tomoshibi.ui.kit.MenuRule
+import app.tomoshibi.ui.kit.Opaque
 import app.tomoshibi.ui.kit.PageArrow
 import app.tomoshibi.ui.kit.PageIndicator
 import app.tomoshibi.ui.kit.PopoverAlignment
@@ -695,16 +696,18 @@ private fun Content(
 
         Panel(app, call, state, host, shape, inset)
 
-        // Always there, so each card leaves with its own animation.
+        // Always there, so each card leaves with its own animation. What
+        // people said and what the call says are solid, as the web's are: on
+        // glass they were read through whatever the picture under them was.
         val corner = shape.corner.settled("corner")
         Box(Modifier.at(corner), contentAlignment = Alignment.BottomStart) {
-            SaidColumn(
+            Opaque { SaidColumn(
                 call.arriving.map { SaidLine(it.id, it.identity, it.name, it.text) },
                 Modifier
                     .widthIn(max = min(320f, corner.width - 32).dp)
                     .padding(start = 12.dp, bottom = (Plan.ISLAND + 8).dp),
                 onBounds = { state.saidBounds = it },
-            )
+            ) }
         }
 
         // The corner for what the call says, drawn after the panels so a tall
@@ -715,11 +718,11 @@ private fun Content(
         val toastsEnd by animateDpAsState(if (beside) (panelWidth + 24 + 8).dp else 16.dp, Theme.settle(), label = "toasts")
         val toastsClear by animateDpAsState(shape.toastsClear.dp, Theme.settle(), label = "toasts")
         Box(Modifier.at(shape.toasts.settled("toasts")), contentAlignment = Alignment.BottomEnd) {
-            ToastStack(
+            Opaque { ToastStack(
                 call,
                 Modifier.padding(end = toastsEnd, bottom = toastsClear),
                 saidBounds = state.saidBounds,
-            )
+            ) }
         }
 
         Menu(call, state, host, record, pictures, ::fill, ::unfill)
@@ -1047,6 +1050,11 @@ private fun Panel(
     // a book, the second page.
     val area = shape.panel.settled("panel")
     val clear by animateDpAsState(((if (narrow) 38 else 0) + if (shape.panel.top == 0f) inset.top else 0f).dp, Theme.settle(), label = "panel")
+    // How far a panel on a phone travels: up from the foot of the room as a
+    // phone's sheet does, and back down when it closes (the web's panels on
+    // a phone, 2026-10-29). From the trailing edge it crossed the pictures
+    // sideways, which on a phone is the way a page is left, not a panel shown.
+    val rise = with(LocalDensity.current) { (area.height + 24f).dp.roundToPx() }
     // The same composition wherever it moves, which is what keeps a
     // message half typed, the watch panel's page and what was pasted into
     // it, and the music panel's search, as the phone is stood up or laid
@@ -1070,8 +1078,9 @@ private fun Panel(
         // which drew the whole panel, blur and all, into a buffer of its
         // size every frame and cut its shadow off square.
         transitionSpec = {
-            (slideInHorizontally(Theme.settle()) { it } togetherWith slideOutHorizontally(Theme.leave()) { it })
-                .using(SizeTransform(clip = false) { _, _ -> snap() })
+            val moves = if (narrow) slideInVertically(Theme.settle()) { rise } togetherWith slideOutVertically(Theme.leave()) { rise }
+            else slideInHorizontally(Theme.settle()) { it } togetherWith slideOutHorizontally(Theme.leave()) { it }
+            moves.using(SizeTransform(clip = false) { _, _ -> snap() })
         },
         contentAlignment = Alignment.TopEnd,
         label = "panel",
@@ -1097,7 +1106,9 @@ private fun Panel(
                 .holdsPresses()
                 .verticalScroll(rememberScrollState()),
         ) {
-            when (open) {
+            // Opaque (LocalOpaque): the words in a panel were read through
+            // whatever the picture under it was doing.
+            Opaque { when (open) {
                 // A book gives the conversation a page of its own, and it
                 // runs down the page rather than stopping a third of the way.
                 RoomPanel.Messages -> ChatPanel(
@@ -1109,7 +1120,7 @@ private fun Panel(
                 RoomPanel.Music -> MusicPanel(app, call, close, tallest = tallest.dp)
                 RoomPanel.Host -> HostPanel(host, close)
                 RoomPanel.Devices -> DevicesPanel(app, call, close)
-            }
+            } }
         }
     }
     }

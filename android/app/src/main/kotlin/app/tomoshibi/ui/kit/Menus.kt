@@ -30,11 +30,25 @@ import app.tomoshibi.basics.Theme
 // which looked like a preferences pane bolted onto a call (the owner,
 // 2026-10-17).
 
-/** A popover menu's rows, two points apart inside six of margin (`MenuCard`). */
+/**
+ * A popover menu's rows, two points apart inside four of margin
+ * (`MenuCard`): the popover's fourteen less the four is the rows' ten, so
+ * the corners inside follow the corner outside.
+ */
 @Composable
 fun MenuCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    Column(modifier.fillMaxWidth().padding(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
+    Column(modifier.fillMaxWidth().padding(4.dp), verticalArrangement = Arrangement.spacedBy(2.dp), content = content)
 }
+
+/**
+ * How tall a menu row is pressed at: a fingertip on a phone and the Fold's
+ * cover screen, where a menu is pressed with a thumb and its rows touch, and
+ * forty-four on an unfolded Fold or a tablet, which is still pressed with a
+ * finger (the web's rows are forty-four wherever the pointer is coarse). The
+ * thirty-four it was there is the Mac's, which has a pointer.
+ */
+@Composable
+internal fun menuRowHeight() = if (narrowWindow()) Fingertip else 44.dp
 
 /** A small heading over some of a menu's rows, in capitals (`MenuHeading`). */
 @Composable
@@ -82,18 +96,21 @@ fun MenuItem(
 ) {
     val on = enabled && LocalEnabled.current
     val press = rememberPress()
-    val light by animateFloatAsState(if (press.lit && on) 0.09f else 0f, Motion.hover(), label = "light")
+    // The row's own two steps (the web's ghost rows, a wash of eight and of
+    // thirteen per cent): lit under the pointer, a step further under the
+    // finger, so that a press on a touch screen shows where it landed.
+    val light by animateFloatAsState(
+        if (!on) 0f else if (press.pressed) 0.13f else if (press.hovered) 0.08f else 0f,
+        Motion.hover(), label = "light",
+    )
     val shape = rounded(10f)
     Row(
         modifier
             .fillMaxWidth()
-            .alpha(if (on) 1f else 0.4f)
+            .alpha(if (on) 1f else DisabledAlpha)
             .background(Theme.wash.copy(alpha = light), shape)
             .pressable(press, shape, on, Role.Button, selected = if (checked) true else null, onClick = onClick)
-            // A fingertip tall on a phone and the Fold's cover screen, where a
-            // menu is pressed with a thumb and its rows touch; the Mac's 34
-            // points in a wide window.
-            .heightIn(min = if (narrowWindow()) Fingertip else 34.dp)
+            .heightIn(min = menuRowHeight())
             .padding(horizontal = 10.dp, vertical = if (detail == null) 7.dp else 6.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -159,7 +176,7 @@ fun MenuSwitch(
         modifier
             .fillMaxWidth()
             .switchable(press, shape, isOn, on, onChange = onChange)
-            .heightIn(min = if (narrowWindow()) Fingertip else 36.dp)
+            .heightIn(min = menuRowHeight())
             .padding(horizontal = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
