@@ -9,8 +9,8 @@ plugins {
 // The version people are told, and which build of it this is. A small fix
 // keeps the version and takes the next build; a new version is for new
 // features or a large update (owner, 2026-10-22).
-val release = "0.1.6"
-val build = 2
+val release = "0.1.7"
+val build = 1
 
 // The version name joins them as the core's version_with_build does
 // (core/protocol/src/api/updates.rs), written out here because the build
@@ -133,7 +133,7 @@ android {
         targetSdk = 36
         // One more for every build of every version: Android installs over
         // the app only a version code above its own.
-        versionCode = 9
+        versionCode = 10
         versionName = joined
         manifestPlaceholders["tomoshibiHost"] = deploymentHost.lowercase()
         // No plain HTTP anywhere in a release build; the builds tested against

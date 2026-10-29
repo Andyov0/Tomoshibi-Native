@@ -46,9 +46,9 @@
       the user agent and the update check. What a build made by hand says;
       setup.ps1 gives a release its own (-Version, -Build).
     -->
-    <Version>0.1.4</Version>
-    <AssemblyVersion>0.1.4.2</AssemblyVersion>
-    <FileVersion>0.1.4.2</FileVersion>
+    <Version>0.1.7</Version>
+    <AssemblyVersion>0.1.7.1</AssemblyVersion>
+    <FileVersion>0.1.7.1</FileVersion>
     <!-- Generated code is not ours to keep tidy. -->
     <NoWarn>$(NoWarn);CS1591;CS8618;CS8625;CS8600;CS8602;CS8603;CS8604;CS0108</NoWarn>
   </PropertyGroup>
