@@ -220,8 +220,8 @@ impl Call {
         match event {
             RoomEvent::ParticipantConnected(p) => say(CallEvent::ParticipantJoined { participant: describe(&p) }),
             RoomEvent::ParticipantDisconnected(p) => {
-                for sender in self.senders.lock().unwrap().iter() {
-                    sender.lock().unwrap().on_left(p.identity().as_str());
+                for sender in held(&self.senders).iter() {
+                    held(sender).on_left(p.identity().as_str());
                 }
                 say(CallEvent::ParticipantLeft { identity: p.identity().to_string() })
             }
@@ -243,7 +243,7 @@ impl Call {
             }),
             RoomEvent::TrackUnpublished { publication, participant } => {
                 self.sinks.detach(&publication.sid().to_string());
-                self.wanted_sizes.lock().unwrap().remove(&publication.sid().to_string());
+                held(&self.wanted_sizes).remove(&publication.sid().to_string());
                 self.freezes.forget(&publication.sid().to_string());
                 say(CallEvent::TrackUnpublished {
                     identity: participant.identity().to_string(),
@@ -253,11 +253,11 @@ impl Call {
             RoomEvent::TrackSubscribed { track, publication, participant } => {
                 let source = publication.source();
                 if matches!(source, TrackSource::Screenshare | TrackSource::ScreenshareAudio) {
-                    let ms = *self.share_playout_ms.lock().unwrap();
+                    let ms = *held(&self.share_playout_ms);
                     let _ = track.set_playout_delay((ms > 0).then(|| ms as f64 / 1000.0));
                 }
                 let sid = publication.sid().to_string();
-                let wanted = self.wanted_sizes.lock().unwrap().get(&sid).copied();
+                let wanted = held(&self.wanted_sizes).get(&sid).copied();
                 let cap = if source == TrackSource::Screenshare { self.freezes.subscribed(&sid) } else { None };
                 if let Some((width, height)) = freeze::combined(cap, wanted) {
                     publication.update_video_dimensions(livekit::track::TrackDimension(width, height));
@@ -342,8 +342,8 @@ impl Call {
                 if topic == "lossless-ask" || topic == "lossless-music-ask" =>
             {
                 let now = freeze::now_ms() as u64;
-                for sender in self.senders.lock().unwrap().iter() {
-                    sender.lock().unwrap().on_ask(now, from.identity().as_str(), &topic, &payload);
+                for sender in held(&self.senders).iter() {
+                    held(sender).on_ask(now, from.identity().as_str(), &topic, &payload);
                 }
             }
             RoomEvent::DataReceived { payload, topic, participant, .. } => say(CallEvent::Data {
@@ -482,7 +482,7 @@ impl Call {
     pub fn set_share_playout_ms(&self, ms: u32) {
         let _core = crate::runtime::enter();
         let ms = ms.min(1000);
-        *self.share_playout_ms.lock().unwrap() = ms;
+        *held(&self.share_playout_ms) = ms;
         for participant in self.room.remote_participants().values() {
             for publication in participant.track_publications().values() {
                 if matches!(publication.source(), TrackSource::Screenshare | TrackSource::ScreenshareAudio) {
@@ -508,7 +508,7 @@ impl Call {
     /// freeze is being sat out.
     pub fn request_video_size(&self, sid: String, width: u32, height: u32) -> Result<(), CallError> {
         let _core = crate::runtime::enter();
-        self.wanted_sizes.lock().unwrap().insert(sid.clone(), (width, height));
+        held(&self.wanted_sizes).insert(sid.clone(), (width, height));
         let cap = self.freezes.capped(&sid);
         let publication = self.publication(&sid).ok_or(CallError::NoSuchTrack { sid })?;
         if let Some((width, height)) = freeze::combined(cap, Some((width, height))) {
@@ -547,7 +547,7 @@ impl Call {
     /// streams that may be standing in for them; the app turns the level.
     pub async fn set_hearing(self: Arc<Self>, identity: String, music: bool, level: f32, blocked: bool) {
         on_core(async move {
-            self.lossless.settings.lock().unwrap().levels_set(identity, music, level, blocked);
+            held(&self.lossless.settings).levels_set(identity, music, level, blocked);
             self.lossless_tick().await;
         })
         .await
@@ -580,7 +580,7 @@ impl Call {
     /// Whether the app is in the background: readings taken there are not
     /// evidence of a freeze (the web skips a hidden tab for the same reason).
     pub fn set_background(&self, background: bool) {
-        *self.freezes.background.lock().unwrap() = background;
+        *held(&self.freezes.background) = background;
     }
 
     /// Sends this remote video's frames to `sink` from now until it is

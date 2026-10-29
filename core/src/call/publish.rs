@@ -203,7 +203,7 @@ impl AudioInput {
     /// being sent).
     fn drain(self: &Arc<Self>) {
         {
-            let mut draining = self.draining.lock().unwrap();
+            let mut draining = super::held(&self.draining);
             if *draining {
                 return;
             }
@@ -212,7 +212,7 @@ impl AudioInput {
         let input = self.clone();
         crate::runtime::spawn(async move {
             loop {
-                let next = input.lossless.as_ref().and_then(|s| s.lock().unwrap().next_packet());
+                let next = input.lossless.as_ref().and_then(|s| super::held(s).next_packet());
                 let Some(packet) = next else { break };
                 let data = DataPacket {
                     payload: packet.payload,
@@ -223,14 +223,14 @@ impl AudioInput {
                 };
                 let _ = input.call.room.local_participant().publish_data(data).await;
             }
-            *input.draining.lock().unwrap() = false;
+            *super::held(&input.draining) = false;
         });
     }
 
     pub async fn unpublish(self: Arc<Self>) -> Result<(), CallError> {
         if let Some(sender) = self.lossless.as_ref() {
-            sender.lock().unwrap().stop();
-            self.call.senders.lock().unwrap().retain(|s| !Arc::ptr_eq(s, sender));
+            super::held(sender).stop();
+            super::held(&self.call.senders).retain(|s| !Arc::ptr_eq(s, sender));
         }
         on_core(async move { withdraw(&self.call, &LocalTrack::Audio(self.track.clone())).await }).await
     }
@@ -483,7 +483,7 @@ impl Call {
             }
             .map(|channel| Arc::new(Mutex::new(LosslessSender::captured(channel))));
             if let Some(sender) = lossless.as_ref() {
-                self.senders.lock().unwrap().push(sender.clone());
+                super::held(&self.senders).push(sender.clone());
             }
             let source = NativeAudioSource::new(AudioSourceOptions::default(), RATE, channels, 0);
             let track = LocalAudioTrack::create_audio_track(&name, RtcAudioSource::Native(source.clone()));

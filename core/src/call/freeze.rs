@@ -44,20 +44,20 @@ pub(super) fn now_ms() -> f64 {
 
 impl Freezes {
     fn watch(&self, sid: &str) -> Arc<ShareFreezeWatch> {
-        self.watches.lock().unwrap().entry(sid.to_string()).or_insert_with(|| ShareFreezeWatch::new(now_ms())).clone()
+        super::held(&self.watches).entry(sid.to_string()).or_insert_with(|| ShareFreezeWatch::new(now_ms())).clone()
     }
 
     pub(super) fn forget(&self, sid: &str) {
-        self.watches.lock().unwrap().remove(sid);
+        super::held(&self.watches).remove(sid);
     }
 
     pub(super) fn capped(&self, sid: &str) -> Option<FreezeRung> {
-        self.watches.lock().unwrap().get(sid).and_then(|watch| watch.capped())
+        super::held(&self.watches).get(sid).and_then(|watch| watch.capped())
     }
 
     /// A share's track has arrived (again).
     pub(super) fn subscribed(&self, sid: &str) -> Option<FreezeRung> {
-        let can_tell = !*self.background.lock().unwrap();
+        let can_tell = !*super::held(&self.background);
         self.watch(sid).subscribed(can_tell)
     }
 }
@@ -76,7 +76,7 @@ pub(super) async fn keep(call: Weak<Call>) {
     loop {
         tick.tick().await;
         let Some(call) = call.upgrade() else { return };
-        let can_tell = !*call.freezes.background.lock().unwrap();
+        let can_tell = !*super::held(&call.freezes.background);
         let shares: Vec<RemoteTrackPublication> = call
             .room
             .remote_participants()
@@ -108,7 +108,7 @@ pub(super) async fn keep(call: Weak<Call>) {
                 _ => None,
             };
             let layers = publication.video_layers().into_iter().map(rung).collect();
-            let wanted = call.wanted_sizes.lock().unwrap().get(&sid).copied();
+            let wanted = super::held(&call.wanted_sizes).get(&sid).copied();
             let measured = wanted.map(|(width, height)| FreezeRung { width, height });
             let TrackDimension(width, height) = publication.dimension();
             let portrait = height > width;

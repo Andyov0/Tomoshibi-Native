@@ -78,7 +78,7 @@ impl Lossless {
     }
 
     pub(super) fn set_sink(&self, sink: Arc<dyn LosslessSink>) {
-        *self.sink.lock().unwrap() = Some(sink);
+        *super::held(&self.sink) = Some(sink);
     }
 }
 
@@ -136,8 +136,8 @@ impl Call {
     pub(super) async fn lossless_tick(self: &Arc<Self>) {
         let room = room(self);
         let outcome = {
-            let settings = self.lossless.settings.lock().unwrap();
-            self.lossless.receiver.lock().unwrap().tick(now_ms() as u64, &room, &*settings)
+            let settings = super::held(&self.lossless.settings);
+            super::held(&self.lossless.receiver).tick(now_ms() as u64, &room, &*settings)
         };
         self.lossless_apply(outcome, &room).await;
     }
@@ -156,8 +156,8 @@ impl Call {
             return (Outcome::default(), room);
         }
         let outcome = {
-            let settings = self.lossless.settings.lock().unwrap();
-            self.lossless.receiver.lock().unwrap().on_data(now_ms() as u64, from, topic, payload, &room, &*settings)
+            let settings = super::held(&self.lossless.settings);
+            super::held(&self.lossless.receiver).on_data(now_ms() as u64, from, topic, payload, &room, &*settings)
         };
         (outcome, room)
     }
@@ -183,9 +183,9 @@ impl Call {
         // taken the other way round here, a packet being read on the room's
         // event pump and this could each hold one and wait for the other,
         // and every event of the call stopped with them.
-        let settings = self.lossless.settings.lock().unwrap();
-        let receiver = self.lossless.receiver.lock().unwrap();
-        let sink = self.lossless.sink.lock().unwrap().clone();
+        let settings = super::held(&self.lossless.settings);
+        let receiver = super::held(&self.lossless.receiver);
+        let sink = super::held(&self.lossless.sink).clone();
         for remote in room {
             for publication in &remote.publications {
                 let sound = match publication.source {
@@ -235,16 +235,16 @@ impl NativePlayer {
             let mut planes = vec![vec![0f32; per]; channels.max(1)];
             let mut tick = tokio::time::interval(Duration::from_millis(10));
             tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Burst);
-            while *flag.lock().unwrap() {
+            while *super::held(&flag) {
                 tick.tick().await;
-                drained.lock().unwrap().pull(&mut planes);
+                super::held(&drained).pull(&mut planes);
                 let mut interleaved = Vec::with_capacity(per * planes.len());
                 for frame in 0..per {
                     for plane in &planes {
                         interleaved.push(plane[frame]);
                     }
                 }
-                let target = sink.lock().unwrap().clone();
+                let target = super::held(&sink).clone();
                 if let Some(target) = target {
                     target.on_lossless(identity.clone(), music, interleaved, rate, planes.len() as u32);
                 }
@@ -256,18 +256,18 @@ impl NativePlayer {
 
 impl Player for NativePlayer {
     fn push(&mut self, block: Vec<Vec<f32>>) {
-        self.worklet.lock().unwrap().push(block);
+        super::held(&self.worklet).push(block);
     }
 
     fn volume(&mut self, _level: f32) {}
 
     fn close(&mut self) {
-        *self.alive.lock().unwrap() = false;
+        *super::held(&self.alive) = false;
         self.pump.abort();
     }
 
     fn counts(&self) -> Option<PlayoutCounts> {
-        self.worklet.lock().unwrap().counts()
+        super::held(&self.worklet).counts()
     }
 
     fn broken(&self) -> bool {

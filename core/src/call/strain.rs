@@ -39,12 +39,12 @@ impl Default for Strain {
 impl Strain {
     pub(super) fn started(&self, sid: String, track: LocalVideoTrack, quality: ShareQuality, fps: u32) {
         self.run.begin(quality, fps, now_ms());
-        *self.share.lock().unwrap() = Some((sid, track));
+        *super::held(&self.share) = Some((sid, track));
         self.watch.running_changed(self.running());
     }
 
     pub(super) fn stopped(&self, sid: &str) {
-        let mut share = self.share.lock().unwrap();
+        let mut share = super::held(&self.share);
         if share.as_ref().is_some_and(|(s, _)| s == sid) {
             *share = None;
             self.run.end();
@@ -131,7 +131,7 @@ pub(super) async fn keep(call: Weak<Call>) {
     loop {
         tick.tick().await;
         let Some(call) = call.upgrade() else { return };
-        let share = call.strain.share.lock().unwrap().clone();
+        let share = super::held(&call.strain.share).clone();
         let begin = call.strain.watch.begin(call.strain.running(), share.as_ref().map(|(sid, _)| sid.clone()), now_ms());
         if begin.hide {
             call.observer.on_event(CallEvent::Strain { hint: None });
