@@ -57,8 +57,8 @@ internal sealed class Overlay : Grid
     private Pop? _pop;
     private readonly List<Held> _dialogs = new();
 
-    private sealed record Pop(string Id, Border Catcher, FrameworkElement Panel, Action? Closed);
-    private sealed record Held(Border Dim, FrameworkElement Panel, Action Dismiss, bool Sheet, Border Body, bool Frosted, Func<Brush> Ground, UIElement Content);
+    private sealed record Pop(string Id, Border Catcher, FrameworkElement Panel, Action? Closed, FrameworkElement Anchor);
+    private sealed record Held(Border Dim, FrameworkElement Panel, Action Dismiss, bool Sheet, Border Body, bool Frosted, Func<Brush> Ground, UIElement Content, UIElement? Before);
 
     public Overlay()
     {
@@ -172,7 +172,7 @@ internal sealed class Overlay : Grid
         }
         _popoverLayer.Children.Add(catcher);
         _popoverLayer.Children.Add(panel);
-        _pop = new Pop(id, catcher, panel, closed);
+        _pop = new Pop(id, catcher, panel, closed, anchor);
 
         // Grows from the control's side, over the settle curve.
         var anchorPoint = side switch
@@ -189,10 +189,12 @@ internal sealed class Overlay : Grid
     {
         if (_pop is not { } pop) return;
         _pop = null;
+        var handBack = FocusIsIn(pop.Panel);
         _popoverLayer.Children.Remove(pop.Catcher);
         var size = new Vector2((float)pop.Panel.ActualWidth, (float)pop.Panel.ActualHeight);
         Animate(pop.Panel, 1f, 0.97f, 1f, 0f, Motion.Leave, false, new Vector2(0.5f, 0.5f), size, () => _popoverLayer.Children.Remove(pop.Panel));
         pop.Closed?.Invoke();
+        if (handBack) GiveBack(pop.Anchor);
     }
 
     /// <summary>
@@ -211,6 +213,8 @@ internal sealed class Overlay : Grid
     /// </param>
     public Action ShowDialog(UIElement content, double width, double? maxHeight, Action dismiss, bool sheet = false, bool scrolls = true, bool cover = false, bool frosted = false)
     {
+        // Where the keyboard was, which is where it goes back to.
+        var before = XamlRoot is { } root ? FocusManager.GetFocusedElement(root) as UIElement : null;
         var dim = new Border { Background = DimFor(frosted) };
         dim.PointerPressed += (_, e) =>
         {
@@ -292,7 +296,7 @@ internal sealed class Overlay : Grid
         panel = K.Holding(inside);
         _dialogLayer.Children.Add(dim);
         _dialogLayer.Children.Add(panel);
-        var held = new Held(dim, panel, dismiss, sheet, chrome, frosted, ground, content);
+        var held = new Held(dim, panel, dismiss, sheet, chrome, frosted, ground, content, before);
         _dialogs.Add(held);
         CoveredChanged?.Invoke();
         Motion.Hide(dim);
@@ -353,6 +357,7 @@ internal sealed class Overlay : Grid
     private void CloseDialog(Held held)
     {
         if (!_dialogs.Remove(held)) return;
+        var handBack = FocusIsIn(held.Panel);
         CoveredChanged?.Invoke();
         ClosePopover();
         Motion.FadeTo(held.Dim, 0);
@@ -363,6 +368,44 @@ internal sealed class Overlay : Grid
         };
         if (held.Sheet) Slide(held.Panel, false, remove);
         else Animate(held.Panel, 1f, 0.98f, 1f, 0f, Motion.Leave, false, new Vector2(0.5f, 0.5f), new Vector2((float)held.Panel.ActualWidth, (float)held.Panel.ActualHeight), remove);
+        if (handBack && held.Before != null) GiveBack(held.Before);
+    }
+
+    /// <summary>
+    /// Whether the keyboard's focus is inside what is closing, or nowhere:
+    /// then it goes back to the control that opened it. Focus a press put
+    /// somewhere else on the way out (a menu item that opened a panel and
+    /// put its field in front) is left where it is.
+    /// </summary>
+    private bool FocusIsIn(FrameworkElement panel)
+    {
+        if (panel.XamlRoot is not { } root) return false;
+        var focused = FocusManager.GetFocusedElement(root) as DependencyObject;
+        if (focused == null) return true;
+        for (var at = focused; at != null; at = VisualTreeHelper.GetParent(at))
+        {
+            if (ReferenceEquals(at, panel)) return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// The keyboard's focus back on the control that opened a popover or a
+    /// dialog, as Windows' own flyouts give it back. It fell to the window's
+    /// root before, and a keyboard or Narrator user closing the share menu
+    /// or the leave question had to Tab from the top of the window to get
+    /// back to the bar. Programmatic, so the focus rectangle shows as the last
+    /// input decides: after the keyboard, not after a mouse. Not to a
+    /// control no longer on the screen (a bar drawn again meanwhile).
+    /// </summary>
+    private void GiveBack(UIElement to)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (to.XamlRoot == null || to.Visibility != Visibility.Visible) return;
+            if (to is FrameworkElement { IsLoaded: false }) return;
+            to.Focus(FocusState.Programmatic);
+        });
     }
 
     /// <summary>
