@@ -144,7 +144,9 @@ private struct Detail: View {
         // A fixed width: left to itself the row's spacer took the whole of
         // the room's width, and the figures ended up under the side panel.
         .frame(width: 236)
-        .glassSurface(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        // Opaque, as every popover over the call is (Kit `menuSurface`):
+        // figures are read, and through glass the picture ran under them.
+        .menuSurface(cornerRadius: Theme.Radius.medium)
         .onAppear { shown = true }
     }
 

@@ -30,7 +30,9 @@ struct WatchersCard: View {
                 }
                 .foregroundStyle(watching.isEmpty ? Theme.muted : Theme.foreground)
                 .padding(.horizontal, 10)
-                .frame(height: 28)
+                // The height of the room's name and the signal it stands
+                // beside in the row at the top (RoomTitle).
+                .frame(height: 32)
                 .glassSurface(Capsule())
                 .help(t("Watching"))
                 .accessibilityElement(children: .ignore)
@@ -75,7 +77,8 @@ struct WatchersCard: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .frame(width: 172, alignment: .leading)
-                .glassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                // Opaque, as every card over the call is (Kit `menuSurface`).
+                .menuSurface(cornerRadius: Theme.Radius.medium)
             }
         }
         .animation(Theme.settle, value: watching.map(\.id))
