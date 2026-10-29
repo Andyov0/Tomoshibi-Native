@@ -6,3 +6,16 @@
 // Apple targets (apple/Deployment.xcconfig) and Android's Gradle build; the
 // environment's TOMOSHIBI_HOST, where set, is taken before either file.
 TOMOSHIBI_HOST = meet.example.com
+
+// The public half of the deployment's release key, as 64 hexadecimal digits:
+// the Ed25519 key, kept on no server, that signs each build's line of the
+// deployment's apps.json (its "sig"). The core holds every update to it
+// before a build is offered or downloaded (core/protocol/src/api/updates.rs),
+// so a deployment's server, or the folder its builds are shelved in, cannot
+// hand the apps a build of its own. A release build for a real deployment
+// does not build without one. The example deployment has none, and a build
+// for it takes a key from the environment alone. A debug build pointed at a
+// local deployment whose manifest nobody signed may say "none". Used by the
+// core's build alone; the environment's TOMOSHIBI_UPDATE_KEY, where set, is
+// taken before either file.
+// TOMOSHIBI_UPDATE_KEY = <64 hexadecimal digits>

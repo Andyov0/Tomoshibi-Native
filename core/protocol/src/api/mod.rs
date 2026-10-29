@@ -73,8 +73,8 @@ pub use rooms::{
     Opening,
 };
 pub use updates::{
-    update_notes, version_is_newer, AppBuild, UpdateCheck, UpdateDownload, UpdateError,
-    UpdatePlatform, UpdateProgress,
+    update_key, update_notes, version_is_newer, AppBuild, UpdateCheck, UpdateDownload,
+    UpdateError, UpdatePlatform, UpdateProgress,
 };
 pub use watch::{
     read_resolved, watch_media_link, MediaItem, MediaServer, ResolvedLink, ResolvedPlay,
