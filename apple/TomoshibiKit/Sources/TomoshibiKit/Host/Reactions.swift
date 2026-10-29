@@ -202,24 +202,34 @@ struct HandControl: View {
     /// stood out of the row.
     private var row: Bool { axis == .horizontal }
     private var radius: CGFloat { size / 2 }
+    /// The hand as long along the bar as any other button is across it.
+    private var hand: CGFloat { size }
+    /// The half that opens the reactions, along the bar: thirty-two (the
+    /// web's and the other clients', ui-polish 2026-10-29). At twenty it was
+    /// the hardest thing on the bar to press, and on a phone the hardest on
+    /// the screen; across the bar a finger has the bar's whole size.
+    static let arrow: CGFloat = 32
 
     var body: some View {
         let stack = row ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
+        let handShape = UnevenRoundedRectangle(topLeadingRadius: radius, bottomLeadingRadius: row ? radius : 0,
+                                               bottomTrailingRadius: 0, topTrailingRadius: row ? 0 : radius)
+        let arrowShape = UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: row ? 0 : radius,
+                                                bottomTrailingRadius: radius, topTrailingRadius: row ? radius : 0)
         stack {
             Button {
                 guard !board.pressWasHold() else { return }
                 act { try await model.setHand(!model.handUp) }
             } label: {
                 Image(systemName: "hand.raised.fill")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(model.handUp ? Theme.tallyForeground : Theme.foreground)
-                    .frame(width: row ? size - 4 : size, height: row ? size : size - 4)
-                    .background(UnevenRoundedRectangle(topLeadingRadius: radius, bottomLeadingRadius: row ? radius : 0,
-                                                       bottomTrailingRadius: 0, topTrailingRadius: row ? 0 : radius)
-                        .fill(model.handUp ? Theme.tally : Theme.ink.opacity(0.12)))
+                    .font(.system(size: size * 0.4, weight: .semibold))
+                    .frame(width: row ? hand : size, height: row ? size : hand)
                     .contentShape(Rectangle())
+                    // Across the bar to a fingertip; along it, the hand and
+                    // its arrow meet, and each keeps its own half.
+                    .fingertip(row ? Theme.fingertip : size, row ? size : Theme.fingertip)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HalfPress(shape: handShape, lit: model.handUp))
             .opensReactions(board)
             .accessibilityLabel(model.handUp ? t("Lower your hand") : t("Raise your hand"))
             .help(model.handUp ? t("Lower your hand") : t("Raise your hand"))
@@ -228,18 +238,19 @@ struct HandControl: View {
                 popovers.toggle(ReactionBoard.tray)
             } label: {
                 // Towards where the tray opens: up over a row, and towards
-                // the pictures from a column.
-                Image(systemName: row ? "chevron.up" : "chevron.backward")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(open ? Theme.foreground : Theme.muted)
+                // the pictures from a column, turned for a right-to-left
+                // language as "chevron.backward" would be. Named as the left
+                // chevron because every symbol the views name has an Android
+                // one (SymbolsTest), and the backward one had none.
+                Image(systemName: row ? "chevron.up" : "chevron.left")
+                    .flipsForRightToLeftLayoutDirection(!row)
+                    .font(.system(size: 11, weight: .bold))
                     .rotationEffect(.degrees(open ? 180 : 0))
-                    .frame(width: row ? 20 : size, height: row ? size : 20)
-                    .background(UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: row ? 0 : radius,
-                                                       bottomTrailingRadius: radius, topTrailingRadius: row ? radius : 0)
-                        .fill(open ? Theme.ink.opacity(0.2) : Theme.ink.opacity(0.12)))
+                    .frame(width: row ? Self.arrow : size, height: row ? size : Self.arrow)
                     .contentShape(Rectangle())
+                    .fingertip(row ? Theme.fingertip : size, row ? size : Theme.fingertip)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HalfPress(shape: arrowShape, lit: false, held: open))
             .accessibilityLabel(t("Reactions"))
             .accessibilityAddTraits(open ? .isSelected : [])
             .help(t("Reactions"))
@@ -270,8 +281,11 @@ struct HandControl: View {
         #endif
     }
 
+    /// The six in a row, each forty across, a finger's forty-four apart on
+    /// a touch screen; on the menu's opaque surface rather than glass, as
+    /// every popover off the bar is (Kit `menuSurface`).
     private var tray: some View {
-        HStack(spacing: 2) {
+        HStack(spacing: Self.cellGap) {
             ForEach(reactionChoices(), id: \.self) { one in
                 ReactionChoice(what: one) {
                     board.send(one, in: model)
@@ -280,28 +294,83 @@ struct HandControl: View {
             }
         }
         .padding(4)
-        .glassSurface(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .menuSurface()
+    }
+
+    /// Between two reactions: a fingertip's worth on a touch screen, so that
+    /// each one's press reaches the next's.
+    private static var cellGap: CGFloat {
+        #if os(iOS)
+        Theme.fingertip - ReactionChoice.cell
+        #else
+        2
+        #endif
     }
 
     private struct ReactionChoice: View {
         let what: String
         let action: () -> Void
+        /// Forty across, the web's and the other clients'; they were 36 by 34.
+        static let cell: CGFloat = 40
         @State private var hovering = false
 
         var body: some View {
             Button(action: action) {
                 Text(what)
-                    .font(.system(size: 20))
-                    .frame(width: 36, height: 34)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(hovering ? Theme.surface : .clear))
-                    .scaleEffect(hovering ? 1.25 : 1)
+                    .font(.system(size: 22))
+                    .scaleEffect(hovering ? 1.2 : 1)
+                    .frame(width: Self.cell, height: Self.cell)
                     .contentShape(Rectangle())
+                    .fingertip(Self.cell)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(RowPress())
             .onHover { hovering = $0 }
             .animation(Theme.settle, value: hovering)
             // The reaction itself, as the web labels it: it is its own name.
             .accessibilityLabel(what)
+        }
+    }
+}
+
+/// One half of the hand's control pressed: its own shape's plate, lit while
+/// the hand is up, held down while it is pressed or the tray is open, lit a
+/// step under the pointer, and the shrink every control gives (Theme.Press).
+/// Pressed plainly before, the two halves were the only buttons on the bar
+/// that did not give under a finger.
+private struct HalfPress<S: Shape>: ButtonStyle {
+    let shape: S
+    let lit: Bool
+    var held = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        Plate(configuration: configuration, shape: shape, lit: lit, held: held)
+    }
+
+    private struct Plate: View {
+        let configuration: Configuration
+        let shape: S
+        let lit: Bool
+        let held: Bool
+        @State private var hovering = false
+        @Environment(\.accessibilityReduceMotion) private var still
+
+        var body: some View {
+            let down = configuration.isPressed
+            configuration.label
+                // Every symbol at full strength: the arrow's was faint while
+                // the tray was closed, which read as a control that was off.
+                .foregroundStyle(lit ? Theme.tallyForeground : Theme.foreground)
+                .background(shape.fill(fill(down)))
+                .scaleEffect(down && !still ? Theme.Press.scale : 1)
+                .onHover { hovering = $0 }
+                .animation(Theme.Press.animation, value: down)
+                .animation(.easeOut(duration: 0.12), value: hovering)
+                .animation(Theme.settle, value: held)
+        }
+
+        private func fill(_ down: Bool) -> Color {
+            if lit { return Theme.tally.opacity(down ? Theme.Press.filledHeld : hovering ? Theme.Press.filledHover : 1) }
+            return Theme.ink.opacity(down || held ? Theme.Press.held : hovering ? Theme.Press.hover : Theme.Press.rest)
         }
     }
 }
