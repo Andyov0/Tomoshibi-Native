@@ -15,8 +15,9 @@
 //   cargo run --example republish -- <base-url> <room>
 //
 // Commands on standard input, one a line: `camera`, `share`, `original`,
-// `quit`. Each prints what it did and what the core answered; every call
-// event is printed as it arrives.
+// `retry`, `network`, `quit`. Each prints what it did and what the core
+// answered; every call event is printed as it arrives, with the seconds since
+// the call began, which also times how long a reconnect keeps trying.
 
 use std::{
     io::BufRead,
@@ -110,9 +111,10 @@ async fn main() {
         .await
         .expect("join answer");
 
+    let began = Instant::now();
     let call = join_call(
         CallOptions { url: grant.url, token: grant.token, room: grant.room, sealing_word: None, forward: None },
-        Arc::new(Printing(Instant::now())),
+        Arc::new(Printing(began)),
     )
     .await
     .expect("call");
@@ -157,6 +159,7 @@ async fn main() {
     });
 
     while let Some(command) = commands.recv().await {
+        println!("{:7.2} > {command}", began.elapsed().as_secs_f64());
         match command.as_str() {
             "camera" => {
                 // Capture stops first, as in the apps; then the track goes.
@@ -175,9 +178,19 @@ async fn main() {
                 feed_audio(voice.clone(), voice_stop.clone());
                 println!("original voice on ({})", voice.sid());
             }
+            // What a platform's network monitor calls (Call::retry_now and
+            // Call::network_changed), for timing a reconnect by hand.
+            "retry" => {
+                call.retry_now();
+                println!("retry asked");
+            }
+            "network" => {
+                call.network_changed();
+                println!("network change said");
+            }
             "quit" => break,
-            "" => {}
-            other => println!("unknown command {other}"),
+            // Anything else only marks the time it arrived.
+            _ => {}
         }
     }
 

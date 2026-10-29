@@ -39,4 +39,22 @@ over the old one and carrying every change forward.
   for good. Taking a track back during a reconnect is exactly what the core's
   `withdraw` (call/publish.rs) allows.
 
+- `livekit` 0.9.5 — the reconnect schedule is the web's
+  (`rtc_engine/reconnect_strategy.rs`): livekit-client's
+  `DefaultReconnectPolicy` as the deployment's web client is built with it,
+  ten attempts after waits of 0, 0.3, 1.2, 2.7, 4.8 and five times 7 s, with
+  up to a second more at random from the third on, the wait taken before each
+  attempt and none after the last. The SDK's own (full-jitter backoff capped
+  at 7 s, waited after every attempt) gave up in about 22 s, and a browser on
+  the same network lasted twice that. `rtc_engine::reconnect_wait` and the
+  constants are public for `core/tests/reconnect_schedule.rs`.
+- `livekit` 0.9.5 — `Room::retry_now` and `Room::network_changed`, reached
+  from the apps through `Call::retry_now` and `Call::network_changed`: while
+  reconnecting, the attempt waiting its turn is made now (the engine's
+  `retry_now_notify`, which until now only the server could ring); while
+  connected, a network change starts a resume at once, the path a server's
+  `Leave{Resume}` takes, as the web resumes when the browser comes back online.
+  A permit left on that notify by an earlier episode is cleared at the start of
+  each, so it cannot cut a later wait short.
+
 All three are Apache-2.0, as each `Cargo.toml` declares; the published crates carry no separate licence file.

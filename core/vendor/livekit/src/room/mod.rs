@@ -890,6 +890,19 @@ impl Room {
         self.inner.rtc_engine.simulate_scenario(scenario).await
     }
 
+    /// Tomoshibi: while reconnecting, makes the next attempt now rather than
+    /// after its wait (`RtcEngine::retry_now`). Says whether it was
+    /// reconnecting.
+    pub fn retry_now(&self) -> bool {
+        self.inner.rtc_engine.retry_now()
+    }
+
+    /// Tomoshibi: the device's network changed: the next attempt now while
+    /// reconnecting, a resume now while connected (`RtcEngine::network_changed`).
+    pub fn network_changed(&self) {
+        self.inner.rtc_engine.network_changed()
+    }
+
     /// Test-only: force the next `count` resume attempts to fail, exercising the
     /// resume-failure → full-reconnect escalation path end-to-end.
     #[cfg(feature = "__lk-e2e-test")]

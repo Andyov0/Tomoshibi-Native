@@ -534,6 +534,30 @@ impl Call {
         .await
     }
 
+    /// The network is back after being lost: while the call is reconnecting,
+    /// the next attempt is made now rather than after its wait (up to eight
+    /// seconds late in the web's schedule, which the core follows), as the
+    /// web's `online` handler does. Does nothing otherwise. For a platform
+    /// that only knows "online again"; one that sees the network change
+    /// calls `network_changed` instead.
+    pub fn retry_now(&self) {
+        let _core = crate::runtime::enter();
+        self.room.retry_now();
+    }
+
+    /// The device's network changed: the default route moved to another
+    /// interface (Wi-Fi to mobile data, a cable plugged in), or the device
+    /// came back online. While reconnecting it is `retry_now`; while
+    /// connected a resume is started at once, because the signalling socket
+    /// and the media are probably on the interface that went, and nothing
+    /// notices until the server's ping times out, a call gone quiet for that
+    /// long. Call it on a change of path, not on every update a network
+    /// monitor sends: each call while connected is a resume.
+    pub fn network_changed(&self) {
+        let _core = crate::runtime::enter();
+        self.room.network_changed();
+    }
+
     /// Whether the app is in the background: readings taken there are not
     /// evidence of a freeze (the web skips a hidden tab for the same reason).
     pub fn set_background(&self, background: bool) {
