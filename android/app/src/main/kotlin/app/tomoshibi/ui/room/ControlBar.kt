@@ -45,6 +45,7 @@ import app.tomoshibi.media.Sharing
 import app.tomoshibi.model.AppModel
 import app.tomoshibi.model.CallModel
 import app.tomoshibi.model.CallToast
+import app.tomoshibi.ui.call.Half
 import app.tomoshibi.ui.call.HandControl
 import app.tomoshibi.ui.call.TRAY
 import app.tomoshibi.ui.kit.BarAxis
@@ -296,7 +297,9 @@ internal object BarLength {
         along += size // microphone
         along += size // camera
         along += size // share
-        along += if (!horizontal) 44f else if (reactionsBeside) 60f else size // the hand, and its reactions beside it
+        // The hand, and its reactions' half beside it along a row and under
+        // it down a column (HandControl): the bar's button and thirty-two.
+        along += if (reactionsBeside || !horizontal) size + Half.value else size
         along += size // messages
         if (compact) {
             along += size // more
