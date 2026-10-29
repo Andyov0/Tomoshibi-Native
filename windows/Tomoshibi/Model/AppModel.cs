@@ -108,6 +108,7 @@ internal sealed class AppModel : Observable
         // and each change of one is made (Sharing.Ceiling).
         media.Sharing.Ceiling = () => _remote.Ceiling;
         var ui = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+        _ui = ui;
         media.BlurFailed += () => ui?.TryEnqueue(() =>
         {
             SetBlur(false);
@@ -232,7 +233,33 @@ internal sealed class AppModel : Observable
             // Out of the call: a blur the deployment switched off during it
             // counts as off from here, for the next meeting.
             if (value == null) FollowBlur();
+            FollowAwake();
         }
+    }
+
+    /// <summary>The window's thread, which keeps the display awake (KeepAwake) and lives as long as the app.</summary>
+    private readonly Microsoft.UI.Dispatching.DispatcherQueue? _ui;
+
+    private readonly KeepAwake _awake = new(Interop.Power.Ask);
+
+    /// <summary>
+    /// The display and the machine kept awake while there is a call, or one
+    /// being moved to another relay, which has none for the moment between
+    /// leaving the old room and joining the new, and let go once there is
+    /// neither. Asked on the window's thread whichever thread the change
+    /// came on, since the state is the asking thread's.
+    /// </summary>
+    private void FollowAwake()
+    {
+        void Ask()
+        {
+            var wanted = _call != null || _movingTo != null;
+            if (wanted == _awake.Held) return;
+            var took = _awake.Hold(wanted);
+            Log.Line(took ? (wanted ? "keeping the display awake" : "letting the display sleep") : "the display could not be kept awake");
+        }
+        if (_ui == null || _ui.HasThreadAccess) Ask();
+        else _ui.TryEnqueue(Ask);
     }
 
     private RelayList? _relays;
@@ -1083,7 +1110,11 @@ internal sealed class AppModel : Observable
     public string? MovingTo
     {
         get => _movingTo;
-        private set => Set(ref _movingTo, value);
+        private set
+        {
+            Set(ref _movingTo, value);
+            FollowAwake();
+        }
     }
 
     public Task Leave() => End(Ending.Left);
