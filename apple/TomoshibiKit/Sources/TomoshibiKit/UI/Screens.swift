@@ -571,7 +571,7 @@ struct PreJoinScreen: View {
         CameraStage(app: app, cornerRadius: 20)
             .aspectRatio(16 / 9, contentMode: .fit)
             .overlay(alignment: .bottom) {
-                DeviceSwitches(app: app, size: 38).padding(6).glassSurface(Capsule()).padding(.bottom, 12)
+                DeviceSwitches(app: app).padding(6).glassSurface(Capsule()).padding(.bottom, 12)
             }
         #endif
     }
@@ -810,9 +810,10 @@ private struct IdentityBox: View {
                     if !passphrase.isEmpty {
                         Button { shown.toggle() } label: {
                             Image(systemName: shown ? "eye.slash" : "eye").font(.system(size: 13)).foregroundStyle(Theme.muted)
-                                .frame(width: 24, height: 24).contentShape(Rectangle())
+                                .frame(width: 32, height: 32).contentShape(Rectangle())
+                                .fingertip(32)
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(Pressable())
                         .accessibilityLabel(shown ? t("Hide passphrase") : t("Show passphrase"))
                         .transition(Theme.arrive)
                     }
@@ -856,8 +857,10 @@ private struct ProblemLine: View {
             if app.problemStays {
                 Button { app.problem = nil } label: {
                     Image(systemName: "xmark").font(.system(size: 9.5, weight: .bold)).foregroundStyle(Theme.muted)
+                        .frame(width: 20, height: 20).contentShape(Rectangle())
+                        .fingertip(20)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(Pressable())
                 .accessibilityLabel(t("Close"))
             }
         }
@@ -923,7 +926,7 @@ struct WaitingScreen: View {
         CameraStage(app: app, cornerRadius: 20)
             .aspectRatio(16 / 9, contentMode: .fit)
             .overlay(alignment: .bottom) {
-                DeviceSwitches(app: app, size: 38).padding(6).glassSurface(Capsule()).padding(.bottom, 12)
+                DeviceSwitches(app: app).padding(6).glassSurface(Capsule()).padding(.bottom, 12)
             }
         #endif
     }
