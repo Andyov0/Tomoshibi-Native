@@ -96,8 +96,12 @@ internal sealed class ControlBar : Grid
         return 2 * inset + along.Sum() + spacing * (along.Count - 1);
     }
 
-    /// <summary>The full bar's length as it stands, for the names lifted clear of it.</summary>
-    public double FullLength => Length(false, _offers, _room.Showing, _call.Sealed);
+    /// <summary>
+    /// The capsule's length as it is drawn, full or compact, for the names
+    /// lifted clear of it: worked out, as the bar works out whether it fits,
+    /// rather than read from a layout that may not yet have drawn a change.
+    /// </summary>
+    public double CapsuleLength => Length(_compact == true, _offers, _room.Showing, _call.Sealed);
 
     /// <summary>Lays the bar out for a window this wide: compact once the full bar would come within 20 of its edges.</summary>
     public void Fit(double width, Offers offers)

@@ -186,6 +186,37 @@ public static class Plan
     /// </summary>
     public static float Lift(float? clear, float ends) => clear is { } c ? MathF.Max(0f, c - ends) : 0f;
 
+    /// <summary>
+    /// Whether the name at the foot of a picture lies under the controls, so
+    /// that it is raised above them while they are out (RoomView.kt
+    /// <c>underBar</c>): the picture's foot in the bar's band and the picture
+    /// under the bar's capsule, from <paramref name="barLeft"/> to
+    /// <paramref name="barRight"/>, whose foot is <paramref name="barBottom"/>;
+    /// and then, for a picture narrower than 900, always, as Android has it,
+    /// and for a wider one only where the name's plate, which stands
+    /// <paramref name="inset"/> in from the picture's left and is
+    /// <paramref name="plateWidth"/> across, comes within a gap of the
+    /// capsule.
+    ///
+    /// Android and Windows took the name of a picture 900 or more across to
+    /// be clear of a bar in its middle. In a call of two the other person
+    /// fills the window, and in a window just over 900 across, with every
+    /// button on the bar, the capsule's left end is about 150 in, which a
+    /// name of twenty letters reaches: it was drawn half behind the bar (the
+    /// iPhone's call of two had its name under the bar the same way).
+    /// </summary>
+    public static bool NameUnderBar(Rect spot, float plateWidth, float inset, float barLeft, float barRight, float barBottom)
+    {
+        var footInBand = spot.Bottom > barBottom - Island + 0.5f;
+        var pictureUnder = spot.Left < barRight && spot.Right > barLeft;
+        if (!footInBand || !pictureUnder) return false;
+        if (spot.Width < 900) return true;
+        if (plateWidth <= 0) return false;
+        var left = spot.Left + inset;
+        var right = left + plateWidth;
+        return left < barRight + Gap && right > barLeft - Gap;
+    }
+
     // The whole room
 
     /// <summary>

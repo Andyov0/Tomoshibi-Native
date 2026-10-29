@@ -387,22 +387,26 @@ internal sealed class RoomScreen : Screen
 
     /// <summary>
     /// Raises the name on each picture that runs under the controls while
-    /// they are out (RoomView.kt <c>underBar</c>), where the bar is wide
-    /// enough to reach it: not on a picture wider than 900, whose name is
-    /// clear of a bar in its middle.
+    /// they are out (RoomView.kt <c>underBar</c>), the other person filling a
+    /// call of two among them, and lets it down again after them: against
+    /// the bar's capsule, and on a picture 900 or more across only where the
+    /// name's own plate reaches it (Plan.NameUnderBar). The bar was taken to
+    /// be the whole window's width (the bar's own element stretches across
+    /// it, the capsule in its middle), and a picture that wide was taken to
+    /// have its name clear, so a long name in a call of two in a window a
+    /// little over 900 across was drawn half under the bar.
     /// </summary>
-    private void LiftNames()
+    internal void LiftNames()
     {
         if (_bar == null) return;
-        var barWidth = _bar.ActualWidth > 0 ? _bar.ActualWidth : _bar.FullLength;
+        var barWidth = _bar.CapsuleLength;
         var left = (ActualWidth - barWidth) / 2;
         var right = left + barWidth;
         var bottom = ActualHeight - 20;
         foreach (var tile in _tiles.Values)
         {
-            var spot = tile.Spot;
-            var under = spot.Left < right && spot.Left + spot.Width > left && spot.Top + spot.Height > bottom - Plan.Island + 0.5;
-            tile.Lift(under && _barShown && spot.Width < 900 ? Plan.Island - Plan.Gap : 0);
+            var under = Plan.NameUnderBar(tile.Spot, tile.PlateWidth, tile.PlateInset, (float)left, (float)right, (float)bottom);
+            tile.Lift(under && _barShown ? Plan.Island - Plan.Gap : 0);
         }
     }
 

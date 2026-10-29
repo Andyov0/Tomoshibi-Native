@@ -392,6 +392,9 @@ internal sealed class Tile : Grid
             IsHitTestVisible = false,
         };
         _hand.Arrives(0.5f);
+        // A name that grows or shrinks (a mark beside it, a name changed)
+        // may come to reach the bar, or no longer reach it.
+        _plate.SizeChanged += (_, _) => room.LiftNames();
         Children.Add(_content);
         Children.Add(_reactions);
         Children.Add(_plate);
@@ -441,6 +444,19 @@ internal sealed class Tile : Grid
     }
 
     public Rect Spot => _spot;
+
+    /// <summary>How far in from the picture's left the name's plate stands (Plan.NameUnderBar).</summary>
+    public float PlateInset => (float)_plate.Margin.Left;
+
+    /// <summary>
+    /// How wide the name's plate was last laid out, or nought where there is
+    /// no name: what decides, with where it stands, whether the bar covers it
+    /// (Plan.NameUnderBar). Read from the layout, not measured here, since it
+    /// is asked from the plate's own size change too; a name changed this
+    /// moment is asked about again once it is laid out (the plate's
+    /// SizeChanged above).
+    /// </summary>
+    public float PlateWidth => _plate.Visibility == Visibility.Visible ? (float)_plate.ActualWidth : 0;
 
     private float _lift;
 
