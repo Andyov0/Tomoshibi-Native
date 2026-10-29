@@ -240,6 +240,7 @@ fun RoomView(app: AppModel, call: CallModel, modifier: Modifier = Modifier) {
     val state = remember(call) { RoomState.of(call) }
     val host = remember(call) { HostFeature.of(call) }
     val record = remember(call) { StageRecord.of(call) }
+    KeepsScreenOn()
     GlassBackdrop {
         FloatingPopoverLayer(state.popovers) {
             if (call.pictureInPicture.inSmallWindow) {
@@ -248,6 +249,24 @@ fun RoomView(app: AppModel, call: CallModel, modifier: Modifier = Modifier) {
                 Room(app, call, state, host, record, modifier)
             }
         }
+    }
+}
+
+/**
+ * The screen kept on, and the phone kept from locking, for as long as the
+ * call is on it, and let go when the call is left: nothing did, and somebody
+ * only watching a shared screen had theirs go dark and lock half a minute
+ * in, the pictures stopping with it, as no browser in a call does (the
+ * health check of 2026-10-29). On the window's own view, so it holds only
+ * while the call is shown, the small window included: behind another app,
+ * or with the call in its bubble, the screen sleeps as it would.
+ */
+@Composable
+private fun KeepsScreenOn() {
+    val view = LocalView.current
+    DisposableEffect(view) {
+        view.keepScreenOn = true
+        onDispose { view.keepScreenOn = false }
     }
 }
 

@@ -1,8 +1,13 @@
 package app.tomoshibi.ui.room
 
 import android.content.Context
+import android.view.View
 import androidx.activity.ComponentActivity
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -83,6 +88,26 @@ class RoomBehaviourTest {
     private fun back() {
         compose.runOnUiThread { compose.activity.onBackPressedDispatcher.onBackPressed() }
         settle()
+    }
+
+    @Test
+    fun theScreenStaysOnForTheCallAndNoLonger() {
+        // Nothing kept the screen on: somebody only watching a shared screen
+        // had theirs go dark and lock half a minute in.
+        val call = room(1)
+        val app = app()
+        var inCall by mutableStateOf(true)
+        var window: View? = null
+        compose.setContent {
+            window = LocalView.current
+            CompositionLocalProvider(LocalRoomPictures provides standInPictures) { if (inCall) RoomView(app, call) }
+        }
+        settle()
+        val view = window!!
+        assertTrue("the screen may sleep in a call", view.keepScreenOn)
+        inCall = false
+        settle()
+        assertFalse("the screen is still held on after the call", view.keepScreenOn)
     }
 
     @Test
