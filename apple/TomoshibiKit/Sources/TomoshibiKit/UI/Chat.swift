@@ -40,7 +40,8 @@ struct ChatPanel: View {
                 .padding(.top, 4)
                 .padding(.bottom, 10)
         }
-        .glassShell(cornerRadius: 22)
+        // Opaque, as every panel is (Kit `panelSurface`).
+        .panelSurface()
         .animation(Theme.settle, value: model.messages.isEmpty)
     }
 

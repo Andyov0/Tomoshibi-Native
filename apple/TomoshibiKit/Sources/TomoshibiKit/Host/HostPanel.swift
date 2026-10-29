@@ -42,7 +42,8 @@ struct HostPanelView: View {
                 ScrollView { content }.scrollIndicators(.hidden)
             }
         }
-        .glassPane(cornerRadius: 22)
+        // Opaque, as every panel is (Kit `panelSurface`).
+        .panelSurface()
         .animation(Theme.settle, value: feature.standing.yours)
     }
 

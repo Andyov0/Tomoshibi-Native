@@ -51,11 +51,17 @@ struct DoorList: View {
                             .truncationMode(.middle)
                     }
                     Spacer(minLength: 4)
-                    PillButton(title: t("Not now"), busy: false) {
-                        Task { await feature.answer(one, admit: false) }
-                    }
-                    PillButton(title: t("Let in"), role: .prominent, busy: feature.answering == one.id) {
-                        Task { await feature.answer(one, admit: true) }
+                    // Thirty-two high and apart, a fingertip each to press
+                    // (the web's, ui-polish 2026-10-29): at twenty-six and
+                    // side by side, "Let in" and "Not now" were one press
+                    // from each other.
+                    HStack(spacing: 10) {
+                        PillButton(title: t("Not now"), busy: false, height: 32) {
+                            Task { await feature.answer(one, admit: false) }
+                        }
+                        PillButton(title: t("Let in"), role: .prominent, busy: feature.answering == one.id, height: 32) {
+                            Task { await feature.answer(one, admit: true) }
+                        }
                     }
                 }
                 .disabled(feature.answering == one.id)

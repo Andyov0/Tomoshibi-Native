@@ -419,17 +419,17 @@ public struct RoomView: View {
                     }
                 }
                 .scrollIndicators(.hidden)
-                // Where it covers the call rather than standing beside it,
-                // dark under its glass: through the glass alone the edges of
-                // the pictures beneath ran across the panel, a line through
-                // the middle of the song desk.
-                .background(RoundedRectangle(cornerRadius: 22, style: .continuous).fill(Theme.background.opacity(narrow ? 0.72 : 0)))
-                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                // Each panel is opaque (Kit `panelSurface`); the dark shade it
+                // was given here to stand over the pictures went with the glass.
+                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.panel, style: .continuous))
                 .frame(width: place.width)
                 .frame(maxHeight: place.height, alignment: .top)
                 .fixedSize(horizontal: false, vertical: true)
                 .offset(x: place.minX, y: place.minY)
-                .transition(Theme.slideIn)
+                // Up from the foot and back down where it covers the call (a
+                // phone, a narrow window), as a sheet does; in from the side
+                // where it stands beside it (the web's, ui-polish 2026-10-29).
+                .transition(narrow ? Theme.slideUp : Theme.slideIn)
                 .id(panel)
             }
         }

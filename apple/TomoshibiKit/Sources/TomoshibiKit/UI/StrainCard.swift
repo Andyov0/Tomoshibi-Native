@@ -47,7 +47,8 @@ struct StrainCard: View {
         }
         .padding(14)
         .frame(maxWidth: 340)
-        .glassPane(cornerRadius: 16)
+        // Opaque, as the web's share notice now is.
+        .menuSurface(cornerRadius: Theme.Radius.medium)
     }
 
     static func label(_ quality: ShareQuality) -> String {

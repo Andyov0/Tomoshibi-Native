@@ -254,9 +254,11 @@ extension View {
     /// through, and grey words on it could not be read (seen with the watch
     /// panel over a test card). A shade of the call's own black under the
     /// content keeps the glass's edge and light and gives the words a ground.
-    func mediaPanelGlass(cornerRadius: CGFloat = 22) -> some View {
-        background(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(Theme.background.opacity(0.68)))
-            .glassShell(cornerRadius: cornerRadius)
+    ///
+    /// Now opaque, as every panel is (Kit `panelSurface`): no ground under
+    /// glass needed, and no colours through it.
+    func mediaPanelGlass(cornerRadius: CGFloat = Theme.Radius.panel) -> some View {
+        panelSurface(cornerRadius: cornerRadius)
     }
 }
 

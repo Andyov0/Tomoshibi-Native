@@ -79,7 +79,9 @@ private struct SaidCard: View {
         .padding(.leading, 8)
         .padding(.trailing, 12)
         .padding(.vertical, run ? 7 : 8)
-        .glassPane(cornerRadius: 16)
+        // Opaque, as the web's message bubbles now are: words over a
+        // moving picture are read on a ground of their own.
+        .menuSurface(cornerRadius: Theme.Radius.medium)
         .accessibilityElement(children: .combine)
     }
 }
