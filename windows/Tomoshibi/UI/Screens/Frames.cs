@@ -162,12 +162,14 @@ internal static class Frames
             card.MaxWidth = 560;
             card.Rises();
             stage = new Shared.CameraStage(app, 20);
-            var switches = Shared.DeviceSwitches(app, 38);
+            // 44, as everywhere the two switches are, on the bar's material
+            // (they were 38 here and 40 on the lobby's card).
+            var switches = Shared.DeviceSwitches(app);
             var picture = K.Stack(stage, new Border
             {
                 Child = switches,
                 Background = K.Acrylic(),
-                CornerRadius = new CornerRadius(25),
+                CornerRadius = new CornerRadius((Sizing.Lobby.DeviceSwitch + 12) / 2),
                 Padding = new Thickness(6),
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Bottom,

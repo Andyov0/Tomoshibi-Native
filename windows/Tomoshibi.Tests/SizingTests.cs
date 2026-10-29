@@ -48,6 +48,38 @@ public class SizingTests
         Assert.True(Sizing.Menu.AnswerRow >= 44);
     }
 
+    [Fact]
+    public void LeavingIsTheBarsOneCapsuleAndTheReactionsArrowCanBeHit()
+    {
+        Assert.Equal(56f, Sizing.Bar.LeaveWidth);
+        Assert.Equal(44f, Sizing.Bar.Button);
+        Assert.True(Sizing.Bar.ReactionsArrow >= 32, "the reactions' arrow was a 20 sliver beside the hand");
+        Assert.Equal(40f, Sizing.Bar.Hand(44));
+        Assert.Equal(36f, Sizing.Bar.Hand(40));
+        Assert.True(Sizing.Bar.Reaction >= 40);
+        // Six reactions, five gaps and the inset each side: the tray is as wide as what it holds.
+        Assert.Equal(6 * 40 + 5 * 2 + 2 * 4, Sizing.Bar.ReactionsWidth(6));
+    }
+
+    [Theory]
+    // A full bar: the microphone, the camera, the share, the messages, the sound and the devices.
+    [InlineData(false, 6)]
+    // With watching together, the music and the host's crown as well.
+    [InlineData(false, 9)]
+    // A compact bar: the four and More.
+    [InlineData(true, 5)]
+    public void TheBarIsAsLongAsWhatIsOnIt(bool compact, int round)
+    {
+        var size = compact ? 40f : 44f;
+        var parts = new List<float>();
+        for (var i = 0; i < round; i++) parts.Add(size);
+        parts.Add(Sizing.Bar.Hand(size) + Sizing.Bar.ReactionsArrow);
+        if (!compact) parts.Add(1 + 4);
+        parts.Add(compact ? 52 : 56);
+        var expected = 2 * (compact ? 5 : 7) + parts.Sum() + (compact ? 4 : 6) * (parts.Count - 1);
+        Assert.Equal((double)expected, Sizing.Bar.Length(compact, round), 3);
+    }
+
     /// <summary>
     /// No gradient anywhere the owner looks (2026-10-29), the glass's rim
     /// among them, which faded from white at 26 per cent to 7. The one left is
@@ -65,5 +97,28 @@ public class SizingTests
             .Select(f => Path.GetRelativePath(ui, f))
             .ToList();
         Assert.Empty(found);
+    }
+
+    [Fact]
+    public void ASwitchThatIsOffIsNeverRed()
+    {
+        // Before a call (Shared.DeviceSwitches) and in it (ControlBar):
+        // the plate of the foreground, as the bar's.
+        var shared = Source(Path.Combine("UI", "Shared.cs"));
+        var switches = shared[shared.IndexOf("public static StackPanel DeviceSwitches", StringComparison.Ordinal)..];
+        switches = switches[..switches.IndexOf("public sealed class CameraStage", StringComparison.Ordinal)];
+        Assert.DoesNotContain("Look.Destructive", switches);
+        Assert.Contains("Look.Off", switches);
+        Assert.Contains("Look.Off", Source(Path.Combine("UI", "Room", "ControlBar.cs")));
+    }
+
+    [Fact]
+    public void NoPanelsButtonIsLitInTheTally()
+    {
+        // Lit is for a share going out and a hand up; an open panel holds its button.
+        var bar = Source(Path.Combine("UI", "Room", "ControlBar.cs"));
+        var lit = Regex.Matches(bar, @"(_\w+)\.Lit\s*=").Select(m => m.Groups[1].Value).ToList();
+        Assert.Equal(new[] { "_hand" }, lit);
+        Assert.DoesNotMatch(new Regex(@"lit:\s*(chat|open)\b"), bar);
     }
 }

@@ -747,7 +747,7 @@ internal sealed class LobbyScreen : Screen
         var actions = K.Line(8, K.Flex(start), K.Fixed(Shared.OnGlass(schedule)));
         actions.VerticalAlignment = VerticalAlignment.Bottom;
         actions.Margin = new Thickness(12);
-        var switches = Shared.DeviceSwitches(App, 40, onPicture: true);
+        var switches = Shared.DeviceSwitches(App, onPicture: true);
         switches.HorizontalAlignment = HorizontalAlignment.Right;
         switches.VerticalAlignment = VerticalAlignment.Top;
         switches.Margin = new Thickness(12);
