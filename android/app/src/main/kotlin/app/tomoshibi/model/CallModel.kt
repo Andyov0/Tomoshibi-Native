@@ -6,6 +6,7 @@ import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import app.tomoshibi.basics.Logged
 import app.tomoshibi.basics.NoticeClock
 import app.tomoshibi.basics.NoticeTimes
 import app.tomoshibi.basics.t
@@ -265,7 +266,7 @@ class CallModel internal constructor(
             toastClocks[said.id] = NoticeClock(lasts, now(), running = !toastsHeld)
             runClock(said.id)
         }
-        Log.i(TAG, "notice: ${said.title}${said.detail?.let { " ($it)" } ?: ""}")
+        Log.i(TAG, "notice: ${Logged.private(said.title + (said.detail?.let { " ($it)" } ?: ""))}")
     }
 
     fun dismiss(id: Long) {
@@ -881,7 +882,7 @@ class CallModel internal constructor(
             is CallEvent.ParticipantJoined -> {
                 val arriving = person(event.participant.identity) == null
                 upsert(event.participant)
-                if (arriving) Log.i(TAG, "participant joined: ${event.participant.identity}")
+                if (arriving) Log.i(TAG, "participant joined: ${Logged.private(event.participant.identity)}")
                 if (arriving && settled) {
                     announce(CallToast(t("{name} joined", mapOf("name" to named(event.participant.name, event.participant.identity)))))
                 }
@@ -892,7 +893,7 @@ class CallModel internal constructor(
                     for (sid in person.tracks.keys) audio.stopPlaying(sid)
                     announce(CallToast(t("{name} left", mapOf("name" to named(person.name, event.identity)))))
                 }
-                Log.i(TAG, "participant left: ${event.identity}")
+                Log.i(TAG, "participant left: ${Logged.private(event.identity)}")
                 people = people.filter { it.id != event.identity }
             }
             is CallEvent.TrackPublished -> {
@@ -902,7 +903,7 @@ class CallModel internal constructor(
             }
             is CallEvent.TrackSubscribed -> {
                 update(event.identity) { it.copy(tracks = it.tracks + (event.track.sid to event.track)) }
-                Log.i(TAG, "subscribed ${event.track.kind.name.lowercase()} ${event.track.source.name.lowercase()} ${event.track.sid} from ${event.identity}")
+                Log.i(TAG, "subscribed ${event.track.kind.name.lowercase()} ${event.track.source.name.lowercase()} ${event.track.sid} from ${Logged.private(event.identity)}")
                 if (event.track.kind == MediaKind.AUDIO) {
                     val stereo = event.track.source == MediaSource.SCREEN_SHARE_AUDIO || event.track.source == MediaSource.UNKNOWN
                     try {

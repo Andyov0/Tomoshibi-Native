@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.tomoshibi.BuildConfig
+import app.tomoshibi.basics.Logged
 import app.tomoshibi.basics.NoticeTimes
 import app.tomoshibi.basics.Pace
 import app.tomoshibi.basics.t
@@ -849,7 +850,7 @@ class AppModel(
             // ignored, so none is sent (PreJoin.tsx `scopedGuest`).
             val signed = account != null
             val scopedGuest = arrivedInvited && scopeOf(room).isNotEmpty()
-            Log.i(TAG, "joining $room")
+            Log.i(TAG, "joining ${Logged.private(room)}")
             val grant = deployment.join(
                 room, joiningName,
                 if (signed || scopedGuest) "" else passphrase,
@@ -902,7 +903,7 @@ class AppModel(
             // were told of the lobby again for the moment between, and a
             // download held for the join started up only to be held again.
             joining = false
-            Log.i(TAG, "in call ${grant.room} as ${model.localIdentity} with ${model.people.size} others")
+            Log.i(TAG, "in call ${Logged.private(grant.room)} as ${Logged.private(model.localIdentity)} with ${model.people.size} others")
             // After joining rather than before, so somebody is in the room
             // the moment they join and their devices come up a beat later,
             // each on its own, never through the catch below (App.tsx
