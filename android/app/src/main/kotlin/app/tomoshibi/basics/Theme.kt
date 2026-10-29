@@ -140,7 +140,11 @@ class Palette private constructor(
             surfaceHigh = Color(0xFFE5E5EA),
             border = Color.Black.copy(alpha = 0.10f),
             foreground = Color(0xFF1C1C1E),
-            muted = Color(60, 60, 67).copy(alpha = 0.6f),
+            // Secondary words at three quarters rather than Apple's sixty per
+            // cent: at sixty they were about 3.2 to one on the page and on a
+            // white card, under the 4.5 words are read at (the web's daylight
+            // check, 2026-10-29, which moved its own to the same value).
+            muted = Color(60, 60, 67).copy(alpha = 0.75f),
             good = Color(0xFF34C759),
             danger = Color(0xFFFF3B30),
             dangerForeground = Color.White,
