@@ -337,7 +337,11 @@ enum AppDebug {
             "problem=\(app.problem ?? "none")",
             "switchingMicrophone=\(app.switchingMicrophone)",
             "microphoneAccess=\(AVCaptureDevice.authorizationStatus(for: .audio).rawValue)",
+            "awake=\(app.awake.holding)",
         ]
+        #if os(iOS)
+        parts.append("idleTimerDisabled=\(UIApplication.shared.isIdleTimerDisabled)")
+        #endif
         if let call = app.call {
             let microphones = call.localTracks.values.filter { $0.source == .microphone }
             parts.append("call=\(call.room) as \(call.localIdentity), model \(UInt(bitPattern: ObjectIdentifier(call).hashValue) % 100_000)")

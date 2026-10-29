@@ -64,7 +64,13 @@ public final class AppModel {
         // and a sign-out has to take the session out of its reach at once.
         didSet { handOver() }
     }
-    public private(set) var call: CallModel?
+    public private(set) var call: CallModel? {
+        didSet { followCall() }
+    }
+    /// Awake for as long as there is a call, or a move between two of the
+    /// same meeting (StayAwake).
+    @ObservationIgnored let awake = StayAwake()
+    private func followCall() { awake.hold(call != nil || movingTo != nil) }
     /// Where Sign out was pressed, while it is asked whether to (SignOutPrompt):
     /// the lobby's window or the settings'.
     public enum SignOutPlace: Equatable, Sendable { case lobby, settings }
@@ -1055,7 +1061,9 @@ public final class AppModel {
     /// over: between leaving the old room and entering the new one the room
     /// view is gone, and the screen was blank for those seconds. The web keeps
     /// its moving notice above every page for the same reason (App.tsx).
-    public private(set) var movingTo: String?
+    public private(set) var movingTo: String? {
+        didSet { followCall() }
+    }
 
     public func leave() async {
         await end(.left)
