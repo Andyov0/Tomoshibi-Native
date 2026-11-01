@@ -178,15 +178,23 @@ entry.tmsb-input, passwordentry.tmsb-input {
   background-color: mix(@tmsb_surface, @tmsb_wash, 0.04); border: 1px solid @tmsb_border;
   border-radius: 12px; min-height: 38px; padding: 0 12px; box-shadow: none; outline: none;
 }
+/* The chosen segment is a plate of its own colour (a raised grey by night,
+   white with a shadow by day) over the track, and its words are the
+   foreground's while the others' are muted: by night the chosen plate was
+   the track's own grey, and the two choices looked the same. */
 .tmsb-segmented {
-  background-color: mix(@tmsb_surface, @tmsb_wash, 0.07); border-radius: 999px; padding: 2px;
+  background-color: @tmsb_segment_track; border-radius: 999px; padding: 2px;
 }
 .tmsb-segmented > button {
   min-height: 28px; padding: 0 12px; border-radius: 999px; border: none; box-shadow: none; background: none;
-  font-size: 13px;
+  font-size: 13px; font-weight: 500; color: @tmsb_muted;
+  transition: background-color 200ms cubic-bezier(0.2, 0.9, 0.3, 1), color 200ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
-.tmsb-segmented > button:hover { background-color: alpha(@tmsb_fg, 0.06); }
-.tmsb-segmented > button:checked { background-color: @tmsb_surface_high; font-weight: 600; }
+.tmsb-segmented > button:hover { background-color: alpha(@tmsb_fg, 0.06); color: @tmsb_fg; }
+.tmsb-segmented > button:checked {
+  background-color: @tmsb_segment; color: @tmsb_fg; font-weight: 600;
+  box-shadow: 0 1px 3px alpha(black, 0.16), 0 0 0 1px alpha(@tmsb_wash, 0.06);
+}
 dialog.tmsb-sheet .dialog-contents, dialog.tmsb-sheet > widget > floating-sheet > sheet { background-color: @tmsb_bg; }
 .tmsb-under-way {
   font-size: 11px; font-weight: 600; color: @tmsb_on_tally; background-color: @tmsb_tally;
