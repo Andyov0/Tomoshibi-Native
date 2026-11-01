@@ -70,6 +70,11 @@ tokio = { version = "1", default-features = false, features = ["sync"] }
 # --- media/ (audio, camera, screen) adds its crates below this line ---
 
 # --- render/ adds its crates below this line ---
+# libyuv, through the vendored libwebrtc the core links already (the
+# [patch] above points it there): the I420 to BGRA conversion of every
+# remote picture, in SIMD, on the core's thread. No crate is added to the
+# build; this names one the core already compiles.
+libwebrtc = { version = "0.3.52", default-features = false }
 
 # --- update/ adds its crates below this line ---
 
