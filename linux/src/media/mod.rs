@@ -145,6 +145,22 @@ pub trait ScreenShare {
     /// person stopped it from the system's own indicator, or the stream
     /// failed.
     fn on_ended(&self, ended: Box<dyn Fn()>);
+    /// Whether the screen's sound is being sent: false when it was not
+    /// asked for, and when it was and could not be captured, which the room
+    /// says as the web does ("No sound was shared") rather than not sharing.
+    fn sends_sound(&self) -> bool {
+        false
+    }
+    /// The running share at another size, rate or with or without its
+    /// sound, applied at once (the web's share menu, ShareButton.tsx: a
+    /// setting that waits for the next share is one nobody can judge),
+    /// without asking for the screen again and without the share leaving
+    /// the stage for those watching it. `Busy` while a change is still
+    /// being made.
+    fn change(&self, choice: ShareChoice) -> Local<Result<(), MediaError>> {
+        let _ = choice;
+        Box::pin(async { Err(MediaError::Unsupported) })
+    }
 }
 
 /// Every device the app opens. One per app; the room and the settings
