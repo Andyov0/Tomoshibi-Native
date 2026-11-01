@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Tomoshibi
+GenericName=Video meetings
+Comment=Join and hold video meetings
+Icon=app.tomoshibi.Linux
+Exec=tomoshibi %U
+Terminal=false
+Categories=Network;VideoConference;
+Keywords=meeting;call;video;conference;
+MimeType=x-scheme-handler/tomoshibi;
+StartupNotify=true
+StartupWMClass=app.tomoshibi.Linux
+SingleMainWindow=true

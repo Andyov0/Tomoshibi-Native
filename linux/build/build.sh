@@ -47,6 +47,8 @@
 #   TOMOSHIBI_TARGET_VOLUME    the target volume (default
 #                              tomoshibi-linux-target-<arch>, shared)
 #   TOMOSHIBI_HOST, TOMOSHIBI_UPDATE_KEY   release builds only
+#   TOMOSHIBI_TEST_UPDATE_KEY  debug and test builds only: the public half of
+#                              a key of the tests' own (default none)
 set -euo pipefail
 
 arch=${1:?"usage: build.sh <aarch64|x86_64> <debug|release|local|test|core-test|check|clippy|fmt|fmt-fix|shell> [cargo args]"}
@@ -95,7 +97,12 @@ if [ "$profile" = release ] || [ "$profile" = local ]; then
   if [ -n "${TOMOSHIBI_UPDATE_KEY:-}" ]; then env_args+=(-e "TOMOSHIBI_UPDATE_KEY=$TOMOSHIBI_UPDATE_KEY"); fi
 else
   # Whatever the caller's environment says: a test build is for nobody.
-  env_args+=(-e TOMOSHIBI_HOST=meet.example.com -e TOMOSHIBI_UPDATE_KEY=none)
+  # Its update key is none, unless the test gives it the public half of a
+  # key of its own (TOMOSHIBI_TEST_UPDATE_KEY), for an update signed by
+  # that key to be checked and installed end to end (appimage.sh test).
+  # Never TOMOSHIBI_UPDATE_KEY, which is the release's: a debug build of
+  # whoever ran a release in the same shell would otherwise take it.
+  env_args+=(-e TOMOSHIBI_HOST=meet.example.com -e "TOMOSHIBI_UPDATE_KEY=${TOMOSHIBI_TEST_UPDATE_KEY:-none}")
 fi
 
 case $what in
