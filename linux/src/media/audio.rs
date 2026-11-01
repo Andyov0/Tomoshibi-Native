@@ -474,6 +474,35 @@ impl Microphone for Mic {
         if matches!(self.published.borrow().as_ref(), Some((_, current)) if *current == original) {
             return Box::pin(async { Ok(()) });
         }
+        // Already published as the other kind of voice: the capture changes
+        // in place, on the same track (sound.ts `applyOriginalSound` restarts
+        // the track it has). Published again, the voice was gone for
+        // everybody for a second or two while the new track was subscribed,
+        // measured from a browser beside it. The web also changes the
+        // sender's bitrate; the core has no call for that on a published
+        // voice, so the track keeps the bitrate it was published with.
+        let current = self.published.borrow().clone();
+        if let Some((input, _)) = current {
+            if !self.raw {
+                let kind = SoundKind::Voice { original };
+                *self
+                    .now()
+                    .processing
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner()) =
+                    Processing::of(&sound_profile(kind).capture);
+            }
+            self.published.replace(Some((input, original)));
+            log(&format!(
+                "sound: the voice is now captured as {}, on the same track",
+                if original {
+                    "original sound"
+                } else {
+                    "a processed voice"
+                }
+            ));
+            return Box::pin(async { Ok(()) });
+        }
         self.busy.set(true);
         let (shared, published, busy, raw) = (
             self.shared.clone(),

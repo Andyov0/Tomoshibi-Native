@@ -172,9 +172,9 @@ pub(in crate::ui::room) fn panel(model: &AppModel) -> PanelView {
     tabs.add_css_class("tmsb-music-tabs");
     tabs.set_homogeneous(true);
     let desk_tab = gtk::Button::with_label(&t("Song desk"));
-    desk_tab.add_css_class("tmsb-chip");
+    desk_tab.add_css_class("tmsb-choice");
     let search_tab = gtk::Button::with_label(&t("Search"));
-    search_tab.add_css_class("tmsb-chip");
+    search_tab.add_css_class("tmsb-choice");
     tabs.append(&desk_tab);
     tabs.append(&search_tab);
     let tabs_slide = slide(&tabs);

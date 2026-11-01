@@ -111,6 +111,7 @@ pub struct SongDesk {
     generation: Cell<u64>,
     duck: RefCell<Duck>,
     ducking: Cell<bool>,
+    duck_ticks: Cell<u64>,
     /// What was last handed to the mix for each person's music.
     ducked: RefCell<HashMap<String, f32>>,
     started: Instant,
@@ -296,6 +297,7 @@ impl SongDesk {
             generation: Cell::new(0),
             duck: RefCell::new(Duck::new(enabled)),
             ducking: Cell::new(false),
+            duck_ticks: Cell::new(0),
             ducked: RefCell::new(HashMap::new()),
             started: Instant::now(),
             over: Cell::new(false),
@@ -1025,6 +1027,21 @@ impl SongDesk {
         let moved = self.duck.borrow_mut().tick(&levels, now, elapsed);
         if moved {
             self.apply_duck(model, now);
+        }
+        // Every two seconds in a debug run, for the tests that read the log:
+        // how loud the loudest voice was and how far the music is down.
+        if cfg!(debug_assertions) {
+            let ticks = self.duck_ticks.get() + 1;
+            self.duck_ticks.set(ticks);
+            if ticks.is_multiple_of(50) {
+                let loudest = levels.iter().copied().fold(0.0, f64::max);
+                log(&format!(
+                    "music: duck {:.2}, {} voices, the loudest {:.4}",
+                    self.duck.borrow().level,
+                    levels.len(),
+                    loudest
+                ));
+            }
         }
         music || !self.duck.borrow().settled(now)
     }

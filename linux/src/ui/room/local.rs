@@ -515,10 +515,9 @@ async fn replace_camera(
 fn watch_camera(model: &AppModel, camera: &Rc<dyn Camera>) {
     let weak = model.downgrade();
     let which = Rc::downgrade(camera);
-    let lost = camera.device();
     camera.on_ended(Box::new(move || {
         if let Some(model) = weak.upgrade() {
-            camera_gone(&model, which.clone(), lost.clone());
+            camera_gone(&model, which.clone());
         }
     }));
 }
@@ -527,7 +526,7 @@ fn watch_camera(model: &AppModel, camera: &Rc<dyn Camera>) {
 /// `cameraTrouble`): another camera there is sent into the same picture and
 /// said; with none, or one that will not start, the camera goes off and
 /// that is said.
-fn camera_gone(model: &AppModel, which: std::rc::Weak<dyn Camera>, lost: Option<String>) {
+fn camera_gone(model: &AppModel, which: std::rc::Weak<dyn Camera>) {
     let room = model.kept::<RoomState>();
     let Some(camera) = room.local.camera.borrow().clone() else {
         return;
@@ -538,7 +537,10 @@ fn camera_gone(model: &AppModel, which: std::rc::Weak<dyn Camera>, lost: Option<
     {
         return;
     }
-    log("the camera stopped by itself");
+    // The device it was capturing when it stopped: changed in place since
+    // it was watched, it is not the one it opened with.
+    let lost = camera.device();
+    log(&format!("the camera stopped by itself ({lost:?})"));
     let shares = model.kept::<Shares>();
     // Once in ten seconds at most: a camera that fails as soon as it is
     // started again would otherwise be started again for ever.
@@ -593,6 +595,7 @@ fn camera_gone(model: &AppModel, which: std::rc::Weak<dyn Camera>, lost: Option<
                 camera.close();
             }
             room.local.camera_on.set(false);
+            log("the camera is off: no other would take its place");
             announce(
                 &model,
                 Toast {

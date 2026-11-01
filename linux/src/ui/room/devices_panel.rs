@@ -570,9 +570,10 @@ pub(super) fn build(model: &AppModel) -> PanelView {
             "No noise suppression or automatic volume. For headphones and music.",
         ));
         blur_title.set_label(&t("Blur my background"));
-        let current = i18n::chosen().then(i18n::language);
+        // The language on screen, as the Mac's panel ticks it.
+        let current = i18n::language();
         for (language, button, tick) in &language_rows {
-            set_ticked(button, tick, current == Some(*language));
+            set_ticked(button, tick, current == *language);
         }
     };
     PanelView {
