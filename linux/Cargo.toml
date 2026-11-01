@@ -69,6 +69,20 @@ tokio = { version = "1", default-features = false, features = ["sync"] }
 
 # --- media/ (audio, camera, screen) adds its crates below this line ---
 
+# media/screen: the xdg-desktop-portal's ScreenCast, and the PipeWire stream
+# it hands over. ashpd on async-io rather than its default tokio: its futures
+# are awaited on GLib's main context (glib::spawn_future_local), where no
+# tokio runtime is entered, and zbus on async-io runs its own reactor; the
+# gtk4 feature names the app's window to the portal so that its picker opens
+# over it. Two versions of pipewire-sys cannot be linked into one binary
+# (each claims `links = "pipewire-0.3"`), so every module that uses PipeWire
+# keeps to this one, and ashpd's own `pipewire` feature, which wants 0.9, is
+# left off. 0.10 rather than 0.9 because 0.9 brings a second nix beside the
+# core's. futures-util for following the portal's Closed signal, a stream.
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "screencast", "gtk4"] }
+pipewire = "0.10"
+futures-util = { version = "0.3", default-features = false }
+
 # --- render/ adds its crates below this line ---
 
 # --- update/ adds its crates below this line ---
