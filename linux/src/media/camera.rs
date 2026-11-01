@@ -51,6 +51,14 @@ use crate::app::log;
 
 pub use self::{frame::PixelFormat, pattern::TestPicture};
 
+/// Makes PipeWire safe to call in this binary, before `pipewire::init()`
+/// and anything else of pipewire-rs: false where libpipewire is not there.
+/// See camera/pipewire.rs `ready` for why; the screen share needs it as
+/// much as the camera does.
+pub fn pipewire_ready() -> bool {
+    pipewire::ready()
+}
+
 /// How the camera side is set up: by devices.rs, from the launch.
 #[derive(Debug, Clone, Default)]
 pub struct CameraOptions {
@@ -74,6 +82,9 @@ pub struct Cameras {
     changed: Rc<dyn Fn()>,
     events: mpsc::UnboundedSender<Event>,
     started: Cell<bool>,
+    /// The portal and PipeWire have been asked, and have answered or not.
+    settled: Cell<bool>,
+    waiting: RefCell<Vec<oneshot::Sender<()>>>,
     v4l2: RefCell<Vec<v4l2::Node>>,
     pipewire: RefCell<Option<Rc<pipewire::Session>>>,
     monitor: RefCell<Option<gio::FileMonitor>>,
@@ -97,6 +108,8 @@ impl Cameras {
             changed,
             events,
             started: Cell::new(false),
+            settled: Cell::new(false),
+            waiting: RefCell::new(Vec::new()),
             v4l2: RefCell::new(Vec::new()),
             pipewire: RefCell::new(None),
             monitor: RefCell::new(None),
@@ -127,7 +140,11 @@ impl Cameras {
 
     /// Looks for cameras, the first time they are wanted.
     fn start(self: &Rc<Self>) {
-        if self.started.replace(true) || self.options.test_picture.is_some() {
+        if self.started.replace(true) {
+            return;
+        }
+        if self.options.test_picture.is_some() {
+            self.settle();
             return;
         }
         self.v4l2.replace(v4l2::nodes());
@@ -157,44 +174,32 @@ impl Cameras {
         }
         let weak = Rc::downgrade(self);
         glib::spawn_future_local(async move {
-            let fd = portal().await;
-            let Some(cameras) = weak.upgrade() else {
-                return;
-            };
-            let fd = match fd {
-                Portal::Remote(fd) => Some(fd),
-                Portal::Absent(why) => {
-                    log(&format!(
-                        "camera: no camera portal ({why}); PipeWire directly"
-                    ));
-                    None
-                }
-                Portal::Refused(why) => {
-                    log(&format!("camera: the portal refused the camera ({why})"));
-                    return;
-                }
-            };
-            let (connected, connection) = oneshot::channel();
-            let events = cameras.events.clone();
-            drop(cameras);
-            pipewire::start(
-                fd,
-                move || {
-                    let _ = events.send(Event::PipeWire);
-                },
-                connected,
-            );
-            match connection.await {
-                Ok(Ok(session)) => {
-                    if let Some(cameras) = weak.upgrade() {
-                        cameras.pipewire.replace(Some(Rc::new(session)));
-                        (cameras.changed)();
-                    }
-                }
-                Ok(Err(fault)) => log(&format!("camera: no PipeWire ({fault}); V4L2 alone")),
-                Err(_) => {}
+            look_for_pipewire(weak.clone()).await;
+            if let Some(cameras) = weak.upgrade() {
+                cameras.settle();
             }
         });
+    }
+
+    /// The portal has answered or is not there, and PipeWire has been
+    /// connected to or not: every camera there is now is listed.
+    fn settle(&self) {
+        self.settled.set(true);
+        for waiting in self.waiting.borrow_mut().drain(..) {
+            let _ = waiting.send(());
+        }
+    }
+
+    /// Waits until the cameras are settled, five seconds at most: a portal
+    /// that never answers leaves the V4L2 nodes.
+    async fn settled(self: &Rc<Self>) {
+        self.start();
+        if self.settled.get() {
+            return;
+        }
+        let (told, tell) = oneshot::channel();
+        self.waiting.borrow_mut().push(told);
+        let _ = glib::future_with_timeout(Duration::from_secs(5), tell).await;
     }
 
     /// PipeWire's cameras, if it lists any.
@@ -247,66 +252,26 @@ impl Cameras {
             .collect()
     }
 
-    /// Opens the camera `choice` (`None`, or one that has gone: the first).
+    /// Opens the camera `choice` (`None`, or one that has gone: the first),
+    /// once the portal and PipeWire have answered, so that a camera asked
+    /// for as the app starts is not looked for before it can be listed.
     pub fn open_camera(
         self: &Rc<Self>,
         choice: Option<String>,
     ) -> Local<Result<Rc<dyn Camera>, MediaError>> {
-        let feed = Feed::new();
-        let stop = Arc::new(AtomicBool::new(false));
-        let (opened, open) = oneshot::channel();
-        let token = self.next_token.get();
-        self.next_token.set(token + 1);
-        let backend = if let Some(picture) = self.options.test_picture.clone() {
-            pattern::start(picture, feed.clone(), stop.clone(), opened);
-            Backend::Thread
-        } else {
-            self.start();
-            let choice = choice.filter(|c| !c.is_empty());
-            let events = self.events.clone();
-            if let Some((session, nodes)) = self.pipewire_nodes() {
-                let node = choice
-                    .as_deref()
-                    .and_then(|c| c.strip_prefix("pipewire:"))
-                    .and_then(|name| nodes.iter().find(|n| n.name == name))
-                    .unwrap_or(&nodes[0])
-                    .clone();
-                let label = node.label.clone();
-                let ended = Box::new(move || {
-                    let _ = events.send(Event::Ended(label));
-                });
-                if !session.open(token, node, wanted(), feed.clone(), opened, ended) {
-                    feed.close();
-                    return Box::pin(async {
-                        Err(MediaError::Failed("PipeWire's loop is gone".into()))
-                    });
-                }
-                Backend::PipeWire(session, token)
-            } else {
-                let nodes = self.v4l2.borrow().clone();
-                let found = choice
-                    .as_deref()
-                    .and_then(|c| v4l2::find(c, &nodes))
-                    .or_else(|| nodes.first().cloned());
-                let Some(node) = found else {
-                    feed.close();
-                    return Box::pin(async { Err(MediaError::NotFound) });
-                };
-                let label = node.label.clone();
-                v4l2::start(
-                    node,
-                    wanted(),
-                    feed.clone(),
-                    stop.clone(),
-                    opened,
-                    move || {
-                        let _ = events.send(Event::Ended(label));
-                    },
-                );
-                Backend::Thread
-            }
-        };
+        let cameras = self.clone();
         Box::pin(async move {
+            cameras.settled().await;
+            let feed = Feed::new();
+            let stop = Arc::new(AtomicBool::new(false));
+            let (opened, open) = oneshot::channel();
+            let backend = match cameras.begin(choice, &feed, &stop, opened) {
+                Ok(backend) => backend,
+                Err(fault) => {
+                    feed.close();
+                    return Err(fault);
+                }
+            };
             let result = open
                 .await
                 .unwrap_or_else(|_| Err(MediaError::Failed("the camera's thread ended".into())));
@@ -328,6 +293,99 @@ impl Cameras {
                 }
             }
         })
+    }
+
+    /// Starts capturing the camera chosen into `feed`; `opened` is told
+    /// how the device's own open went.
+    fn begin(
+        &self,
+        choice: Option<String>,
+        feed: &Arc<Feed>,
+        stop: &Arc<AtomicBool>,
+        opened: oneshot::Sender<Result<(), MediaError>>,
+    ) -> Result<Backend, MediaError> {
+        if let Some(picture) = self.options.test_picture.clone() {
+            pattern::start(picture, feed.clone(), stop.clone(), opened);
+            return Ok(Backend::Thread);
+        }
+        let choice = choice.filter(|c| !c.is_empty());
+        let events = self.events.clone();
+        if let Some((session, nodes)) = self.pipewire_nodes() {
+            let node = choice
+                .as_deref()
+                .and_then(|c| c.strip_prefix("pipewire:"))
+                .and_then(|name| nodes.iter().find(|n| n.name == name))
+                .unwrap_or(&nodes[0])
+                .clone();
+            let label = node.label.clone();
+            let ended = Box::new(move || {
+                let _ = events.send(Event::Ended(label));
+            });
+            let token = self.next_token.get();
+            self.next_token.set(token + 1);
+            if !session.open(token, node, wanted(), feed.clone(), opened, ended) {
+                return Err(MediaError::Failed("PipeWire's loop is gone".into()));
+            }
+            return Ok(Backend::PipeWire(session, token));
+        }
+        let nodes = self.v4l2.borrow().clone();
+        let node = choice
+            .as_deref()
+            .and_then(|c| v4l2::find(c, &nodes))
+            .or_else(|| nodes.first().cloned())
+            .ok_or(MediaError::NotFound)?;
+        let label = node.label.clone();
+        v4l2::start(
+            node,
+            wanted(),
+            feed.clone(),
+            stop.clone(),
+            opened,
+            move || {
+                let _ = events.send(Event::Ended(label));
+            },
+        );
+        Ok(Backend::Thread)
+    }
+}
+
+/// Asks the portal for its PipeWire remote and connects to it, or to the
+/// session's PipeWire where no portal answers; the cameras hold the
+/// connection once it is up.
+async fn look_for_pipewire(weak: std::rc::Weak<Cameras>) {
+    let fd = match portal().await {
+        Portal::Remote(fd) => Some(fd),
+        Portal::Absent(why) => {
+            log(&format!(
+                "camera: no camera portal ({why}); PipeWire directly"
+            ));
+            None
+        }
+        Portal::Refused(why) => {
+            log(&format!("camera: the portal refused the camera ({why})"));
+            return;
+        }
+    };
+    let Some(events) = weak.upgrade().map(|cameras| cameras.events.clone()) else {
+        return;
+    };
+    let (connected, connection) = oneshot::channel();
+    pipewire::start(
+        fd,
+        move || {
+            let _ = events.send(Event::PipeWire);
+        },
+        connected,
+    );
+    match connection.await {
+        Ok(Ok(session)) => {
+            if let Some(cameras) = weak.upgrade() {
+                cameras.pipewire.replace(Some(Rc::new(session)));
+                (cameras.changed)();
+            }
+        }
+        Ok(Err(fault)) => log(&format!("camera: no PipeWire ({fault}); V4L2 alone")),
+        Err(_) => {}
     }
 }
 
