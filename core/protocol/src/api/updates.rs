@@ -73,19 +73,34 @@ use super::{network, Api, Deployment};
 use crate::{runtime::on_core, ProtocolError};
 
 /// The platforms the deployment says the newest build of, by the section of
-/// its manifest each is in. The Mac, Android and Windows builds are files it
-/// hands over; the iOS app is installed by TestFlight, and the deployment
-/// only says which version is newest there and what changed in it.
+/// its manifest each is in. The Mac, Android, Windows and Linux builds are
+/// files it hands over; the iOS app is installed by TestFlight, and the
+/// deployment only says which version is newest there and what changed in it.
+///
+/// A variant crosses into the apps as its position counted from one, so new
+/// platforms go on the end and nothing is ever put before another: a binding
+/// generated before a variant was added still reads every earlier one
+/// rightly, and one put first would have such a binding read the Mac as
+/// Android.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum UpdatePlatform {
     Mac,
     Android,
     Windows,
-    /// Last, and to stay last. A variant crosses into the apps as its
-    /// position counted from one, so a binding generated before this one
-    /// was added still reads the other three rightly; put first, it would
-    /// have such a binding read the Mac as Android.
+    /// After the first three, which were there before it, for the rule above.
     Ios,
+    /// The Linux app, an AppImage that replaces itself. After `Ios` for the
+    /// same rule: the bindings the other apps were built with before Linux
+    /// existed number the four before it as they always did, and never see
+    /// this one, since no app but Linux's asks for it.
+    ///
+    /// One variant for both of the architectures it is built for, whose
+    /// section names the architecture this core was compiled for
+    /// (`linux_section`): an AppImage holds the machine code of one
+    /// architecture only, where the Mac's disk image, Android's package and
+    /// the Windows installer each hold every architecture their platform
+    /// runs on, so the deployment shelves two Linux builds side by side.
+    Linux,
 }
 
 impl UpdatePlatform {
@@ -96,6 +111,7 @@ impl UpdatePlatform {
             Self::Android => "android",
             Self::Windows => "windows",
             Self::Ios => "ios",
+            Self::Linux => linux_section(),
         }
     }
 
@@ -104,6 +120,31 @@ impl UpdatePlatform {
     /// file of it to download. updates.go's `elsewhere`, by the same name.
     fn elsewhere(self) -> bool {
         matches!(self, Self::Ios)
+    }
+}
+
+/// The Linux app's section, which is its architecture's: `linux-x86_64` or
+/// `linux-aarch64`, spelled as the AppImage tools and the kernel spell the
+/// two (`uname -m`).
+///
+/// In the path, and so in what the release key signs (`Signed`), rather
+/// than in a field beside one `linux` section. A field would leave the
+/// signature saying "Linux" and nothing about which machine code: a
+/// deployment, or a shelf somebody else had written to, could then hand an
+/// aarch64 image, signed and whole, to every x86_64 app, which would put it
+/// in its own place, fail to start, and leave nobody anything to update
+/// from. With the architecture in the platform's word, an image is signed
+/// for one architecture and offered to it alone, as a Mac's disk image is
+/// to the Mac.
+///
+/// An architecture nobody builds the app for (somebody compiled it
+/// themselves for riscv64) asks for a section no manifest has, and is told
+/// there is no build, which is the truth.
+fn linux_section() -> &'static str {
+    match std::env::consts::ARCH {
+        "x86_64" => "linux-x86_64",
+        "aarch64" => "linux-aarch64",
+        _ => "linux-unbuilt",
     }
 }
 
@@ -1341,6 +1382,99 @@ mod tests {
     }
 
     #[test]
+    fn the_platforms_keep_their_places_and_linux_is_last() {
+        // The bindings number the variants by place; a platform added before
+        // another, or the five reordered, would have an app built against
+        // the earlier list ask for somebody else's builds.
+        let places = [
+            UpdatePlatform::Mac,
+            UpdatePlatform::Android,
+            UpdatePlatform::Windows,
+            UpdatePlatform::Ios,
+            UpdatePlatform::Linux,
+        ]
+        .map(|platform| platform as u8);
+        assert_eq!(places, [0, 1, 2, 3, 4]);
+        assert_eq!(
+            UpdatePlatform::Linux.section(),
+            format!("linux-{}", std::env::consts::ARCH),
+            "updates.go's word, which names the architecture"
+        );
+        assert!(!UpdatePlatform::Linux.elsewhere(), "a Linux build is a file");
+    }
+
+    #[test]
+    fn a_linux_build_is_signed_as_linux_and_as_nothing_else() {
+        let (pair, key) = test_pair(TEST_SEED);
+        let image = b"an appimage";
+        let sha256 = hash_of(image);
+        let section = UpdatePlatform::Linux.section();
+        let file = format!("Tomoshibi-0.1.7-{}.AppImage", std::env::consts::ARCH);
+        let signed = |platform| Signed {
+            platform,
+            version: "0.1.7",
+            file_name: &file,
+            size: image.len() as u64,
+            sha256: &sha256,
+        };
+        assert!(String::from_utf8(signed(UpdatePlatform::Linux).message())
+            .unwrap()
+            .contains(&format!("\nplatform={section}\n")));
+
+        let answer = json!({
+            "platform": section, "version": "0.1.7", "file": file,
+            "size": image.len(), "sha256": sha256,
+            "sig": signature_of(&pair, &signed(UpdatePlatform::Linux)),
+        });
+        let build = read_build(UpdatePlatform::Linux, &answer, Some(&key)).unwrap();
+        assert_eq!(build.platform, UpdatePlatform::Linux);
+        assert_eq!(build.size, image.len() as u64);
+
+        // Windows' signature of the very same file is not Linux's.
+        let as_windows = with(
+            &answer,
+            "sig",
+            json!(signature_of(&pair, &signed(UpdatePlatform::Windows))),
+        );
+        assert!(
+            refused(&read_build(UpdatePlatform::Linux, &as_windows, Some(&key))),
+            "a signature made for Windows passed for Linux"
+        );
+        // And Linux's answer is not taken for another platform's.
+        assert!(refused(&read_build(UpdatePlatform::Windows, &answer, Some(&key))));
+
+        // Nor the other architecture's image for this one's, signed and
+        // whole as it is: the signature says which architecture it was
+        // made for, and a deployment cannot move it to the other shelf.
+        let other = if section == "linux-x86_64" {
+            "linux-aarch64"
+        } else {
+            "linux-x86_64"
+        };
+        let for_other = format!(
+            "tomoshibi-update-v1\nplatform={other}\nversion=0.1.7\nfile={file}\nsize={}\nsha256={sha256}\n",
+            image.len()
+        );
+        let as_other = with(
+            &answer,
+            "sig",
+            json!(BASE64.encode(pair.sign(for_other.as_bytes()).as_ref())),
+        );
+        assert!(
+            refused(&read_build(UpdatePlatform::Linux, &as_other, Some(&key))),
+            "an image signed for {other} passed for {section}"
+        );
+        assert!(
+            refused(&read_build(
+                UpdatePlatform::Linux,
+                &with(&as_other, "platform", json!(other)),
+                Some(&key)
+            )),
+            "an answer for {other} was read as this architecture's"
+        );
+    }
+
+    #[test]
     fn a_signed_build_is_offered_with_its_signature() {
         let (pair, key) = test_pair(TEST_SEED);
         let answer = signed_answer(&pair, b"a setup");
@@ -1580,6 +1714,10 @@ mod tests {
             ("mac", UpdatePlatform::Mac),
             ("android", UpdatePlatform::Android),
             ("windows", UpdatePlatform::Windows),
+            // The architecture this core is for; the other's lines are
+            // another platform's to it, and a core for that architecture
+            // checks them.
+            (UpdatePlatform::Linux.section(), UpdatePlatform::Linux),
         ] {
             for line in manifest[section].as_array().into_iter().flatten() {
                 if line.get("file").is_none() {
@@ -1615,7 +1753,11 @@ mod tests {
         .unwrap();
         let key = key_from_hex(TEST_PUBLIC).unwrap();
 
-        assert_eq!(check_manifest(&manifest, &key), 5);
+        // The Mac's two, Android's two, Windows' one, and the one Linux line
+        // of the architecture these tests were built for: the fixture has one
+        // in each of linux-x86_64 and linux-aarch64, and the other is another
+        // platform's to this core.
+        assert_eq!(check_manifest(&manifest, &key), 6);
     }
 
     /// A manifest checked by this core's own rule, against a key given with

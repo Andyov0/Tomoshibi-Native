@@ -1,0 +1,1883 @@
+//! The call: its plan and layout, the tiles and the stage, the control bar,
+//! the panels (messages, sound, devices, host), the reactions, the name
+//! plates, leaving, and the screen after it ends. Drawn in the call's
+//! palette (`tmsb_call_*`) in every appearance. The Mac's RoomView and
+//! CallModel are the reference for the desktop layout and behaviour, the
+//! web client (Room.tsx and its neighbours) for every rule.
+//!
+//! The window asks [`page`] for the call when the model moves to
+//! `Screen::Call` (after `AppModel::enter_call`) and for the ending at
+//! `Screen::Ended`. The call is opened with [`join`]; every remote picture
+//! is a `render::VideoView` given to `Call::attach_video`, the call is
+//! handed to `Media::attach_call` once joined and every remote sound then
+//! goes to `Media::play`, and the devices are the `media::Media` in the
+//! context. When the call is over the room says why with
+//! `AppModel::end_call` (after `Media::detach_call`).
+//!
+//! The call outlives its widgets: the window throws a screen away and
+//! builds it again, so the joined `Call` and everything the room knows about
+//! it live in the model (`AppModel::kept::<RoomState>()`), and the call's
+//! screen re-words itself on `i18n::on_change` rather than being built again
+//! in the middle of a call (ui/window.rs). The observer is called on the
+//! core's threads; [`observer`] sends each `CallEvent` to the main thread
+//! before anything reads it.
+//!
+//! The parts: plan.rs (where pictures go, the web's rules), talk.rs (the
+//! call as the room knows it, from its events), local.rs (this app's own
+//! microphone, camera and shared screen in the call), stage.rs and tile.rs
+//! (the pictures), page.rs (the screen and everything on it), panels.rs
+//! (the panels beside the call; sound_panel.rs, host_panel.rs and
+//! devices_panel.rs are three of them), share_menu.rs (the share button's
+//! menu), strain.rs (the uplink's card), music/ (the song desk), watch/
+//! (watching together), signal.rs (the signal's figures), picture_menu.rs (what can be done to
+//! one picture), veil.rs (the meeting moving), ended.rs (the screen after
+//! the call), motion.rs and glyph.rs (how pieces come and go, and the
+//! symbols the icon theme lacks), and, in a debug build, fake.rs (devices
+//! that are not there) and script.rs (what a test asks the room to do and
+//! picture).
+
+mod css;
+mod devices_panel;
+mod ended;
+#[cfg(debug_assertions)]
+mod fake;
+mod glyph;
+mod host_panel;
+mod local;
+mod motion;
+mod music;
+mod page;
+mod panels;
+mod picture_menu;
+pub mod plan;
+#[cfg(debug_assertions)]
+mod script;
+mod share_menu;
+mod signal;
+mod sound_panel;
+mod stage;
+mod strain;
+pub mod talk;
+mod tile;
+mod veil;
+mod watch;
+#[cfg(debug_assertions)]
+pub use watch::debug_fetch;
+
+use std::{
+    cell::{Cell, RefCell},
+    collections::HashMap,
+    rc::Rc,
+    sync::Arc,
+    time::{Duration, Instant},
+};
+
+use adw::prelude::*;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tomoshibi_core::call::{join_call, Call, CallError, CallEvent, CallObserver, CallState};
+use tomoshibi_protocol::{
+    api::{HostStanding, Joining, Knocker},
+    hands,
+    identity::{scope_of, signature_of},
+    relays::Relay,
+    share::ShareQuality,
+    ProtocolError,
+};
+
+use super::Context;
+use crate::{
+    app::{log, AppModel, CallEntry, Change, Ending, Screen},
+    i18n::{t, t_with},
+    media::{Camera, Media, MediaError, Microphone, ScreenShare, ShareChoice},
+};
+use local::*;
+use talk::{Effect, LeaveDue, Line, Talk, Toast, ToastKind};
+
+/// What the room keeps in the model while a call is open
+/// (`AppModel::kept::<RoomState>()`), so that a screen built again finds
+/// the call rather than joining a second time.
+#[derive(Default)]
+pub struct RoomState {
+    /// The joined call; `None` while joining and after it ends.
+    pub call: RefCell<Option<Arc<Call>>>,
+    /// A join is out for the call entered.
+    pub joining: Cell<bool>,
+    /// The connection's state, as the core last said it.
+    pub state: Cell<Option<CallState>>,
+    /// Everybody in the call, this app included.
+    pub people: Cell<usize>,
+    /// The call as the room knows it, from its events.
+    pub talk: RefCell<Option<Talk>>,
+    /// What the person has done to the screen: the stage, the page, the
+    /// open panel and popover, the volumes, the notices.
+    pub view: RefCell<View>,
+    /// This participant's own devices in the call.
+    pub local: Devices,
+    /// What the deployment says about who runs the room, and the door.
+    pub host: RefCell<Host>,
+    /// The devices the call was joined with: the context's, or in a debug
+    /// run the test ones (fake.rs).
+    pub media: RefCell<Option<Rc<dyn Media>>>,
+    /// Where the server is moving the meeting, and since when, while that
+    /// is worth showing over the call (veil.rs): from the server's word that
+    /// it is moving until this app is back in the moved meeting, its rejoin
+    /// failed, or twenty seconds have passed, whichever comes first.
+    pub moving: RefCell<Option<(String, Instant)>>,
+    /// The call's screen while it is shown. Held here, and only here: every
+    /// closure on its widgets holds it weakly, so that the widgets do not
+    /// keep it alive, and this lets it go when the window moves to another
+    /// screen. It is also how what is drawn once rather than kept (a
+    /// reaction rising off a picture) reaches it.
+    page: RefCell<Option<Rc<page::Page>>>,
+    next_notice: Cell<u64>,
+}
+
+/// The panels beside the call (the Mac's `RoomView.Panel`): the song desk
+/// is music/, watching together watch/.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Panel {
+    Messages,
+    Sound,
+    Devices,
+    Host,
+    Music,
+    Watch,
+}
+
+impl Panel {
+    pub fn of(name: &str) -> Option<Panel> {
+        match name {
+            "messages" => Some(Panel::Messages),
+            "sound" => Some(Panel::Sound),
+            "devices" => Some(Panel::Devices),
+            "host" => Some(Panel::Host),
+            "music" => Some(Panel::Music),
+            "watch" => Some(Panel::Watch),
+            _ => None,
+        }
+    }
+}
+
+/// The bar's popovers, one open at a time across the whole screen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pop {
+    Reactions,
+    Leave,
+    Share,
+    More,
+    Signal,
+}
+
+impl Pop {
+    pub fn of(name: &str) -> Option<Pop> {
+        match name {
+            "reactions" => Some(Pop::Reactions),
+            "leave" => Some(Pop::Leave),
+            "share" | "share.screen" => Some(Pop::Share),
+            "more" => Some(Pop::More),
+            "signal" => Some(Pop::Signal),
+            _ => None,
+        }
+    }
+}
+
+/// The three things somebody can be heard through, each turned down on its
+/// own (hearing.ts `Sound`): their voice, their shared screen's sound, and
+/// the song desk's music.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Sound {
+    Voice,
+    Screen,
+    Music,
+}
+
+/// One person's sound as the listener set it (hearing.ts): a level from
+/// nought to one, and whether it is stopped altogether.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Hearing {
+    pub level: f32,
+    pub blocked: bool,
+}
+
+impl Default for Hearing {
+    fn default() -> Self {
+        Hearing {
+            level: 1.0,
+            blocked: false,
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct View {
+    pub pin: plan::StagePin,
+    pub page: usize,
+    /// The stage given the whole screen (the web's "Fill the screen").
+    pub filled: bool,
+    /// The other person of a call of two, put on the stage only to fill the
+    /// screen with them: leaving the full screen takes them off it again.
+    pub pinned_to_fill: Option<String>,
+    pub panel: Option<Panel>,
+    pub pop: Option<Pop>,
+    /// The alone-in-the-room capsule, once closed, stays closed.
+    pub alone_dismissed: bool,
+    /// The `watching` attribute as this participant last wrote it.
+    pub watching_written: String,
+    pub copied: bool,
+    /// What is in the messages box, kept with the call so that closing the
+    /// panel half way through a sentence does not lose it.
+    pub draft: String,
+    pub sending: bool,
+    /// The last message did not leave; its words are back in the box.
+    pub chat_failed: bool,
+    /// Each person's voice, by identity.
+    pub hearing: HashMap<String, Hearing>,
+    /// Each person's screen sound and music, by identity and which.
+    pub other_hearing: HashMap<(String, Sound), Hearing>,
+    pub toasts: Vec<(u64, Toast)>,
+    pub said: Vec<(u64, Line)>,
+    /// A press that failed, said over the stage until pressed.
+    pub problem: Option<String>,
+    /// The controls are stepped aside (idle while the stage fills the
+    /// screen, or the setting says to).
+    pub idle: bool,
+}
+
+#[derive(Default)]
+pub struct Devices {
+    pub microphone: RefCell<Option<Rc<dyn Microphone>>>,
+    pub camera: RefCell<Option<Rc<dyn Camera>>>,
+    pub share: RefCell<Option<Rc<dyn ScreenShare>>>,
+    pub microphone_on: Cell<bool>,
+    pub camera_on: Cell<bool>,
+    pub microphone_published: Cell<bool>,
+    /// A microphone or camera press still being carried out: another of the
+    /// same meanwhile is ignored (ControlBar.tsx `guard`), and only ignored.
+    /// One flag each, so that the join turning both on starts both.
+    pub microphone_busy: Cell<bool>,
+    pub camera_busy: Cell<bool>,
+    pub sharing_busy: Cell<bool>,
+    /// The hand's own press, so that a pending microphone does not hold up a
+    /// raised hand, nor the hand a microphone.
+    pub raising: Cell<bool>,
+}
+
+#[derive(Default)]
+pub struct Host {
+    /// What the server last said; nothing until it has.
+    pub standing: Option<HostStanding>,
+    pub waiting: Vec<Knocker>,
+    /// The one host action under way, named by what it acts on.
+    pub busy: Option<String>,
+    /// The link the last "Invite somebody" made.
+    pub link: Option<String>,
+    /// "Close the room" asked once, waiting for the second press.
+    pub ending: bool,
+    /// The relays the meeting could be moved to, asked for when the panel
+    /// is first opened (HostPanel.tsx `Elsewhere`).
+    pub relays: Option<Vec<Relay>>,
+    /// The list of relays to move to is open.
+    pub choosing_relay: bool,
+    /// How many the door's notice says are waiting: none when it is not up.
+    pub door_said: usize,
+}
+
+impl Host {
+    pub fn yours(&self) -> bool {
+        self.standing
+            .as_ref()
+            .is_some_and(|standing| standing.yours)
+    }
+
+    /// Where the meeting can be put: neither a machine under maintenance
+    /// nor, for anybody but an administrator, one held in reserve
+    /// (HostFeature `usableRelays`). The server refuses those regardless;
+    /// this is about not showing a door that will not open.
+    pub fn usable_relays(&self) -> Vec<Relay> {
+        let admin = self
+            .standing
+            .as_ref()
+            .is_some_and(|standing| standing.admin);
+        self.relays
+            .iter()
+            .flatten()
+            .filter(|relay| !relay.maintenance && (admin || !relay.admin_only))
+            .cloned()
+            .collect()
+    }
+}
+
+/// The room's own change, for [`AppModel::announce`].
+pub const CHANGED: Change = Change::Module("room");
+
+/// The screen for `screen`: the call or its ending.
+pub fn page(context: &Context, screen: Screen) -> gtk::Widget {
+    crate::theme::add_module_css("room", css::ROOM_CSS);
+    match screen {
+        Screen::Call => {
+            let media = media_for(context);
+            let built = page::Page::build(context, media.clone());
+            let widget = built.widget();
+            let room = context.model.kept::<RoomState>();
+            room.page.replace(Some(built));
+            // Let go of once the window shows another screen: the ending,
+            // or the next call's own screen.
+            let weak = Rc::downgrade(&room);
+            let shown = widget.downgrade();
+            context
+                .model
+                .subscribe_while(&widget, move |model, change| {
+                    if change == Change::Screen && model.screen() != Screen::Call {
+                        if let Some(room) = weak.upgrade() {
+                            let ours = room
+                                .page
+                                .borrow()
+                                .as_ref()
+                                .is_some_and(|page| Some(page.widget()) == shown.upgrade());
+                            if ours {
+                                room.page.replace(None);
+                            }
+                        }
+                    }
+                });
+            start(&context.model, media);
+            widget
+        }
+        _ => ended::page(context),
+    }
+}
+
+/// The devices this call uses: the context's, or the test ones in a debug
+/// run that asks for them.
+fn media_for(context: &Context) -> Rc<dyn Media> {
+    let room = context.model.kept::<RoomState>();
+    if let Some(media) = room.media.borrow().clone() {
+        return media;
+    }
+    #[cfg(debug_assertions)]
+    if fake::wanted().is_some() {
+        log("using the test devices (TOMOSHIBI_DEBUG_FAKE_MEDIA)");
+        let media: Rc<dyn Media> = fake::FakeMedia::new();
+        room.media.replace(Some(media.clone()));
+        return media;
+    }
+    room.media.replace(Some(context.media.clone()));
+    context.media.clone()
+}
+
+/// Opens the call `entry` describes and starts telling `observer` about it.
+pub async fn join(
+    entry: &CallEntry,
+    observer: Arc<dyn CallObserver>,
+) -> Result<Arc<Call>, CallError> {
+    #[allow(unused_mut)]
+    let mut options = entry.options();
+    // TOMOSHIBI_DEBUG_JOIN_FAILS, in a debug run: the grant's media server
+    // replaced by a port nothing listens on, so that a test can see what a
+    // join the deployment granted and the media server refused looks like.
+    #[cfg(debug_assertions)]
+    if std::env::var_os("TOMOSHIBI_DEBUG_JOIN_FAILS").is_some() {
+        options.url = "ws://127.0.0.1:9".into();
+    }
+    join_call(options, observer).await
+}
+
+/// An observer for the core's threads, and the main thread's end of it:
+/// every event is sent, in order, to the receiver, which the room reads
+/// from GLib's main context (`glib::spawn_future_local`). Nothing GTK, and
+/// nothing of the model, is touched on the core's threads.
+pub fn observer() -> (Arc<dyn CallObserver>, UnboundedReceiver<CallEvent>) {
+    let (sender, receiver) = unbounded_channel();
+    (Arc::new(ToMainThread(sender)), receiver)
+}
+
+struct ToMainThread(UnboundedSender<CallEvent>);
+
+impl CallObserver for ToMainThread {
+    fn on_event(&self, event: CallEvent) {
+        // The receiver is gone once the room has stopped listening, after
+        // the call ended; what arrives after that has nobody to tell.
+        let _ = self.0.send(event);
+    }
+}
+
+/// How LiveKit's word for a disconnection reads to the person (the Mac's
+/// AppModel, CallModel.swift `gone`): the host closing the room and being
+/// taken out want their own sentences, and anything else that was not this
+/// app leaving is a lost connection.
+pub fn ending_of(reason: &str) -> Ending {
+    if reason.contains("RoomDeleted") || reason.contains("RoomClosed") {
+        Ending::Closed
+    } else if reason.contains("ParticipantRemoved") {
+        Ending::Removed
+    } else if reason.contains("ClientInitiated") {
+        Ending::Left
+    } else {
+        Ending::Lost(reason.to_owned())
+    }
+}
+
+/// Seconds since the epoch, for the speaking record.
+fn now() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|since| since.as_secs_f64())
+        .unwrap_or_default()
+}
+
+fn changed(model: &AppModel) {
+    model.announce(CHANGED);
+}
+
+/// The joined call, while there is one.
+pub(crate) fn call_of(model: &AppModel) -> Option<Arc<Call>> {
+    model.kept::<RoomState>().call.borrow().clone()
+}
+
+fn media_of(model: &AppModel) -> Option<Rc<dyn Media>> {
+    model.kept::<RoomState>().media.borrow().clone()
+}
+
+/// Joins the call entered, once, and follows it until it ends.
+fn start(model: &AppModel, media: Rc<dyn Media>) {
+    begin(model, media, false);
+}
+
+/// [`start`], or, `moved`, the same meeting joined again where the server
+/// moved it: what the person chose on the screen (the volumes, the panel
+/// open, the stage) is kept, as it is one meeting to them.
+fn begin(model: &AppModel, media: Rc<dyn Media>, moved: bool) {
+    let room = model.kept::<RoomState>();
+    let Some(entry) = model.call_entry() else {
+        return;
+    };
+    if room.joining.get() || room.call.borrow().is_some() {
+        return;
+    }
+    room.joining.set(true);
+    // A fresh call starts from nothing the last one left.
+    room.talk.replace(None);
+    if moved {
+        let mut view = room.view.borrow_mut();
+        view.pop = None;
+        view.toasts.clear();
+        view.sending = false;
+        view.watching_written = String::new();
+        drop(view);
+        let link = room.host.borrow().link.clone();
+        room.host.replace(Host {
+            link,
+            ..Host::default()
+        });
+    } else {
+        room.moving.replace(None);
+        room.view.replace(View::default());
+        room.host.replace(Host::default());
+    }
+    room.local.microphone_on.set(false);
+    room.local.camera_on.set(false);
+    room.local.microphone_published.set(false);
+    let model = model.downgrade();
+    glib::spawn_future_local(async move {
+        let (observer, mut events) = observer();
+        let joined = join(&entry, observer).await;
+        let Some(model) = model.upgrade() else {
+            return;
+        };
+        let room = model.kept::<RoomState>();
+        room.joining.set(false);
+        let call = match joined {
+            Ok(call) => call,
+            Err(fault) => {
+                // A call that never began did not end: back to the join
+                // screen with why and its Join button, as the Mac does,
+                // rather than "Connection lost" for a connection that was
+                // never made.
+                log(&format!("the call could not be joined: {fault}"));
+                room.moving.replace(None);
+                model.call_not_joined();
+                return;
+            }
+        };
+        media.attach_call(&call);
+        let mut talk = Talk::new(
+            &entry.grant.room,
+            &call.local_identity(),
+            &call.local_name(),
+        );
+        talk.arrive(&call.participants());
+        room.talk.replace(Some(talk));
+        room.people.set(call.participants().len() + 1);
+        room.state.set(Some(CallState::Connected));
+        room.call.replace(Some(call.clone()));
+        log(&format!(
+            "joined the call as {}: {} in the call",
+            call.local_identity(),
+            room.people.get()
+        ));
+        // What the join already said (the people there, their tracks) is
+        // taken before anybody arriving counts as news (CallModel
+        // `settled`).
+        while let Ok(event) = events.try_recv() {
+            if !follow(&model, &call, event) {
+                return;
+            }
+        }
+        if let Some(talk) = room.talk.borrow_mut().as_mut() {
+            talk.settled = true;
+        }
+        // Back in a meeting that moved: the veil over it goes.
+        if room.moving.take().is_some() {
+            log("back in the meeting where it moved");
+        }
+        devices_at_join(&model, &entry, &call);
+        refresh_standing(&model);
+        watch_the_door(&model);
+        changed(&model);
+        #[cfg(debug_assertions)]
+        {
+            if model.launch().make_invite {
+                make_invite(&entry);
+            }
+            script::run(&model);
+        }
+
+        let weak = model.downgrade();
+        drop(model);
+        while let Some(event) = events.recv().await {
+            let Some(model) = weak.upgrade() else {
+                return;
+            };
+            if !follow(&model, &call, event) {
+                return;
+            }
+        }
+    });
+}
+
+/// TOMOSHIBI_DEBUG_MAKE_INVITE: an invite into the call this app opened,
+/// its token written to the log for the test that asked for it. Only a
+/// debug build, against the local deployment a test gives it, ever does
+/// this; an invite is a key to the room.
+#[cfg(debug_assertions)]
+fn make_invite(entry: &CallEntry) {
+    let (deployment, room, bearer) = (
+        entry.deployment.clone(),
+        entry.grant.room.clone(),
+        entry.grant.token.clone(),
+    );
+    glib::spawn_future_local(async move {
+        match deployment.create_invite(room, bearer).await {
+            Ok(made) => log(&format!("made an invite: {}", made.token)),
+            Err(fault) => log(&format!("no invite was made: {fault}")),
+        }
+    });
+}
+
+/// One event of the call; false once the call is over.
+fn follow(model: &AppModel, call: &Arc<Call>, event: CallEvent) -> bool {
+    let room = model.kept::<RoomState>();
+    // An event of a call that has been replaced (the meeting moved, and this
+    // app is in it again on another call) is about nothing on screen: its
+    // ending, told late, ended the call that replaced it (the Mac's AppModel
+    // `ended`, which asks the same).
+    let replaced = room
+        .call
+        .borrow()
+        .as_ref()
+        .is_some_and(|held| !Arc::ptr_eq(held, call));
+    if replaced {
+        return false;
+    }
+    music::follow(model, call, &event);
+    watch::follow(model, call, &event);
+    let effects = {
+        let mut talk = room.talk.borrow_mut();
+        let Some(talk) = talk.as_mut() else {
+            return true;
+        };
+        let effects = talk.apply(event, now());
+        room.state.set(Some(talk.state));
+        room.people.set(talk.count());
+        effects
+    };
+    let mut going_on = true;
+    for effect in effects {
+        match effect {
+            Effect::Play { sid, identity } => {
+                if let Some(media) = media_of(model) {
+                    media.play(call, &sid, &identity);
+                }
+                apply_hearing(model, &identity);
+            }
+            Effect::StopPlaying { sid } => {
+                if let Some(media) = media_of(model) {
+                    media.stop_playing(call, &sid);
+                }
+            }
+            Effect::Toast(toast) => announce(model, toast),
+            Effect::Said(line) => say_in_corner(model, line),
+            Effect::Reaction { from, what } => {
+                log(&format!("{from} reacted with {what}"));
+                if let Some(page) = room.page.borrow().clone() {
+                    page.float(&from, &what);
+                }
+            }
+            Effect::Standing => refresh_standing(model),
+            Effect::LeaveLater { identity } => leave_later(model, identity, talk::BACK_WITHIN_MS),
+            Effect::Moving { to } => moving(model, to),
+            Effect::Hearing => {
+                let everybody: Vec<String> = room
+                    .talk
+                    .borrow()
+                    .as_ref()
+                    .map(Talk::identities)
+                    .unwrap_or_default();
+                for identity in everybody {
+                    apply_hearing(model, &identity);
+                }
+            }
+            Effect::Ended { reason } => {
+                log(&format!("the call ended: {reason}"));
+                let moved = room
+                    .talk
+                    .borrow()
+                    .as_ref()
+                    .and_then(|talk| talk.moved_to(&reason, now()));
+                // A leave from here has already said how it ended.
+                let ended = room.call.borrow_mut().take();
+                if let Some(ended) = ended {
+                    match moved {
+                        Some(to) => rejoin_where_moved(model, ended, to),
+                        None => {
+                            end_devices(model);
+                            model.end_call(ending_of(&reason));
+                        }
+                    }
+                }
+                going_on = false;
+            }
+        }
+    }
+    changed(model);
+    going_on
+}
+
+/// Leaves the call, if there is one, and says so: the leave button, the
+/// window closing, the session ending the app, and a debug run's
+/// TOMOSHIBI_DEBUG_QUIT_AFTER before it quits.
+///
+/// The ending is shown first and the call left behind it. Left the other
+/// way round, the leave's own disconnection reached the call's screen
+/// before the ending did: "Connection lost" at the top, the bar greyed and
+/// one's own picture gone to its initial, for the 0.3 to 1.7 seconds the
+/// leave took, every time anybody pressed leave. Awaited to the end all the
+/// same, so that whoever quits after it quits once the call is left.
+pub async fn leave(model: &AppModel, media: &dyn Media) {
+    let room = model.kept::<RoomState>();
+    let call = room.call.borrow_mut().take();
+    if let Some(call) = call {
+        model.end_call(Ending::Left);
+        // A show this participant runs is closed, and the word that it
+        // closed sent, before the call goes: sent after, it never arrived.
+        // Here rather than at the leave button alone, where it was first:
+        // closing the window or the session ending the app left the others
+        // watching a show nobody held.
+        watch::leaving(model).await;
+        stop_sharing_now(model).await;
+        let_go_of_devices(model);
+        call.leave().await;
+        // The devices the call was joined with, which in a debug run are not
+        // the context's.
+        match media_of(model) {
+            Some(own) => own.detach_call(),
+            None => media.detach_call(),
+        }
+    }
+}
+
+/// The devices this call uses, or none at all: for whoever leaves from
+/// outside the room (the window's keys, its closing).
+pub(crate) fn media_or_quiet(model: &AppModel) -> Rc<dyn Media> {
+    media_of(model).unwrap_or_else(|| Rc::new(crate::media::Quiet))
+}
+
+/// Everything the call held let go of, when it ended by itself (the host
+/// closing the room, being taken out, the connection lost): the
+/// microphone, the camera, the shared screen, and the sound. The share was
+/// left running: its portal session open, the desktop's sharing light on,
+/// its capture still feeding a call that had gone, and the next call's
+/// share refused because one was still held, until the app was restarted.
+fn end_devices(model: &AppModel) {
+    let_go_of_devices(model);
+    if let Some(media) = media_of(model) {
+        media.detach_call();
+    }
+    let weak = model.downgrade();
+    glib::spawn_future_local(async move {
+        if let Some(model) = weak.upgrade() {
+            stop_sharing_now(&model).await;
+        }
+    });
+}
+
+/// The microphone on or off, from the window's key: a press while one is
+/// still being carried out is the bar's own guard's to ignore.
+pub(crate) fn toggle_microphone(model: &AppModel) {
+    let on = model.kept::<RoomState>().local.microphone_on.get();
+    set_microphone(model, !on);
+}
+
+/// The camera on or off, from the window's key.
+pub(crate) fn toggle_camera(model: &AppModel) {
+    let on = model.kept::<RoomState>().local.camera_on.get();
+    set_camera(model, !on);
+}
+
+// ---- the meeting moving --------------------------------------------------
+
+/// How long the veil may stay up whatever became of the move (App.tsx: the
+/// overlay's twenty-second limit), so that nobody sits under "you will be
+/// back in a moment" for ever because a path that should have taken it
+/// down did not.
+const MOVING_SHOWN_FOR: Duration = Duration::from_secs(20);
+
+/// The server's word that the meeting is about to move: shown over the call
+/// at once, before the disconnection rather than after it (App.tsx `told`).
+fn moving(model: &AppModel, to: String) {
+    log(&format!(
+        "the server says the meeting is moving{}",
+        if to.is_empty() {
+            ""
+        } else {
+            " to another server"
+        }
+    ));
+    show_moving(model, to);
+}
+
+fn show_moving(model: &AppModel, to: String) {
+    let room = model.kept::<RoomState>();
+    let since = Instant::now();
+    room.moving.replace(Some((to, since)));
+    let weak = model.downgrade();
+    glib::timeout_add_local_once(MOVING_SHOWN_FOR, move || {
+        let Some(model) = weak.upgrade() else {
+            return;
+        };
+        let room = model.kept::<RoomState>();
+        let ours = room
+            .moving
+            .borrow()
+            .as_ref()
+            .is_some_and(|(_, at)| *at == since);
+        if ours {
+            room.moving.replace(None);
+            changed(&model);
+        }
+    });
+    changed(model);
+}
+
+/// The call ended because the meeting moved: back in at once, as the same
+/// person with the same passphrase, word and invitation, the server choosing
+/// where (App.tsx ~676, the Mac's AppModel `rejoin`), under the veil the
+/// whole time. A join that fails ends on the join screen with why, as one
+/// from the join screen does.
+fn rejoin_where_moved(model: &AppModel, ended: Arc<Call>, to: String) {
+    log("the meeting moved: joining it again");
+    show_moving(model, to);
+    // Nobody's pictures are kept from the call that ended: each was drawn
+    // from that call's track, and a person whose track kept its name across
+    // the move (somebody else's, when only this participant was placed
+    // elsewhere) kept a picture attached to the old call, frozen on its
+    // last frame. Under the veil they go, and come back from the new call.
+    if let Some(talk) = model.kept::<RoomState>().talk.borrow_mut().as_mut() {
+        talk.people.clear();
+        talk.leaving.clear();
+    }
+    let_go_of_devices(model);
+    if let Some(media) = media_of(model) {
+        media.detach_call();
+    }
+    let weak = model.downgrade();
+    glib::spawn_future_local(async move {
+        let Some(model) = weak.upgrade() else {
+            return;
+        };
+        stop_sharing_now(&model).await;
+        ended.leave().await;
+        if !model.rejoin_moved().await {
+            log("the moved meeting could not be joined again");
+            model.kept::<RoomState>().moving.replace(None);
+            changed(&model);
+            return;
+        }
+        // The call's screen never went, so it is not built again to start
+        // the call: the join is begun here.
+        let Some(media) = model.kept::<RoomState>().media.borrow().clone() else {
+            return;
+        };
+        begin(&model, media, true);
+        changed(&model);
+    });
+}
+
+/// Asks the talk again, after `after_ms`, whether somebody's leave is to be
+/// said (talk.rs `leave_due`).
+fn leave_later(model: &AppModel, identity: String, after_ms: u64) {
+    let weak = model.downgrade();
+    glib::timeout_add_local_once(Duration::from_millis(after_ms), move || {
+        let Some(model) = weak.upgrade() else {
+            return;
+        };
+        let due = model
+            .kept::<RoomState>()
+            .talk
+            .borrow_mut()
+            .as_mut()
+            .map(|talk| talk.leave_due(&identity, now()));
+        match due {
+            Some(LeaveDue::Say(toast)) => announce(&model, toast),
+            Some(LeaveDue::Wait(ms)) => leave_later(&model, identity, ms),
+            _ => {}
+        }
+    });
+}
+
+/// Closes the microphone and the camera, which the call opened or was
+/// handed by the pre-join.
+fn let_go_of_devices(model: &AppModel) {
+    let room = model.kept::<RoomState>();
+    if let Some(microphone) = room.local.microphone.take() {
+        microphone.close();
+    }
+    if let Some(camera) = room.local.camera.take() {
+        camera.close();
+    }
+    room.local.microphone_on.set(false);
+    room.local.camera_on.set(false);
+}
+
+// ---- notices -----------------------------------------------------------
+
+/// Says something in the corner, for as long as it says it lasts; said
+/// again under the same key it replaces the one there.
+fn announce(model: &AppModel, toast: Toast) {
+    let room = model.kept::<RoomState>();
+    let id = room.next_notice.get() + 1;
+    room.next_notice.set(id);
+    let lasts = toast.lasts_ms;
+    {
+        let mut view = room.view.borrow_mut();
+        if let Some(key) = toast.key.as_ref() {
+            view.toasts
+                .retain(|(_, kept)| kept.key.as_ref() != Some(key));
+        }
+        view.toasts.push((id, toast));
+        // The newest few: a burst of arrivals is not a wall of cards.
+        let over = view.toasts.len().saturating_sub(4);
+        view.toasts.drain(..over);
+    }
+    if let Some(lasts) = lasts {
+        let weak = model.downgrade();
+        glib::timeout_add_local_once(Duration::from_millis(lasts), move || {
+            if let Some(model) = weak.upgrade() {
+                dismiss(&model, id);
+            }
+        });
+    }
+    changed(model);
+}
+
+pub(crate) fn dismiss(model: &AppModel, id: u64) {
+    let room = model.kept::<RoomState>();
+    room.view
+        .borrow_mut()
+        .toasts
+        .retain(|(kept, _)| *kept != id);
+    changed(model);
+}
+
+/// A failure, said briefly.
+fn failed(model: &AppModel, sentence: impl Into<String>) {
+    announce(model, Toast::failure(sentence));
+}
+
+fn say_in_corner(model: &AppModel, line: Line) {
+    let room = model.kept::<RoomState>();
+    let id = room.next_notice.get() + 1;
+    room.next_notice.set(id);
+    {
+        let mut view = room.view.borrow_mut();
+        view.said.push((id, line));
+        let over = view.said.len().saturating_sub(3);
+        view.said.drain(..over);
+    }
+    let weak = model.downgrade();
+    glib::timeout_add_local_once(Duration::from_millis(talk::SAID_FOR_MS), move || {
+        if let Some(model) = weak.upgrade() {
+            let room = model.kept::<RoomState>();
+            room.view.borrow_mut().said.retain(|(kept, _)| *kept != id);
+            changed(&model);
+        }
+    });
+}
+
+// ---- the hand, reactions, messages ------------------------------------
+
+/// The hand is an attribute, written only when it changes (hands.ts).
+pub(crate) fn set_hand(model: &AppModel, up: bool) {
+    let room = model.kept::<RoomState>();
+    let Some(call) = call_of(model) else {
+        return;
+    };
+    let current = room.talk.borrow().as_ref().map(|talk| talk.hand_up);
+    let Some(value) = hands::hand_to_write(
+        current.map(|up| if up { "up".into() } else { String::new() }),
+        up,
+    ) else {
+        return;
+    };
+    if room.local.raising.replace(true) {
+        return;
+    }
+    let weak = model.downgrade();
+    glib::spawn_future_local(async move {
+        let written = call
+            .set_attributes(HashMap::from([(hands::HAND.to_owned(), value)]))
+            .await;
+        let Some(model) = weak.upgrade() else {
+            return;
+        };
+        let room = model.kept::<RoomState>();
+        room.local.raising.set(false);
+        match written {
+            Ok(()) => {
+                if let Some(talk) = room.talk.borrow_mut().as_mut() {
+                    talk.hand_up = up;
+                }
+            }
+            Err(fault) => {
+                log(&format!("the hand was not written: {fault}"));
+                failed(&model, t("That could not be done. Try again."));
+            }
+        }
+        changed(&model);
+    });
+}
+
+/// Sends a reaction to everybody and shows it on this participant's own
+/// picture at once: data does not come back to whoever sent it (hands.ts
+/// `react`). The topic and payload are the protocol crate's, which refuses
+/// anything but the six a browser would show.
+/// Says whose share is on this participant's stage (watching.ts
+/// `useWatching`): the owner of somebody else's screen on the stage, or
+/// nothing, written only when it changes, so that whoever is sharing can see
+/// who has it open (their watchers card). A share in the strip does not
+/// count: nobody has opened it.
+pub(crate) fn write_watching(model: &AppModel) {
+    let room = model.kept::<RoomState>();
+    let Some(call) = call_of(model) else {
+        return;
+    };
+    let stage = {
+        let view = room.view.borrow();
+        view.pin.pinned().map(|id| {
+            let local = id == talk::ME || id == talk::MY_SHARE;
+            let (owner, kind) = id.rsplit_once('/').unwrap_or((id, ""));
+            hands::StagePicture {
+                owner: if local {
+                    call.local_identity()
+                } else {
+                    owner.to_owned()
+                },
+                screen: kind == "screen",
+                local,
+            }
+        })
+    };
+    let sharer = hands::watched_sharer(stage);
+    let current = room.view.borrow().watching_written.clone();
+    let Some(value) = hands::watching_to_write(Some(current), sharer) else {
+        return;
+    };
+    room.view.borrow_mut().watching_written = value.clone();
+    let weak = model.downgrade();
+    glib::spawn_future_local(async move {
+        let written = call
+            .set_attributes(HashMap::from([(hands::WATCHING.to_owned(), value)]))
+            .await;
+        if let Err(fault) = written {
+            log(&format!("the watching attribute was not written: {fault}"));
+            // Written again at the next change, from what it says now.
+            if let Some(model) = weak.upgrade() {
+                model.kept::<RoomState>().view.borrow_mut().watching_written = String::from("?");
+            }
+        }
+    });
+}
+
+/// Who has this participant's shared screen open (watching.ts
+/// `useWatchers`), by name.
+pub(crate) fn watchers(model: &AppModel) -> Option<Vec<String>> {
+    let room = model.kept::<RoomState>();
+    if room.local.share.borrow().is_none() {
+        return None;
+    }
+    let talk = room.talk.borrow();
+    let talk = talk.as_ref()?;
+    let roster: Vec<hands::RosterMember> = talk
+        .people
+        .iter()
+        .map(|person| hands::RosterMember {
+            identity: person.id.clone(),
+            attributes: person.attributes.clone(),
+        })
+        .collect();
+    Some(
+        hands::watchers(talk.local_identity.clone(), true, roster)
+            .into_iter()
+            .map(|identity| {
+                talk.person(&identity)
+                    .map(|person| person.label())
+                    .unwrap_or(identity)
+            })
+            .collect(),
+    )
+}
+
+pub(crate) fn react(model: &AppModel, what: &str) {
+    let Some(call) = call_of(model) else {
+        return;
+    };
+    let Ok(payload) = hands::reaction_payload(what.to_owned()) else {
+        return;
+    };
+    if let Some(page) = model.kept::<RoomState>().page.borrow().clone() {
+        page.float(talk::ME, what);
+    }
+    glib::spawn_future_local(async move {
+        if let Err(fault) = call
+            .send_data(
+                hands::REACTION_TOPIC.to_owned(),
+                payload,
+                Vec::new(),
+                hands::REACTION_RELIABLE,
+            )
+            .await
+        {
+            log(&format!("the reaction was not sent: {fault}"));
+        }
+    });
+}
+
+/// Sends what is in the box (ChatPanel.tsx `send`): cleared at once and put
+/// back if it did not leave, because losing what somebody typed is worse
+/// than showing it twice. Nothing goes while a message is on its way, or
+/// while the call is reconnecting.
+pub(crate) fn send_draft(model: &AppModel) {
+    let room = model.kept::<RoomState>();
+    let Some(call) = call_of(model) else {
+        return;
+    };
+    let connected = room.state.get() == Some(CallState::Connected);
+    let body = {
+        let mut view = room.view.borrow_mut();
+        let body = view.draft.trim().to_owned();
+        if body.is_empty() || view.sending || !connected {
+            return;
+        }
+        view.draft.clear();
+        view.chat_failed = false;
+        view.sending = true;
+        body
+    };
+    changed(model);
+    let weak = model.downgrade();
+    glib::spawn_future_local(async move {
+        let sent = call.send_chat(body.clone()).await;
+        let Some(model) = weak.upgrade() else {
+            return;
+        };
+        let room = model.kept::<RoomState>();
+        {
+            let mut view = room.view.borrow_mut();
+            view.sending = false;
+            if sent.is_err() {
+                // Whatever was typed since goes after it.
+                view.draft = if view.draft.is_empty() {
+                    body.clone()
+                } else {
+                    format!("{body}\n{}", view.draft)
+                };
+                view.chat_failed = true;
+            }
+        }
+        match sent {
+            Ok(()) => {
+                let at = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|since| since.as_millis() as i64)
+                    .unwrap_or_default();
+                let id = format!("mine-{at}");
+                if let Some(talk) = room.talk.borrow_mut().as_mut() {
+                    talk.sent(&body, at, id);
+                }
+            }
+            Err(fault) => log(&format!("the message was not sent: {fault}")),
+        }
+        changed(&model);
+    });
+}
+
+// ---- the screen's own choices ------------------------------------------
+
+pub(crate) fn toggle_panel(model: &AppModel, panel: Panel) {
+    let room = model.kept::<RoomState>();
+    let open = {
+        let mut view = room.view.borrow_mut();
+        view.pop = None;
+        view.panel = if view.panel == Some(panel) {
+            None
+        } else {
+            Some(panel)
+        };
+        if view.panel != Some(Panel::Host) {
+            // Closing it puts both questions away: opened again it was one
+            // press from ending the meeting, or from moving everybody (the
+            // Mac's HostFeature `panelOpen`).
+            let mut host = room.host.borrow_mut();
+            host.ending = false;
+            host.choosing_relay = false;
+        }
+        view.panel
+    };
+    if let Some(talk) = room.talk.borrow_mut().as_mut() {
+        talk.set_chat_open(open == Some(Panel::Messages));
+    }
+    if open == Some(Panel::Host) {
+        refresh_standing(model);
+        load_relays(model);
+    }
+    say_who_is_waiting(model);
+    changed(model);
+}
+
+pub(crate) fn toggle_pop(model: &AppModel, pop: Pop) {
+    let room = model.kept::<RoomState>();
+    {
+        let mut view = room.view.borrow_mut();
+        view.pop = if view.pop == Some(pop) {
+            None
+        } else {
+            Some(pop)
+        };
+    }
+    changed(model);
+}
+
+pub(crate) fn close_pop(model: &AppModel) -> bool {
+    let room = model.kept::<RoomState>();
+    let was = room.view.borrow_mut().pop.take();
+    if was.is_some() {
+        changed(model);
+    }
+    was.is_some()
+}
+
+/// A press on a picture: on to the stage or back off it. While the stage
+/// fills the screen a press only brings the controls back (the Mac's
+/// `select`): no video player leaves its full screen on a click.
+pub(crate) fn press_picture(model: &AppModel, id: &str) {
+    let room = model.kept::<RoomState>();
+    {
+        let mut view = room.view.borrow_mut();
+        if view.filled {
+            return;
+        }
+        view.pin.toggle(id);
+    }
+    changed(model);
+}
+
+/// The picture menu's "Show {name} larger" and "Show everybody": the
+/// picture on to the stage or back off it, as a press does.
+pub(crate) fn toggle_stage(model: &AppModel, id: &str) {
+    let room = model.kept::<RoomState>();
+    room.view.borrow_mut().pin.toggle(id);
+    changed(model);
+}
+
+/// A second press within the double-press interval: fills the screen with
+/// the picture the first press was on, wherever that has moved (the Mac's
+/// `expand`).
+pub(crate) fn expand_picture(model: &AppModel, id: &str) {
+    let filled = model.kept::<RoomState>().view.borrow().filled;
+    if filled {
+        unfill(model);
+        return;
+    }
+    model
+        .kept::<RoomState>()
+        .view
+        .borrow_mut()
+        .pin
+        .pin(Some(id.to_owned()));
+    fill(model);
+}
+
+/// Fills the screen with the stage: the window's own full screen, the
+/// nearest thing to the browser's.
+pub(crate) fn fill(model: &AppModel) {
+    let room = model.kept::<RoomState>();
+    {
+        let mut view = room.view.borrow_mut();
+        if view.pin.pinned().is_none() {
+            return;
+        }
+        view.filled = true;
+    }
+    if let Some(page) = room.page.borrow().clone() {
+        page.fullscreen(true);
+    }
+    changed(model);
+}
+
+/// Fills the screen with the other person of a call of two, from the button
+/// on their picture (Room.tsx `alone`).
+pub(crate) fn fill_alone(model: &AppModel, id: &str) {
+    {
+        let room = model.kept::<RoomState>();
+        let mut view = room.view.borrow_mut();
+        view.pin.pin(Some(id.to_owned()));
+        view.pinned_to_fill = Some(id.to_owned());
+    }
+    fill(model);
+}
+
+pub(crate) fn unfill(model: &AppModel) {
+    let room = model.kept::<RoomState>();
+    {
+        let mut view = room.view.borrow_mut();
+        view.filled = false;
+        if let Some(id) = view.pinned_to_fill.take() {
+            if view.pin.pinned() == Some(id.as_str()) {
+                view.pin.pin(None);
+            }
+        }
+    }
+    if let Some(page) = room.page.borrow().clone() {
+        page.fullscreen(false);
+    }
+    changed(model);
+}
+
+pub(crate) fn turn_page(model: &AppModel, by: i32) {
+    let room = model.kept::<RoomState>();
+    {
+        let mut view = room.view.borrow_mut();
+        view.page = (view.page as i32 + by).max(0) as usize;
+    }
+    changed(model);
+}
+
+// ---- hearing ------------------------------------------------------------
+
+impl View {
+    /// What the listener chose for one of somebody's sounds; full and on
+    /// where nothing was chosen.
+    pub fn hearing_of(&self, identity: &str, sound: Sound) -> Hearing {
+        match sound {
+            Sound::Voice => self.hearing.get(identity),
+            other => self.other_hearing.get(&(identity.to_owned(), other)),
+        }
+        .copied()
+        .unwrap_or_default()
+    }
+}
+
+/// A person's volume for one of their sounds, from the sound panel or a
+/// picture's menu.
+pub(crate) fn set_hearing(model: &AppModel, identity: &str, sound: Sound, hearing: Hearing) {
+    {
+        let room = model.kept::<RoomState>();
+        let mut view = room.view.borrow_mut();
+        match sound {
+            Sound::Voice => {
+                view.hearing.insert(identity.to_owned(), hearing);
+            }
+            other => {
+                view.other_hearing
+                    .insert((identity.to_owned(), other), hearing);
+            }
+        }
+    }
+    apply_hearing(model, identity);
+    changed(model);
+}
+
+/// Puts a person's chosen volumes on what is playing of them, each sound
+/// its own (hearing.ts `SOURCE`): their voice and their screen sound and
+/// music through the devices, and the screen sound and music at the server
+/// too (`Call::set_hearing`, which also turns the lossless streams standing
+/// in for them, the `music` argument saying which), as hearing.ts does. A
+/// screen's sound was turned with the voice's slider, so a film somebody
+/// shared could not be turned down without their voice going with it.
+fn apply_hearing(model: &AppModel, identity: &str) {
+    let room = model.kept::<RoomState>();
+    let (voice, screen_hearing, music_hearing) = {
+        let view = room.view.borrow();
+        (
+            view.hearing_of(identity, Sound::Voice),
+            view.hearing_of(identity, Sound::Screen),
+            view.hearing_of(identity, Sound::Music),
+        )
+    };
+    let audible = |hearing: Hearing| if hearing.blocked { 0.0 } else { hearing.level };
+    if let Some(media) = media_of(model) {
+        media.set_volume(identity, audible(voice));
+        media.set_kind_volume(identity, false, audible(screen_hearing));
+        media.set_kind_volume(identity, true, audible(music_hearing));
+    }
+    let Some(call) = call_of(model) else {
+        return;
+    };
+    let shares_sound = room.talk.borrow().as_ref().and_then(|talk| {
+        let person = talk.person(identity)?;
+        Some((
+            person
+                .track(tomoshibi_core::call::MediaSource::ScreenShareAudio)
+                .is_some(),
+            person.music_track().is_some(),
+        ))
+    });
+    let Some((screen, music)) = shares_sound else {
+        return;
+    };
+    if !screen && !music {
+        return;
+    }
+    let identity = identity.to_owned();
+    glib::spawn_future_local(async move {
+        for (has, is_music, hearing) in [
+            (screen, false, screen_hearing),
+            (music, true, music_hearing),
+        ] {
+            if has {
+                call.clone()
+                    .set_hearing(identity.clone(), is_music, hearing.level, hearing.blocked)
+                    .await;
+            }
+        }
+    });
+}
+
+// ---- running the room ----------------------------------------------------
+
+/// Asks the deployment again who runs the room (host.ts `useStanding`).
+fn refresh_standing(model: &AppModel) {
+    let (Some(call), Some(entry)) = (call_of(model), model.call_entry()) else {
+        return;
+    };
+    let room_name = entry.grant.room.clone();
+    let deployment = entry.deployment.clone();
+    let weak = model.downgrade();
+    glib::spawn_future_local(async move {
+        let said = deployment.host_standing(room_name, call.token()).await;
+        let Some(model) = weak.upgrade() else {
+            return;
+        };
+        if let Ok(said) = said {
+            let room = model.kept::<RoomState>();
+            let mut host = room.host.borrow_mut();
+            if !said.yours {
+                host.waiting.clear();
+                host.link = None;
+            }
+            host.standing = Some(said);
+            drop(host);
+            say_who_is_waiting(&model);
+            changed(&model);
+        }
+    });
+}
+
+/// The key the door's notice is said under.
+const DOOR: &str = "door";
+
+/// Takes back whatever notice was said under `key`.
+pub(crate) fn dismiss_key(model: &AppModel, key: &str) {
+    let room = model.kept::<RoomState>();
+    room.view
+        .borrow_mut()
+        .toasts
+        .retain(|(_, toast)| toast.key.as_deref() != Some(key));
+    changed(model);
+}
+
+/// Somebody waiting to be let in, said where the host will see it, and
+/// taken back the moment the door is empty (notices.ts `atTheDoor`; the
+/// Mac's HostFeature `sayWhoIsWaiting`). It stands down while the host's
+/// panel is open, which lists the same people under the same two answers:
+/// left up, it sat beside the panel saying what the panel said, and where
+/// the panel was wider than the notices were placed for, under it. Said
+/// again when the panel closes on somebody still outside, and again
+/// whenever the count changes, so that it never says two when one is left.
+fn say_who_is_waiting(model: &AppModel) {
+    let room = model.kept::<RoomState>();
+    let panel_open = room.view.borrow().panel == Some(Panel::Host);
+    let count = {
+        let host = room.host.borrow();
+        if panel_open || !host.yours() {
+            0
+        } else {
+            host.waiting.len()
+        }
+    };
+    {
+        let mut host = room.host.borrow_mut();
+        if host.door_said == count {
+            return;
+        }
+        host.door_said = count;
+    }
+    if count == 0 {
+        dismiss_key(model, DOOR);
+        return;
+    }
+    announce(
+        model,
+        Toast {
+            kind: ToastKind::Signal,
+            key: Some(DOOR.into()),
+            lasts_ms: None,
+            closable: true,
+            // The Mac's and Windows' words for one, from the catalogue
+            // (notices.ts `atTheDoor`): "1 person" read as a count with
+            // nothing to count.
+            ..Toast::said(if count == 1 {
+                t("Somebody is waiting to be let in")
+            } else {
+                t_with(
+                    "{count} people are waiting to be let in",
+                    &[("count", &count)],
+                )
+            })
+        },
+    );
+}
+
+/// Looks at the door every four seconds while this participant may open
+/// it (AtTheDoor.tsx `LOOK_EVERY`).
+fn watch_the_door(model: &AppModel) {
+    let weak = model.downgrade();
+    // For this call only: one joined again after a move starts its own, and
+    // this one, still waiting out its four seconds, would have gone on
+    // beside it, asking twice.
+    let watched = call_of(model);
+    glib::timeout_add_local(Duration::from_secs(4), move || {
+        let Some(model) = weak.upgrade() else {
+            return glib::ControlFlow::Break;
+        };
+        let room = model.kept::<RoomState>();
+        let Some(call) = call_of(&model) else {
+            return glib::ControlFlow::Break;
+        };
+        if !watched
+            .as_ref()
+            .is_some_and(|watched| Arc::ptr_eq(watched, &call))
+        {
+            return glib::ControlFlow::Break;
+        }
+        if !room.host.borrow().yours() {
+            return glib::ControlFlow::Continue;
+        }
+        let Some(entry) = model.call_entry() else {
+            return glib::ControlFlow::Break;
+        };
+        let weak = model.downgrade();
+        glib::spawn_future_local(async move {
+            // A round that did not answer is not an empty door.
+            let Ok(said) = entry
+                .deployment
+                .knocking(entry.grant.room.clone(), call.token())
+                .await
+            else {
+                return;
+            };
+            if let Some(model) = weak.upgrade() {
+                let room = model.kept::<RoomState>();
+                room.host.borrow_mut().waiting = said;
+                say_who_is_waiting(&model);
+                changed(&model);
+            }
+        });
+        glib::ControlFlow::Continue
+    });
+}
+
+/// One host action at a time, and what went wrong said in words.
+fn host_act<F>(model: &AppModel, who: &str, work: F)
+where
+    F: std::future::Future<Output = Result<Option<String>, tomoshibi_protocol::ProtocolError>>
+        + 'static,
+{
+    let room = model.kept::<RoomState>();
+    if room.host.borrow().busy.is_some() {
+        return;
+    }
+    room.host.borrow_mut().busy = Some(who.to_owned());
+    changed(model);
+    let weak = model.downgrade();
+    glib::spawn_future_local(async move {
+        let done = work.await;
+        let Some(model) = weak.upgrade() else {
+            return;
+        };
+        model.kept::<RoomState>().host.borrow_mut().busy = None;
+        match done {
+            Ok(Some(said)) => announce(&model, Toast::said(said)),
+            Ok(None) => {}
+            Err(fault) => {
+                log(&format!("a host action failed: {fault}"));
+                failed(&model, explain_refusal(&fault));
+            }
+        }
+        refresh_standing(&model);
+        changed(&model);
+    });
+}
+
+/// The server sends a code and the app owns the sentence (HostPanel.tsx
+/// `explain`, the Mac's HostFeature): each written out, because each wants
+/// a different next move, where every refusal used to read "Something went
+/// wrong".
+pub(crate) fn explain_refusal(fault: &ProtocolError) -> String {
+    let ProtocolError::Refused { code, .. } = fault else {
+        return t("That could not be done. Try again.");
+    };
+    match code.as_str() {
+        "media_unreachable" => t("That server did not answer. The meeting has not been moved."),
+        "no_such_relay" => t("That server is no longer on this deployment."),
+        "relay_not_allowed" => t("That server is reserved, and this meeting may not be put on it."),
+        "no_such_person" => t("They have already left."),
+        "not_proven" => t(
+            "They joined without a passphrase, so they cannot run the room. Ask them to rejoin with one.",
+        ),
+        "not_yours" => t("You no longer run this room."),
+        "scoped_room" => t(
+            "Every member of this room's scope runs it, so there is nobody to hand it to.",
+        ),
+        "rate_limited" => t("Too many attempts. Try again in a moment."),
+        _ => t("That could not be done. Try again."),
+    }
+}
+
+/// Whether this room is held under a scope, where every member runs it and
+/// there is nobody to hand it to (HostPanel.tsx `scoped`).
+pub(crate) fn scoped(model: &AppModel) -> bool {
+    model
+        .call_entry()
+        .is_some_and(|entry| !scope_of(entry.grant.room).is_empty())
+}
+
+/// Somebody who joined without a passphrase, whom the room cannot be handed
+/// to (HostPanel.tsx `HandOver`, by the signature's prefix).
+pub(crate) fn is_guest(identity: &str) -> bool {
+    signature_of(identity.to_owned()).is_some_and(|mark| !mark.proven)
+}
+
+/// "Make host" pressed beside a guest: the reason, said where a phone's
+/// reader sees it too, rather than a press that does nothing.
+pub(crate) fn refuse_hand_over(model: &AppModel) {
+    failed(
+        model,
+        t("They joined without a passphrase, so they cannot run the room. Ask them to rejoin with one."),
+    );
+}
+
+/// The relays a meeting could be moved to, asked once, when the panel that
+/// offers them is first opened (HostPanel.tsx `Elsewhere`).
+pub(crate) fn load_relays(model: &AppModel) {
+    let Some(entry) = model.call_entry() else {
+        return;
+    };
+    if model.kept::<RoomState>().host.borrow().relays.is_some() {
+        return;
+    }
+    let weak = model.downgrade();
+    glib::spawn_future_local(async move {
+        let relays = entry
+            .deployment
+            .relays()
+            .await
+            .map(|list| list.relays)
+            .unwrap_or_default();
+        if let Some(model) = weak.upgrade() {
+            model.kept::<RoomState>().host.borrow_mut().relays = Some(relays);
+            changed(&model);
+        }
+    });
+}
+
+/// Opens or closes the list of relays to move the meeting to.
+pub(crate) fn choose_relay(model: &AppModel, open: bool) {
+    model.kept::<RoomState>().host.borrow_mut().choosing_relay = open;
+    changed(model);
+}
+
+/// Puts the meeting on another relay without ending it (rooms.rs
+/// `move_room`): the server tells the room it is moving and closes it, and
+/// everybody, this app included, comes straight back on the new one.
+pub(crate) fn move_meeting(model: &AppModel, relay: &str) {
+    let Some((deployment, room_name, bearer)) = host_parts(model) else {
+        return;
+    };
+    model.kept::<RoomState>().host.borrow_mut().choosing_relay = false;
+    let relay = relay.to_owned();
+    host_act(model, "move", async move {
+        deployment.move_room(room_name, bearer, relay).await?;
+        Ok(None)
+    });
+}
+
+fn host_parts(
+    model: &AppModel,
+) -> Option<(Arc<tomoshibi_protocol::api::Deployment>, String, String)> {
+    let call = call_of(model)?;
+    let entry = model.call_entry()?;
+    Some((
+        entry.deployment.clone(),
+        entry.grant.room.clone(),
+        call.token(),
+    ))
+}
+
+/// Makes an invitation to this room and copies it, since whoever pressed
+/// for one is about to paste it somewhere.
+pub(crate) fn invite(model: &AppModel) {
+    let Some((deployment, room_name, bearer)) = host_parts(model) else {
+        return;
+    };
+    let weak = model.downgrade();
+    host_act(model, "invite", async move {
+        let made = deployment
+            .clone()
+            .create_invite(room_name.clone(), bearer)
+            .await?;
+        let link = deployment.invite_link(made.token, room_name);
+        if let Some(model) = weak.upgrade() {
+            copy(&link);
+            model.kept::<RoomState>().host.borrow_mut().link = Some(link);
+            mark_copied(&model);
+        }
+        Ok(None)
+    });
+}
+
+pub(crate) fn revoke(model: &AppModel) {
+    let Some((deployment, room_name, bearer)) = host_parts(model) else {
+        return;
+    };
+    let weak = model.downgrade();
+    host_act(model, "revoke", async move {
+        let gone = deployment.revoke_invites(room_name, Some(bearer)).await?;
+        if let Some(model) = weak.upgrade() {
+            model.kept::<RoomState>().host.borrow_mut().link = None;
+        }
+        // Said, because "nothing happened" and "three links stopped
+        // working" look the same otherwise.
+        Ok(Some(if gone == 1 {
+            t("One link stopped working.")
+        } else {
+            t_with("{count} links stopped working.", &[("count", &gone)])
+        }))
+    });
+}
+
+/// Quietens somebody's microphone from the server, not by asking them.
+pub(crate) fn silence(model: &AppModel, identity: &str) {
+    let Some((deployment, room_name, bearer)) = host_parts(model) else {
+        return;
+    };
+    let track = model
+        .kept::<RoomState>()
+        .talk
+        .borrow()
+        .as_ref()
+        .and_then(|talk| {
+            talk.person(identity)?
+                .track(tomoshibi_core::call::MediaSource::Microphone)
+                .map(|track| track.sid.clone())
+        });
+    let Some(track) = track else {
+        return;
+    };
+    let identity = identity.to_owned();
+    host_act(model, &identity.clone(), async move {
+        deployment
+            .silence(room_name, bearer, identity, track)
+            .await?;
+        Ok(None)
+    });
+}
+
+pub(crate) fn turn_out(model: &AppModel, identity: &str) {
+    let Some((deployment, room_name, bearer)) = host_parts(model) else {
+        return;
+    };
+    let identity = identity.to_owned();
+    host_act(model, &identity.clone(), async move {
+        deployment.turn_out(room_name, bearer, identity).await?;
+        Ok(None)
+    });
+}
+
+pub(crate) fn hand_over(model: &AppModel, identity: &str) {
+    if is_guest(identity) {
+        refuse_hand_over(model);
+        return;
+    }
+    let Some((deployment, room_name, bearer)) = host_parts(model) else {
+        return;
+    };
+    let identity = identity.to_owned();
+    host_act(model, &identity.clone(), async move {
+        deployment.hand_over(room_name, bearer, identity).await?;
+        Ok(None)
+    });
+}
+
+pub(crate) fn answer_knock(model: &AppModel, id: &str, admit: bool) {
+    let Some((deployment, room_name, bearer)) = host_parts(model) else {
+        return;
+    };
+    let (weak, id) = (model.downgrade(), id.to_owned());
+    host_act(model, &id.clone(), async move {
+        deployment
+            .answer_knock(room_name, id.clone(), bearer, admit)
+            .await?;
+        // Taken off the list now rather than at the next round.
+        if let Some(model) = weak.upgrade() {
+            model
+                .kept::<RoomState>()
+                .host
+                .borrow_mut()
+                .waiting
+                .retain(|knocker| knocker.id != id);
+        }
+        Ok(None)
+    });
+}
+
+/// Ends the meeting for everybody: asked once rather than done at once,
+/// since it cannot be undone (HostPanel.tsx `ending`).
+pub(crate) fn end_for_everybody(model: &AppModel) {
+    let Some((deployment, room_name, bearer)) = host_parts(model) else {
+        return;
+    };
+    host_act(model, "close", async move {
+        deployment.dissolve(room_name, bearer).await?;
+        Ok(None)
+    });
+}
+
+pub(crate) fn ask_to_end(model: &AppModel, asking: bool) {
+    model.kept::<RoomState>().host.borrow_mut().ending = asking;
+    changed(model);
+}
+
+// ---- the room's link ----------------------------------------------------
+
+/// Whether a plain link to this room lets people in (useJoining.ts
+/// `useLinkWorks`): only where anybody may use a room that exists, and
+/// never for a room under a scope.
+pub(crate) fn link_works(model: &AppModel) -> bool {
+    let joined_by = model
+        .info()
+        .map(|info| info.joined_by)
+        .unwrap_or(Joining::Anyone);
+    let room_name = model
+        .call_entry()
+        .map(|entry| entry.grant.room)
+        .unwrap_or_default();
+    joined_by == Joining::Anyone && scope_of(room_name).is_empty()
+}
+
+/// The room's plain address, `{base}/#/{room}`, which is what the web
+/// copies from its address bar.
+pub(crate) fn room_link(model: &AppModel) -> Option<String> {
+    let entry = model.call_entry()?;
+    let base = entry.deployment.base_url();
+    Some(format!(
+        "{}/#/{}",
+        base.trim_end_matches('/'),
+        entry.grant.room
+    ))
+}
+
+pub(crate) fn copy_link(model: &AppModel) {
+    if let Some(link) = room_link(model) {
+        copy(&link);
+        mark_copied(model);
+    }
+}
+
+pub(crate) fn copy(text: &str) {
+    if let Some(display) = gtk::gdk::Display::default() {
+        display.clipboard().set_text(text);
+    }
+}
+
+/// "Link copied" for a moment and a half, then the button again.
+fn mark_copied(model: &AppModel) {
+    let room = model.kept::<RoomState>();
+    room.view.borrow_mut().copied = true;
+    changed(model);
+    let weak = model.downgrade();
+    glib::timeout_add_local_once(Duration::from_millis(1600), move || {
+        if let Some(model) = weak.upgrade() {
+            model.kept::<RoomState>().view.borrow_mut().copied = false;
+            changed(&model);
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn endings_read_as_the_mac_reads_them() {
+        assert_eq!(ending_of("RoomDeleted"), Ending::Closed);
+        assert_eq!(ending_of("ParticipantRemoved"), Ending::Removed);
+        assert_eq!(ending_of("ClientInitiated"), Ending::Left);
+        assert_eq!(ending_of("SignalClose"), Ending::Lost("SignalClose".into()));
+    }
+
+    #[test]
+    fn the_observer_hands_events_over_in_order() {
+        let (observer, mut events) = observer();
+        observer.on_event(CallEvent::LosslessGaveUp);
+        observer.on_event(CallEvent::ParticipantLeft {
+            identity: "a".into(),
+        });
+        assert_eq!(events.try_recv().unwrap(), CallEvent::LosslessGaveUp);
+        assert!(matches!(
+            events.try_recv().unwrap(),
+            CallEvent::ParticipantLeft { .. }
+        ));
+        assert!(events.try_recv().is_err());
+    }
+
+    #[test]
+    fn panels_and_popovers_are_named_as_the_mac_names_them() {
+        assert_eq!(Panel::of("messages"), Some(Panel::Messages));
+        assert_eq!(Panel::of("host"), Some(Panel::Host));
+        assert_eq!(Panel::of("watch"), Some(Panel::Watch));
+        assert_eq!(Panel::of("music"), Some(Panel::Music));
+        assert_eq!(Pop::of("share.screen"), Some(Pop::Share));
+        assert_eq!(Pop::of("reactions"), Some(Pop::Reactions));
+    }
+}

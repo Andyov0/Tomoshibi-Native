@@ -836,6 +836,78 @@
       "zh-Hans": "Tomoshibi 正在安装更新，稍后会自动重新打开，届时再开始或加入会议。",
       "zh-Hant": "Tomoshibi 正在安裝更新，稍後會自動重新開啟，屆時再開始或加入會議。",
       "ja": "Tomoshibi はアップデートをインストール中で、まもなく自動でもう一度開きます。会議の開始や参加はそのあとにしてください。"
+    },
+    "Show the sidebar": {
+      "en": "Show the sidebar",
+      "zh-Hans": "显示侧边栏",
+      "zh-Hant": "顯示側邊欄",
+      "ja": "サイドバーを表示"
+    },
+    "Video meetings": {
+      "en": "Video meetings",
+      "zh-Hans": "视频会议",
+      "zh-Hant": "視訊會議",
+      "ja": "ビデオ会議"
+    },
+    "Join and hold video meetings": {
+      "en": "Join and hold video meetings",
+      "zh-Hans": "加入和主持视频会议",
+      "zh-Hant": "加入和主持視訊會議",
+      "ja": "ビデオ会議への参加と開催"
+    },
+    "Add Tomoshibi to your apps?": {
+      "en": "Add Tomoshibi to your apps?",
+      "zh-Hans": "把 Tomoshibi 添加到应用列表？",
+      "zh-Hant": "把 Tomoshibi 加入應用程式列表？",
+      "ja": "Tomoshibi をアプリの一覧に追加しますか？"
+    },
+    "Tomoshibi will appear with your other apps, and meeting links will open in it.": {
+      "en": "Tomoshibi will appear with your other apps, and meeting links will open in it.",
+      "zh-Hans": "Tomoshibi 会和其他应用一起出现在应用列表里，会议链接也会用它打开。",
+      "zh-Hant": "Tomoshibi 會和其他應用程式一起出現在應用程式列表裡，會議連結也會用它開啟。",
+      "ja": "Tomoshibi がほかのアプリと並んで表示され、会議のリンクが Tomoshibi で開くようになります。"
+    },
+    "You are not allowed to change Tomoshibi where it is. Move the AppImage into a folder of your own, or ask whoever manages this computer to update it.": {
+      "en": "You are not allowed to change Tomoshibi where it is. Move the AppImage into a folder of your own, or ask whoever manages this computer to update it.",
+      "zh-Hans": "你没有权限修改当前位置的 Tomoshibi。请把 AppImage 移到你自己的文件夹里，或请这台电脑的管理员来更新。",
+      "zh-Hant": "你沒有權限修改目前位置的 Tomoshibi。請把 AppImage 移到你自己的資料夾裡，或請這台電腦的管理員來更新。",
+      "ja": "この場所の Tomoshibi を変更する権限がありません。AppImage を自分のフォルダーに移すか、このコンピューターの管理者に更新を頼んでください。"
+    },
+    "Tomoshibi is not running from an AppImage, so it cannot update itself. Download the new version instead.": {
+      "en": "Tomoshibi is not running from an AppImage, so it cannot update itself. Download the new version instead.",
+      "zh-Hans": "Tomoshibi 不是从 AppImage 运行的，无法自行更新。请改为下载新版本。",
+      "zh-Hant": "Tomoshibi 不是從 AppImage 執行的，無法自行更新。請改為下載新版本。",
+      "ja": "Tomoshibi は AppImage から起動されていないため、自分で更新できません。新しいバージョンをダウンロードしてください。"
+    },
+    "Tomoshibi was updated but could not open again by itself. Open it again.": {
+      "en": "Tomoshibi was updated but could not open again by itself. Open it again.",
+      "zh-Hans": "Tomoshibi 已更新，但没能自动重新打开。请再次打开它。",
+      "zh-Hant": "Tomoshibi 已更新，但沒能自動重新開啟。請再次開啟它。",
+      "ja": "Tomoshibi は更新されましたが、自動でもう一度開けませんでした。もう一度開いてください。"
+    },
+    "This computer's system is too old for Tomoshibi. It needs the GNU C library {needed} or newer (Ubuntu 24.04, Debian 13, Fedora 40 or later); this one has {found}.": {
+      "en": "This computer's system is too old for Tomoshibi. It needs the GNU C library {needed} or newer (Ubuntu 24.04, Debian 13, Fedora 40 or later); this one has {found}.",
+      "zh-Hans": "这台电脑的系统对 Tomoshibi 来说太旧了。它需要 GNU C 库 {needed} 或更新的版本（Ubuntu 24.04、Debian 13、Fedora 40 或更新）；这台电脑上是 {found}。",
+      "zh-Hant": "這台電腦的系統對 Tomoshibi 來說太舊了。它需要 GNU C 函式庫 {needed} 或更新的版本（Ubuntu 24.04、Debian 13、Fedora 40 或更新）；這台電腦上是 {found}。",
+      "ja": "このコンピューターのシステムは Tomoshibi には古すぎます。GNU C ライブラリ {needed} 以降が必要です（Ubuntu 24.04、Debian 13、Fedora 40 以降）。このコンピューターは {found} です。"
+    },
+    "In a call": {
+      "en": "In a call",
+      "zh-Hans": "通话中",
+      "zh-Hant": "通話中",
+      "ja": "通話中"
+    },
+    "Another sealing word": {
+      "en": "Another sealing word",
+      "zh-Hans": "暗号不同",
+      "zh-Hant": "暗號不同",
+      "ja": "合言葉が違います"
+    },
+    "This person sealed the call with another word, so nothing of theirs can be seen or heard here.": {
+      "en": "This person sealed the call with another word, so nothing of theirs can be seen or heard here.",
+      "zh-Hans": "对方用的暗号和你不同，这里看不到也听不到对方。",
+      "zh-Hant": "對方用的暗號和你不同，這裡看不到也聽不到對方。",
+      "ja": "この人は別の合言葉で通話を封じているため、ここでは映像も音声も届きません。"
     }
   }
 }

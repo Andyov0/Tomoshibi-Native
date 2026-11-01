@@ -501,23 +501,27 @@ async fn the_websocket_opening_is_the_only_request_a_relay_sees() {
     }
 }
 
-// A relay that answers with a redirect has answered. Following it would be a
-// second, ordinary web request to the relay, which is what gets one blocked.
+// A redirect is not followed: following it would be a second, ordinary web
+// request to the relay, which is what gets one blocked. Nor is it a reading:
+// a relay answers the upgrade or refuses its missing token, and an address
+// that sends the socket elsewhere is not one a call can be held on, since the
+// call's own socket does not follow it either.
 #[tokio::test]
-async fn a_redirect_is_an_answer_and_is_not_followed() {
+async fn a_redirect_is_not_followed_and_is_no_reading() {
     let _turn = TURN.lock().await;
     relays::forget();
 
     let sh = Socket::start(Answer::Redirect(ms(5))).await;
     let hk = Socket::start(Answer::Refuse(ms(150))).await;
 
-    assert_eq!(relays::fastest(&[at("shanghai", &sh), at("hongkong", &hk)]).await.as_deref(), Some("shanghai"));
+    assert_eq!(relays::fastest(&[at("shanghai", &sh), at("hongkong", &hk)]).await.as_deref(), Some("hongkong"));
     settle().await;
 
     // One connection a round, each the upgrade and nothing after it: a
-    // followed redirect would be a sixth, or a second request on one.
+    // followed redirect would be another connection, or a second request on
+    // one. Three rounds, missed, and no more (relays::QUORUM).
     let connections = sh.connections();
-    assert_eq!(connections.len(), relays::ROUNDS, "the redirect was followed");
+    assert_eq!(connections.len(), relays::ROUNDS - relays::QUORUM + 1, "the redirect was followed");
     for connection in &connections {
         let (line, _, after) = request(connection);
         assert_eq!(line, "GET /rtc HTTP/1.1");
@@ -550,12 +554,15 @@ async fn an_accepted_socket_is_closed_with_a_close_frame() {
     }
 }
 
-// relays.ts counts `error` as an answer alongside `open` and `close`, so a
-// relay whose port refuses the connection outright has answered, and quickly.
-// Pinned here because it is the web's rule, and a native client that ranked
-// differently would land somewhere a browser on the same network would not.
+// A relay whose port refuses the connection has not answered. relays.ts
+// counts `error` as an answer alongside `open` and `close`, and a browser's
+// socket to a port with nothing on it errs at once, so such a relay read as a
+// round trip of a millisecond and was named the fastest: the join asked for a
+// machine that could not hold the call, and a server page showed it at 0 ms.
+// This was pinned the other way to rank as a browser does; the web needs the
+// same change (relays.ts `overSignalling`), in the server's repository.
 #[tokio::test]
-async fn a_refused_connection_counts_as_an_answer_as_it_does_in_a_browser() {
+async fn a_refused_connection_is_no_reading() {
     let _turn = TURN.lock().await;
     relays::forget();
 
@@ -563,7 +570,11 @@ async fn a_refused_connection_counts_as_an_answer_as_it_does_in_a_browser() {
     let hk = Socket::start(Answer::Refuse(ms(300))).await;
 
     let offered = [Relay { url: Some(format!("ws://{refusing}")), ..relay("shanghai") }, at("hongkong", &hk)];
-    assert_eq!(relays::fastest(&offered).await.as_deref(), Some("shanghai"));
+    assert_eq!(relays::fastest(&offered).await.as_deref(), Some("hongkong"));
+
+    let timed = relays::timings(&offered).await;
+    let shanghai = timed.iter().find(|timing| timing.name == "shanghai").unwrap();
+    assert_eq!(shanghai.millis, None, "a refused port shown with a time");
 }
 
 #[tokio::test]

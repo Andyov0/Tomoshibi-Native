@@ -1,0 +1,177 @@
+[package]
+name = "tomoshibi-linux"
+# The product's version, as every platform numbers it (apple/project.yml,
+# android/app/build.gradle.kts, windows/Tomoshibi/Tomoshibi.csproj); the
+# build within it is app::client::BUILD.
+version = "0.1.7"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+publish = false
+description = "Tomoshibi for Linux: GTK 4 and libadwaita over the shared core"
+
+# Everything but the entry is a library, so that what one module offers
+# another (the AppModel, the Media traits, the VideoView, the kit) is public
+# API rather than dead code while the module that will use it is being
+# written, and so that the tests link without the GtkApplication.
+[lib]
+name = "tomoshibi_linux"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tomoshibi"
+path = "src/main.rs"
+
+# Its own workspace, not a member of the core's.
+#
+# The core's [patch.crates-io] (three vendored LiveKit crates, each change in
+# them marked "Tomoshibi:") applies only in the workspace whose root declares
+# it, and a patch in a dependency's manifest is ignored without an error. So
+# a package that links the core must either sit in the core's workspace or
+# repeat the patch at its own root. Joining the core's workspace would put GTK,
+# libadwaita and PipeWire into core/Cargo.lock, which the Apple, Android and
+# Windows builds resolve from, and every core build would read a lock full of
+# crates it never compiles; a Linux change could then move a version the other
+# three ship. Repeating the patch keeps the core untouched, and the lock here
+# was started as a copy of the core's, so the core links with exactly the
+# versions it is tested with on the other platforms. Anything the core pins
+# that this lock resolves differently is a mistake: compare the two with
+# build/check-lock.sh before merging a dependency change.
+[workspace]
+
+[patch.crates-io]
+livekit = { path = "../core/vendor/livekit" }
+livekit-signaling = { path = "../core/vendor/livekit-signaling" }
+libwebrtc = { path = "../core/vendor/libwebrtc" }
+
+[dependencies]
+# The shared core, linked directly: the media crate and the protocol crate
+# beneath it. Their exports are ordinary Rust functions as well as UniFFI
+# bindings, so no bindings are generated for this app.
+tomoshibi-core = { path = "../core" }
+tomoshibi-protocol = { path = "../core/protocol" }
+
+# The toolkit, at the oldest versions the oldest supported system has:
+# Ubuntu 24.04's GTK 4.14 and libadwaita 1.5. Asking for more would make a
+# binary that does not start there.
+gtk = { package = "gtk4", version = "0.11", features = ["v4_14"] }
+adw = { package = "libadwaita", version = "0.9", features = ["v1_5"] }
+glib = "0.22"
+gio = "0.22"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# Its channels alone, for what the core says on its own threads (a call's
+# events) to reach GTK's main thread, where the receiver is awaited from
+# GLib's main context; the version is the core's.
+tokio = { version = "1", default-features = false, features = ["sync"] }
+
+# --- ui/room adds its crates below this line ---
+
+# ui/room/watch: GStreamer, the player of watching together. playbin plays a
+# file or an HLS playlist from where it is, the way a browser's video element
+# does, and hands its picture and its sound to sinks of the app's own
+# (gstreamer-app's appsink): the picture to render::VideoView as the core's
+# frames are, the sound into the call's mixer, where the echo canceller
+# hears it. gstreamer-video for the planes and strides of a frame. 0.25 is
+# the release on glib 0.22, the toolkit's: two glib-sys in one binary do not
+# link. The system's GStreamer is 1.24 on Ubuntu 24.04; nothing past 1.14's
+# API is asked for.
+gstreamer = "0.25"
+gstreamer-app = "0.25"
+gstreamer-video = "0.25"
+# ui/room/watch: an address read as a URL, to tell whether it is on the
+# deployment the session cookie belongs to (player.rs `same_origin`). The
+# version reqwest and the core already compile; nothing new enters the build.
+url = "2"
+
+# --- media/ (audio, camera, screen) adds its crates below this line ---
+
+# media/screen: the xdg-desktop-portal's ScreenCast, and the PipeWire stream
+# it hands over. ashpd on async-io rather than its default tokio: its futures
+# are awaited on GLib's main context (glib::spawn_future_local), where no
+# tokio runtime is entered, and zbus on async-io runs its own reactor; the
+# gtk4 feature names the app's window to the portal so that its picker opens
+# over it. Two versions of pipewire-sys cannot be linked into one binary
+# (each claims `links = "pipewire-0.3"`), so every module that uses PipeWire
+# keeps to this one, and ashpd's own `pipewire` feature, which wants 0.9, is
+# left off. 0.10 rather than 0.9 because 0.9 brings a second nix beside the
+# core's. futures-util for following the portal's Closed signal, a stream;
+# libc to open libpipewire for WebRTC's PipeWire stubs (screen/linkage.rs).
+# The camera below uses the same two: one ashpd line carries both modules'
+# features.
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "screencast", "gtk4", "camera"] }
+pipewire = "0.10"
+futures-util = { version = "0.3", default-features = false }
+libc = "0.2"
+
+# media/audio: PulseAudio's client library, which PipeWire's pipewire-pulse
+# serves as well, so one client covers both kinds of system: the threaded
+# main loop for the device lists and their changes, the simple API for the
+# two streams, each on a thread of its own that blocks on the device.
+libpulse-binding = "2.28"
+libpulse-simple-binding = "2.28"
+# The core's own vendored libwebrtc (the [patch] above resolves it to
+# core/vendor/libwebrtc, which the core links already), for WebRTC's audio
+# processing: the echo canceller, the noise suppressor and the gain control
+# a browser runs on its microphone, which a synthetic audio device never
+# runs, and which Linux has no system equivalent of to lean on. The line is
+# render/'s below, which uses the same crate for libyuv: a key may be named
+# only once in a table.
+
+# media/camera: the camera portal and the PipeWire stream it opens, on the
+# same ashpd and pipewire as media/screen (whose lines say why async-io and
+# why 0.10: one pipewire-sys per binary, and zbus on tokio would need a
+# tokio runtime entered wherever any ashpd future is polled); V4L2 where
+# there is no portal; MJPEG decoding, for the cameras that send nothing else
+# at 720p; and the background blur's person segmenter, MediaPipe's selfie
+# model as ONNX (windows/Blur), in ONNX Runtime, linked statically from the
+# prebuilt library ort downloads at build time, so that the AppImage carries
+# no runtime beside the binary. ashpd and pipewire are named once, under
+# media/screen above.
+v4l = "0.14"
+zune-jpeg = "0.5"
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "download-binaries", "tls-rustls", "api-17"] }
+
+# ui/room/music: the song desk's music, fetched from the deployment's
+# library and decoded here, since the core plays nothing of a file. Pure
+# Rust, so that the AppImage carries no codec library beside the binary;
+# the formats the library hands out (FLAC for lossless and above, MP3 and
+# AAC in MP4 for the lossy tiers) and Ogg Vorbis and WAV for a file a test
+# stands in with.
+symphonia = { version = "0.5", default-features = false, features = ["flac", "mp3", "aac", "isomp4", "ogg", "vorbis", "wav", "pcm"] }
+
+# --- render/ adds its crates below this line ---
+# libyuv, through the vendored libwebrtc the core links already (the
+# [patch] above points it there): the I420 to BGRA conversion of every
+# remote picture, in SIMD, on the core's thread. No crate is added to the
+# build; this names one the core already compiles.
+libwebrtc = { version = "0.3.52", default-features = false }
+
+# --- update/ adds its crates below this line ---
+
+# --- app/ (secrets, network watch) adds its crates below this line ---
+
+# app/account: the account's picture, fetched from the deployment for the
+# lobby and the settings (the Mac's AsyncImage of the same address). The
+# core's own reqwest, the version and TLS it already compiles, run on the
+# core's runtime; nothing new enters the build.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots"] }
+
+[dev-dependencies]
+
+# Every dependency, the core and the vendored LiveKit among them, keeps line
+# tables only: enough for a backtrace to name the file and line, without the
+# full type and variable information. Each binary that links the core
+# carries the prebuilt WebRTC, and with full debug information every test
+# binary was about 300 MB and one architecture's target directory 36 GB,
+# on a build machine several builds share. The app's own crate keeps full
+# debug information, for a debugger in the code being written.
+[profile.dev.package."*"]
+debug = "line-tables-only"
+
+# The core's [profile.local] (release with debug assertions on, for measuring
+# against a local deployment), repeated because profiles too are read only at
+# the workspace root.
+[profile.local]
+inherits = "release"
+debug-assertions = true

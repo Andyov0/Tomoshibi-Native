@@ -14,7 +14,7 @@
 //! with the version in the dotted form the download page uses (0.1.0 build 8
 //! is 0.1.0.8), then the platform, the system and the model. The platform is
 //! the one place the server reads a fixed word from: iPhone, iPad, Mac,
-//! Android or Windows.
+//! Android, Windows or Linux.
 //!
 //! Set here once rather than by each app at each request, so that one change
 //! named every platform the core runs on. An app that never calls
@@ -36,8 +36,8 @@ struct Described {
 }
 
 /// Says which app this is, for the user agent every `Deployment` made after it
-/// sends: `platform` one of iPhone, iPad, Mac, Android or Windows, `version`
-/// the app's in dotted form (0.1.0.8), `system` such as "iOS 27.0.1", and
+/// sends: `platform` one of iPhone, iPad, Mac, Android, Windows or Linux,
+/// `version` the app's in dotted form (0.1.0.8), `system` such as "iOS 27.0.1", and
 /// `device` the model, such as "iPhone17,1". Any of them may be empty. Called
 /// once at start, before the first deployment is made; a deployment reads it
 /// when it is made and keeps it.
@@ -99,6 +99,10 @@ fn built_for() -> &'static str {
         "Android"
     } else if cfg!(target_os = "windows") {
         "Windows"
+    } else if cfg!(target_os = "linux") {
+        // The desktop. Android runs on a Linux kernel too, but it is its own
+        // target_os and is matched above.
+        "Linux"
     } else {
         "Other"
     }
@@ -151,6 +155,23 @@ mod tests {
         let agent = agent_of(Some(&said("Android", "0.1 (2)", "Android 16; beta", "小米 (Pro)")));
         assert_eq!(agent, "Tomoshibi/0.1.2 (Android; Android 16 beta; Pro)");
         assert!(reqwest::header::HeaderValue::from_str(&agent).is_ok());
+    }
+
+    #[test]
+    fn a_linux_app_says_linux() {
+        assert_eq!(
+            agent_of(Some(&said("Linux", "0.1.7", "Ubuntu 24.04", "x86_64"))),
+            "Tomoshibi/0.1.7 (Linux; Ubuntu 24.04; x86_64)"
+        );
+    }
+
+    /// A core built for Linux that is never described says Linux rather than
+    /// "Other", the word for a target the core does not know.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_core_built_for_linux_says_linux_by_itself() {
+        assert_eq!(built_for(), "Linux");
+        assert!(agent_of(None).ends_with("(Linux)"));
     }
 
     #[test]

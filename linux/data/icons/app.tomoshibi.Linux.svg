@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+	<!-- The web client's mark (web/public/favicon.svg) and the Apple apps'
+	     (apple/icon/make-icon.swift): a room of pictures with one of them
+	     live, in the warm ramp's darkest neutral, the one hue the interface
+	     spends on the live one. On its own rounded ground, because no Linux
+	     desktop cuts an app's icon to a shape the way iOS and macOS do; the
+	     ground keeps the margin a hicolor app icon leaves, and the pictures
+	     sit on the favicon's 32-unit grid at 0.86 of their size about the
+	     middle, as on the Mac. Flat colours only. -->
+	<rect x="8" y="8" width="112" height="112" rx="26" fill="#0f0e0d"/>
+	<g transform="translate(15.84 15.84) scale(3.01)">
+		<rect x="6" y="8" width="9" height="7" rx="2" fill="#55524e"/>
+		<rect x="17" y="8" width="9" height="7" rx="2" fill="#55524e"/>
+		<rect x="6" y="17" width="9" height="7" rx="2" fill="#55524e"/>
+		<rect x="17" y="17" width="9" height="7" rx="2" fill="#ffa23b"/>
+	</g>
+</svg>
