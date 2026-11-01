@@ -42,7 +42,9 @@ mod panels;
 pub mod plan;
 #[cfg(debug_assertions)]
 mod script;
+mod share_menu;
 mod stage;
+mod strain;
 pub mod talk;
 mod tile;
 

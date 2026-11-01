@@ -22,7 +22,6 @@ use tomoshibi_protocol::{
     hands,
     identity::{impersonating, signature_of, NamedIdentity},
     quality::ConnectionGrade,
-    share::ShareQuality,
 };
 
 use super::{
@@ -409,6 +408,7 @@ impl Page {
         bar_motion.set_margin_bottom(BAR_FOOT);
         bar_motion.set_widget_name("room.bar");
         root.add_overlay(&bar_motion);
+        super::strain::attach(&root, &model);
 
         let window = glib::WeakRef::new();
         window.set(context.window().as_ref());
@@ -671,84 +671,8 @@ impl Page {
                 )
             }
             "share" => {
-                let heading = gtk::Label::builder()
-                    .label(t("Picture quality"))
-                    .xalign(0.0)
-                    .build();
-                heading.add_css_class("tmsb-menu-heading");
-                card.append(&heading);
-                let choices = gtk::Box::new(gtk::Orientation::Horizontal, 2);
-                let mut buttons = Vec::new();
-                for (quality, label) in [
-                    (ShareQuality::Auto, t("Automatic")),
-                    (ShareQuality::P1080, "1080p".to_owned()),
-                    (ShareQuality::P1440, "1440p".to_owned()),
-                    (ShareQuality::P4k, "4K".to_owned()),
-                ] {
-                    let button = gtk::Button::with_label(&label);
-                    button.add_css_class("tmsb-choice");
-                    let w = weak.clone();
-                    button.connect_clicked(move |_| {
-                        if let Some(model) = w.upgrade() {
-                            model.kept::<RoomState>().view.borrow_mut().share_quality =
-                                Some(quality);
-                            super::changed(&model);
-                        }
-                    });
-                    choices.append(&button);
-                    buttons.push((quality, button));
-                }
-                card.append(&choices);
-                let rule = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-                rule.add_css_class("tmsb-menu-rule");
-                card.append(&rule);
-                let (go, go_title) = menu_row(
-                    &t("Share your screen"),
-                    None,
-                    Some("screen-shared-symbolic"),
-                );
-                go.set_widget_name("share.go");
-                let w = weak.clone();
-                go.connect_clicked(move |_| {
-                    if let Some(model) = w.upgrade() {
-                        super::close_pop(&model);
-                        let sharing = model.kept::<RoomState>().local.share.borrow().is_some();
-                        if sharing {
-                            super::stop_share(&model);
-                        } else {
-                            super::start_share(&model);
-                        }
-                    }
-                });
-                card.append(&go);
-                card.set_width_request(300);
-                let go = go.downgrade();
-                (
-                    card,
-                    Box::new(move |model: &AppModel| {
-                        let room = model.kept::<RoomState>();
-                        let chosen = room
-                            .view
-                            .borrow()
-                            .share_quality
-                            .unwrap_or(ShareQuality::Auto);
-                        for (quality, button) in &buttons {
-                            class(button, "held", *quality == chosen);
-                            if *quality == ShareQuality::Auto {
-                                button.set_label(&t("Automatic"));
-                            }
-                        }
-                        let sharing = room.local.share.borrow().is_some();
-                        go_title.set_label(&if sharing {
-                            t("Stop sharing")
-                        } else {
-                            t("Share your screen")
-                        });
-                        if let Some(go) = go.upgrade() {
-                            go.set_sensitive(!room.local.sharing_busy.get());
-                        }
-                    }),
-                )
+                let refresh = super::share_menu::build(model, &card);
+                (card, refresh)
             }
             "more" => {
                 let (sound, _) = menu_row(&t("Sound"), None, Some("audio-volume-high-symbolic"));
