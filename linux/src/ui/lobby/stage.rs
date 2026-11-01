@@ -109,21 +109,34 @@ pub fn stage(context: &Context, placement: Placement) -> Stage {
                     .device_choice(DeviceSlot::Camera)
                     .filter(|id| present.contains(id));
                 let opened = media.open_camera(choice).await;
-                // Switched off, opened by another stage, or gone into a call
-                // meanwhile: this one is not wanted, and is let go of. The
-                // first open waits up to five seconds for the portal, and a
-                // join pressed in that time (or an autojoin) went into the
-                // call without it; kept, it became the preview of a screen
-                // nobody could see again, its device held and its light on
-                // for the whole call, beside the camera the call opened.
-                // Each open is a camera of its own, so closing this one
-                // touches no other.
-                if !model.start_with_camera()
-                    || model.preview_camera().is_some()
-                    || !model.screen().before_call()
-                {
+                // Switched off, or gone into a call, meanwhile: this one is
+                // not wanted, and is let go of. The first open waits up to
+                // five seconds for the portal, and a join pressed in that
+                // time (or an autojoin) went into the call without it;
+                // kept, it became the preview of a screen nobody could see
+                // again, its device held and its light on for the whole
+                // call, beside the camera the call opened. Each open is a
+                // camera of its own, so closing this one touches no other.
+                if !model.start_with_camera() || !model.screen().before_call() {
                     if let Ok(camera) = opened {
                         camera.close();
+                    }
+                    return;
+                }
+                // Opened by another stage meanwhile: the lobby's, whose open
+                // was still waiting when the pre-join replaced it, finishes
+                // first and keeps its camera as the preview. That one is the
+                // preview, and this stage draws it; before, this stage drew
+                // nothing and the pre-join showed an empty card with the
+                // camera on.
+                if let Some(preview) = model.preview_camera() {
+                    if let Ok(camera) = opened {
+                        camera.close();
+                    }
+                    if let Some(view) = view.upgrade() {
+                        if attached.get().is_none() {
+                            attached.set(Some(preview.add_preview(view.sink())));
+                        }
                     }
                     return;
                 }
