@@ -399,6 +399,8 @@ pub(crate) struct Engine {
 impl Engine {
     fn new(model: &AppModel, call: &Arc<Call>) -> Option<Rc<Engine>> {
         let entry = model.call_entry()?;
+        // The player's GStreamer, ready before a show needs it.
+        player::warm();
         let sealed = entry.options().sealing_word.is_some();
         let theatre = WatchTheatre::new(call.local_identity(), call.local_name(), sealed);
         let engine = Rc::new_cyclic(|me| Engine {

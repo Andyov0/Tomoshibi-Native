@@ -83,6 +83,42 @@ fn started() -> bool {
     })
 }
 
+/// GStreamer started, and the plugins a player is made of loaded, on a
+/// thread of its own as a call begins, before any player is made on the
+/// main thread. Made there with the first player, the start (the registry
+/// read, and written the first time from the image) and the loading held
+/// the window still for a quarter of a second as a show began (268 ms
+/// between two frames, measured in a debug build): the stage's own
+/// transitions, timed as they went, were over by the next frame, and the
+/// call's picture left the stage for the video's in one frame. As a call
+/// begins rather than as a show does, because the host's own show is
+/// played here the moment it is added.
+pub fn warm() {
+    static ASKED: std::sync::Once = std::sync::Once::new();
+    ASKED.call_once(|| {
+        let _ = std::thread::Builder::new()
+            .name("tomoshibi-gstreamer".into())
+            .spawn(|| {
+                if !started() {
+                    return;
+                }
+                // Made once and let go: each loads its plugin now.
+                for name in [
+                    "playbin",
+                    "uridecodebin",
+                    "souphttpsrc",
+                    "appsink",
+                    "audioconvert",
+                    "audioresample",
+                    "videoconvert",
+                    "fakesink",
+                ] {
+                    let _ = gst::ElementFactory::make(name).build();
+                }
+            });
+    });
+}
+
 /// Where the GNU TLS the image carries looks for the certificates it
 /// trusts: Debian's and Ubuntu's bundle, which is what it was built with.
 const BUILT_IN_TRUST: &str = "/etc/ssl/certs/ca-certificates.crt";

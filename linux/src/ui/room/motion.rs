@@ -74,6 +74,8 @@ mod imp {
         pub from: Cell<super::Away>,
         pub shown: Cell<bool>,
         pub animation: RefCell<Option<adw::TimedAnimation>>,
+        /// An arrival waiting for its first frame to be drawn.
+        pub arriving: Cell<bool>,
     }
 
     impl Default for Motion {
@@ -84,6 +86,7 @@ mod imp {
                 from: Cell::new(super::Away::GROW),
                 shown: Cell::new(true),
                 animation: RefCell::new(None),
+                arriving: Cell::new(false),
             }
         }
     }
@@ -202,9 +205,14 @@ impl Motion {
             return;
         }
         if on {
+            let was_there = self.is_visible() && self.imp().progress.get() > 0.0;
             self.set_visible(true);
             self.set_can_target(true);
-            self.animate(1.0, motion::SETTLE_MS, adw::Easing::EaseOutCubic, None);
+            if was_there {
+                self.animate(1.0, motion::SETTLE_MS, adw::Easing::EaseOutCubic, None);
+            } else {
+                self.arrive();
+            }
         } else {
             // No presses on a piece on its way out: a second press on a
             // panel's close button as it slid away pressed what was under.
@@ -223,6 +231,33 @@ impl Motion {
                 })),
             );
         }
+    }
+
+    /// Brings in a piece that was not there, its clock started once it has
+    /// been laid out and drawn once, at nothing (kit::Menu's arrival does
+    /// the same). The animation is timed: started at once, a first frame
+    /// that took long (a new piece's styles worked out and its contents
+    /// measured, drawn in software; or the main thread held by whatever
+    /// made the piece, as the first start of GStreamer held it for the
+    /// watch stage) was already the end of it, and the piece was there in
+    /// one frame with nothing in between.
+    fn arrive(&self) {
+        let imp = self.imp();
+        if imp.arriving.replace(true) {
+            return;
+        }
+        let frames = Cell::new(0);
+        self.add_tick_callback(move |piece, _| {
+            frames.set(frames.get() + 1);
+            if frames.get() < 2 {
+                return glib::ControlFlow::Continue;
+            }
+            piece.imp().arriving.set(false);
+            if piece.is_shown() {
+                piece.animate(1.0, motion::SETTLE_MS, adw::Easing::EaseOutCubic, None);
+            }
+            glib::ControlFlow::Break
+        });
     }
 
     /// Takes it away, then calls `gone` (to remove it).

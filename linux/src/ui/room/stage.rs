@@ -285,7 +285,18 @@ impl Stage {
     pub fn set_spots(&self, spots: &Spots, animate: bool) {
         let imp = self.imp();
         let progress = imp.progress.get();
-        let mut moved = false;
+        let moved = imp.placed.borrow().iter().any(|placed| {
+            !placed.leaving && spots.get(&placed.id).is_some_and(|spot| *spot != placed.to)
+        });
+        // Nothing going anywhere new: a move under way is left to finish.
+        // The room is brought up to date on every event of the call, and
+        // each time it was put at its end: the call's picture leaving the
+        // stage for a show was in the strip one frame after it set off,
+        // since the show's start brought the next update a frame later.
+        if !moved {
+            self.restack();
+            return;
+        }
         for placed in imp.placed.borrow_mut().iter_mut() {
             if placed.leaving {
                 continue;
@@ -294,9 +305,6 @@ impl Stage {
                 continue;
             };
             let now = placed.from.toward(&placed.to, progress);
-            if *spot != placed.to {
-                moved = true;
-            }
             placed.from = if animate { now } else { *spot };
             placed.to = *spot;
         }
@@ -334,9 +342,7 @@ impl Stage {
         // date on every event of the call (a level, a reading every two
         // seconds), and a layout each time was a window always waiting for
         // one.
-        if moved {
-            self.queue_allocate();
-        }
+        self.queue_allocate();
     }
 
     /// The larger picture under the smaller, in drawing and in picking.
