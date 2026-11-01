@@ -38,8 +38,11 @@ pub struct Launch {
     pub make_invite: bool,
     /// `TOMOSHIBI_LANGUAGE`: the interface's language for this run, not kept.
     pub language: Option<String>,
-    /// `TOMOSHIBI_MUTE`: start with the microphone off; `speakers` silences
-    /// the playback instead.
+    /// `TOMOSHIBI_MUTE`: plays nothing and only measures what arrives, as
+    /// on Windows and the Mac, so that a test browser's beeps stay out of the
+    /// speakers of the machine a test runs on; `speakers` opens the speakers
+    /// and plays silence to them. The microphone is `TOMOSHIBI_MICROPHONE`'s
+    /// alone: a test that mutes the speakers still sends its test sound.
     pub mute: Option<String>,
     /// `TOMOSHIBI_SOURCE`: a file the media module sends in place of the
     /// camera (y4m) or the microphone (wav), for tests with no devices.

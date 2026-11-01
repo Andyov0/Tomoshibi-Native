@@ -324,15 +324,6 @@ impl AppModel {
                 preview: RefCell::new(None),
             }),
         };
-        // TOMOSHIBI_MUTE: the microphone starts off for this run.
-        if model
-            .launch()
-            .mute
-            .as_deref()
-            .is_some_and(|mute| mute != "speakers")
-        {
-            model.inner.state.borrow_mut().start_microphone = false;
-        }
         // The camera seen before a call is let go of once nothing before a
         // call shows it, unless the call has taken it.
         model.subscribe(|model, change| {

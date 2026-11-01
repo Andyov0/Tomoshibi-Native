@@ -650,12 +650,14 @@ fn devices_at_join(model: &AppModel, entry: &CallEntry, call: &Arc<Call>) {
             media.set_silent(true);
         }
     }
-    let mut microphone = entry.microphone_on && mute.is_none();
+    // TOMOSHIBI_MUTE is about what is played, not what is sent (app::Launch):
+    // a test that silences the speakers still sends its test sound.
+    let mut microphone = entry.microphone_on;
     let mut camera = entry.camera_on;
     let mut share = false;
     #[cfg(debug_assertions)]
     {
-        microphone |= fake::on_at_join("microphone") && mute.is_none();
+        microphone |= fake::on_at_join("microphone");
         camera |= fake::on_at_join("camera");
         share |= fake::on_at_join("share");
     }
