@@ -23,6 +23,7 @@ struct Running {
 }
 
 fn main() -> glib::ExitCode {
+    choose_renderer();
     // The links AppRun took off the command line (an invitation's token is
     // as good as a key to the room, and a command line can be read by every
     // user of the machine): a start from an image that has them on its
@@ -131,6 +132,46 @@ fn main() -> glib::ExitCode {
         let mut arguments = vec![std::env::args().next().unwrap_or_else(|| "tomoshibi".into())];
         arguments.extend(links);
         application.run_with_args(&arguments)
+    }
+}
+
+/// GTK's renderer, where nobody chose one: Cairo on a machine without a
+/// GPU, GTK's own choice otherwise.
+///
+/// Without a GPU (a virtual machine, a thin client) GTK's GL renderers run
+/// on Mesa's llvmpipe, which rasterises in software on the processor: a
+/// call of four drawn by the default renderer (ngl) took 2.4 cores in a
+/// debug build, 1.4 of them llvmpipe's, where Cairo drew the same call in
+/// 1.0 (GL: 2.2); and a
+/// window drawn in software by GL got a frame every 150 to 220 ms, so the
+/// start sheet's arrival, a timed animation, was seen in two frames (about
+/// 15 per cent, then all of it), where Cairo gave one every 26 ms. Mesa
+/// rasterises in software when there is no DRM render node to draw with
+/// (/dev/dri/renderD*), or when LIBGL_ALWAYS_SOFTWARE says so; NVIDIA's own
+/// driver draws GL without a render node where its DRM module is not
+/// loaded, so its control device counts as a GPU too. Set before
+/// anything else runs, since GTK reads it when the window is realised;
+/// marked, so that what the app starts (a browser, the next version) is
+/// handed the system's own choice (update/relaunch.rs).
+fn choose_renderer() {
+    if std::env::var_os("GSK_RENDERER").is_some() {
+        return;
+    }
+    let render_node = std::fs::read_dir("/dev/dri").is_ok_and(|folder| {
+        folder
+            .flatten()
+            .any(|entry| entry.file_name().to_string_lossy().starts_with("renderD"))
+    }) || std::path::Path::new("/dev/nvidiactl").exists();
+    let software = std::env::var("LIBGL_ALWAYS_SOFTWARE")
+        .is_ok_and(|value| !value.is_empty() && value != "0" && value != "false");
+    if !render_node || software {
+        std::env::set_var("GSK_RENDERER", "cairo");
+        std::env::set_var(update::relaunch::RENDERER_CHOSEN, "1");
+        log(if software {
+            "drawing with Cairo: GL would be drawn in software here (LIBGL_ALWAYS_SOFTWARE)"
+        } else {
+            "drawing with Cairo: there is no GPU to draw GL with (no render node)"
+        });
     }
 }
 

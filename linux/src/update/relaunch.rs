@@ -72,8 +72,17 @@ pub fn host_environment(
     for name in THIS_START_ONLY {
         changes.push((name.to_owned(), None));
     }
+    // The renderer main.rs chose for a machine without a GPU, which is this
+    // app's choice and not the system's.
+    if get(RENDERER_CHOSEN).is_some() {
+        changes.push(("GSK_RENDERER".to_owned(), None));
+        changes.push((RENDERER_CHOSEN.to_owned(), None));
+    }
     changes
 }
+
+/// Set beside GSK_RENDERER where main.rs chose the renderer.
+pub const RENDERER_CHOSEN: &str = "TOMOSHIBI_CHOSE_RENDERER";
 
 /// [`host_environment`] for this process.
 pub fn host_environment_now() -> Vec<(String, Option<OsString>)> {
@@ -234,6 +243,15 @@ pub fn hand_links_over(image: &Path, links: &str) -> io::Result<()> {
     command
         .env(OPEN_LINKS, links)
         .env(LINKS_HANDED, "1");
+    // This start's activation (the desktop's leave to raise the window it
+    // opens, which as_the_host drops as this start's alone) is handed on
+    // with the links: the start that shows the window is the next one, and
+    // without it a window opened by clicking an invitation was not raised.
+    for name in ["XDG_ACTIVATION_TOKEN", "DESKTOP_STARTUP_ID"] {
+        if let Some(value) = std::env::var_os(name) {
+            command.env(name, value);
+        }
+    }
     close_inherited(&mut command);
     command.spawn().map(|_| ())
 }
@@ -348,6 +366,18 @@ mod tests {
         assert_eq!(change(&changes, "TOMOSHIBI_APPRUN_SET"), Some(&None));
         assert_eq!(change(&changes, "APPIMAGE"), Some(&None));
         assert_eq!(change(&changes, "HOME"), None, "the rest is left alone");
+    }
+
+    #[test]
+    fn the_renderer_the_app_chose_is_not_handed_on() {
+        let chosen = environment(&[
+            ("GSK_RENDERER", "cairo"),
+            ("TOMOSHIBI_CHOSE_RENDERER", "1"),
+        ]);
+        assert_eq!(change(&chosen, "GSK_RENDERER"), Some(&None));
+        // One the person set is theirs, and stays.
+        let theirs = environment(&[("GSK_RENDERER", "vulkan")]);
+        assert_eq!(change(&theirs, "GSK_RENDERER"), None);
     }
 
     #[test]
