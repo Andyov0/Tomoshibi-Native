@@ -71,13 +71,169 @@ fn started() -> bool {
     static STARTED: OnceLock<bool> = OnceLock::new();
     // Run from the AppImage, AppRun has pointed GStreamer at the image's own
     // plugins, scanner and registry (linux/build/AppRun says why).
-    *STARTED.get_or_init(|| match gst::init() {
-        Ok(()) => true,
-        Err(fault) => {
-            log(&format!("GStreamer did not start: {fault}"));
-            false
+    *STARTED.get_or_init(|| {
+        trust_the_system();
+        match gst::init() {
+            Ok(()) => true,
+            Err(fault) => {
+                log(&format!("GStreamer did not start: {fault}"));
+                false
+            }
         }
     })
+}
+
+/// Where the GNU TLS the image carries looks for the certificates it
+/// trusts: Debian's and Ubuntu's bundle, which is what it was built with.
+const BUILT_IN_TRUST: &str = "/etc/ssl/certs/ca-certificates.crt";
+
+/// The bundles of the certificates a system trusts, where each family of
+/// distributions keeps it (the list Go reads, crypto/x509/root_linux.go).
+const TRUST_BUNDLES: [&str; 7] = [
+    BUILT_IN_TRUST,
+    // Fedora and RHEL.
+    "/etc/pki/tls/certs/ca-bundle.crt",
+    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+    // openSUSE.
+    "/etc/ssl/ca-bundle.pem",
+    "/var/lib/ca-certificates/ca-bundle.pem",
+    // Alpine and Arch.
+    "/etc/ssl/cert.pem",
+    "/etc/pki/tls/cacert.pem",
+];
+
+/// The bundle to trust: the one OpenSSL's SSL_CERT_FILE names, where
+/// somebody named one, and otherwise the first of [`TRUST_BUNDLES`] there is.
+fn trust_bundle(
+    named: Option<std::path::PathBuf>,
+    there: impl Fn(&std::path::Path) -> bool,
+) -> Option<std::path::PathBuf> {
+    named.filter(|path| there(path)).or_else(|| {
+        TRUST_BUNDLES
+            .iter()
+            .map(std::path::PathBuf::from)
+            .find(|path| there(path))
+    })
+}
+
+/// GIO's trust for https where the image's TLS module would find none.
+///
+/// Run from the AppImage, GIO's TLS is the image's own (glib-networking's
+/// GNU TLS module, which AppRun's GIO_MODULE_DIR names, built against the
+/// image's GLib), and that GNU TLS trusts the one bundle Ubuntu keeps, at
+/// [`BUILT_IN_TRUST`]. Fedora and openSUSE keep theirs elsewhere, and there
+/// every https address the watch player opened (a direct link, the
+/// deployment's relay) would fail as untrusted; so the system's own bundle
+/// is made GIO's default database, which libsoup, the HTTP source and the
+/// HLS demuxer all ask for. Started from anywhere else, GIO's TLS is the
+/// system's, which knows its own system, and is left alone.
+fn trust_the_system() {
+    let ours = std::env::var("TOMOSHIBI_APPRUN_SET")
+        .is_ok_and(|set| set.split_whitespace().any(|name| name == "GIO_MODULE_DIR"));
+    if !ours {
+        return;
+    }
+    let named = std::env::var_os("SSL_CERT_FILE").map(std::path::PathBuf::from);
+    let Some(bundle) = trust_bundle(named, |path| path.is_file()) else {
+        log("https: this system has no bundle of trusted certificates that the image knows of");
+        return;
+    };
+    if bundle == std::path::Path::new(BUILT_IN_TRUST) {
+        return;
+    }
+    match gio::TlsFileDatabase::new(&bundle) {
+        Ok(database) => {
+            let backend = gio::TlsBackend::default();
+            // g_tls_backend_set_default_database (GLib 2.60), declared here
+            // rather than asked of gio-rs through a feature: a feature of
+            // gio's own rebuilds every crate above it.
+            extern "C" {
+                fn g_tls_backend_set_default_database(
+                    backend: *mut gio::ffi::GTlsBackend,
+                    database: *mut gio::ffi::GTlsDatabase,
+                );
+            }
+            use glib::translate::ToGlibPtr as _;
+            let database: gio::TlsDatabase = database.upcast();
+            // SAFETY: both are live GObjects of the declared types; the
+            // backend takes its own reference to the database.
+            unsafe {
+                g_tls_backend_set_default_database(
+                    backend.to_glib_none().0,
+                    database.to_glib_none().0,
+                );
+            }
+            log(&format!("https: trusting {}", bundle.display()));
+        }
+        Err(fault) => log(&format!(
+            "https: {} could not be read ({fault})",
+            bundle.display()
+        )),
+    }
+}
+
+/// TOMOSHIBI_DEBUG_FETCH: one address read through the watch player's own
+/// HTTP source, with what the player would trust, and the outcome said in
+/// the log. For the distribution check of an AppImage's https, which needs
+/// no call to be in.
+#[cfg(debug_assertions)]
+pub fn debug_fetch(address: &str) {
+    if !started() {
+        return;
+    }
+    let made = (|| -> Result<gst::Pipeline, String> {
+        let pipeline = gst::Pipeline::new();
+        let source = gst::ElementFactory::make("souphttpsrc")
+            .property("location", address)
+            .build()
+            .map_err(|fault| fault.to_string())?;
+        let sink = gst::ElementFactory::make("fakesink")
+            .build()
+            .map_err(|fault| fault.to_string())?;
+        pipeline
+            .add_many([&source, &sink])
+            .map_err(|fault| fault.to_string())?;
+        source.link(&sink).map_err(|fault| fault.to_string())?;
+        Ok(pipeline)
+    })();
+    let pipeline = match made {
+        Ok(pipeline) => pipeline,
+        Err(fault) => {
+            log(&format!("fetch: no pipeline ({fault})"));
+            return;
+        }
+    };
+    let Some(bus) = pipeline.bus() else { return };
+    let held = pipeline.clone();
+    let guard = bus.add_watch_local(move |_, message| {
+        use gst::MessageView;
+        let said = match message.view() {
+            MessageView::Eos(_) => Some("fetch: read to its end".to_owned()),
+            MessageView::Error(fault) => Some(format!(
+                "fetch: failed: {} ({})",
+                fault.error(),
+                fault
+                    .debug()
+                    .map(|debug| debug.to_string())
+                    .unwrap_or_default()
+            )),
+            _ => None,
+        };
+        match said {
+            Some(said) => {
+                log(&said);
+                let _ = held.set_state(gst::State::Null);
+                glib::ControlFlow::Break
+            }
+            None => glib::ControlFlow::Continue,
+        }
+    });
+    // Kept for the life of the process: dropped, the guard takes the watch
+    // away before anything has been read.
+    if let Ok(guard) = guard {
+        std::mem::forget(guard);
+    }
+    let _ = pipeline.set_state(gst::State::Playing);
 }
 
 struct State {
@@ -665,19 +821,67 @@ fn packed_i420(sample: &gst::Sample) -> Option<RemoteFrame> {
 
 #[cfg(test)]
 mod tests {
-    use super::same_origin;
+    use std::path::{Path, PathBuf};
+
+    use super::{same_origin, trust_bundle, BUILT_IN_TRUST};
+
+    #[test]
+    fn the_systems_own_bundle_is_trusted() {
+        let only = |kept: &'static [&'static str]| {
+            move |path: &Path| kept.iter().any(|k| Path::new(k) == path)
+        };
+        // Debian and Ubuntu: the one the image's GNU TLS knows already.
+        assert_eq!(
+            trust_bundle(None, only(&[BUILT_IN_TRUST, "/etc/ssl/cert.pem"])),
+            Some(PathBuf::from(BUILT_IN_TRUST))
+        );
+        // Fedora, and openSUSE.
+        assert_eq!(
+            trust_bundle(None, only(&["/etc/pki/tls/certs/ca-bundle.crt"])),
+            Some(PathBuf::from("/etc/pki/tls/certs/ca-bundle.crt"))
+        );
+        assert_eq!(
+            trust_bundle(None, only(&["/etc/ssl/ca-bundle.pem"])),
+            Some(PathBuf::from("/etc/ssl/ca-bundle.pem"))
+        );
+        // One somebody named comes first, where it is there.
+        assert_eq!(
+            trust_bundle(
+                Some("/opt/mine.pem".into()),
+                only(&["/opt/mine.pem", BUILT_IN_TRUST])
+            ),
+            Some(PathBuf::from("/opt/mine.pem"))
+        );
+        assert_eq!(
+            trust_bundle(Some("/opt/gone.pem".into()), only(&[BUILT_IN_TRUST])),
+            Some(PathBuf::from(BUILT_IN_TRUST))
+        );
+        assert_eq!(trust_bundle(None, only(&[])), None);
+    }
 
     const BASE: &str = "https://meet.example.com/";
 
     #[test]
     fn the_session_goes_to_the_deployment_alone() {
         // The relay's own addresses, as the core resolves `media?t=...`.
-        assert!(same_origin("https://meet.example.com/watch/media?t=abc", BASE));
-        assert!(same_origin("https://meet.example.com:443/watch/media?t=abc", BASE));
+        assert!(same_origin(
+            "https://meet.example.com/watch/media?t=abc",
+            BASE
+        ));
+        assert!(same_origin(
+            "https://meet.example.com:443/watch/media?t=abc",
+            BASE
+        ));
         assert!(same_origin("https://MEET.example.com/watch/media", BASE));
         // What a prefix of the base's text let through.
-        assert!(!same_origin("https://meet.example.com.attacker.tld/v.mp4", BASE));
-        assert!(!same_origin("https://meet.example.com@attacker.tld/v.mp4", BASE));
+        assert!(!same_origin(
+            "https://meet.example.com.attacker.tld/v.mp4",
+            BASE
+        ));
+        assert!(!same_origin(
+            "https://meet.example.com@attacker.tld/v.mp4",
+            BASE
+        ));
         assert!(!same_origin("https://meet.example.com:8443/v.mp4", BASE));
         assert!(!same_origin("http://meet.example.com/v.mp4", BASE));
         assert!(!same_origin("https://example.com/v.mp4", BASE));

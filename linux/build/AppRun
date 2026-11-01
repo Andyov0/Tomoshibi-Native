@@ -20,11 +20,13 @@
 #                            built against another gdk-pixbuf, and without
 #                            one of these the symbolic icons, which are SVG,
 #                            are drawn as missing images
-#   GIO_MODULE_DIR           an empty directory, so that this glib loads no
-#                            GIO modules: the system's (dconf, gvfs) are
-#                            built against the system's glib, often newer,
-#                            and fail to load into this one with a warning
-#                            at every start; the app uses none of them
+#   GIO_MODULE_DIR           the image's own GIO modules, which are GIO's
+#                            TLS alone (glib-networking's GNU TLS, built
+#                            against this glib), for the watch player's
+#                            https: the system's (dconf, gvfs, its own TLS)
+#                            are built against the system's glib, often
+#                            newer, and fail to load into this one with a
+#                            warning at every start
 #   LD_LIBRARY_PATH          only where a library the image lends is
 #                            missing from the system (below), and then only
 #                            that library's folder

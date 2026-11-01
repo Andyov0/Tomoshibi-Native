@@ -47,6 +47,8 @@ use tomoshibi_protocol::{
 };
 
 pub use panel::panel;
+#[cfg(debug_assertions)]
+pub use player::debug_fetch;
 pub use stage::{Place, StageView};
 
 use super::{talk::Toast, Panel, RoomState, CHANGED};

@@ -281,6 +281,11 @@ fn debug_switches(
             });
         });
     }
+    // TOMOSHIBI_DEBUG_FETCH=<address>: read once through the watch player's
+    // HTTP source, for the distribution check of an image's https.
+    if let Ok(address) = std::env::var("TOMOSHIBI_DEBUG_FETCH") {
+        ui::room::debug_fetch(&address);
+    }
     if let Some(seconds) = model.launch().quit_after_seconds {
         let (application, model) = (application.downgrade(), model.downgrade());
         glib::timeout_add_seconds_local_once(seconds, move || {

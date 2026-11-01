@@ -61,6 +61,8 @@ pub mod talk;
 mod tile;
 mod veil;
 mod watch;
+#[cfg(debug_assertions)]
+pub use watch::debug_fetch;
 
 use std::{
     cell::{Cell, RefCell},

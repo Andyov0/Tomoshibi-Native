@@ -86,9 +86,22 @@ for part in index.theme symbolic symbolic-up-to-32 scalable 16x16; do
 done
 cp /usr/share/icons/hicolor/index.theme "$app/usr/share/icons/hicolor/"
 
-# An empty directory for GIO's modules (AppRun's GIO_MODULE_DIR).
+# GIO's modules (AppRun's GIO_MODULE_DIR): GIO's TLS, and nothing else.
+# glib-networking's GNU TLS module is what libsoup, and so the watch
+# player's HTTP source and its HLS demuxer, make every https connection
+# through; without it every https address failed with "TLS support is not
+# available", which is every deployment's relay and most links. It is this
+# image's, built against this image's GLib; the system's modules are not
+# read (AppRun says why). linuxdeploy below copies what it links (GNU TLS
+# and the libraries under it) and points its run path into the image, and
+# the cache GIO reads to know which module offers what is written after
+# that. The GNU TLS it brings trusts Debian's bundle of certificates; the
+# app points GIO at the system's own where that is elsewhere (player.rs
+# `trust_the_system`).
 mkdir -p "$app/usr/lib/gio/modules"
-: >"$app/usr/lib/gio/modules/.none"
+cp -L "$lib/gio/modules/libgiognutls.so" "$app/usr/lib/gio/modules/"
+mkdir -p "$app/usr/share/doc/glib-networking"
+cp /usr/share/doc/glib-networking/copyright "$app/usr/share/doc/glib-networking/"
 
 # 4b. GStreamer, the player of watching together (ui/room/watch): the
 # plugins it plays a file or an HLS playlist with, in usr/lib/gstreamer-1.0,
@@ -98,8 +111,8 @@ mkdir -p "$app/usr/lib/gio/modules"
 # with, about 126 MB more on aarch64; H.264 is decoded by OpenH264 and AAC by
 # FAAD instead, VP8 and VP9 by libvpx, Opus and Vorbis by theirs. libsoup is
 # named, since the HTTP source opens it at run time rather than linking it.
-# The app points GStreamer at these, and at a registry of its own, when it
-# runs from the image (ui/room/watch/player.rs `started`).
+# AppRun points GStreamer at these, at the scanner, and at a registry of
+# its own.
 gst=$lib/gstreamer-1.0
 mkdir -p "$app/usr/lib/gstreamer-1.0" "$app/usr/lib/gstreamer1.0/gstreamer-1.0"
 for plugin in coreelements playback typefindfunctions app videoconvertscale audioconvert \
@@ -110,6 +123,7 @@ done
 cp -L "$lib/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner" "$app/usr/lib/gstreamer1.0/gstreamer-1.0/"
 gstreamer=(--deploy-deps-only "$app/usr/lib/gstreamer-1.0"
   --deploy-deps-only "$app/usr/lib/gstreamer1.0/gstreamer-1.0"
+  --deploy-deps-only "$app/usr/lib/gio/modules"
   --library "$lib/libsoup-3.0.so.0")
 
 # 5. The libraries. linuxdeploy copies every one the binary and the loaders
@@ -131,6 +145,13 @@ linuxdeploy --appdir "$app" \
   --exclude-library 'libwayland-cursor.so*' \
   --exclude-library 'libwayland-egl.so*' \
   --exclude-library 'libwayland-server.so*'
+
+# GIO's list of what the image's modules offer (the TLS backend), which it
+# reads rather than opening every module to ask. Written by this image's
+# GIO, of the module as it now is, its run path pointed into the image.
+gio-querymodules "$app/usr/lib/gio/modules"
+grep -q '^libgiognutls.so: .*gio-tls-backend' "$app/usr/lib/gio/modules/giomodule.cache" \
+  || { echo "appimage: GIO's TLS module is not in giomodule.cache" >&2; exit 1; }
 
 # One library on that list is copied in all the same: libgpg-error, which
 # the libgcrypt copied in needs and which a plain Debian 13 no longer has
