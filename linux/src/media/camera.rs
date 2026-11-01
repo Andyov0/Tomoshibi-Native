@@ -51,10 +51,10 @@ use crate::app::log;
 
 pub use self::{frame::PixelFormat, pattern::TestPicture};
 
-/// Makes PipeWire safe to call in this binary, before `pipewire::init()`
-/// and anything else of pipewire-rs: false where libpipewire is not there.
-/// See camera/pipewire.rs `ready` for why; the screen share needs it as
-/// much as the camera does.
+/// Makes PipeWire safe to call in this binary, in place of
+/// `pipewire::init()` and before anything else of pipewire-rs: false where
+/// libpipewire is not there. One function for the whole app, the screen
+/// share's (media/screen/linkage.rs says why it is needed at all).
 pub fn pipewire_ready() -> bool {
     pipewire::ready()
 }

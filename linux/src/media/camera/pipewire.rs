@@ -135,40 +135,21 @@ fn is_camera(props: &spa::utils::dict::DictRef, through_portal: bool) -> bool {
         || matches!(props.get("device.api"), Some("v4l2") | Some("libcamera"))
 }
 
-extern "C" {
-    /// `bool webrtc::InitializePipeWire()` (modules/portal/pipewire_utils.h).
-    #[link_name = "_ZN6webrtc18InitializePipeWireEv"]
-    fn webrtc_initialize_pipewire() -> bool;
-}
-
-/// Makes PipeWire callable from Rust in a binary that links the core: call
-/// it before `pipewire::init()`, from any thread, as often as wanted.
+/// Makes PipeWire callable from Rust in a binary that links the core:
+/// false where there is no libpipewire to load, and then nothing of
+/// PipeWire's may be called.
 ///
 /// The prebuilt WebRTC the core links carries stubs for the PipeWire
-/// functions its screen capturer calls (pw_init, pw_context_connect_fd,
+/// functions its own capturers call (pw_init, pw_context_connect_fd,
 /// pw_stream_new and the rest of its list), each a jump through a pointer
-/// that WebRTC fills only when it loads libpipewire itself. They are
-/// defined in the static library, so the linker binds every call by that
-/// name to them, pipewire-rs's included, ahead of libpipewire's own: the
-/// first call from pipewire-rs, `pw_init`, jumped to address zero and the
-/// app died the moment it looked for a camera. WebRTC's own loader fills
-/// the pointers (dlopen of libpipewire-0.3.so.0, the library the binary
-/// already depends on), after which a stub is the real function one jump
-/// later. It says false where there is no libpipewire to load, and then
-/// nothing of PipeWire's may be called.
+/// that WebRTC fills only when it loads libpipewire itself, and the linker
+/// binds pipewire-rs's calls by those names to the stubs: the first call,
+/// `pw_init`, jumped to address zero and the app died the moment it looked
+/// for a camera. One function fills them for the whole app, the screen
+/// share's (media/screen/linkage.rs, which says more), so that the camera,
+/// the screen and the screen's sound cannot each fill them their own way.
 pub fn ready() -> bool {
-    use std::sync::OnceLock;
-    static READY: OnceLock<bool> = OnceLock::new();
-    *READY.get_or_init(|| {
-        // SAFETY: WebRTC's function takes nothing, keeps its answer in a
-        // function-local static, and only loads a library and looks up
-        // symbols in it.
-        let loaded = unsafe { webrtc_initialize_pipewire() };
-        if loaded {
-            pw::init();
-        }
-        loaded
-    })
+    crate::media::screen::init_pipewire()
 }
 
 fn run(
