@@ -1153,10 +1153,6 @@ impl Page {
         }
     }
 
-    pub fn window(&self) -> Option<adw::ApplicationWindow> {
-        self.window.upgrade()
-    }
-
     /// Every tile and what it shows, one a line, for a test to read: the
     /// proof that a remote picture is on screen is a tile with frames drawn.
     pub fn report(&self) -> String {
@@ -1382,7 +1378,17 @@ impl Page {
             } else {
                 0
             };
+            let my_share = picture.mine && picture.kind == PictureKind::Screen;
+            if my_share {
+                let weak = model.downgrade();
+                tile.on_stop_sharing(move || {
+                    if let Some(model) = weak.upgrade() {
+                        super::stop_share(&model);
+                    }
+                });
+            }
             let marks = Marks {
+                my_share,
                 hand_beside_name: cornered,
                 lift,
                 label,
@@ -1755,6 +1761,8 @@ impl Page {
         if panel_width > 0 {
             self.panel_motion.set_width_request(panel_width);
         }
+        self.panel_motion
+            .set_from(if narrow { Away::FOOT } else { Away::SIDE });
         if open != self.panel_shown.get() {
             self.panel_shown.set(open);
             if let Some(panel) = open {

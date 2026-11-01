@@ -67,6 +67,9 @@ pub struct Marks {
     /// The hand drawn at the start of the name rather than at the top left,
     /// where the room's own name and signal would cover it.
     pub hand_beside_name: bool,
+    /// One's own shared screen, which has no picture here: a face saying
+    /// so, with the way to stop (the Mac's MyShareFace).
+    pub my_share: bool,
     /// How far the name plate is lifted off the foot: a picture that runs
     /// under the bar keeps its name above it.
     pub lift: i32,
@@ -205,11 +208,14 @@ pub struct Tile {
     small_hand_motion: Motion,
     fill_button: gtk::Button,
     fill_motion: Motion,
+    share_face: Motion,
+    share_stop: gtk::Button,
     hovering: Cell<bool>,
     marks: RefCell<Marks>,
     /// The track whose frames the view is attached to, if any.
     pub attached: RefCell<Option<String>>,
     on_fill: RefCell<Option<Rc<dyn Fn()>>>,
+    on_stop: RefCell<Option<Rc<dyn Fn()>>>,
     floats: Cell<usize>,
 }
 
@@ -315,6 +321,34 @@ impl Tile {
         fill_motion.set_margin_bottom(10);
         root.add_overlay(&fill_motion);
 
+        // One's own share: the screen's symbol on the tally's tint, the
+        // sentence, and Stop where there is room for it.
+        let face = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(8)
+            .halign(gtk::Align::Center)
+            .valign(gtk::Align::Center)
+            .build();
+        face.add_css_class("tmsb-share-face");
+        let mark = gtk::Image::from_icon_name("screen-shared-symbolic");
+        mark.add_css_class("tmsb-share-mark");
+        mark.set_halign(gtk::Align::Center);
+        let said = gtk::Label::builder()
+            .label(t("You are sharing your screen"))
+            .wrap(true)
+            .justify(gtk::Justification::Center)
+            .build();
+        said.add_css_class("tmsb-share-said");
+        let share_stop = gtk::Button::with_label(&t("Stop sharing"));
+        share_stop.add_css_class("tmsb-panel-button");
+        share_stop.set_halign(gtk::Align::Center);
+        share_stop.set_widget_name("tile.stop-sharing");
+        face.append(&mark);
+        face.append(&said);
+        face.append(&share_stop);
+        let share_face = Motion::hidden(&face, Away::FADE);
+        root.add_overlay(&share_face);
+
         let tile = Rc::new(Tile {
             id: id.to_owned(),
             root,
@@ -335,10 +369,13 @@ impl Tile {
             small_hand_motion,
             fill_button,
             fill_motion,
+            share_face,
+            share_stop,
             hovering: Cell::new(false),
             marks: RefCell::new(Marks::default()),
             attached: RefCell::new(None),
             on_fill: RefCell::new(None),
+            on_stop: RefCell::new(None),
             floats: Cell::new(0),
         });
 
@@ -369,6 +406,15 @@ impl Tile {
         tile.root.add_controller(hover);
 
         let weak = Rc::downgrade(&tile);
+        tile.share_stop.connect_clicked(move |_| {
+            let stop = weak
+                .upgrade()
+                .and_then(|tile| tile.on_stop.borrow().clone());
+            if let Some(stop) = stop {
+                stop();
+            }
+        });
+        let weak = Rc::downgrade(&tile);
         tile.fill_button.connect_clicked(move |_| {
             let fill = weak
                 .upgrade()
@@ -389,6 +435,11 @@ impl Tile {
     }
 
     /// What the fill button does.
+    /// What the face's Stop does.
+    pub fn on_stop_sharing(&self, stop: impl Fn() + 'static) {
+        self.on_stop.replace(Some(Rc::new(stop)));
+    }
+
     pub fn on_fill(&self, fill: impl Fn() + 'static) {
         self.on_fill.replace(Some(Rc::new(fill)));
     }
@@ -427,6 +478,10 @@ impl Tile {
         self.hand_motion
             .set_margin_top(if marks.compact { 5 } else { 8 });
         self.hand_motion.show(marks.hand && !marks.hand_beside_name);
+        self.share_face.show(marks.my_share);
+        self.avatar.set_visible(!marks.my_share);
+        self.share_stop.set_visible(!marks.compact);
+        toggle(root.upcast_ref(), "mine-shared", marks.my_share);
         self.small_hand_motion
             .show(marks.hand && marks.hand_beside_name);
         toggle(self.ring.upcast_ref(), "on", marks.speaking);

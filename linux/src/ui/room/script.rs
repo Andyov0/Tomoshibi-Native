@@ -7,7 +7,7 @@
 //! `popover=<reactions|leave|share|more|signal|none>`, `say=<text>`,
 //! `hand=<up|down>`, `react=<0-5>`, `mic=<on|off>`, `camera=<on|off>`,
 //! `share=<on|off>`, `pin=<me|first|none>`, `fill=<on|off>`, `page=<+1|-1>`,
-//! `volume=<0-100>` (the first person's), and two that only look:
+//! `volume=<0-100>` (the first person's), `leave`, and two that only look:
 //! `shot=<name>`, GTK's own picture of the window and its widget tree beside
 //! the run's main snapshot, and `report`, every tile and what it shows,
 //! written to the log. A headless run (linux/build/run-headless.sh) keeps
@@ -127,6 +127,14 @@ fn act(model: &AppModel, action: &str) {
             }
         }
         "report" => report(model),
+        "leave" => {
+            let weak = model.downgrade();
+            glib::spawn_future_local(async move {
+                if let Some(model) = weak.upgrade() {
+                    super::leave(&model, &crate::media::Quiet).await;
+                }
+            });
+        }
         "shot" => shot(model, value),
         other => log(&format!("room script: no such action {other:?}")),
     }
@@ -169,8 +177,13 @@ fn shot(model: &AppModel, name: &str) {
         .trim_end_matches(".gtk")
         .to_owned();
     let path = format!("{base}.{name}.gtk.png");
-    let room = model.kept::<RoomState>();
-    let Some(window) = room.page.borrow().clone().and_then(|page| page.window()) else {
+    // The app's window, whichever screen it shows: a picture of the ending
+    // is taken after the call's screen has gone.
+    let Some(window) = gtk::Window::toplevels()
+        .iter::<glib::Object>()
+        .flatten()
+        .find_map(|window| window.downcast::<adw::ApplicationWindow>().ok())
+    else {
         return;
     };
     let mut tree = String::new();

@@ -98,6 +98,14 @@ button.tmsb-stage-button {
 button.tmsb-stage-button:hover { background-color: rgba(0, 0, 0, 0.7); }
 button.tmsb-stage-button:active { background-color: rgba(0, 0, 0, 0.8); transform: scale(0.95); }
 
+/* One's own share, which has no picture here (the Mac's MyShareFace). */
+.tmsb-tile.mine-shared { background-color: @tmsb_call_surface_high; }
+.tmsb-share-mark {
+  background-color: alpha(@tmsb_call_tally, 0.18); color: @tmsb_call_tally;
+  border-radius: 999px; min-width: 52px; min-height: 52px; -gtk-icon-size: 22px;
+}
+.tmsb-share-said { font-size: 14px; font-weight: 600; }
+
 /* A reaction rising off a picture (Reacting.tsx). */
 .tmsb-float { font-size: 30px; }
 .tmsb-float.compact { font-size: 22px; }
@@ -238,6 +246,8 @@ button.tmsb-choice {
   background-color: transparent; color: @tmsb_call_fg;
 }
 button.tmsb-choice:hover { background-color: alpha(@tmsb_call_wash, 0.10); }
+button.tmsb-choice.held { background-color: alpha(@tmsb_call_wash, 0.16); }
+button.tmsb-choice label { font-weight: normal; }
 button.tmsb-choice image.tick { color: @tmsb_call_tally; }
 
 /* Messages. */
@@ -293,7 +303,7 @@ button.tmsb-signal:hover { background-color: mix(@tmsb_call_surface, @tmsb_call_
 .tmsb-toast .detail { font-size: 12px; color: @tmsb_call_muted; }
 .tmsb-said {
   background-color: @tmsb_call_surface_high; border-radius: 14px; padding: 8px 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  box-shadow: inset 0 0 0 1px alpha(@tmsb_call_wash, 0.10);
 }
 
 /* Alone in the room: the link, as a small capsule above the controls. */

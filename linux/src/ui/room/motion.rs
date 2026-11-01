@@ -180,6 +180,12 @@ impl Motion {
         motion
     }
 
+    /// Where it comes from and goes back to from now on: a panel slides in
+    /// from the side beside the call, and up from the foot over it.
+    pub fn set_from(&self, from: Away) {
+        self.imp().from.set(from);
+    }
+
     pub fn child(&self) -> Option<gtk::Widget> {
         self.imp().child.borrow().clone()
     }

@@ -654,7 +654,6 @@ fn host(model: &AppModel) -> PanelView {
             }
 
             // Invitations.
-            content.append(&section(&t("Invite somebody")));
             let invite = pill(&t("Invite somebody"));
             invite.set_halign(gtk::Align::Start);
             invite.set_sensitive(busy.is_none());
@@ -690,7 +689,9 @@ fn host(model: &AppModel) -> PanelView {
             content.append(&revoke);
 
             // The people.
-            content.append(&section(&t("people")));
+            let rule = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+            rule.add_css_class("tmsb-menu-rule");
+            content.append(&rule);
             let people = talk
                 .as_ref()
                 .map(|talk| talk.people.clone())
