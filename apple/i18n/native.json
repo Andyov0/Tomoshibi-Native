@@ -884,6 +884,18 @@
       "zh-Hans": "Tomoshibi 已更新，但没能自动重新打开。请再次打开它。",
       "zh-Hant": "Tomoshibi 已更新，但沒能自動重新開啟。請再次開啟它。",
       "ja": "Tomoshibi は更新されましたが、自動でもう一度開けませんでした。もう一度開いてください。"
+    },
+    "Another sealing word": {
+      "en": "Another sealing word",
+      "zh-Hans": "暗号不同",
+      "zh-Hant": "暗號不同",
+      "ja": "合言葉が違います"
+    },
+    "This person sealed the call with another word, so nothing of theirs can be seen or heard here.": {
+      "en": "This person sealed the call with another word, so nothing of theirs can be seen or heard here.",
+      "zh-Hans": "对方用的暗号和你不同，这里看不到也听不到对方。",
+      "zh-Hant": "對方用的暗號和你不同，這裡看不到也聽不到對方。",
+      "ja": "この人は別の合言葉で通話を封じているため、ここでは映像も音声も届きません。"
     }
   }
 }

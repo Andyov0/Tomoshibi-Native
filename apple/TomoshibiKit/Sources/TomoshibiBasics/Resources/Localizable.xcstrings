@@ -2521,6 +2521,36 @@
         }
       }
     },
+    "Another sealing word" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Another sealing word"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "合言葉が違います"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暗号不同"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "暗號不同"
+          }
+        }
+      }
+    },
     "Answer" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
@@ -24237,6 +24267,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "該密語已被禁止加入，請聯絡主持人。"
+          }
+        }
+      }
+    },
+    "This person sealed the call with another word, so nothing of theirs can be seen or heard here." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This person sealed the call with another word, so nothing of theirs can be seen or heard here."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "この人は別の合言葉で通話を封じているため、ここでは映像も音声も届きません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "对方用的暗号和你不同，这里看不到也听不到对方。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "對方用的暗號和你不同，這裡看不到也聽不到對方。"
           }
         }
       }
