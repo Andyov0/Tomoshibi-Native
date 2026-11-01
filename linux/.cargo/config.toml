@@ -1,0 +1,17 @@
+# Read by cargo for every build of the Linux app (build.sh runs cargo in
+# linux/), and by nothing else: the core keeps its own .cargo.
+
+[env]
+# Where ort (media/camera's background blur) keeps the ONNX Runtime it
+# downloads at build time: in its build script's own OUT_DIR, inside the
+# target directory, rather than in a cache under $HOME.
+#
+# Every build runs in a container that is thrown away (build.sh), so a
+# download kept under $HOME went with the container, while cargo kept the
+# build script's output, which still pointed there: the next build in a
+# fresh container linked against a directory that no longer existed
+# ("could not find native static library `onnxruntime`") and never ran the
+# script again to fetch it. ort falls back to OUT_DIR when the cache
+# directory cannot be made, and a path under /dev/null never can be, so
+# the library lives and dies with the build script's output that names it.
+ORT_CACHE_DIR = "/dev/null/ort"

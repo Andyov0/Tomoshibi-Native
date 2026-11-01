@@ -1,0 +1,627 @@
+//! Cameras through PipeWire: on the connection the camera portal opens
+//! (`org.freedesktop.portal.Camera.OpenPipeWireRemote`), which shows this
+//! app the camera nodes alone, or, where no portal answers, on an ordinary
+//! connection to the session's PipeWire. Cameras that only libcamera can
+//! drive (the image signal processors of recent laptops) exist nowhere
+//! else; a V4L2 node of theirs gives raw sensor data nobody can show.
+//!
+//! One thread holds the connection and runs PipeWire's loop: the registry
+//! listener keeps the list of camera nodes (a node is a camera when it is a
+//! video source whose role is Camera, or that a camera monitor made from a
+//! V4L2 or libcamera device, which leaves out the screen casts that are
+//! video sources too), and streams are opened and closed on it by command
+//! (`pipewire::channel`). Each stream asks for NV12, YUY2 or I420 at
+//! 1280x720 and thirty frames a second, or MJPEG at the same, and its frames
+//! go into the camera's feed on this thread, read before the buffer is given
+//! back.
+
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    os::fd::OwnedFd,
+    rc::Rc,
+    sync::{Arc, Mutex},
+    thread,
+};
+
+use pipewire as pw;
+use pw::{properties::properties, spa};
+use spa::{
+    param::{
+        format::{FormatProperties, MediaSubtype, MediaType},
+        format_utils::parse_format,
+        video::{VideoFormat, VideoInfoRaw},
+        ParamType,
+    },
+    pod::{serialize::PodSerializer, Pod},
+    utils::{Direction, Fraction, Rectangle, SpaTypes},
+};
+use tokio::sync::oneshot;
+
+use super::{
+    feed::Feed,
+    frame::{PixelFormat, Raw},
+    modes::Wanted,
+};
+use crate::{app::log, media::MediaError};
+
+/// A camera node.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Node {
+    /// `node.name`, which a camera keeps across runs.
+    pub name: String,
+    /// `object.serial`, which a stream is pointed at.
+    pub serial: String,
+    pub label: String,
+}
+
+enum Command {
+    Open {
+        token: u64,
+        node: Node,
+        wanted: Wanted,
+        feed: Arc<Feed>,
+        opened: oneshot::Sender<Result<(), MediaError>>,
+        ended: Box<dyn FnOnce() + Send>,
+    },
+    Close {
+        token: u64,
+    },
+}
+
+/// The connection, from the main thread's side.
+pub struct Session {
+    commands: pw::channel::Sender<Command>,
+    pub nodes: Arc<Mutex<Vec<Node>>>,
+}
+
+impl Session {
+    /// Opens a stream from `node` into `feed`, under `token`.
+    pub fn open(
+        &self,
+        token: u64,
+        node: Node,
+        wanted: Wanted,
+        feed: Arc<Feed>,
+        opened: oneshot::Sender<Result<(), MediaError>>,
+        ended: Box<dyn FnOnce() + Send>,
+    ) -> bool {
+        self.commands
+            .send(Command::Open {
+                token,
+                node,
+                wanted,
+                feed,
+                opened,
+                ended,
+            })
+            .is_ok()
+    }
+
+    pub fn close(&self, token: u64) {
+        let _ = self.commands.send(Command::Close { token });
+    }
+}
+
+/// Connects (through the portal's `fd`, or directly when there is none) on
+/// a thread of its own; `connected` is told whether it worked, and
+/// `changed` is called on that thread whenever the cameras change.
+pub fn start(
+    fd: Option<OwnedFd>,
+    changed: impl Fn() + Send + 'static,
+    connected: oneshot::Sender<Result<Session, String>>,
+) {
+    let spawned = thread::Builder::new()
+        .name("tomoshibi pipewire camera".into())
+        .spawn(move || {
+            if let Err(fault) = run(fd, changed, connected) {
+                log(&format!("camera: PipeWire: {fault}"));
+            }
+        });
+    if let Err(fault) = spawned {
+        log(&format!(
+            "camera: the PipeWire thread did not start: {fault}"
+        ));
+    }
+}
+
+/// Whether a node is a camera.
+fn is_camera(props: &spa::utils::dict::DictRef, through_portal: bool) -> bool {
+    if props.get("media.class") != Some("Video/Source") {
+        return false;
+    }
+    through_portal
+        || props.get("media.role") == Some("Camera")
+        || matches!(props.get("device.api"), Some("v4l2") | Some("libcamera"))
+}
+
+extern "C" {
+    /// `bool webrtc::InitializePipeWire()` (modules/portal/pipewire_utils.h).
+    #[link_name = "_ZN6webrtc18InitializePipeWireEv"]
+    fn webrtc_initialize_pipewire() -> bool;
+}
+
+/// Makes PipeWire callable from Rust in a binary that links the core: call
+/// it before `pipewire::init()`, from any thread, as often as wanted.
+///
+/// The prebuilt WebRTC the core links carries stubs for the PipeWire
+/// functions its screen capturer calls (pw_init, pw_context_connect_fd,
+/// pw_stream_new and the rest of its list), each a jump through a pointer
+/// that WebRTC fills only when it loads libpipewire itself. They are
+/// defined in the static library, so the linker binds every call by that
+/// name to them, pipewire-rs's included, ahead of libpipewire's own: the
+/// first call from pipewire-rs, `pw_init`, jumped to address zero and the
+/// app died the moment it looked for a camera. WebRTC's own loader fills
+/// the pointers (dlopen of libpipewire-0.3.so.0, the library the binary
+/// already depends on), after which a stub is the real function one jump
+/// later. It says false where there is no libpipewire to load, and then
+/// nothing of PipeWire's may be called.
+pub fn ready() -> bool {
+    use std::sync::OnceLock;
+    static READY: OnceLock<bool> = OnceLock::new();
+    *READY.get_or_init(|| {
+        // SAFETY: WebRTC's function takes nothing, keeps its answer in a
+        // function-local static, and only loads a library and looks up
+        // symbols in it.
+        let loaded = unsafe { webrtc_initialize_pipewire() };
+        if loaded {
+            pw::init();
+        }
+        loaded
+    })
+}
+
+fn run(
+    fd: Option<OwnedFd>,
+    changed: impl Fn() + Send + 'static,
+    connected: oneshot::Sender<Result<Session, String>>,
+) -> Result<(), String> {
+    if !ready() {
+        let fault = "libpipewire could not be loaded".to_string();
+        let _ = connected.send(Err(fault.clone()));
+        return Err(fault);
+    }
+    let through_portal = fd.is_some();
+    let made = (|| {
+        let mainloop = pw::main_loop::MainLoopRc::new(None).map_err(|e| e.to_string())?;
+        let context = pw::context::ContextRc::new(&mainloop, None).map_err(|e| e.to_string())?;
+        let core = match fd {
+            Some(fd) => context.connect_fd_rc(fd, None),
+            None => context.connect_rc(None),
+        }
+        .map_err(|e| format!("no connection: {e}"))?;
+        let registry = core.get_registry_rc().map_err(|e| e.to_string())?;
+        Ok::<_, String>((mainloop, context, core, registry))
+    })();
+    let (mainloop, _context, core, registry) = match made {
+        Ok(made) => made,
+        Err(fault) => {
+            let _ = connected.send(Err(fault.clone()));
+            return Err(fault);
+        }
+    };
+
+    let nodes: Arc<Mutex<Vec<Node>>> = Arc::new(Mutex::new(Vec::new()));
+    let (commands, receiver) = pw::channel::channel::<Command>();
+
+    // Every camera by its global id, and the list published from it.
+    let known: Rc<RefCell<HashMap<u32, Node>>> = Rc::new(RefCell::new(HashMap::new()));
+    let changed = Rc::new(changed);
+    let publish = {
+        let (known, nodes, changed) = (known.clone(), nodes.clone(), changed.clone());
+        Rc::new(move || {
+            let mut list: Vec<Node> = known.borrow().values().cloned().collect();
+            list.sort_by(|a, b| a.label.cmp(&b.label));
+            *nodes.lock().unwrap_or_else(|p| p.into_inner()) = list;
+            changed();
+        })
+    };
+    let _registry_listener = registry
+        .add_listener_local()
+        .global({
+            let (known, publish) = (known.clone(), publish.clone());
+            move |global| {
+                if global.type_ != pw::types::ObjectType::Node {
+                    return;
+                }
+                let Some(props) = global.props.as_ref() else {
+                    return;
+                };
+                if !is_camera(props, through_portal) {
+                    return;
+                }
+                let name = props.get("node.name").unwrap_or_default().to_owned();
+                let label = props
+                    .get("node.description")
+                    .or_else(|| props.get("node.nick"))
+                    .unwrap_or(&name)
+                    .to_owned();
+                let serial = props.get("object.serial").unwrap_or_default().to_owned();
+                known.borrow_mut().insert(
+                    global.id,
+                    Node {
+                        name,
+                        serial,
+                        label,
+                    },
+                );
+                publish();
+            }
+        })
+        .global_remove({
+            let (known, publish) = (known.clone(), publish.clone());
+            move |id| {
+                if known.borrow_mut().remove(&id).is_some() {
+                    publish();
+                }
+            }
+        })
+        .register();
+
+    // Connected once the server has answered a first round trip, by which
+    // time the registry has listed every camera there already is: a
+    // camera asked for at once (a pre-join opening as the app starts) is
+    // then found rather than missed.
+    let session = RefCell::new(Some((
+        Session {
+            commands,
+            nodes: nodes.clone(),
+        },
+        connected,
+    )));
+    let pending = core.sync(0).map_err(|e| e.to_string())?;
+    let _core_listener = core
+        .add_listener_local()
+        .done(move |id, seq| {
+            if id == pw::core::PW_ID_CORE && seq == pending {
+                if let Some((session, connected)) = session.borrow_mut().take() {
+                    let _ = connected.send(Ok(session));
+                }
+            }
+        })
+        .register();
+
+    // The open streams by token, with their listeners, which must live as
+    // long as they do.
+    type Open = (pw::stream::StreamRc, pw::stream::StreamListener<Negotiated>);
+    let streams: Rc<RefCell<HashMap<u64, Open>>> = Rc::new(RefCell::new(HashMap::new()));
+    let _receiver = receiver.attach(mainloop.loop_(), {
+        let (core, streams) = (core.clone(), streams.clone());
+        move |command| match command {
+            Command::Open {
+                token,
+                node,
+                wanted,
+                feed,
+                opened,
+                ended,
+            } => match open(&core, &node, wanted, feed, ended) {
+                Ok(open) => {
+                    log(&format!(
+                        "camera: {} through PipeWire{}",
+                        node.label,
+                        if through_portal {
+                            " (the portal's)"
+                        } else {
+                            ""
+                        }
+                    ));
+                    streams.borrow_mut().insert(token, open);
+                    let _ = opened.send(Ok(()));
+                }
+                Err(fault) => {
+                    let _ = opened.send(Err(MediaError::Failed(fault)));
+                }
+            },
+            Command::Close { token } => {
+                if let Some((stream, listener)) = streams.borrow_mut().remove(&token) {
+                    let _ = stream.disconnect();
+                    drop(listener);
+                }
+            }
+        }
+    });
+
+    mainloop.run();
+    Ok(())
+}
+
+/// What a stream has agreed to send.
+struct Negotiated {
+    format: Option<PixelFormat>,
+    width: u32,
+    height: u32,
+    feed: Arc<Feed>,
+    ended: Option<Box<dyn FnOnce() + Send>>,
+    streaming: bool,
+    /// Buffers that came with no data, for the log.
+    empty: u64,
+}
+
+/// The format a stream offers to take: raw in the layouts read here, or
+/// MJPEG, each at the size and rate wanted by default and anything else
+/// the camera has otherwise.
+fn format_param(subtype: MediaSubtype, wanted: Wanted) -> Result<Vec<u8>, String> {
+    let size = spa::pod::property!(
+        FormatProperties::VideoSize,
+        Choice,
+        Range,
+        Rectangle,
+        Rectangle {
+            width: wanted.width,
+            height: wanted.height
+        },
+        Rectangle {
+            width: 1,
+            height: 1
+        },
+        Rectangle {
+            width: 8192,
+            height: 8192
+        }
+    );
+    let rate = spa::pod::property!(
+        FormatProperties::VideoFramerate,
+        Choice,
+        Range,
+        Fraction,
+        Fraction {
+            num: wanted.fps,
+            denom: 1
+        },
+        Fraction { num: 0, denom: 1 },
+        Fraction {
+            num: 1000,
+            denom: 1
+        }
+    );
+    let object = if subtype == MediaSubtype::Raw {
+        spa::pod::object!(
+            SpaTypes::ObjectParamFormat,
+            ParamType::EnumFormat,
+            spa::pod::property!(FormatProperties::MediaType, Id, MediaType::Video),
+            spa::pod::property!(FormatProperties::MediaSubtype, Id, MediaSubtype::Raw),
+            spa::pod::property!(
+                FormatProperties::VideoFormat,
+                Choice,
+                Enum,
+                Id,
+                VideoFormat::NV12,
+                VideoFormat::NV12,
+                VideoFormat::YUY2,
+                VideoFormat::I420
+            ),
+            size,
+            rate,
+        )
+    } else {
+        spa::pod::object!(
+            SpaTypes::ObjectParamFormat,
+            ParamType::EnumFormat,
+            spa::pod::property!(FormatProperties::MediaType, Id, MediaType::Video),
+            spa::pod::property!(FormatProperties::MediaSubtype, Id, MediaSubtype::Mjpg),
+            size,
+            rate,
+        )
+    };
+    PodSerializer::serialize(
+        std::io::Cursor::new(Vec::new()),
+        &spa::pod::Value::Object(object),
+    )
+    .map(|(cursor, _)| cursor.into_inner())
+    .map_err(|e| format!("{e:?}"))
+}
+
+/// The buffers a compressed stream is asked for: eight (from two to
+/// sixteen) of one block each, four megabytes by default, which holds a
+/// 1080p MJPEG frame several times over.
+fn buffers_param() -> Result<Vec<u8>, String> {
+    use spa::{
+        pod::{ChoiceValue, Object, Property, PropertyFlags, Value},
+        utils::{Choice, ChoiceEnum, ChoiceFlags},
+    };
+    let range = |default: i32, min: i32, max: i32| {
+        Value::Choice(ChoiceValue::Int(Choice(
+            ChoiceFlags::empty(),
+            ChoiceEnum::Range { default, min, max },
+        )))
+    };
+    let property = |key: u32, value: Value| Property {
+        key,
+        flags: PropertyFlags::empty(),
+        value,
+    };
+    let object = Object {
+        type_: SpaTypes::ObjectParamBuffers.as_raw(),
+        id: ParamType::Buffers.as_raw(),
+        properties: vec![
+            property(spa::sys::SPA_PARAM_BUFFERS_buffers, range(8, 2, 16)),
+            property(spa::sys::SPA_PARAM_BUFFERS_blocks, Value::Int(1)),
+            property(
+                spa::sys::SPA_PARAM_BUFFERS_size,
+                range(4 << 20, 64 << 10, 32 << 20),
+            ),
+            property(spa::sys::SPA_PARAM_BUFFERS_stride, Value::Int(0)),
+        ],
+    };
+    PodSerializer::serialize(std::io::Cursor::new(Vec::new()), &Value::Object(object))
+        .map(|(cursor, _)| cursor.into_inner())
+        .map_err(|e| format!("{e:?}"))
+}
+
+fn open(
+    core: &pw::core::CoreRc,
+    node: &Node,
+    wanted: Wanted,
+    feed: Arc<Feed>,
+    ended: Box<dyn FnOnce() + Send>,
+) -> Result<(pw::stream::StreamRc, pw::stream::StreamListener<Negotiated>), String> {
+    let stream = pw::stream::StreamRc::new(
+        core.clone(),
+        "Tomoshibi camera",
+        properties! {
+            *pw::keys::MEDIA_TYPE => "Video",
+            *pw::keys::MEDIA_CATEGORY => "Capture",
+            *pw::keys::MEDIA_ROLE => "Camera",
+            // PW_KEY_TARGET_OBJECT, which the bindings name only behind a
+            // version feature; every PipeWire since 0.3.44 reads it.
+            "target.object" => node.serial.as_str(),
+        },
+    )
+    .map_err(|e| e.to_string())?;
+    let negotiated = Negotiated {
+        format: None,
+        width: 0,
+        height: 0,
+        feed,
+        ended: Some(ended),
+        streaming: false,
+        empty: 0,
+    };
+    let listener = stream
+        .add_local_listener_with_user_data(negotiated)
+        .state_changed(|_, negotiated, old, new| {
+            log(&format!(
+                "camera: the PipeWire stream went from {old:?} to {new:?}"
+            ));
+            match new {
+                pw::stream::StreamState::Streaming => negotiated.streaming = true,
+                pw::stream::StreamState::Error(fault) => {
+                    log(&format!("camera: the PipeWire stream failed: {fault}"));
+                    if let Some(ended) = negotiated.ended.take() {
+                        ended();
+                    }
+                }
+                pw::stream::StreamState::Unconnected if negotiated.streaming => {
+                    if let Some(ended) = negotiated.ended.take() {
+                        ended();
+                    }
+                }
+                _ => {}
+            }
+        })
+        .param_changed(|stream, negotiated, id, param| {
+            let Some(param) = param else { return };
+            if id != ParamType::Format.as_raw() {
+                return;
+            }
+            let Ok((media_type, subtype)) = parse_format(param) else {
+                return;
+            };
+            if media_type != MediaType::Video {
+                return;
+            }
+            if subtype == MediaSubtype::Mjpg {
+                // The size is read from each JPEG.
+                negotiated.format = Some(PixelFormat::Mjpeg);
+                log("camera: PipeWire sends MJPEG");
+                // A compressed frame's size cannot be worked out from the
+                // format, so the buffers' is said here: a producer that
+                // derives it from the format alone (GStreamer's
+                // pipewiresink) otherwise sent nothing at all, the stream
+                // streaming and no buffer ever arriving.
+                match buffers_param() {
+                    Ok(bytes) => match Pod::from_bytes(&bytes) {
+                        Some(pod) => {
+                            if let Err(fault) = stream.update_params(&mut [pod]) {
+                                log(&format!(
+                                    "camera: the MJPEG buffers were not asked for: {fault}"
+                                ));
+                            }
+                        }
+                        None => log("camera: a bad buffers parameter"),
+                    },
+                    Err(fault) => log(&format!("camera: a bad buffers parameter: {fault}")),
+                }
+                return;
+            }
+            let mut info = VideoInfoRaw::new();
+            if info.parse(param).is_err() {
+                return;
+            }
+            negotiated.format = match info.format() {
+                VideoFormat::NV12 => Some(PixelFormat::Nv12),
+                VideoFormat::YUY2 => Some(PixelFormat::Yuyv),
+                VideoFormat::I420 => Some(PixelFormat::I420),
+                _ => None,
+            };
+            negotiated.width = info.size().width;
+            negotiated.height = info.size().height;
+            log(&format!(
+                "camera: PipeWire sends {:?} at {}x{}",
+                negotiated.format, negotiated.width, negotiated.height
+            ));
+        })
+        .process(|stream, negotiated| {
+            let Some(mut buffer) = stream.dequeue_buffer() else {
+                return;
+            };
+            let Some(format) = negotiated.format else {
+                return;
+            };
+            let datas = buffer.datas_mut();
+            let mut planes: Vec<(&[u8], u32)> = Vec::with_capacity(datas.len());
+            let mut seen = Vec::new();
+            for data in datas.iter_mut() {
+                seen.push(format!(
+                    "type {:?} maxsize {} chunk {}+{} stride {} mapped {}",
+                    data.type_(),
+                    data.as_raw().maxsize,
+                    data.chunk().offset(),
+                    data.chunk().size(),
+                    data.chunk().stride(),
+                    !data.as_raw().data.is_null()
+                ));
+                let (offset, size, stride) = {
+                    let chunk = data.chunk();
+                    (
+                        chunk.offset() as usize,
+                        chunk.size() as usize,
+                        chunk.stride().max(0) as u32,
+                    )
+                };
+                let Some(bytes) = data.data() else { continue };
+                // Read only, for as long as the buffer is held.
+                let bytes: &[u8] = bytes;
+                let end = (offset + size).min(bytes.len());
+                if offset >= end {
+                    continue;
+                }
+                planes.push((&bytes[offset..end], stride));
+            }
+            if planes.is_empty() {
+                negotiated.empty += 1;
+                if negotiated.empty == 1 || negotiated.empty.is_power_of_two() {
+                    log(&format!(
+                        "camera: a PipeWire buffer with nothing in it ({} so far): {seen:?}",
+                        negotiated.empty
+                    ));
+                }
+                return;
+            }
+            let raw = Raw {
+                format,
+                width: negotiated.width,
+                height: negotiated.height,
+                planes,
+            };
+            negotiated.feed.deliver(&raw, negotiated.feed.now_us());
+        })
+        .register()
+        .map_err(|e| e.to_string())?;
+    let raw = format_param(MediaSubtype::Raw, wanted)?;
+    let mjpg = format_param(MediaSubtype::Mjpg, wanted)?;
+    let mut params = [
+        Pod::from_bytes(&raw).ok_or("a bad format")?,
+        Pod::from_bytes(&mjpg).ok_or("a bad format")?,
+    ];
+    stream
+        .connect(
+            Direction::Input,
+            None,
+            pw::stream::StreamFlags::AUTOCONNECT | pw::stream::StreamFlags::MAP_BUFFERS,
+            &mut params,
+        )
+        .map_err(|e| e.to_string())?;
+    Ok((stream, listener))
+}
