@@ -560,7 +560,7 @@ async fn an_accepted_socket_is_closed_with_a_close_frame() {
 // round trip of a millisecond and was named the fastest: the join asked for a
 // machine that could not hold the call, and a server page showed it at 0 ms.
 // This was pinned the other way to rank as a browser does; the web needs the
-// same change (relays.ts `overSignalling`), which is the web client's to make.
+// same change (relays.ts `overSignalling`), in the server's repository.
 #[tokio::test]
 async fn a_refused_connection_is_no_reading() {
     let _turn = TURN.lock().await;
