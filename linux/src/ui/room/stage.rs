@@ -218,6 +218,13 @@ impl Stage {
         self.queue_allocate();
     }
 
+    /// Takes away at once a tile of `id` still fading out. Off the list
+    /// before it is unparented: unparenting unmaps it, libadwaita skips an
+    /// animation whose widget is unmapped, and the skipped fade's end (the
+    /// `remove` below) then ran while GTK was still inside this unparent,
+    /// unparented the same widget a second time from within the first, and
+    /// the app died in gtk_widget_unparent. That was a call losing its
+    /// default route: everybody left and came back within the fade.
     fn drop_leaving(&self, id: &str) {
         let mut gone = Vec::new();
         self.imp().placed.borrow_mut().retain(|placed| {
@@ -228,7 +235,9 @@ impl Stage {
             keep
         });
         for widget in gone {
-            widget.unparent();
+            if widget.parent().as_ref() == Some(self.upcast_ref()) {
+                widget.unparent();
+            }
         }
     }
 
@@ -254,12 +263,19 @@ impl Stage {
             let (Some(stage), Some(gone)) = (stage.upgrade(), gone.upgrade()) else {
                 return;
             };
-            stage
-                .imp()
-                .placed
-                .borrow_mut()
-                .retain(|placed| placed.widget != gone);
-            gone.unparent();
+            // Only a tile still on the list is this fade's to take away. One
+            // already taken (the same picture coming back, the stage going)
+            // is being unparented by whoever took it, and this can be called
+            // from inside that unparent (`drop_leaving` says how).
+            let was_here = {
+                let mut placed = stage.imp().placed.borrow_mut();
+                let before = placed.len();
+                placed.retain(|placed| placed.widget != gone);
+                placed.len() != before
+            };
+            if was_here && gone.parent().as_ref() == Some(stage.upcast_ref()) {
+                gone.unparent();
+            }
         });
     }
 
