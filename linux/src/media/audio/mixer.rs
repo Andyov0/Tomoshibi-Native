@@ -5,22 +5,42 @@
 //! hands over 10 ms whenever the core's audio clock ticks) and are taken out
 //! at the sound card's, which is a different clock. So each sound waits in a
 //! queue of its own: it starts only once two frames are queued, which rides
-//! over the two clocks' ticks not lining up, and a queue that has grown past
-//! a fifth of a second, which is the card running slower than the network
-//! for long enough to talk over somebody, is cut back to forty milliseconds
-//! (Windows' Playback.cs drops at the same fifth of a second). A queue that
-//! runs dry plays what it has, then silence, and waits for two frames again,
-//! rather than clicking in and out a frame at a time.
+//! over the two clocks' ticks not lining up. A queue that runs dry plays
+//! what it has, then silence, and waits for two frames again, rather than
+//! clicking in and out a frame at a time.
+//!
+//! A queue that grows stays grown unless something takes it back: one stall
+//! of the card (a busy machine) left three remote voices fifteen frames deep
+//! for the rest of a call, 150 ms later than they need be, because the old
+//! rule cut a queue only past twenty frames, as Windows' Playback.cs does.
+//! So the shallowest each queue has been over the last half second is
+//! watched, and whatever of it stands above [`TARGET`] is taken back
+//! gradually: a frame that is all but silent (the gap between two words) is
+//! dropped whole, which nobody hears, and otherwise every frame is played a
+//! hundredth faster than it came until the excess is gone, which nobody hears
+//! either. A queue past [`CEILING`] is still cut back at once, for the burst
+//! that arrives after the network itself stalled.
 //!
 //! The lossless streams (`LosslessSink`) come at the sender's own rate, as
 //! floats. Each is taken to 48 kHz stereo by WebRTC's own resampler, one per
 //! stream since it keeps the filter's state from one block to the next, and
 //! then queued like any other sound.
 //!
-//! Each person's level (the sound panel's sliders, `Media::set_volume`)
-//! applies to everything of theirs, voice, screen sound, music and the
-//! lossless streams standing in for the last two; it is eased across a
-//! frame rather than stepped, since a gain stepped under speech clicks.
+//! Levels. Each sound is a voice, a shared screen's sound or music, and is
+//! played at its person's level for that kind (hearing.ts keeps one per
+//! person and kind; the sound panel has a row each): `set_level` is the
+//! person's level for everything of theirs, `set_kind_level` the level of
+//! their screen's sound or their music, which stands in place of the
+//! person's where it is set. Music is further turned down under speech
+//! (`set_duck`, duck.ts). A gain is eased across a frame rather than
+//! stepped, since a gain stepped under speech clicks.
+//!
+//! The sum is limited rather than clipped. Four people talking at once at the
+//! levels a browser's gain control sends summed to full scale for 15% of the
+//! samples, and truncating them to 16 bits put a buzz of odd harmonics 39 dB
+//! up on everything. The limiter brings the whole mix down, fast when it
+//! would go over and slowly back, and a soft knee catches what the first
+//! moment of a frame still overshoots.
 
 use std::{
     collections::{HashMap, VecDeque},
@@ -36,14 +56,51 @@ pub const FRAME: usize = (RATE / 100) as usize;
 
 /// Frames queued before a sound starts, or starts again after running dry.
 const START: usize = 2;
-/// Frames past which a queue is cut back: 200 ms.
+/// Frames a queue settles at once it has been taken back gradually: 40 ms,
+/// two frames above the start, which rides over the ordinary unevenness of
+/// both clocks.
+const TARGET: usize = 4;
+/// Mixes over which the shallowest a queue has been is measured: half a
+/// second.
+const WINDOW: u32 = 50;
+/// Frames past which a queue is cut back at once: 200 ms.
 const CEILING: usize = 20;
 /// Frames a queue is cut back to: 40 ms.
 const SETTLE: usize = 4;
+/// Samples of one channel taken out of every frame while a queue is being
+/// taken back: a hundredth faster.
+const SHRINK: usize = FRAME / 100;
+/// A frame whose loudest sample is below this (about -54 dBFS) is the
+/// silence between words, and is dropped whole when a queue is too long.
+const QUIET: i32 = 64;
+/// Frames in a row with no silence to drop before a queue owed back is
+/// played faster instead: a quarter of a second, longer than any word, so
+/// that speech is taken back in its gaps and only music, which has none, is
+/// sped up.
+const NO_GAP: u32 = 25;
+
+/// The level the limiter holds the mix under: -1 dBFS.
+const CEILING_LEVEL: f32 = 0.891 * 32767.0;
+/// Where the soft knee begins, for what overshoots inside a frame.
+const KNEE: f32 = 0.95 * 32767.0;
+/// How much of the way back to full gain the limiter goes each frame once
+/// the mix is quieter: about 150 ms to recover.
+const RELEASE: f32 = 0.065;
+
+/// What a sound is, for its person's level of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Kind {
+    Voice,
+    /// A shared screen's sound, or sound shared on its own.
+    Screen,
+    /// The song desk's music.
+    Music,
+}
 
 /// One sound waiting to be played.
 struct Source {
     identity: String,
+    kind: Kind,
     /// The channels its samples are interleaved in: 1 or 2.
     channels: usize,
     /// Interleaved 48 kHz samples not yet played.
@@ -59,6 +116,19 @@ struct Source {
     /// For a lossless stream not at 48 kHz stereo: the resampler that takes
     /// it there, and the rate and channels it was made for.
     resampler: Option<(AudioResampler, u32, usize)>,
+    /// The shallowest the queue has been in this window, in frames, and how
+    /// many mixes the window has run.
+    shallowest: usize,
+    mixes: u32,
+    /// Samples (of every channel) still to be taken back from the queue.
+    excess: usize,
+    /// Frames played in a row, while something was owed, with no silence
+    /// to drop.
+    without_gap: u32,
+    /// How loud the last few frames played were, before any gain, as an RMS
+    /// from nought to one: what the duck listens to.
+    recent: [f32; 4],
+    recent_at: usize,
     /// What has arrived and been played, for the log.
     reading: Reading,
 }
@@ -68,20 +138,28 @@ struct Reading {
     frames_in: u64,
     frames_out: u64,
     dropped: u64,
+    trimmed: u64,
     squares: f64,
     samples: u64,
 }
 
 impl Source {
-    fn new(identity: &str, channels: usize) -> Source {
+    fn new(identity: &str, kind: Kind, channels: usize) -> Source {
         Source {
             identity: identity.to_owned(),
+            kind,
             channels,
             queue: VecDeque::with_capacity(FRAME * 2 * (CEILING + 1)),
             playing: false,
             gain: 0.0,
             ending: false,
             resampler: None,
+            shallowest: usize::MAX,
+            mixes: 0,
+            excess: 0,
+            without_gap: 0,
+            recent: [0.0; 4],
+            recent_at: 0,
             reading: Reading::default(),
         }
     }
@@ -97,6 +175,7 @@ impl Source {
             self.channels = channels;
             self.queue.clear();
             self.playing = false;
+            self.excess = 0;
         }
         let mut squares = 0f64;
         for &sample in samples {
@@ -111,7 +190,101 @@ impl Source {
             let cut = self.queue.len() - keep;
             self.queue.drain(..cut);
             self.reading.dropped += (cut / (FRAME * self.channels)) as u64;
+            self.excess = 0;
         }
+    }
+
+    /// Watches how shallow the queue gets, and once a window says it stood
+    /// above the target the whole time, owes that much back.
+    fn watch_depth(&mut self) {
+        self.shallowest = self.shallowest.min(self.queued_frames());
+        self.mixes += 1;
+        if self.mixes < WINDOW {
+            return;
+        }
+        if self.shallowest != usize::MAX && self.shallowest > TARGET {
+            let owed = (self.shallowest - TARGET) * FRAME * self.channels;
+            self.excess = self.excess.max(owed);
+        }
+        self.shallowest = usize::MAX;
+        self.mixes = 0;
+    }
+
+    /// The next frame of this sound, one channel or two interleaved, into
+    /// `frame` (`FRAME * channels`); how much of it was there. Takes back
+    /// what is owed of a queue that stood too long on the way.
+    fn next_frame(&mut self, frame: &mut [i16]) -> usize {
+        let per = FRAME * self.channels;
+        // The silence between two words, dropped whole while there is
+        // something to take back and something after it to play.
+        while self.excess >= per && self.queue.len() >= per * 2 {
+            let quiet = self
+                .queue
+                .iter()
+                .take(per)
+                .all(|sample| i32::from(*sample).abs() < QUIET);
+            if !quiet {
+                break;
+            }
+            self.queue.drain(..per);
+            self.excess -= per;
+            self.without_gap = 0;
+            self.reading.trimmed += 1;
+        }
+        let shrink = SHRINK * self.channels;
+        if self.excess < shrink {
+            self.without_gap = 0;
+        } else {
+            self.without_gap += 1;
+        }
+        if self.without_gap > NO_GAP && self.queue.len() >= per + shrink {
+            // A hundredth faster: FRAME + SHRINK samples of each channel
+            // read into FRAME, by linear interpolation.
+            let read = FRAME + SHRINK;
+            let channels = self.channels;
+            let (first, second) = self.queue.as_slices();
+            let at = |index: usize| -> f32 {
+                let value = if index < first.len() {
+                    first[index]
+                } else {
+                    second[index - first.len()]
+                };
+                f32::from(value)
+            };
+            for out in 0..FRAME {
+                let position = out as f32 * (read - 1) as f32 / (FRAME - 1) as f32;
+                let below = position.floor() as usize;
+                let above = (below + 1).min(read - 1);
+                let part = position - below as f32;
+                for channel in 0..channels {
+                    let a = at(below * channels + channel);
+                    let b = at(above * channels + channel);
+                    frame[out * channels + channel] = (a + (b - a) * part).round() as i16;
+                }
+            }
+            self.queue.drain(..read * channels);
+            self.excess -= shrink;
+            return FRAME;
+        }
+        let available = (self.queue.len() / self.channels).min(FRAME);
+        for (slot, sample) in frame.iter_mut().zip(self.queue.drain(..available * self.channels)) {
+            *slot = sample;
+        }
+        for slot in frame.iter_mut().skip(available * self.channels) {
+            *slot = 0;
+        }
+        available
+    }
+
+    fn heard(&mut self, frame: &[i16]) {
+        let squares: f64 = frame.iter().map(|&s| f64::from(s) * f64::from(s)).sum();
+        let rms = (squares / frame.len().max(1) as f64).sqrt() / 32768.0;
+        self.recent[self.recent_at] = rms as f32;
+        self.recent_at = (self.recent_at + 1) % self.recent.len();
+    }
+
+    fn loudness(&self) -> f32 {
+        self.recent.iter().copied().fold(0.0, f32::max)
     }
 }
 
@@ -127,13 +300,48 @@ fn lossless_key(identity: &str, music: bool) -> String {
 struct State {
     sources: HashMap<String, Source>,
     levels: HashMap<String, f32>,
+    kind_levels: HashMap<(String, Kind), f32>,
+    ducks: HashMap<String, f32>,
     silent: bool,
+    /// The limiter's gain at the end of the last frame.
+    limit: f32,
+    /// Frames the limiter turned down, for the log.
+    limited: u64,
+}
+
+impl State {
+    fn level_of(&self, identity: &str, kind: Kind) -> f32 {
+        let person = self.levels.get(identity).copied().unwrap_or(1.0);
+        let level = match kind {
+            Kind::Voice => person,
+            _ => self
+                .kind_levels
+                .get(&(identity.to_owned(), kind))
+                .copied()
+                .unwrap_or(person),
+        };
+        if kind == Kind::Music {
+            level * self.ducks.get(identity).copied().unwrap_or(1.0)
+        } else {
+            level
+        }
+    }
 }
 
 /// The mixer: shared by the sinks the core feeds and the playback thread.
-#[derive(Default)]
 pub struct Mixer {
     state: Mutex<State>,
+}
+
+impl Default for Mixer {
+    fn default() -> Self {
+        Mixer {
+            state: Mutex::new(State {
+                limit: 1.0,
+                ..State::default()
+            }),
+        }
+    }
 }
 
 impl Mixer {
@@ -149,14 +357,20 @@ impl Mixer {
             .unwrap_or_else(|poisoned| poisoned.into_inner())
     }
 
-    /// Starts expecting a track's sound, `identity`'s.
+    /// Starts expecting a track's sound, `identity`'s voice.
     pub fn add(&self, sid: &str, identity: &str) {
+        self.add_kind(sid, identity, Kind::Voice);
+    }
+
+    /// Starts expecting a sound of this kind under `key`, `identity`'s.
+    pub fn add_kind(&self, key: &str, identity: &str, kind: Kind) {
         let mut state = self.state();
-        state
+        let source = state
             .sources
-            .entry(sid.to_owned())
-            .or_insert_with(|| Source::new(identity, 1))
-            .identity = identity.to_owned();
+            .entry(key.to_owned())
+            .or_insert_with(|| Source::new(identity, kind, 1));
+        source.identity = identity.to_owned();
+        source.kind = kind;
     }
 
     /// Stops playing a track's sound, whatever is still queued of it.
@@ -200,13 +414,14 @@ impl Mixer {
             return;
         }
         let key = lossless_key(identity, music);
+        let kind = if music { Kind::Music } else { Kind::Screen };
         let mut state = self.state();
         let source = state
             .sources
             .entry(key)
-            .or_insert_with(|| Source::new(identity, 2));
+            .or_insert_with(|| Source::new(identity, kind, 2));
         if source.ending {
-            *source = Source::new(identity, 2);
+            *source = Source::new(identity, kind, 2);
         }
         let pcm: Vec<i16> = samples
             .iter()
@@ -249,6 +464,44 @@ impl Mixer {
             .insert(identity.to_owned(), level.clamp(0.0, 1.0));
     }
 
+    /// One person's level for their screen's sound (`music` false) or their
+    /// music, in place of their level for everything.
+    pub fn set_kind_level(&self, identity: &str, music: bool, level: f32) {
+        let kind = if music { Kind::Music } else { Kind::Screen };
+        self.state()
+            .kind_levels
+            .insert((identity.to_owned(), kind), level.clamp(0.0, 1.0));
+    }
+
+    /// How far a person's music is turned down under speech, from nought to
+    /// one (one: not at all).
+    pub fn set_duck(&self, identity: &str, factor: f32) {
+        let mut state = self.state();
+        if factor >= 1.0 {
+            state.ducks.remove(identity);
+        } else {
+            state
+                .ducks
+                .insert(identity.to_owned(), factor.clamp(0.0, 1.0));
+        }
+    }
+
+    /// How loud each person's voice was over the last 40 ms as it was
+    /// played, before their level: an RMS from nought to one, the loudest of
+    /// their voices.
+    pub fn voice_levels(&self) -> Vec<(String, f32)> {
+        let state = self.state();
+        let mut levels: HashMap<String, f32> = HashMap::new();
+        for source in state.sources.values() {
+            if source.kind != Kind::Voice {
+                continue;
+            }
+            let entry = levels.entry(source.identity.clone()).or_insert(0.0);
+            *entry = entry.max(source.loudness());
+        }
+        levels.into_iter().collect()
+    }
+
     /// Plays silence in place of everything, keeping every queue moving.
     pub fn set_silent(&self, silent: bool) {
         self.state().silent = silent;
@@ -261,48 +514,52 @@ impl Mixer {
     /// The next ten milliseconds of the mix, stereo interleaved, into `out`
     /// (`2 * FRAME` samples).
     pub fn mix(&self, out: &mut [i16]) {
-        let mut sum = [0i32; FRAME * 2];
+        let mut sum = [0f32; FRAME * 2];
+        let mut frame = [0i16; FRAME * 2];
         let mut state = self.state();
-        let State {
-            sources,
-            levels,
-            silent,
-        } = &mut *state;
+        let targets: Vec<(String, f32)> = state
+            .sources
+            .iter()
+            .map(|(key, source)| {
+                let target = if source.ending {
+                    0.0
+                } else {
+                    state.level_of(&source.identity, source.kind)
+                };
+                (key.clone(), target)
+            })
+            .collect();
         let mut finished = Vec::new();
-        for (key, source) in sources.iter_mut() {
+        for (key, target) in targets {
+            let Some(source) = state.sources.get_mut(&key) else {
+                continue;
+            };
+            source.watch_depth();
             if !source.playing {
                 if source.queued_frames() >= START || (source.ending && !source.queue.is_empty()) {
                     source.playing = true;
                 } else {
                     if source.ending {
-                        finished.push(key.clone());
+                        finished.push(key);
                     }
+                    source.heard(&[]);
                     continue;
                 }
             }
-            let target = if source.ending {
-                0.0
-            } else {
-                levels.get(&source.identity).copied().unwrap_or(1.0)
-            };
-            let from = source.gain;
             let channels = source.channels;
-            let available = (source.queue.len() / channels).min(FRAME);
-            for frame in 0..FRAME {
-                let gain = from + (target - from) * ((frame + 1) as f32 / FRAME as f32);
-                let (left, right) = if frame < available {
-                    let left = source.queue.pop_front().unwrap_or(0);
-                    let right = if channels == 2 {
-                        source.queue.pop_front().unwrap_or(0)
-                    } else {
-                        left
-                    };
-                    (left, right)
+            let used = &mut frame[..FRAME * channels];
+            let available = source.next_frame(used);
+            source.heard(&used[..available * channels]);
+            let from = source.gain;
+            for index in 0..FRAME {
+                let gain = from + (target - from) * ((index + 1) as f32 / FRAME as f32);
+                let (left, right) = if channels == 2 {
+                    (used[index * 2], used[index * 2 + 1])
                 } else {
-                    (0, 0)
+                    (used[index], used[index])
                 };
-                sum[frame * 2] += (f32::from(left) * gain) as i32;
-                sum[frame * 2 + 1] += (f32::from(right) * gain) as i32;
+                sum[index * 2] += f32::from(left) * gain;
+                sum[index * 2 + 1] += f32::from(right) * gain;
             }
             source.gain = target;
             source.reading.frames_out += 1;
@@ -313,27 +570,28 @@ impl Mixer {
                 source.playing = false;
             }
             if source.ending && (source.gain == 0.0 || source.queue.is_empty()) {
-                finished.push(key.clone());
+                finished.push(key);
             }
         }
         for key in finished {
-            sources.remove(&key);
+            state.sources.remove(&key);
         }
-        let silent = *silent;
+        let silent = state.silent;
+        let (gain, limited) = limit(&mut sum, state.limit);
+        state.limit = gain;
+        state.limited += u64::from(limited);
         drop(state);
         for (slot, value) in out.iter_mut().zip(sum.iter()) {
-            *slot = if silent {
-                0
-            } else {
-                (*value).clamp(i16::MIN as i32, i16::MAX as i32) as i16
-            };
+            *slot = if silent { 0 } else { *value as i16 };
         }
     }
 
     /// One line per sound since the last reading, for the debug log: what
-    /// arrived, what was played, what was cut, and how loud it was in dBFS.
+    /// arrived, what was played, what was cut or taken back, and how loud it
+    /// was in dBFS; and how often the limiter turned the mix down.
     pub fn reading(&self) -> Vec<String> {
         let mut state = self.state();
+        let limited = std::mem::take(&mut state.limited);
         let mut lines: Vec<String> = state
             .sources
             .iter_mut()
@@ -350,16 +608,21 @@ impl Mixer {
                     f64::NEG_INFINITY
                 };
                 format!(
-                    "{key} ({}) in={} out={} cut={} queued={} level={dbfs:.1} dBFS",
+                    "{key} ({} {:?}) in={} out={} cut={} trimmed={} queued={} level={dbfs:.1} dBFS",
                     source.identity,
+                    source.kind,
                     reading.frames_in,
                     reading.frames_out,
                     reading.dropped,
+                    reading.trimmed,
                     source.queued_frames(),
                 )
             })
             .collect();
         lines.sort();
+        if limited > 0 {
+            lines.push(format!("the limiter turned {limited} frames down"));
+        }
         lines
     }
 
@@ -367,6 +630,49 @@ impl Mixer {
     pub fn sounds(&self) -> usize {
         self.state().sources.len()
     }
+}
+
+/// Holds one frame of the mix under [`CEILING_LEVEL`]: the gain `from` the
+/// last frame eases down to what this frame's loudest sample needs, or back
+/// up toward one; whatever still goes past the knee is bent under full scale
+/// rather than cut at it. The gain at the end, and whether it turned the
+/// frame down.
+fn limit(sum: &mut [f32], from: f32) -> (f32, bool) {
+    let peak = sum.iter().fold(0f32, |peak, value| peak.max(value.abs()));
+    let needed = if peak > CEILING_LEVEL {
+        CEILING_LEVEL / peak
+    } else {
+        1.0
+    };
+    let to = if needed < from {
+        needed
+    } else {
+        let back = from + (1.0 - from) * RELEASE;
+        // All the way back once it is within a fiftieth of a decibel, rather
+        // than for ever a hair under.
+        (if back > 0.998 { 1.0 } else { back }).min(needed)
+    };
+    let frames = sum.len() / 2;
+    for (index, pair) in sum.chunks_exact_mut(2).enumerate() {
+        let gain = from + (to - from) * ((index + 1) as f32 / frames as f32);
+        for value in pair {
+            *value = knee(*value * gain);
+        }
+    }
+    (to, to < 0.999)
+}
+
+/// Full scale approached rather than reached: linear to the knee, then bent
+/// toward full scale along a curve that never gets there.
+fn knee(value: f32) -> f32 {
+    let size = value.abs();
+    if size <= KNEE {
+        return value;
+    }
+    let room = 32767.0 - KNEE;
+    let over = (size - KNEE) / room;
+    let bent = KNEE + room * (over / (1.0 + over));
+    bent.copysign(value)
 }
 
 #[cfg(test)]
@@ -381,6 +687,12 @@ mod tests {
         let mut out = vec![0i16; FRAME * 2];
         mixer.mix(&mut out);
         out
+    }
+
+    fn queued(mixer: &Mixer) -> usize {
+        let reading = mixer.reading();
+        let line = reading.iter().find(|line| line.contains("queued=")).unwrap();
+        line.split("queued=").nth(1).unwrap().split(' ').next().unwrap().parse().unwrap()
     }
 
     #[test]
@@ -413,24 +725,70 @@ mod tests {
         assert!(mixed(&mixer).iter().all(|&s| s == 0));
     }
 
+    /// Two loud voices together are limited, not truncated: the mix stays
+    /// under full scale, and no sample sits clipped at it. Without the
+    /// limiter (`limit` passing the sum through) every sample was 32767.
     #[test]
-    fn sounds_add_and_clip_and_levels_follow_the_person() {
+    fn sounds_add_and_are_limited_and_levels_follow_the_person() {
         let mixer = Mixer::new();
         mixer.add("TR_a", "ann");
         mixer.add("TR_b", "bob");
         mixer.set_level("bob", 0.5);
-        for _ in 0..4 {
+        let feed = |mixer: &Mixer| {
             mixer.push("TR_a", &tone(1, 1, 25_000), 1);
             mixer.push("TR_b", &tone(1, 2, 25_000), 2);
-        }
-        mixed(&mixer);
-        let out = mixed(&mixer);
-        // 25000 + 12500 clipped to the 16-bit range.
-        assert!(out.iter().all(|&s| s == i16::MAX), "{:?}", &out[..4]);
+            mixed(mixer)
+        };
+        feed(&mixer);
+        feed(&mixer);
+        let out = feed(&mixer);
+        // 25000 + 12500 held at the limiter's ceiling.
+        let ceiling = CEILING_LEVEL as i16;
+        assert!(
+            out.iter().all(|&s| (s - ceiling).abs() <= 2),
+            "{:?}",
+            &out[..4]
+        );
+        assert!(out.iter().all(|&s| s < i16::MAX));
+        // Quieter again, the limiter lets go over a few frames and the
+        // sound comes through as it is.
         mixer.set_level("ann", 0.0);
-        mixed(&mixer);
-        let out = mixed(&mixer);
-        assert!(out.iter().all(|&s| s == 12_500), "{:?}", &out[..4]);
+        for _ in 0..100 {
+            feed(&mixer);
+        }
+        let out = feed(&mixer);
+        assert!(out.iter().all(|&s| (s - 12_500).abs() <= 2), "{:?}", &out[..4]);
+    }
+
+    #[test]
+    fn the_knee_bends_and_never_reaches_full_scale() {
+        assert_eq!(knee(1000.0), 1000.0);
+        assert_eq!(knee(-1000.0), -1000.0);
+        let bent = knee(60_000.0);
+        assert!(bent < 32767.0 && bent > KNEE, "{bent}");
+        assert!(knee(-60_000.0) > -32767.0);
+        assert!(knee(40_000.0) < knee(50_000.0), "it still rises");
+    }
+
+    #[test]
+    fn levels_of_screens_and_music_stand_apart_and_music_ducks() {
+        let mixer = Mixer::new();
+        mixer.add_kind("TR_v", "ann", Kind::Voice);
+        mixer.add_kind("TR_m", "ann", Kind::Music);
+        mixer.set_level("ann", 0.5);
+        let state = mixer.state();
+        assert_eq!(state.level_of("ann", Kind::Voice), 0.5);
+        assert_eq!(state.level_of("ann", Kind::Music), 0.5, "the person's, until set");
+        drop(state);
+        mixer.set_kind_level("ann", true, 0.8);
+        mixer.set_duck("ann", 0.3);
+        let state = mixer.state();
+        assert_eq!(state.level_of("ann", Kind::Voice), 0.5);
+        assert!((state.level_of("ann", Kind::Music) - 0.24).abs() < 1e-6);
+        assert_eq!(state.level_of("ann", Kind::Screen), 0.5);
+        drop(state);
+        mixer.set_duck("ann", 1.0);
+        assert!((mixer.state().level_of("ann", Kind::Music) - 0.8).abs() < 1e-6);
     }
 
     #[test]
@@ -438,17 +796,55 @@ mod tests {
         let mixer = Mixer::new();
         mixer.add("TR_a", "ann");
         mixer.push("TR_a", &tone(CEILING + 5, 1, 100), 1);
-        let reading = mixer.reading();
-        assert!(
-            reading[0].contains(&format!("queued={SETTLE}")),
-            "{reading:?}"
-        );
+        assert_eq!(queued(&mixer), SETTLE);
         for _ in 0..SETTLE {
             mixed(&mixer);
         }
         // Dry: the next frame alone does not restart it.
         mixer.push("TR_a", &tone(1, 1, 100), 1);
         assert!(mixed(&mixer).iter().all(|&s| s == 0));
+    }
+
+    /// The fault of the test calls: a stall pushes a queue to fifteen frames
+    /// and nothing ever brings it back. Kept fed a frame a mix, it now
+    /// comes back to the target within seconds, by playing a hundredth
+    /// faster where there is no silence to drop. Broken (no taking back),
+    /// the queue is still fifteen at the end.
+    #[test]
+    fn a_queue_that_stands_too_long_is_taken_back_gradually() {
+        let mixer = Mixer::new();
+        mixer.add("TR_a", "ann");
+        mixer.push("TR_a", &tone(15, 1, 8000), 1);
+        let mut deepest = 0;
+        for _ in 0..2000 {
+            mixer.push("TR_a", &tone(1, 1, 8000), 1);
+            let out = mixed(&mixer);
+            assert!(out[FRAME] != 0, "never runs dry meanwhile");
+            deepest = deepest.max(queued(&mixer));
+        }
+        assert!(deepest <= 16);
+        let now = queued(&mixer);
+        assert!(now <= TARGET + 1, "still {now} frames queued");
+    }
+
+    /// Speech has gaps, and a gap is dropped whole: far quicker than playing
+    /// faster, and nothing of a word is changed.
+    #[test]
+    fn silence_between_words_is_dropped_first() {
+        let mixer = Mixer::new();
+        mixer.add("TR_a", "ann");
+        // Fifteen frames: a word, a gap, a word, again and again.
+        let pattern = |n: usize| if n % 3 == 1 { 0 } else { 6000 };
+        for n in 0..15 {
+            mixer.push("TR_a", &tone(1, 1, pattern(n)), 1);
+        }
+        let mut n = 15;
+        for _ in 0..300 {
+            mixer.push("TR_a", &tone(1, 1, pattern(n)), 1);
+            n += 1;
+            mixed(&mixer);
+        }
+        assert!(queued(&mixer) <= TARGET + 1, "{:?}", mixer.reading());
     }
 
     #[test]
@@ -459,6 +855,22 @@ mod tests {
         mixer.set_silent(true);
         assert!(mixed(&mixer).iter().all(|&s| s == 0));
         assert!(mixer.reading()[0].contains("out=1"));
+    }
+
+    #[test]
+    fn voices_are_heard_for_the_duck_and_music_is_not() {
+        let mixer = Mixer::new();
+        mixer.add("TR_a", "ann");
+        mixer.add_kind("TR_m", "bob", Kind::Music);
+        for _ in 0..4 {
+            mixer.push("TR_a", &tone(1, 1, 3277), 1);
+            mixer.push("TR_m", &tone(1, 2, 3277), 2);
+        }
+        mixed(&mixer);
+        let levels = mixer.voice_levels();
+        assert_eq!(levels.len(), 1);
+        assert_eq!(levels[0].0, "ann");
+        assert!((levels[0].1 - 0.1).abs() < 0.01, "{levels:?}");
     }
 
     #[test]
