@@ -449,6 +449,16 @@ window.tmsb-window.tmsb-call, window.tmsb-window.tmsb-call > contents, .tmsb-cal
   color: @tmsb_call_fg;
 }
 window.tmsb-window.tmsb-call .tmsb-muted { color: @tmsb_call_muted; }
+window.tmsb-window.tmsb-call button.tmsb-plain {
+  background-color: mix(@tmsb_call_surface, @tmsb_call_wash, 0.06);
+  color: @tmsb_call_fg;
+}
+window.tmsb-window.tmsb-call button.tmsb-plain:hover { background-color: mix(@tmsb_call_surface, @tmsb_call_fg, 0.10); }
+window.tmsb-window.tmsb-call button.tmsb-plain:active { background-color: mix(@tmsb_call_surface, @tmsb_call_fg, 0.16); }
+window.tmsb-window.tmsb-call button.tmsb-primary { background-color: @tmsb_call_tally; color: @tmsb_call_on_tally; }
+window.tmsb-window.tmsb-call button.tmsb-primary:hover { background-color: mix(@tmsb_call_tally, @tmsb_call_fg, 0.10); }
+window.tmsb-window.tmsb-call button.tmsb-primary:active { background-color: mix(@tmsb_call_tally, @tmsb_call_fg, 0.16); }
+window.tmsb-window.tmsb-call button.tmsb-primary:disabled { background-color: @tmsb_call_surface_high; color: @tmsb_call_muted; }
 "#;
 
 thread_local! {
@@ -580,6 +590,28 @@ mod tests {
         let css = stylesheet(Scheme::Light, Accent::Amber);
         assert!(css.contains("@define-color tmsb_bg #f2f2f7;"));
         assert!(css.contains("@define-color tmsb_call_bg #0b0b0d;"));
+    }
+
+    #[test]
+    fn the_shared_buttons_take_the_call_palette_inside_a_call() {
+        // Seen on a light system: the call's ground was dark and its leave
+        // button the day's white plate.
+        let css = stylesheet(Scheme::Light, Accent::Amber);
+        for rule in [
+            "window.tmsb-window.tmsb-call button.tmsb-plain {",
+            "window.tmsb-window.tmsb-call button.tmsb-primary {",
+        ] {
+            let at = css.find(rule).unwrap_or_else(|| panic!("no rule {rule}"));
+            let body = &css[at..at + css[at..].find('}').unwrap()];
+            assert!(
+                body.contains("@tmsb_call_"),
+                "{rule} uses the system's palette"
+            );
+            assert!(
+                !body.contains("@tmsb_surface"),
+                "{rule} uses the system's palette"
+            );
+        }
     }
 
     #[test]
