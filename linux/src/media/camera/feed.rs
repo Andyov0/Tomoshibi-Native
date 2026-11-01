@@ -63,6 +63,8 @@ pub struct Feed {
     pub frames: AtomicU64,
     pub pushed: AtomicU64,
     failures: AtomicU64,
+    /// When the last reading for the log was taken, and the counts then.
+    reading: Mutex<(Instant, u64, u64)>,
     epoch: Instant,
 }
 
@@ -82,6 +84,7 @@ impl Feed {
             frames: AtomicU64::new(0),
             pushed: AtomicU64::new(0),
             failures: AtomicU64::new(0),
+            reading: Mutex::new((Instant::now(), 0, 0)),
             epoch: Instant::now(),
         });
         let spawned = thread::Builder::new()
@@ -155,7 +158,10 @@ impl Feed {
             return;
         }
         *self.size.lock().unwrap_or_else(|p| p.into_inner()) = (width, height);
-        self.frames.fetch_add(1, Ordering::Relaxed);
+        let frames = self.frames.fetch_add(1, Ordering::Relaxed) + 1;
+        if frames.is_multiple_of(150) {
+            self.say_rate(frames, width, height);
+        }
         self.blur(planes);
 
         if !self.muted.load(Ordering::Relaxed) {
@@ -190,6 +196,25 @@ impl Feed {
             });
             woken.notify_one();
         }
+    }
+
+    /// Every 150 frames, how fast they come and how many were sent: what a
+    /// test reads to tell a camera that keeps up from one that does not.
+    fn say_rate(&self, frames: u64, width: u32, height: u32) {
+        let pushed = self.pushed.load(Ordering::Relaxed);
+        let mut reading = self.reading.lock().unwrap_or_else(|p| p.into_inner());
+        let seconds = reading.0.elapsed().as_secs_f64().max(1e-3);
+        log(&format!(
+            "camera: {width}x{height} at {:.1} frames a second, {:.1} sent{}",
+            (frames - reading.1) as f64 / seconds,
+            (pushed - reading.2) as f64 / seconds,
+            if self.blur_wanted.load(Ordering::Relaxed) {
+                ", blurred"
+            } else {
+                ""
+            }
+        ));
+        *reading = (Instant::now(), frames, pushed);
     }
 
     fn blur(&self, planes: &mut Planes) {

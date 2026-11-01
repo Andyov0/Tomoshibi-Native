@@ -117,6 +117,8 @@ pub struct Echo {
     processors: Mutex<Vec<Weak<Mutex<Processor>>>>,
     /// The playback stream's latency, in milliseconds.
     render_delay_ms: AtomicI32,
+    /// Frames of the speakers fed to a processor, for the debug log.
+    pub rendered: std::sync::atomic::AtomicU64,
     /// `TOMOSHIBI_DEBUG_NO_ECHO_CANCELLER`: processors are made without the
     /// canceller, for a test that shows what it takes out.
     disabled: AtomicBool,
@@ -153,6 +155,7 @@ impl Echo {
         if live.is_empty() {
             return;
         }
+        self.rendered.fetch_add(1, Ordering::Relaxed);
         let mono: Vec<i16> = stereo
             .as_chunks::<2>()
             .0

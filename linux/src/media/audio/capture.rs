@@ -215,6 +215,16 @@ fn run(
                     processor.capture(&mut frame, echo.render_delay_ms() + capture_delay_ms);
                 }
             }
+            if cfg!(debug_assertions) && frames.is_multiple_of(500) {
+                log(&format!(
+                    "sound: microphone {:?}, {} frames of the speakers fed back, delay {} ms ({} playing, {} capturing)",
+                    wanted,
+                    echo.rendered.load(Ordering::Relaxed),
+                    echo.render_delay_ms() + capture_delay_ms,
+                    echo.render_delay_ms(),
+                    capture_delay_ms
+                ));
+            }
             let level = meter.add(&frame);
             shared.level.store(level.to_bits(), Ordering::Relaxed);
             if !shared.muted.load(Ordering::Relaxed) {
