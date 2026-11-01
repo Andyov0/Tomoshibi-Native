@@ -175,6 +175,20 @@ mod imp {
     }
 
     impl WidgetImpl for Arrival {
+        // Expands as its child does. Without this a wrapped column that asks
+        // to fill the height and centre itself (the unreachable screen's)
+        // was given only its own height at the top of the window: a widget
+        // of our own does not take its child's expand flags by itself.
+        fn compute_expand(&self, hexpand: &mut bool, vexpand: &mut bool) {
+            let child = self.child.borrow();
+            *hexpand = child
+                .as_ref()
+                .is_some_and(|child| child.compute_expand(gtk::Orientation::Horizontal));
+            *vexpand = child
+                .as_ref()
+                .is_some_and(|child| child.compute_expand(gtk::Orientation::Vertical));
+        }
+
         fn snapshot(&self, snapshot: &gtk::Snapshot) {
             let progress = self.progress.get().clamp(0.0, 1.0) as f32;
             let Some(child) = self.child.borrow().clone() else {

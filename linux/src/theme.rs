@@ -369,6 +369,12 @@ fn named_colors(prefix: &str, palette: &Palette, accent: Accent, scheme: Scheme)
 /// The rules every screen shares, written once against the named colours.
 /// `.tmsb-primary` is the amber button with dark ink, a neutral grey plate
 /// with grey words when disabled, never faded amber (UI-SYNC decision 4).
+///
+/// GTK's min-height is the content's, and libadwaita gives a button five
+/// pixels above and below and a field a border: a primary given 44 was 54
+/// high on screen and the link field 38. So the buttons here have no
+/// vertical padding and no border, and a bordered field's min-height is its
+/// height less the two borders, so that what is drawn is the scale's size.
 const SHARED_RULES: &str = r#"
 window.tmsb-window, window.tmsb-window > contents {
   background-color: @tmsb_bg;
@@ -402,14 +408,16 @@ window.tmsb-window, window.tmsb-window > contents {
   background-color: mix(@tmsb_surface, @tmsb_wash, 0.04);
   border: 1px solid @tmsb_border;
   border-radius: 999px;
-  min-height: 36px;
+  min-height: 34px;
   padding: 0 14px;
 }
 button.tmsb-primary {
   background-color: @tmsb_tally;
   color: @tmsb_on_tally;
+  border: none;
   border-radius: 999px;
   min-height: 44px;
+  padding: 0 18px;
   font-weight: 600;
   box-shadow: none;
   transition: background-color 200ms cubic-bezier(0.2, 0.9, 0.3, 1),
@@ -422,6 +430,7 @@ button.tmsb-primary:disabled { background-color: @tmsb_surface_high; color: @tms
 button.tmsb-plain {
   background-color: mix(@tmsb_surface, @tmsb_wash, 0.06);
   color: @tmsb_fg;
+  border: none;
   border-radius: 999px;
   min-height: 36px;
   padding: 0 14px;
