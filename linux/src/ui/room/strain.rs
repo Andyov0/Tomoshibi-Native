@@ -105,8 +105,14 @@ pub(super) fn attach(root: &gtk::Overlay, model: &AppModel) {
     // column is the page's, found by its name once it is in the room.
     place(root, &motion);
 
+    // The card itself only weakly: the model's subscription and the
+    // language's listener below hold this, and both are let go when the
+    // card is destroyed. Held strongly, the card could never be destroyed,
+    // so neither was ever let go, and every call left a card, a
+    // subscription and a listener behind for good, each run again on every
+    // change of the model and of the language for the rest of the run.
     let refresh = {
-        let (motion, said, ask) = (motion.clone(), said.clone(), ask.clone());
+        let (motion, said, ask) = (motion.downgrade(), said.clone(), ask.clone());
         let (switch, not_now, switch_words, spinner, spinning) = (
             switch.clone(),
             not_now.clone(),
@@ -115,6 +121,9 @@ pub(super) fn attach(root: &gtk::Overlay, model: &AppModel) {
             spinning.clone(),
         );
         move |model: &AppModel| {
+            let Some(motion) = motion.upgrade() else {
+                return;
+            };
             let room = model.kept::<RoomState>();
             let sharing = room.local.share.borrow().is_some();
             let hint = room.talk.borrow().as_ref().and_then(|talk| talk.strain);
@@ -154,10 +163,10 @@ pub(super) fn attach(root: &gtk::Overlay, model: &AppModel) {
             }
         });
     }
-    // The words again in another language; nothing once the card is gone.
-    let (weak, shown) = (model.downgrade(), motion.downgrade());
-    crate::i18n::on_change(move |_| {
-        if let (Some(model), Some(_)) = (weak.upgrade(), shown.upgrade()) {
+    // The words again in another language, for as long as the card lives.
+    let weak = model.downgrade();
+    crate::i18n::on_change_while(&motion, move |_| {
+        if let Some(model) = weak.upgrade() {
             refresh(&model);
         }
     });
