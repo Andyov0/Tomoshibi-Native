@@ -363,6 +363,30 @@ fn named_colors(prefix: &str, palette: &Palette, accent: Accent, scheme: Scheme)
     define("tally", accent.color(scheme));
     define("tally_text", accent.text_color(scheme));
     define("on_tally", accent.on_color());
+    // A menu's ground and edge: by night a step above the surface, since a
+    // menu on the surface's own colour over the sidebar (which is the
+    // surface) was told apart only by a faint ring; by day the surface's
+    // white, which the shadow lifts off the page.
+    let (menu, menu_edge, segment, segment_track) = match scheme {
+        Scheme::Dark => (
+            palette.surface_high,
+            WHITE.with_alpha(0.12),
+            Shade::hex(0x636366),
+            WHITE.with_alpha(0.10),
+        ),
+        Scheme::Light => (
+            palette.surface,
+            BLACK.with_alpha(0.10),
+            WHITE,
+            BLACK.with_alpha(0.07),
+        ),
+    };
+    define("menu", menu);
+    define("menu_edge", menu_edge);
+    // The chosen segment of a choice of two (systemGray3 by night, as the
+    // system's own segmented control draws it, white by day) and its track.
+    define("segment", segment);
+    define("segment_track", segment_track);
     css
 }
 
@@ -644,6 +668,13 @@ mod tests {
             let body = &css[at..at + css[at..].find('}').unwrap()];
             assert!(body.contains("filter: none"), "{rule} keeps the filter");
         }
+    }
+
+    #[test]
+    fn a_menu_stands_off_the_sidebar_by_night() {
+        let css = stylesheet(Scheme::Dark, Accent::Amber);
+        assert!(css.contains(&format!("@define-color tmsb_menu {};", DARK.surface_high.css())));
+        assert_ne!(DARK.surface_high.css(), DARK.surface.css());
     }
 
     #[test]

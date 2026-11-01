@@ -126,6 +126,12 @@ libwebrtc = { version = "0.3.52", default-features = false }
 
 # --- app/ (secrets, network watch) adds its crates below this line ---
 
+# app/account: the account's picture, fetched from the deployment for the
+# lobby and the settings (the Mac's AsyncImage of the same address). The
+# core's own reqwest, the version and TLS it already compiles, run on the
+# core's runtime; nothing new enters the build.
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls-native-roots"] }
+
 [dev-dependencies]
 
 # Every dependency, the core and the vendored LiveKit among them, keeps line

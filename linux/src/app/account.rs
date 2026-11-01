@@ -74,6 +74,14 @@ impl AppModel {
         ))
     }
 
+    /// The account's picture as the deployment serves it, or none: fetched
+    /// on the core's runtime, at most two megabytes (a picture is scaled to
+    /// 256 square before it is sent, and anything far larger is not one).
+    pub async fn fetch_avatar(&self) -> Option<Vec<u8>> {
+        let address = self.avatar_address()?;
+        fetch_picture(address).await
+    }
+
     fn account_changed(&self, account: tomoshibi_protocol::api::Account, picture: bool) {
         {
             let mut state = self.inner.state.borrow_mut();
@@ -163,4 +171,28 @@ impl AppModel {
             .await
             .map_err(|fault| words::explain_link(&fault))
     }
+}
+
+/// What is at `address`, where it answers with a picture-sized body.
+pub async fn fetch_picture(address: String) -> Option<Vec<u8>> {
+    const LARGEST: usize = 2 * 1024 * 1024;
+    tomoshibi_protocol::runtime::on_core(async move {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(20))
+            .build()
+            .ok()?;
+        let response = client.get(&address).send().await.ok()?;
+        if !response.status().is_success() {
+            return None;
+        }
+        if response
+            .content_length()
+            .is_some_and(|length| length as usize > LARGEST)
+        {
+            return None;
+        }
+        let bytes = response.bytes().await.ok()?;
+        (bytes.len() <= LARGEST).then(|| bytes.to_vec())
+    })
+    .await
 }

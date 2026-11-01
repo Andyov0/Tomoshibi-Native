@@ -66,6 +66,7 @@ button.tmsb-row-button:hover { background-color: alpha(@tmsb_fg, 0.06); }
 button.tmsb-row-button:active { background-color: alpha(@tmsb_fg, 0.10); }
 
 .tmsb-initial { border-radius: 999px; color: #ffffff; font-weight: 600; }
+.tmsb-avatar-picture { border-radius: 999px; box-shadow: inset 0 0 0 1px alpha(@tmsb_wash, 0.12); }
 .tmsb-initial-0 { background-color: #5e5ce6; }
 .tmsb-initial-1 { background-color: #2e8b9a; }
 .tmsb-initial-2 { background-color: #9a5cc8; }
@@ -92,34 +93,43 @@ button.tmsb-switch.off { background-color: @tmsb_fg; color: @tmsb_bg; }
 button.tmsb-switch.off:hover { background-color: mix(@tmsb_fg, @tmsb_bg, 0.10); }
 button.tmsb-switch.off:active { background-color: mix(@tmsb_fg, @tmsb_bg, 0.16); }
 
-button.tmsb-round, menubutton.tmsb-round > button {
+button.tmsb-round {
   min-width: 0; min-height: 0; padding: 0;
   border-radius: 999px; border: none; box-shadow: none;
   background-color: mix(@tmsb_surface, @tmsb_wash, 0.06);
   color: @tmsb_fg;
   transition: background-color 200ms cubic-bezier(0.2, 0.9, 0.3, 1), transform 120ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
-menubutton.tmsb-round > button { min-width: 32px; min-height: 32px; }
-button.tmsb-round:hover, menubutton.tmsb-round > button:hover { background-color: mix(@tmsb_surface, @tmsb_fg, 0.10); }
-button.tmsb-round:active, menubutton.tmsb-round > button:active, menubutton.tmsb-round > button:checked { background-color: mix(@tmsb_surface, @tmsb_fg, 0.16); }
+button.tmsb-round:hover { background-color: mix(@tmsb_surface, @tmsb_fg, 0.10); }
+button.tmsb-round:active, button.tmsb-round.open { background-color: mix(@tmsb_surface, @tmsb_fg, 0.16); }
 button.tmsb-round:active { transform: scale(0.95); }
 button.tmsb-forget { background-color: alpha(@tmsb_fg, 0.07); color: @tmsb_muted; }
 
 button.tmsb-primary.tmsb-compact, button.tmsb-plain.tmsb-compact { font-size: 13px; padding: 0 14px; min-height: 0; }
-menubutton.tmsb-pill > button {
+button.tmsb-pill {
   min-height: 28px; padding: 0 12px; border-radius: 999px; border: none; box-shadow: none;
-  background-color: mix(@tmsb_surface, @tmsb_wash, 0.06); font-size: 12.5px;
+  background-color: mix(@tmsb_surface, @tmsb_wash, 0.06); font-size: 12.5px; font-weight: normal;
+  transition: background-color 200ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
-menubutton.tmsb-pill > button:hover { background-color: mix(@tmsb_surface, @tmsb_fg, 0.10); }
-menubutton.tmsb-pill > button:checked { background-color: mix(@tmsb_surface, @tmsb_fg, 0.16); }
-menubutton.tmsb-account > button {
+button.tmsb-pill:hover { background-color: mix(@tmsb_surface, @tmsb_fg, 0.10); }
+button.tmsb-pill:active, button.tmsb-pill.open { background-color: mix(@tmsb_surface, @tmsb_fg, 0.16); }
+button.tmsb-account {
   padding: 8px 10px; border-radius: 16px; border: 1px solid @tmsb_border; box-shadow: none;
-  background-color: mix(@tmsb_surface, @tmsb_wash, 0.03);
+  background-color: mix(@tmsb_surface, @tmsb_wash, 0.03); font-weight: normal;
+  transition: background-color 200ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
-menubutton.tmsb-account > button:hover { background-color: mix(@tmsb_surface, @tmsb_fg, 0.10); }
-menubutton.tmsb-account > button:checked { background-color: mix(@tmsb_surface, @tmsb_fg, 0.16); }
+button.tmsb-account:hover { background-color: mix(@tmsb_surface, @tmsb_fg, 0.10); }
+button.tmsb-account:active, button.tmsb-account.open { background-color: mix(@tmsb_surface, @tmsb_fg, 0.16); }
 
-popover.tmsb-menu > contents { border-radius: 14px; padding: 6px; background-color: @tmsb_surface; color: @tmsb_fg; }
+/* A menu drawn in the window (kit::Menu): opaque, on a colour of its own
+   that stands off the sidebar it opens over by night as well as by day,
+   with a hairline and a shadow; radius 14, rows 32 with radius 10. */
+menu-card > box.tmsb-menu {
+  border-radius: 14px; padding: 6px; background-color: @tmsb_menu; color: @tmsb_fg;
+  border: 1px solid @tmsb_menu_edge;
+  box-shadow: 0 10px 30px alpha(black, 0.22), 0 1px 4px alpha(black, 0.12);
+}
+menu-card > box.tmsb-menu > scrolledwindow { background: none; }
 button.tmsb-menu-row {
   min-height: 32px; padding: 0 10px; border-radius: 10px; border: none; box-shadow: none; background: none;
   font-weight: normal;
@@ -129,6 +139,9 @@ button.tmsb-menu-row:active { background-color: alpha(@tmsb_fg, 0.14); }
 button.tmsb-menu-row.tmsb-destructive { color: @tmsb_danger_text; }
 .tmsb-menu-heading { font-size: 11px; font-weight: 600; color: @tmsb_muted; margin: 6px 10px 2px 10px; }
 separator.tmsb-menu-rule { margin: 4px 6px; background-color: @tmsb_border; }
+
+.tmsb-field-row { padding-left: 14px; }
+.tmsb-field-row > entry.tmsb-field, .tmsb-field-row > passwordentry.tmsb-field { padding-left: 0; }
 
 .tmsb-toast {
   background-color: @tmsb_surface; border: 1px solid @tmsb_border; border-radius: 999px;

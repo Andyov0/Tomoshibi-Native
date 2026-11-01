@@ -49,7 +49,7 @@ pub fn page(context: &Context) -> adw::PreferencesPage {
     let who = adw::PreferencesGroup::new();
     let head = gtk::Box::new(gtk::Orientation::Horizontal, 16);
     head.set_margin_bottom(6);
-    head.append(&pieces::initial(&account.name, 64));
+    head.append(&pieces::avatar(model, &account.name, 64));
     let names = gtk::Box::new(gtk::Orientation::Vertical, 4);
     names.set_valign(gtk::Align::Center);
     let name = gtk::Label::new(Some(&account.name));
@@ -483,15 +483,25 @@ fn choose_picture(context: &Context) {
             let Some(path) = file.path() else {
                 return;
             };
-            let data_url = gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(&path, 256, 256, true)
-                .ok()
-                .and_then(|pixbuf| pixbuf.save_to_bufferv("jpeg", &[("quality", "82")]).ok())
-                .map(|bytes| format!("data:image/jpeg;base64,{}", glib::base64_encode(&bytes)));
-            let Some(data_url) = data_url else {
-                model.mention(t("That picture could not be used."));
-                return;
-            };
             glib::spawn_future_local(async move {
+                // Decoded, scaled and encoded on a thread of its own: a
+                // camera's photograph is tens of megapixels, and decoding it
+                // on the main thread held the window still for as long.
+                let data_url = gtk::gio::spawn_blocking(move || {
+                    gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(&path, 256, 256, true)
+                        .ok()
+                        .and_then(|pixbuf| pixbuf.save_to_bufferv("jpeg", &[("quality", "82")]).ok())
+                        .map(|bytes| {
+                            format!("data:image/jpeg;base64,{}", glib::base64_encode(&bytes))
+                        })
+                })
+                .await
+                .ok()
+                .flatten();
+                let Some(data_url) = data_url else {
+                    model.mention(t("That picture could not be used."));
+                    return;
+                };
                 if let Err(said) = model.set_picture(data_url).await {
                     model.mention(said);
                 }

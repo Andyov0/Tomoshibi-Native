@@ -152,7 +152,9 @@ pub fn present(context: &Context, mode: Mode) {
     column.append(&card);
     column.append(&form);
     column.append(&foot);
-    dialog.set_child(Some(&column));
+    // A layer of its own for the menus in it: the dialog is drawn over the
+    // lobby, and so over the lobby's layer.
+    dialog.set_child(Some(&kit::menu_layer(&column)));
 
     // ---- what it does -----------------------------------------------------
 
@@ -458,29 +460,16 @@ pub fn scoped_room_field(
     };
     let scopes = account.scopes.clone();
     let admin = account.admin;
-    let column = gtk::Box::new(gtk::Orientation::Vertical, 2);
-    let popover = gtk::Popover::builder()
-        .child(&column)
-        .has_arrow(false)
-        .autohide(false)
-        .can_focus(false)
-        .build();
-    popover.add_css_class("tmsb-menu");
-    popover.set_parent(entry);
-    popover.set_position(gtk::PositionType::Bottom);
-    {
-        let popover = popover.downgrade();
-        entry.connect_destroy(move |_| {
-            if let Some(popover) = popover.upgrade() {
-                popover.unparent();
-            }
-        });
-    }
+    // Under the field and as wide as it, and not modal: the keyboard stays
+    // in the field, and a press elsewhere puts the suggestions away and
+    // goes on to what it pressed.
+    let menu = kit::Menu::new(entry, 0, kit::MenuSide::Below, kit::MenuAlign::Fill);
+    menu.set_modal(false);
     let previous = Rc::new(RefCell::new(entry.text().to_string()));
-    let (warning, warning_slot, popover_weak) = (
+    let (warning, warning_slot, menu_weak) = (
         warning.downgrade(),
         warning_slot.downgrade(),
-        popover.downgrade(),
+        menu.downgrade(),
     );
     entry.connect_changed(move |entry| {
         let text = entry.text().to_string();
@@ -501,15 +490,29 @@ pub fn scoped_room_field(
                 .collect(),
             None => Vec::new(),
         };
-        if let Some(popover) = popover_weak.upgrade() {
-            if let Some(column) = popover.child().and_then(|c| c.downcast::<gtk::Box>().ok()) {
+        if let Some(menu) = menu_weak.upgrade() {
+            let column = menu.column();
+            // The rows change only when the scopes offered do, so that the
+            // open menu does not flicker under each letter typed.
+            let shown: Vec<String> = {
+                let mut shown = Vec::new();
+                let mut child = column.first_child();
+                while let Some(row) = child {
+                    child = row.next_sibling();
+                    shown.push(row.widget_name().to_string());
+                }
+                shown
+            };
+            if shown != matches {
                 while let Some(child) = column.first_child() {
                     column.remove(&child);
                 }
                 for scope in &matches {
                     let row = pieces::menu_row(scope, None, false);
+                    row.set_widget_name(scope);
+                    row.set_can_focus(false);
                     let (entry_weak, scope, pop) =
-                        (entry.downgrade(), scope.clone(), popover.downgrade());
+                        (entry.downgrade(), scope.clone(), menu.downgrade());
                     row.connect_clicked(move |_| {
                         if let Some(entry) = entry_weak.upgrade() {
                             let text = entry.text().to_string();
@@ -517,6 +520,7 @@ pub fn scoped_room_field(
                                 entry.set_text(&format!("{room}@{scope}"));
                                 entry.set_position(-1);
                             }
+                            entry.grab_focus_without_selecting();
                         }
                         if let Some(pop) = pop.upgrade() {
                             pop.popdown();
@@ -526,9 +530,9 @@ pub fn scoped_room_field(
                 }
             }
             if matches.is_empty() {
-                popover.popdown();
+                menu.popdown();
             } else {
-                popover.popup();
+                menu.popup();
             }
         }
         let outside = typed_scope.as_ref().filter(|typed| {

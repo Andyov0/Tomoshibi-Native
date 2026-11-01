@@ -36,7 +36,6 @@ pub fn page(context: &Context) -> gtk::Widget {
     // Shared.IdentityBox draws them.
     let name = gtk::Entry::builder()
         .placeholder_text(t("Name"))
-        .primary_icon_name("avatar-default-symbolic")
         .input_purpose(gtk::InputPurpose::Name)
         .build();
     name.add_css_class("tmsb-field");
@@ -49,9 +48,9 @@ pub fn page(context: &Context) -> gtk::Widget {
     passphrase.update_property(&[gtk::accessible::Property::Label(&t("Passphrase"))]);
     let fields = gtk::Box::new(gtk::Orientation::Vertical, 0);
     fields.add_css_class("tmsb-fields");
-    fields.append(&name);
+    fields.append(&pieces::identity_field(&pieces::name_symbol(), &name));
     fields.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
-    fields.append(&passphrase);
+    fields.append(&pieces::identity_field(&pieces::passphrase_symbol(), &passphrase));
 
     let go = kit::primary_button(&t("Sign in"));
     go.set_widget_name("signin.go");
@@ -232,7 +231,7 @@ pub fn page(context: &Context) -> gtk::Widget {
     });
 
     super::home::open_from_debug(context, &page, true);
-    page.upcast()
+    kit::menu_layer(&page).upcast()
 }
 
 /// In a debug build, what the deployment said about itself, under the

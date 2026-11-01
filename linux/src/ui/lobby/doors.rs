@@ -48,7 +48,7 @@ fn card_screen(context: &Context, width: i32, content: &gtk::Box) -> gtk::Widget
     let page = adw::ToolbarView::new();
     page.add_top_bar(&bar);
     page.set_content(Some(&pieces::with_toast(&context.model, &scroller)));
-    page.upcast()
+    kit::menu_layer(&page).upcast()
 }
 
 /// The room, in the machine's monospace, with the way to copy its address
@@ -76,7 +76,6 @@ fn identity_box(model: &AppModel, name_only: bool, submit: Rc<dyn Fn()>) -> gtk:
     fields.add_css_class("tmsb-fields");
     let name = gtk::Entry::builder()
         .placeholder_text(t("Your name"))
-        .primary_icon_name("avatar-default-symbolic")
         .input_purpose(gtk::InputPurpose::Name)
         .build();
     name.add_css_class("tmsb-field");
@@ -92,7 +91,7 @@ fn identity_box(model: &AppModel, name_only: bool, submit: Rc<dyn Fn()>) -> gtk:
         }
         None => name.set_text(&model.name()),
     }
-    fields.append(&name);
+    fields.append(&pieces::identity_field(&pieces::name_symbol(), &name));
     let weak = model.downgrade();
     let fixed = model.invited_name().is_some();
     name.connect_changed(move |entry| {
@@ -120,7 +119,7 @@ fn identity_box(model: &AppModel, name_only: bool, submit: Rc<dyn Fn()>) -> gtk:
         });
         let submit_passphrase = submit.clone();
         passphrase.connect_activate(move |_| submit_passphrase());
-        fields.append(&passphrase);
+        fields.append(&pieces::identity_field(&pieces::passphrase_symbol(), &passphrase));
     }
     name.connect_activate(move |_| submit());
     fields

@@ -319,3 +319,532 @@ pub fn bar() -> adw::HeaderBar {
     bar.add_css_class("flat");
     bar
 }
+
+// ---- menus drawn in the window ------------------------------------------------
+
+/// Which side of what it hangs from a [`Menu`] opens on, when there is room
+/// there; it opens on the other side when there is more room there.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuSide {
+    Below,
+    Above,
+}
+
+/// How a [`Menu`] lines up with what it hangs from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MenuAlign {
+    /// Its left edge on the anchor's.
+    Start,
+    /// Its right edge on the anchor's (a menu off a button in a corner).
+    End,
+    /// As wide as the anchor (the suggestions under a field).
+    Fill,
+}
+
+/// How far a menu opens from what it hangs from, and from the window's
+/// edges.
+const MENU_GAP: f32 = 6.0;
+const MENU_MARGIN: i32 = 8;
+/// How far a menu travels as it arrives and leaves, towards its anchor.
+const MENU_TRAVEL: f32 = 8.0;
+
+mod menu_imp {
+    use super::*;
+
+    pub struct Menu {
+        /// What is drawn: the menu's own ground, edge and shadow are this
+        /// box's, not the menu's, because GTK draws a widget's CSS ground
+        /// before and outside its snapshot, where the fade could not reach
+        /// it (the card stood there at full strength, empty, for a frame).
+        pub frame: gtk::Box,
+        pub scroller: gtk::ScrolledWindow,
+        pub column: gtk::Box,
+        pub progress: Cell<f64>,
+        pub animation: RefCell<Option<adw::TimedAnimation>>,
+        pub anchor: glib::WeakRef<gtk::Widget>,
+        pub side: Cell<MenuSide>,
+        pub align: Cell<MenuAlign>,
+        /// Where it was put the last time, to arrive from that side.
+        pub above: Cell<bool>,
+        pub open: Cell<bool>,
+        /// A modal menu takes the keyboard, and a press outside it closes it
+        /// and goes no further, as a system menu's does; a field's
+        /// suggestions leave the keyboard in the field and let the press
+        /// through.
+        pub modal: Cell<bool>,
+        pub keys: RefCell<Option<(glib::WeakRef<gtk::Window>, gtk::EventControllerKey)>>,
+        pub follow: RefCell<Option<gtk::TickCallbackId>>,
+        pub anchor_bounds: Cell<Option<(f32, f32, f32, f32)>>,
+        pub returns_focus_to: glib::WeakRef<gtk::Widget>,
+        pub opened: RefCell<Vec<Box<dyn Fn()>>>,
+    }
+
+    impl Default for Menu {
+        fn default() -> Self {
+            let column = gtk::Box::new(gtk::Orientation::Vertical, 2);
+            let scroller = gtk::ScrolledWindow::builder()
+                .hscrollbar_policy(gtk::PolicyType::Never)
+                .propagate_natural_height(true)
+                .propagate_natural_width(true)
+                .child(&column)
+                .build();
+            let frame = gtk::Box::new(gtk::Orientation::Vertical, 0);
+            frame.add_css_class("tmsb-menu");
+            frame.append(&scroller);
+            Menu {
+                frame,
+                scroller,
+                column,
+                progress: Cell::new(0.0),
+                animation: RefCell::new(None),
+                anchor: glib::WeakRef::new(),
+                side: Cell::new(MenuSide::Below),
+                align: Cell::new(MenuAlign::Start),
+                above: Cell::new(false),
+                open: Cell::new(false),
+                modal: Cell::new(true),
+                keys: RefCell::new(None),
+                follow: RefCell::new(None),
+                anchor_bounds: Cell::new(None),
+                returns_focus_to: glib::WeakRef::new(),
+                opened: RefCell::new(Vec::new()),
+            }
+        }
+    }
+
+    #[glib::object_subclass]
+    impl ObjectSubclass for Menu {
+        const NAME: &'static str = "TomoshibiMenu";
+        type Type = super::Menu;
+        type ParentType = gtk::Widget;
+
+        fn class_init(class: &mut Self::Class) {
+            class.set_layout_manager_type::<gtk::BinLayout>();
+            class.set_css_name("menu-card");
+            class.set_accessible_role(gtk::AccessibleRole::Menu);
+        }
+    }
+
+    impl ObjectImpl for Menu {
+        fn constructed(&self) {
+            self.parent_constructed();
+            self.frame.set_parent(&*self.obj());
+        }
+
+        fn dispose(&self) {
+            self.obj().stop_listening();
+            self.frame.unparent();
+        }
+    }
+
+    impl WidgetImpl for Menu {
+        fn snapshot(&self, snapshot: &gtk::Snapshot) {
+            let progress = self.progress.get().clamp(0.0, 1.0) as f32;
+            if progress <= 0.0 {
+                return;
+            }
+            // Towards the anchor while it is not all there: a menu below its
+            // button comes down off it, one above rises off it.
+            let toward = if self.above.get() { 1.0 } else { -1.0 };
+            snapshot.save();
+            snapshot.translate(&graphene::Point::new(
+                0.0,
+                toward * (1.0 - progress) * MENU_TRAVEL,
+            ));
+            snapshot.push_opacity(progress as f64);
+            self.parent_snapshot(snapshot);
+            snapshot.pop();
+            snapshot.restore();
+        }
+    }
+}
+
+glib::wrapper! {
+    /// A menu drawn inside the window rather than in a surface of its own:
+    /// it fades in and slides a few points off what it hangs from as it
+    /// opens, and back as it closes (GtkPopover appears and vanishes in one
+    /// frame, and GTK 4 gives it no transition to ask for), and it is kept
+    /// inside the window, where a compositor that does not move popups
+    /// clear of the screen's edge left a popover's right half off screen.
+    /// It lives in the nearest [`menu_layer`] above its anchor.
+    pub struct Menu(ObjectSubclass<menu_imp::Menu>)
+        @extends gtk::Widget,
+        @implements gtk::Accessible, gtk::Buildable, gtk::ConstraintTarget;
+}
+
+impl Menu {
+    /// A menu `width` wide hanging from `anchor`. Its rows go in
+    /// [`column`](Self::column).
+    pub fn new(anchor: &impl IsA<gtk::Widget>, width: i32, side: MenuSide, align: MenuAlign) -> Menu {
+        let menu: Menu = glib::Object::new();
+        let imp = menu.imp();
+        imp.column.set_width_request(width);
+        imp.anchor.set(Some(anchor.as_ref()));
+        imp.side.set(side);
+        imp.align.set(align);
+        menu.set_visible(false);
+        // Held by the anchor, which is what keeps it alive until it is first
+        // opened into a layer (the menu holds the anchor only weakly), and
+        // so that whoever has the anchor can open it (the debug switch that
+        // opens a menu for a picture).
+        // SAFETY: the key is only ever set here, with this type.
+        unsafe {
+            anchor.as_ref().set_data("tmsb-menu", menu.clone());
+        }
+        // The menu goes with what it hangs from.
+        let weak = menu.downgrade();
+        anchor.as_ref().connect_destroy(move |_| {
+            if let Some(menu) = weak.upgrade() {
+                menu.stop_listening();
+                if let Some(layer) = menu.parent().and_then(|p| p.downcast::<gtk::Overlay>().ok()) {
+                    layer.remove_overlay(&menu);
+                }
+            }
+        });
+        menu
+    }
+
+    /// The menu kept on `anchor` by [`Menu::new`], if there is one.
+    pub fn of(anchor: &impl IsA<gtk::Widget>) -> Option<Menu> {
+        // SAFETY: set in `new` with this type.
+        unsafe {
+            anchor
+                .as_ref()
+                .data::<Menu>("tmsb-menu")
+                .map(|menu| menu.as_ref().clone())
+        }
+    }
+
+    pub fn column(&self) -> gtk::Box {
+        self.imp().column.clone()
+    }
+
+    /// Whether a press outside closes it and goes no further, and whether
+    /// it takes the keyboard (true unless said otherwise).
+    pub fn set_modal(&self, modal: bool) {
+        self.imp().modal.set(modal);
+    }
+
+    pub fn is_open(&self) -> bool {
+        self.imp().open.get()
+    }
+
+    /// Called each time it opens (the server menu measures then).
+    pub fn connect_opened(&self, opened: impl Fn() + 'static) {
+        self.imp().opened.borrow_mut().push(Box::new(opened));
+    }
+
+    pub fn toggle(&self) {
+        if self.is_open() {
+            self.popdown();
+        } else {
+            self.popup();
+        }
+    }
+
+    pub fn popup(&self) {
+        let imp = self.imp();
+        let Some(anchor) = imp.anchor.upgrade() else {
+            return;
+        };
+        let Some(layer) = layer_for(&anchor) else {
+            crate::app::log("a menu has no layer to open in");
+            return;
+        };
+        if self.parent().as_ref() != Some(layer.upcast_ref()) {
+            if let Some(old) = self.parent().and_then(|p| p.downcast::<gtk::Overlay>().ok()) {
+                old.remove_overlay(self);
+            }
+            layer.add_overlay(self);
+        }
+        let was_open = imp.open.replace(true);
+        let was_shown = self.is_visible();
+        self.set_visible(true);
+        self.set_can_target(true);
+        anchor.add_css_class("open");
+        anchor.update_state(&[gtk::accessible::State::Expanded(Some(true))]);
+        if was_shown {
+            self.animate(1.0, motion::SETTLE_MS, settle());
+        } else {
+            // Its clock starts once it has been laid out and drawn once, at
+            // nothing: the animation is timed, and the first frame of a menu
+            // just shown (its rows measured, its styles worked out) took
+            // 180 ms in a debug build drawn in software, so the first frame
+            // anybody saw was already 92 per cent of the way and the menu
+            // seemed to appear at once.
+            let frames = Cell::new(0);
+            self.add_tick_callback(move |menu, _| {
+                frames.set(frames.get() + 1);
+                if frames.get() < 2 {
+                    return glib::ControlFlow::Continue;
+                }
+                if menu.is_open() {
+                    menu.animate(1.0, motion::SETTLE_MS, settle());
+                }
+                glib::ControlFlow::Break
+            });
+        }
+        if was_open {
+            return;
+        }
+        self.listen(&anchor);
+        for opened in imp.opened.borrow().iter() {
+            opened();
+        }
+        if imp.modal.get() {
+            let root = anchor.root();
+            let focus = root.as_ref().and_then(|root| root.focus());
+            imp.returns_focus_to.set(focus.as_ref());
+            // The first row, so that the arrows and Enter work at once, as
+            // a menu opened from the keyboard does.
+            self.child_focus(gtk::DirectionType::TabForward);
+        }
+    }
+
+    pub fn popdown(&self) {
+        let imp = self.imp();
+        if !imp.open.replace(false) {
+            return;
+        }
+        self.stop_listening();
+        if let Some(anchor) = imp.anchor.upgrade() {
+            anchor.remove_css_class("open");
+            anchor.update_state(&[gtk::accessible::State::Expanded(Some(false))]);
+        }
+        // The keyboard goes back where it was, where it was in the menu.
+        let focus_inside = self
+            .root()
+            .and_then(|root| root.focus())
+            .is_some_and(|focus| focus.is_ancestor(self));
+        if focus_inside {
+            if let Some(back) = imp
+                .returns_focus_to
+                .upgrade()
+                .or_else(|| imp.anchor.upgrade())
+            {
+                back.grab_focus();
+            }
+        }
+        self.set_can_target(false);
+        let weak = self.downgrade();
+        self.animate_then(0.0, motion::LEAVE_MS, adw::Easing::EaseInCubic, move || {
+            if let Some(menu) = weak.upgrade() {
+                if !menu.is_open() {
+                    menu.set_visible(false);
+                }
+            }
+        });
+    }
+
+    fn animate(&self, to: f64, duration_ms: u32, easing: adw::Easing) {
+        self.animate_then(to, duration_ms, easing, || {});
+    }
+
+    fn animate_then(&self, to: f64, duration_ms: u32, easing: adw::Easing, then: impl FnOnce() + 'static) {
+        let imp = self.imp();
+        // Paused rather than skipped, as Arrival's: a close interrupted by
+        // an open goes on from where it had got to.
+        if let Some(running) = imp.animation.take() {
+            running.pause();
+        }
+        let target = adw::CallbackAnimationTarget::new(glib::clone!(
+            #[weak(rename_to = menu)]
+            self,
+            move |value| {
+                menu.imp().progress.set(value);
+                menu.queue_draw();
+            }
+        ));
+        let animation = adw::TimedAnimation::builder()
+            .widget(self)
+            .value_from(imp.progress.get())
+            .value_to(to)
+            .duration(duration_ms)
+            .easing(easing)
+            .target(&target)
+            .build();
+        let then = RefCell::new(Some(then));
+        animation.connect_done(move |_| {
+            if let Some(then) = then.take() {
+                then();
+            }
+        });
+        imp.animation.replace(Some(animation.clone()));
+        animation.play();
+    }
+
+    /// Escape closes it from anywhere in the window, and it follows its
+    /// anchor while it is open (an anchor in a list that scrolls).
+    fn listen(&self, anchor: &gtk::Widget) {
+        let imp = self.imp();
+        if let Some(window) = anchor.root().and_then(|root| root.downcast::<gtk::Window>().ok()) {
+            let keys = gtk::EventControllerKey::new();
+            keys.set_propagation_phase(gtk::PropagationPhase::Capture);
+            let weak = self.downgrade();
+            keys.connect_key_pressed(move |_, key, _, _| {
+                if key != gtk::gdk::Key::Escape {
+                    return glib::Propagation::Proceed;
+                }
+                match weak.upgrade() {
+                    Some(menu) if menu.is_open() => {
+                        menu.popdown();
+                        glib::Propagation::Stop
+                    }
+                    _ => glib::Propagation::Proceed,
+                }
+            });
+            window.add_controller(keys.clone());
+            let held = glib::WeakRef::new();
+            held.set(Some(&window));
+            imp.keys.replace(Some((held, keys)));
+        }
+        imp.anchor_bounds.set(None);
+        let id = self.add_tick_callback(|menu, _| {
+            let imp = menu.imp();
+            let (Some(anchor), Some(layer)) = (
+                imp.anchor.upgrade(),
+                menu.parent().and_then(|p| p.downcast::<gtk::Overlay>().ok()),
+            ) else {
+                return glib::ControlFlow::Continue;
+            };
+            // An anchor taken off the screen (its page went) takes the menu.
+            if !anchor.is_mapped() {
+                menu.popdown();
+                return glib::ControlFlow::Continue;
+            }
+            let bounds = anchor
+                .compute_bounds(&layer)
+                .map(|b| (b.x(), b.y(), b.width(), b.height()));
+            if bounds != imp.anchor_bounds.get() {
+                imp.anchor_bounds.set(bounds);
+                layer.queue_allocate();
+            }
+            glib::ControlFlow::Continue
+        });
+        imp.follow.replace(Some(id));
+    }
+
+    fn stop_listening(&self) {
+        let imp = self.imp();
+        if let Some((window, keys)) = imp.keys.take() {
+            if let Some(window) = window.upgrade() {
+                window.remove_controller(&keys);
+            }
+        }
+        if let Some(id) = imp.follow.take() {
+            id.remove();
+        }
+    }
+
+    /// Where it goes in `layer`: on its side of the anchor where it fits,
+    /// on the other where that has more room, as tall as there is room for
+    /// (its rows scroll beyond that), and inside the window's edges.
+    fn place(&self, layer: &gtk::Overlay) -> Option<gtk::gdk::Rectangle> {
+        let imp = self.imp();
+        let anchor = imp.anchor.upgrade()?.compute_bounds(layer)?;
+        let (minimum, natural) = self.preferred_size();
+        let (whole_width, whole_height) = (layer.width(), layer.height());
+        let width = match imp.align.get() {
+            MenuAlign::Fill => (anchor.width().round() as i32).max(minimum.width()),
+            _ => natural.width(),
+        }
+        .min(whole_width - 2 * MENU_MARGIN)
+        .max(minimum.width());
+        let below_room =
+            whole_height - (anchor.y() + anchor.height() + MENU_GAP).round() as i32 - MENU_MARGIN;
+        let above_room = (anchor.y() - MENU_GAP).round() as i32 - MENU_MARGIN;
+        let wanted = natural.height();
+        let above = match imp.side.get() {
+            MenuSide::Below => wanted > below_room && above_room > below_room,
+            MenuSide::Above => !(wanted > above_room && below_room > above_room),
+        };
+        imp.above.set(above);
+        let room = if above { above_room } else { below_room };
+        let height = wanted.min(room).max(minimum.height());
+        let x = match imp.align.get() {
+            MenuAlign::Start | MenuAlign::Fill => anchor.x(),
+            MenuAlign::End => anchor.x() + anchor.width() - width as f32,
+        };
+        let x = (x.round() as i32).clamp(MENU_MARGIN, (whole_width - width - MENU_MARGIN).max(MENU_MARGIN));
+        let y = if above {
+            (anchor.y() - MENU_GAP).round() as i32 - height
+        } else {
+            (anchor.y() + anchor.height() + MENU_GAP).round() as i32
+        };
+        Some(gtk::gdk::Rectangle::new(x, y.max(0), width, height))
+    }
+}
+
+/// The layer [`Menu`]s open in: `child` with room over it. A screen with a
+/// menu wraps itself in one, and so does a dialog with one, since a dialog
+/// is drawn over the screen's layer.
+pub fn menu_layer(child: &impl IsA<gtk::Widget>) -> gtk::Overlay {
+    let layer = gtk::Overlay::new();
+    layer.set_child(Some(child));
+    layer.add_css_class("tmsb-menu-layer");
+    layer.connect_get_child_position(|layer, child| child.downcast_ref::<Menu>()?.place(layer));
+    // A press outside an open menu closes it; a modal menu's press goes no
+    // further, so that the press that put the menu away does not also press
+    // whatever was under it.
+    let press = gtk::GestureClick::new();
+    press.set_button(0);
+    press.set_propagation_phase(gtk::PropagationPhase::Capture);
+    press.connect_pressed(|gesture, _, x, y| {
+        let Some(layer) = gesture.widget().and_downcast::<gtk::Overlay>() else {
+            return;
+        };
+        let point = graphene::Point::new(x as f32, y as f32);
+        let inside = |widget: &gtk::Widget| {
+            widget
+                .compute_bounds(&layer)
+                .is_some_and(|bounds| bounds.contains_point(&point))
+        };
+        let mut child = layer.first_child();
+        while let Some(widget) = child {
+            child = widget.next_sibling();
+            let Ok(menu) = widget.downcast::<Menu>() else {
+                continue;
+            };
+            if !menu.is_open() || inside(menu.upcast_ref()) {
+                continue;
+            }
+            // A press on the anchor is the anchor's: it closes the menu
+            // by toggling it.
+            if menu.imp().anchor.upgrade().is_some_and(|anchor| inside(&anchor)) {
+                continue;
+            }
+            menu.popdown();
+            if menu.imp().modal.get() {
+                gesture.set_state(gtk::EventSequenceState::Claimed);
+            }
+        }
+    });
+    layer.add_controller(press);
+    layer
+}
+
+/// The nearest menu layer holding `widget`.
+fn layer_for(widget: &gtk::Widget) -> Option<gtk::Overlay> {
+    let mut parent = widget.parent();
+    while let Some(next) = parent {
+        if next.has_css_class("tmsb-menu-layer") {
+            return next.downcast().ok();
+        }
+        parent = next.parent();
+    }
+    None
+}
+
+/// A button that opens `menu`'s kind of menu: pressed, it opens or closes
+/// it, and it reads as open while the menu is (the `.open` class).
+pub fn menu_button(child: &impl IsA<gtk::Widget>) -> gtk::Button {
+    let button = gtk::Button::builder().child(child).build();
+    button.update_property(&[gtk::accessible::Property::HasPopup(true)]);
+    button.update_state(&[gtk::accessible::State::Expanded(Some(false))]);
+    button.connect_clicked(|button| {
+        if let Some(menu) = Menu::of(button) {
+            menu.toggle();
+        }
+    });
+    button
+}
