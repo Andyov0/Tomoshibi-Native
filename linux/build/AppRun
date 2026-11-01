@@ -94,11 +94,15 @@ too_old() {
   said=$(printf '%s' "$said" | sed -e "s/{needed}/$1/g" -e "s/{found}/$2/g")
   echo "tomoshibi: $said" >&2
   if [ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]; then
+    # Shown, whether it was closed with its button (0) or its window (1);
+    # anything else is a dialog that could not open, and the next is tried.
     if command -v zenity >/dev/null 2>&1; then
-      zenity --error --title=Tomoshibi --width=420 --text="$said" >/dev/null 2>&1 && return
+      zenity --error --title=Tomoshibi --width=420 --text="$said" >/dev/null 2>&1
+      [ $? -le 1 ] && return
     fi
     if command -v kdialog >/dev/null 2>&1; then
-      kdialog --title Tomoshibi --error "$said" >/dev/null 2>&1 && return
+      kdialog --title Tomoshibi --error "$said" >/dev/null 2>&1
+      [ $? -le 1 ] && return
     fi
     if command -v notify-send >/dev/null 2>&1; then
       notify-send --app-name=Tomoshibi --icon=dialog-error Tomoshibi "$said" >/dev/null 2>&1 && return
