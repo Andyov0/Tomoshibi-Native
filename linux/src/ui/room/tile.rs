@@ -606,7 +606,7 @@ mod tests {
         assert_eq!(initials("ann lee smith"), "AL");
         assert_eq!(initials("  "), "?");
         assert_eq!(initials("Web Peer"), "WP");
-        assert_eq!(initials("灯"), "灯");
+        assert_eq!(initials("émile zola"), "ÉZ", "upper case beyond ASCII");
     }
 
     #[test]
