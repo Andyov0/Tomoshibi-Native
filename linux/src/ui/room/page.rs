@@ -1137,7 +1137,7 @@ impl Page {
 
         // The words follow the language without the call being built again.
         let page = Rc::downgrade(self);
-        i18n::on_change(move |_| {
+        i18n::on_change_while(&self.root, move |_| {
             if let Some(page) = page.upgrade() {
                 page.reword();
                 page.refresh();

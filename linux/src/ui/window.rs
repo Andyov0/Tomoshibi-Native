@@ -125,7 +125,7 @@ pub fn open(
     });
     let on_language = present.clone();
     let model = context.model.downgrade();
-    crate::i18n::on_change(move |_| {
+    crate::i18n::on_change_while(&window, move |_| {
         let in_call = model
             .upgrade()
             .is_some_and(|model| model.screen().is_call());
