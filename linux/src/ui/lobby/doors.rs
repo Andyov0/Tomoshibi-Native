@@ -21,7 +21,12 @@ use crate::{
 
 /// A screen that is a single card over the page, with the language in the
 /// corner (Screens.swift `CardScreen`).
-fn card_screen(context: &Context, width: i32, content: &gtk::Box) -> gtk::Widget {
+fn card_screen(
+    context: &Context,
+    width: i32,
+    content: &gtk::Box,
+    picture: Option<(&gtk::Overlay, i32)>,
+) -> gtk::Widget {
     let card = gtk::Box::new(gtk::Orientation::Vertical, 0);
     card.add_css_class("tmsb-pane");
     card.add_css_class("tmsb-door");
@@ -34,7 +39,7 @@ fn card_screen(context: &Context, width: i32, content: &gtk::Box) -> gtk::Widget
         // short card ran down to the window's foot.
         .valign(gtk::Align::Start)
         .margin_top(24)
-        .margin_bottom(48)
+        .margin_bottom(24)
         .margin_start(16)
         .margin_end(16)
         .build();
@@ -43,12 +48,44 @@ fn card_screen(context: &Context, width: i32, content: &gtk::Box) -> gtk::Widget
         .vexpand(true)
         .child(&clamp)
         .build();
+    if let Some((card, tallest)) = picture {
+        fit_picture(&scroller, card, tallest);
+    }
     let bar = kit::bar();
     bar.pack_end(&pieces::language_button(&context.model));
     let page = adw::ToolbarView::new();
     page.add_top_bar(&bar);
     page.set_content(Some(&pieces::with_toast(&context.model, &scroller)));
     kit::menu_layer(&page).upcast()
+}
+
+/// The picture of yourself gives up height, down to [`SHORTEST`], while the
+/// card is taller than the window, so that a short window shows the whole
+/// card and its way back rather than a picture a third of it: at 700 high
+/// the guest's wait for an arranged meeting had its Back button cut off by
+/// the window's foot and had to be scrolled to. It grows back as the window
+/// does. Scrolling is left for what is still too tall then.
+fn fit_picture(scroller: &gtk::ScrolledWindow, card: &gtk::Overlay, tallest: i32) {
+    const SHORTEST: i32 = 150;
+    let Some(frame) = card.child() else {
+        return;
+    };
+    let fit = move |adjustment: &gtk::Adjustment| {
+        // Not laid out yet: nothing to go by.
+        if adjustment.page_size() <= 0.0 {
+            return;
+        }
+        let (_, height) = frame.size_request();
+        let height = if height < 0 { tallest } else { height };
+        let over = (adjustment.upper() - adjustment.page_size()).round() as i32;
+        let wanted = (height - over).clamp(SHORTEST, tallest);
+        if wanted != height {
+            frame.set_size_request(-1, wanted);
+        }
+    };
+    let adjustment = scroller.vadjustment();
+    adjustment.connect_upper_notify(fit.clone());
+    adjustment.connect_page_size_notify(fit);
 }
 
 /// The room, in the machine's monospace, with the way to copy its address
@@ -207,7 +244,8 @@ pub fn prejoin(context: &Context) -> gtk::Widget {
     let model = &context.model;
     let content = gtk::Box::new(gtk::Orientation::Vertical, 16);
     content.append(&room_heading(model));
-    let (card, _) = stage::card(context, ((560 - 44) as f64 * 9.0 / 16.0) as i32);
+    let picture_height = ((560 - 44) as f64 * 9.0 / 16.0) as i32;
+    let (card, _) = stage::card(context, picture_height);
     content.append(&card);
 
     let (options, sealing) = options_card(model, !model.sealing_word().is_empty());
@@ -294,7 +332,7 @@ pub fn prejoin(context: &Context) -> gtk::Widget {
         }
     };
     update(model);
-    let page = card_screen(context, 560, &content);
+    let page = card_screen(context, 560, &content, Some((&card, picture_height)));
     model.subscribe_while(&page, move |model, change| {
         if matches!(change, Change::Busy | Change::Problem | Change::Account)
             || change == app::CHANGED
@@ -336,7 +374,7 @@ pub fn knocking(context: &Context) -> gtk::Widget {
             model.stop_knocking();
         }
     }));
-    card_screen(context, 420, &content)
+    card_screen(context, 420, &content, None)
 }
 
 // ---- an arranged meeting -------------------------------------------------------
@@ -350,7 +388,8 @@ pub fn waiting(context: &Context) -> gtk::Widget {
     let content = gtk::Box::new(gtk::Orientation::Vertical, 16);
     let heading = pieces::heading(&model.room(), true);
     content.append(&heading);
-    let (card, _) = stage::card(context, ((560 - 44) as f64 * 9.0 / 16.0) as i32);
+    let picture_height = ((560 - 44) as f64 * 9.0 / 16.0) as i32;
+    let (card, _) = stage::card(context, picture_height);
     content.append(&card);
     let (options, sealing) = options_card(model, !model.sealing_word().is_empty());
     let go: Rc<dyn Fn()> = {
@@ -485,7 +524,7 @@ pub fn waiting(context: &Context) -> gtk::Widget {
         }
     };
     fill(model);
-    let page = card_screen(context, 560, &content);
+    let page = card_screen(context, 560, &content, Some((&card, picture_height)));
     {
         let fill = fill.clone();
         model.subscribe_while(&page, move |model, change| {
