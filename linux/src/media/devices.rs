@@ -4,13 +4,15 @@
 //! Owned by the media module, like those three. The sound comes from
 //! [`Sound`] (PulseAudio, through pipewire-pulse where PipeWire runs), the
 //! camera from [`Cameras`] (the camera portal and PipeWire, V4L2 where there
-//! is no portal); the screen is screen.rs's, and until that is written the
-//! share button has nothing to share.
+//! is no portal), the screen from [`Screens`] (the portal's ScreenCast and
+//! PipeWire).
 //!
 //! A debug run given `TOMOSHIBI_SOURCE` (app::Launch) sends a test's sound
 //! and picture in place of the microphone and the camera, so that a test
 //! never captures a room; given `TOMOSHIBI_MUTE` it plays nothing
-//! (`speakers`: silence to the real speakers), as on Windows.
+//! (`speakers`: silence to the real speakers), as on Windows; given
+//! `TOMOSHIBI_SCREEN=synthetic` it shares a generated screen and chord
+//! rather than asking the portal for one.
 
 use std::{cell::RefCell, rc::Rc, sync::Arc};
 
@@ -19,8 +21,8 @@ use tomoshibi_core::call::Call;
 use super::{
     audio::{Sound, SoundOptions, Speakers, TestSound},
     camera::{CameraOptions, Cameras, TestPicture},
-    Camera, Device, DeviceKind, Local, Media, MediaError, Microphone, Quiet, ScreenShare,
-    ShareChoice,
+    screen::{Screens, Source},
+    Camera, Device, DeviceKind, Local, Media, MediaError, Microphone, ScreenShare, ShareChoice,
 };
 use crate::app::{log, Launch};
 
@@ -49,6 +51,7 @@ pub fn standard() -> Rc<dyn Media> {
         CameraOptions {
             test_picture: camera,
         },
+        Source::from_environment(),
     )
 }
 
@@ -101,12 +104,14 @@ type Listeners = Rc<RefCell<Vec<Box<dyn Fn()>>>>;
 struct Machine {
     sound: Rc<Sound>,
     cameras: Rc<Cameras>,
-    screen: Quiet,
+    screens: Screens,
     listeners: Listeners,
 }
 
 impl Machine {
-    fn open(sound: SoundOptions, camera: CameraOptions) -> Rc<dyn Media> {
+    /// Called on GTK's main thread once the application has started: the
+    /// screen asks the portal in the background whether it can share.
+    fn open(sound: SoundOptions, camera: CameraOptions, screen: Source) -> Rc<dyn Media> {
         let listeners: Listeners = Rc::new(RefCell::new(Vec::new()));
         let changed: Rc<dyn Fn()> = {
             let listeners = Rc::downgrade(&listeners);
@@ -121,7 +126,7 @@ impl Machine {
         Rc::new(Machine {
             sound: Sound::new(sound, changed.clone()),
             cameras: Cameras::new(camera, changed),
-            screen: Quiet,
+            screens: Screens::new(screen),
             listeners,
         })
     }
@@ -150,18 +155,16 @@ impl Media for Machine {
         self.cameras.open_camera(choice)
     }
 
-    // The screen is screen.rs's (the screen-share module): these two are
-    // where it is put together with the rest.
     fn share_screen(
         &self,
         call: Arc<Call>,
         choice: ShareChoice,
     ) -> Local<Result<Rc<dyn ScreenShare>, MediaError>> {
-        self.screen.share_screen(call, choice)
+        self.screens.share(call, choice)
     }
 
     fn can_share_screen(&self) -> bool {
-        self.screen.can_share_screen()
+        self.screens.can_share()
     }
 
     fn attach_call(&self, call: &Arc<Call>) {
