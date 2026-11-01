@@ -1,0 +1,3 @@
+# Builds go to build.sh's docker volumes, never here; a cargo run on the
+# host by mistake leaves its target directory out of the repository.
+/target/
