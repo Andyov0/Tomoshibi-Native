@@ -449,7 +449,7 @@ impl AppModel {
             self.passphrase()
         };
         let base = deployment.base_url();
-        let kept = KeptIdentity::read(self.preferences(), self.secrets(), &base);
+        let kept = KeptIdentity::read_soon(self.preferences(), self.secrets(), &base).await;
         log(&format!("joining {room}"));
         let granted = deployment
             .clone()

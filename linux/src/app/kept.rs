@@ -39,6 +39,28 @@ impl KeptIdentity {
         )
     }
 
+    /// [`read`](Self::read) without holding up the main thread: the proof
+    /// is in the secret store, and a read from it on the main thread waited
+    /// on the keyring, which, locked, put up its unlock prompt and froze the
+    /// window until somebody answered it. A join awaits this instead.
+    pub async fn read_soon(
+        preferences: &Preferences,
+        secrets: &dyn Secrets,
+        base: &str,
+    ) -> KeptIdentity {
+        let (identity_key, proof_key) = Self::keys(base);
+        let identity = preferences.string(&identity_key).filter(|v| !v.is_empty());
+        // A proof outliving its identity is about nobody.
+        let proof = match identity {
+            Some(_) => secrets
+                .read_soon(&proof_key)
+                .await
+                .filter(|v| !v.is_empty()),
+            None => None,
+        };
+        KeptIdentity { identity, proof }
+    }
+
     pub fn read(preferences: &Preferences, secrets: &dyn Secrets, base: &str) -> KeptIdentity {
         let (identity_key, proof_key) = Self::keys(base);
         let identity = preferences.string(&identity_key).filter(|v| !v.is_empty());
@@ -255,6 +277,16 @@ mod tests {
                 identity: Some("guest-1".into()),
                 proof: Some("p1".into())
             }
+        );
+        // The join's read, which waits on the main loop rather than on the
+        // store, reads the same.
+        assert_eq!(
+            glib::MainContext::new().block_on(KeptIdentity::read_soon(
+                &preferences,
+                &secrets,
+                base
+            )),
+            KeptIdentity::read(&preferences, &secrets, base)
         );
         assert_eq!(
             preferences
