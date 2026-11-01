@@ -192,6 +192,27 @@ fn run(
         })
         .register();
 
+    // The shared screen or window going away: its node removed from the
+    // remote. A stream whose node goes only pauses, waiting to be linked
+    // again, and the portal does not always say Closed (a backend that dies
+    // says nothing); in the rig the share went on sending its last picture
+    // twice a second to a screen that no longer existed.
+    let registry = core
+        .get_registry_rc()
+        .map_err(|e| format!("registry: {e}"))?;
+    let _registry_listener = registry
+        .add_listener_local()
+        .global_remove({
+            let events = events.clone();
+            move |id| {
+                if id == node {
+                    let _ =
+                        events.send(Event::Gone("the shared screen or window went away".into()));
+                }
+            }
+        })
+        .register();
+
     let stream = StreamRc::new(
         core.clone(),
         "tomoshibi-screen",
@@ -301,7 +322,10 @@ fn run(
         .connect(
             spa::utils::Direction::Input,
             Some(node),
-            StreamFlags::AUTOCONNECT | StreamFlags::MAP_BUFFERS,
+            // Never moved to another node when this one goes: the session
+            // manager would link a capture left without its screen to any
+            // video source the remote can see.
+            StreamFlags::AUTOCONNECT | StreamFlags::MAP_BUFFERS | StreamFlags::DONT_RECONNECT,
             &mut params,
         )
         .map_err(|e| format!("connect to node {node}: {e}"))?;
