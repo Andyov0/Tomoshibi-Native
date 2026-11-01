@@ -93,11 +93,14 @@ const WINDOW: usize = 1000;
 const LONGEST: usize = 800;
 /// Kept of the speakers at 2 kHz.
 const HISTORY_SLOW: usize = 1 << 13;
-/// How far ahead of its echo the reverse stream is put: 10 ms, room for the
-/// measure being a little off without the echo ever coming first. Ahead,
-/// not behind: a reverse stream that came after its echo (the sign once
-/// written the other way round) is cancelled not at all.
-const MARGIN: f64 = 480.0;
+/// How far ahead of its echo the reverse stream is put: 60 ms. Ahead, not
+/// behind: a reverse stream that came after its echo (the sign once written
+/// the other way round) is cancelled not at all. And well ahead: at 10 ms,
+/// through a real loopback, any measure a few milliseconds off put part of
+/// the echo before its reference, and the voice leaked back in most
+/// seconds; at 60 ms the canceller has the room it has when the reverse
+/// stream is fed the moment it is played.
+const MARGIN: f64 = 2880.0;
 /// Frames between measures: a quarter of a second.
 const MEASURE_EVERY: u64 = 25;
 /// Measures a drift is worked out from: the last second and a half's.
@@ -105,9 +108,11 @@ const KEPT_MEASURES: usize = 6;
 /// The most the reverse stream moves in one frame, in samples (2%): a
 /// drift is far slower, and anything faster is a measure gone wrong.
 const STEP: f64 = 10.0;
-/// A measure this far from where the reverse stream is (50 ms) is jumped
-/// to at once: a new device, a stall.
-const JUMP: f64 = 2400.0;
+/// A measure this far from where the reverse stream is (10 ms) is jumped
+/// to at once: the path moved (a new device, a stall, a loopback that
+/// dropped or added a chunk to hold its latency), and gliding there at the
+/// drift's pace left the canceller a second without its echo.
+const JUMP: f64 = 480.0;
 /// The correlation a measure needs to be believed.
 const BELIEVED: f32 = 0.3;
 
@@ -168,6 +173,11 @@ struct Align {
     /// what moves the reverse stream from one frame to the next, so that it
     /// follows a delay that moves rather than lagging a measure behind it.
     measures: VecDeque<(f64, f64)>,
+    /// A measure off the line, waiting for the next to say whether the
+    /// path moved.
+    suspect: Option<(f64, f64)>,
+    /// Measures off the line in a row.
+    astray: u32,
     /// The microphone at 2 kHz, the last second of it.
     slow: VecDeque<f32>,
     frames: u64,
@@ -228,6 +238,8 @@ impl Processor {
                 feed: None,
                 target: None,
                 measures: VecDeque::with_capacity(KEPT_MEASURES + 1),
+                suspect: None,
+                astray: 0,
                 slow: VecDeque::with_capacity(WINDOW + 1),
                 frames: 0,
                 measurer: measurer.flatten(),
@@ -391,18 +403,53 @@ impl Processor {
 impl Align {
     fn believe(&mut self, measure: Measure, margin: f64) {
         self.last = Some(measure);
-        if measure.correlation < BELIEVED {
+        if cfg!(debug_assertions) && std::env::var_os("TOMOSHIBI_DEBUG_ECHO_LOG").is_some() {
+            crate::app::log(&format!(
+                "echo: measured {:.2} ms behind at {:.0}, offset {:.1}, correlation {:.2}; feeding at {:?}",
+                measure.delay_ms, measure.at, measure.offset, measure.correlation, self.feed
+            ));
+        }
+        if measure.correlation < BELIEVED
+            || (cfg!(debug_assertions) && std::env::var_os("TOMOSHIBI_DEBUG_ECHO_FIXED").is_some())
+        {
             return;
         }
         self.believed += 1;
-        self.target = Some(measure.offset + margin);
-        // A measure far from where the drift says it would be is a new
-        // path (another device, a stall): what came before is forgotten.
+        // A measure far from where the drift says it would be is either the
+        // voice fooling the measure (a pitch period off, which through a
+        // resampling loopback came every few seconds) or the path having
+        // moved (another device, a stall). One alone is taken for the
+        // first: followed, it moved the reverse stream 6 ms for a moment and
+        // the canceller lost hold. Two in a row that agree are the second,
+        // and what came before is forgotten.
+        // After a stall of the machine the path can move a second at once,
+        // and the measures that follow scatter while it settles: three off
+        // the line in a row, and the next one sure of itself is taken,
+        // rather than the reverse stream staying where nothing is.
         if let Some(expected) = self.predict(measure.at) {
             if (expected - measure.offset).abs() > 240.0 {
-                self.measures.clear();
+                match self.suspect.take() {
+                    Some((at, offset)) if (offset - measure.offset).abs() < 96.0 => {
+                        self.measures.clear();
+                        self.measures.push_back((at, offset));
+                        self.astray = 0;
+                    }
+                    _ if self.astray >= 3 && measure.correlation >= 0.6 => {
+                        self.measures.clear();
+                        self.astray = 0;
+                    }
+                    _ => {
+                        self.suspect = Some((measure.at, measure.offset));
+                        self.astray += 1;
+                        return;
+                    }
+                }
+            } else {
+                self.suspect = None;
+                self.astray = 0;
             }
         }
+        self.target = Some(measure.offset + margin);
         self.measures.push_back((measure.at, measure.offset));
         while self.measures.len() > KEPT_MEASURES {
             self.measures.pop_front();
@@ -436,8 +483,10 @@ impl Align {
             .iter()
             .map(|(x, y)| (x - mean_at) * (y - mean))
             .sum();
-        // A drift of more than a percent is no clock's: held where it is.
-        let slope = (together / spread).clamp(-0.01, 0.01);
+        // A drift of more than two thousandths is no clock's (two sound
+        // cards are a hundred millionths or so apart, a loopback's
+        // resampler about as much): held to that.
+        let slope = (together / spread).clamp(-0.002, 0.002);
         let _ = last_at;
         Some(mean + slope * (at - mean_at))
     }
@@ -808,7 +857,9 @@ mod tests {
     /// other, by a few hundred microseconds a second.
     fn drifting(t: f64) -> f64 {
         let rates = [0.3, -0.4, 0.25, -0.3];
-        let mut delay = 45.0;
+        // Behind the newest the speakers were given: their own buffer
+        // (50 ms) and the loopback's 40 ms, as in the rig.
+        let mut delay = 95.0;
         let mut at = 0.0;
         for rate in rates {
             let span = (t - at).clamp(0.0, 8.0);
