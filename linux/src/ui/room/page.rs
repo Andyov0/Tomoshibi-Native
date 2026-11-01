@@ -22,7 +22,6 @@ use tomoshibi_protocol::{
     hands,
     identity::{impersonating, signature_of, NamedIdentity},
     quality::ConnectionGrade,
-    share::ShareQuality,
 };
 
 use super::{
@@ -67,6 +66,8 @@ struct Bar {
     messages: gtk::Button,
     messages_dot: Motion,
     sound: gtk::Button,
+    music: gtk::Button,
+    music_dot: Motion,
     devices: gtk::Button,
     host: gtk::Button,
     host_count: gtk::Label,
@@ -411,6 +412,7 @@ impl Page {
         bar_motion.set_margin_bottom(BAR_FOOT);
         bar_motion.set_widget_name("room.bar");
         root.add_overlay(&bar_motion);
+        super::strain::attach(&root, &model);
 
         let window = glib::WeakRef::new();
         window.set(context.window().as_ref());
@@ -534,6 +536,19 @@ impl Page {
         messages_holder.add_overlay(&messages_dot);
         let sound = icon_button("audio-volume-high-symbolic", "");
         sound.set_widget_name("bar.sound");
+        let music = icon_button("emblem-music-symbolic", "");
+        music.set_widget_name("bar.music");
+        let music_dot_shape = gtk::Box::builder()
+            .halign(gtk::Align::Center)
+            .valign(gtk::Align::Center)
+            .build();
+        music_dot_shape.add_css_class("tmsb-dot");
+        let music_dot = Motion::hidden(&music_dot_shape, Away::GROW);
+        music_dot.set_halign(gtk::Align::End);
+        music_dot.set_valign(gtk::Align::Start);
+        music_dot.set_can_target(false);
+        let music_holder = gtk::Overlay::builder().child(&music).build();
+        music_holder.add_overlay(&music_dot);
         let devices = icon_button("emblem-system-symbolic", "");
         devices.set_widget_name("bar.devices");
         let host = glyph_button(glyph::CROWN, 17, "");
@@ -563,6 +578,9 @@ impl Page {
         island.append(&hand_pair);
         island.append(&messages_holder);
         island.append(&coming(&sound));
+        // Music beside the sound it is part of (ControlBar.tsx), shown once
+        // there is something to show.
+        island.append(&coming(&music_holder));
         island.append(&coming(&host_holder));
         island.append(&coming(&devices));
         island.append(&coming(&more));
@@ -578,6 +596,8 @@ impl Page {
             messages,
             messages_dot,
             sound,
+            music,
+            music_dot,
             devices,
             host,
             host_count,
@@ -673,92 +693,18 @@ impl Page {
                 )
             }
             "share" => {
-                let heading = gtk::Label::builder()
-                    .label(t("Picture quality"))
-                    .xalign(0.0)
-                    .build();
-                heading.add_css_class("tmsb-menu-heading");
-                card.append(&heading);
-                let choices = gtk::Box::new(gtk::Orientation::Horizontal, 2);
-                let mut buttons = Vec::new();
-                for (quality, label) in [
-                    (ShareQuality::Auto, t("Automatic")),
-                    (ShareQuality::P1080, "1080p".to_owned()),
-                    (ShareQuality::P1440, "1440p".to_owned()),
-                    (ShareQuality::P4k, "4K".to_owned()),
-                ] {
-                    let button = gtk::Button::with_label(&label);
-                    button.add_css_class("tmsb-choice");
-                    let w = weak.clone();
-                    button.connect_clicked(move |_| {
-                        if let Some(model) = w.upgrade() {
-                            model.kept::<RoomState>().view.borrow_mut().share_quality =
-                                Some(quality);
-                            super::changed(&model);
-                        }
-                    });
-                    choices.append(&button);
-                    buttons.push((quality, button));
-                }
-                card.append(&choices);
-                let rule = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-                rule.add_css_class("tmsb-menu-rule");
-                card.append(&rule);
-                let (go, go_title) = menu_row(
-                    &t("Share your screen"),
-                    None,
-                    Some("screen-shared-symbolic"),
-                );
-                go.set_widget_name("share.go");
-                let w = weak.clone();
-                go.connect_clicked(move |_| {
-                    if let Some(model) = w.upgrade() {
-                        super::close_pop(&model);
-                        let sharing = model.kept::<RoomState>().local.share.borrow().is_some();
-                        if sharing {
-                            super::stop_share(&model);
-                        } else {
-                            super::start_share(&model);
-                        }
-                    }
-                });
-                card.append(&go);
-                card.set_width_request(300);
-                let go = go.downgrade();
-                (
-                    card,
-                    Box::new(move |model: &AppModel| {
-                        let room = model.kept::<RoomState>();
-                        let chosen = room
-                            .view
-                            .borrow()
-                            .share_quality
-                            .unwrap_or(ShareQuality::Auto);
-                        for (quality, button) in &buttons {
-                            class(button, "held", *quality == chosen);
-                            if *quality == ShareQuality::Auto {
-                                button.set_label(&t("Automatic"));
-                            }
-                        }
-                        let sharing = room.local.share.borrow().is_some();
-                        go_title.set_label(&if sharing {
-                            t("Stop sharing")
-                        } else {
-                            t("Share your screen")
-                        });
-                        if let Some(go) = go.upgrade() {
-                            go.set_sensitive(!room.local.sharing_busy.get());
-                        }
-                    }),
-                )
+                let refresh = super::share_menu::build(model, &card);
+                (card, refresh)
             }
             "more" => {
                 let (sound, _) = menu_row(&t("Sound"), None, Some("audio-volume-high-symbolic"));
+                let (music, _) = menu_row(&t("Music"), None, Some("emblem-music-symbolic"));
                 let (devices, _) = menu_row(&t("Devices"), None, Some("emblem-system-symbolic"));
                 let (host, _) =
                     menu_row(&t("Running this room"), None, Some("system-users-symbolic"));
                 for (row, panel) in [
                     (&sound, Panel::Sound),
+                    (&music, Panel::Music),
                     (&devices, Panel::Devices),
                     (&host, Panel::Host),
                 ] {
@@ -772,11 +718,17 @@ impl Page {
                 }
                 card.set_width_request(240);
                 let host_row = host.downgrade();
+                let music_row = music.downgrade();
                 (
                     card,
                     Box::new(move |model: &AppModel| {
                         if let Some(host) = host_row.upgrade() {
                             host.set_visible(model.kept::<RoomState>().host.borrow().yours());
+                        }
+                        if let Some(music) = music_row.upgrade() {
+                            let open =
+                                model.kept::<RoomState>().view.borrow().panel == Some(Panel::Music);
+                            music.set_visible(open || super::music::available(model));
                         }
                     }),
                 )
@@ -837,6 +789,9 @@ impl Page {
         });
         on(&self.bar.devices, |model| {
             super::toggle_panel(model, Panel::Devices)
+        });
+        on(&self.bar.music, |model| {
+            super::toggle_panel(model, Panel::Music)
         });
         on(&self.bar.host, |model| {
             super::toggle_panel(model, Panel::Host)
@@ -1617,6 +1572,21 @@ impl Page {
             },
         );
         come_or_go(&bar.sound, !compact);
+        let music = view.panel == Some(Panel::Music);
+        class(&bar.music, "held", music);
+        set_label(
+            &bar.music,
+            &if music {
+                t("Hide music")
+            } else {
+                t("Show music")
+            },
+        );
+        come_or_go(
+            &bar.music,
+            (music || super::music::available(model)) && !compact,
+        );
+        bar.music_dot.show(!music && super::music::playing(model));
         class(&bar.devices, "held", view.panel == Some(Panel::Devices));
         set_label(&bar.devices, &t("Devices"));
         come_or_go(&bar.devices, !compact);

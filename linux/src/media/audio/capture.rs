@@ -216,9 +216,29 @@ fn run(
                 }
             }
             if cfg!(debug_assertions) && frames.is_multiple_of(500) {
+                // What the processor does, not what was asked of it: a run
+                // with the canceller turned off printed
+                // `echo_cancellation: true` every five seconds, and a test
+                // reading the log took it for on.
+                let (effective, measured) = processor
+                    .as_ref()
+                    .and_then(|(_, processor)| {
+                        processor
+                            .lock()
+                            .ok()
+                            .map(|p| (p.processing(), p.measured()))
+                    })
+                    .unwrap_or((wanted, (None, 0)));
+                let echo_said = match measured {
+                    (Some(last), believed) => format!(
+                        ", the echo measured {:.1} ms behind (correlation {:.2}, {believed} believed)",
+                        last.delay_ms, last.correlation
+                    ),
+                    (None, _) => String::new(),
+                };
                 log(&format!(
-                    "sound: microphone {:?}, {} frames of the speakers fed back, delay {} ms ({} playing, {} capturing)",
-                    wanted,
+                    "sound: microphone {:?}, {} frames of the speakers fed back, delay {} ms ({} playing, {} capturing){echo_said}",
+                    effective,
                     echo.rendered.load(Ordering::Relaxed),
                     echo.render_delay_ms() + capture_delay_ms,
                     echo.render_delay_ms(),

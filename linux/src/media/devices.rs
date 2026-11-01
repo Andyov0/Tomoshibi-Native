@@ -167,6 +167,30 @@ impl Media for Machine {
         self.screens.can_share()
     }
 
+    fn share_sound(
+        &self,
+        call: Arc<Call>,
+        lossless: bool,
+    ) -> Local<Result<Rc<dyn ScreenShare>, MediaError>> {
+        self.screens.share_sound(call, lossless)
+    }
+
+    fn set_duck(&self, identity: &str, factor: f32) {
+        self.sound.set_duck(identity, factor);
+    }
+
+    fn voice_levels(&self) -> Vec<(String, f32)> {
+        self.sound.voice_levels()
+    }
+
+    fn set_kind_volume(&self, identity: &str, music: bool, level: f32) {
+        self.sound.set_kind_volume(identity, music, level);
+    }
+
+    fn local_sound(&self, name: &str) -> Option<Arc<dyn tomoshibi_core::call::PcmSink>> {
+        Some(self.sound.local_sound(name))
+    }
+
     fn attach_call(&self, call: &Arc<Call>) {
         self.sound.attach_call(call);
     }

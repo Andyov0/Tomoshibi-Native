@@ -108,6 +108,17 @@ pub trait Microphone {
     fn set_muted(&self, muted: bool);
     /// Lets go of the device.
     fn close(&self);
+    /// Captures from another microphone (`None`: the system's default)
+    /// into the same voice: the track the others hear stays as it is, and
+    /// only where its sound comes from changes, as a browser's
+    /// `switchActiveDevice` replaces the track's source in place. Taking the
+    /// voice down and publishing it again made it vanish and come back for
+    /// everybody, and for a moment two voices were published at once. The
+    /// old device keeps sending until the new one has opened.
+    fn use_device(&self, choice: Option<String>) -> Local<Result<(), MediaError>> {
+        let _ = choice;
+        Box::pin(async { Err(MediaError::Unsupported) })
+    }
 }
 
 /// The camera, before and during a call.
@@ -125,6 +136,28 @@ pub trait Camera {
     /// deployment offers it.
     fn set_blur(&self, on: bool);
     fn close(&self);
+    /// Sends another camera into the same picture (the Mac's `useCamera`,
+    /// a browser's `switchActiveDevice`): nobody watching sees the picture
+    /// go and come back. The old camera keeps sending until the new one has
+    /// opened.
+    fn use_device(&self, choice: Option<String>) -> Local<Result<(), MediaError>> {
+        let _ = choice;
+        Box::pin(async { Err(MediaError::Unsupported) })
+    }
+    /// The device this camera captures, as listed (`Device::id`).
+    fn device(&self) -> Option<String> {
+        None
+    }
+    /// Called once on the main thread when the camera stops by itself: it
+    /// was unplugged, or its stream failed. Not called for `close`.
+    fn on_ended(&self, ended: Box<dyn Fn()>) {
+        let _ = ended;
+    }
+    /// A debug run's stand-in for pulling the camera out
+    /// (TOMOSHIBI_DEBUG_DEVICES `camera-gone`): a test picture stops as an
+    /// unplugged camera does, and its device leaves the list.
+    #[cfg(debug_assertions)]
+    fn pretend_unplugged(&self) {}
 }
 
 /// What a shared screen is sent as: the share menu's choices.
@@ -151,6 +184,11 @@ pub trait ScreenShare {
     fn sends_sound(&self) -> bool {
         false
     }
+    /// Whether the sound goes out losslessly too: a share of sound alone
+    /// offered so (`SoundKind::Listening { lossless_offered: true }`).
+    fn sends_lossless(&self) -> bool {
+        false
+    }
     /// The running share at another size, rate or with or without its
     /// sound, applied at once (the web's share menu, ShareButton.tsx: a
     /// setting that waits for the next share is one nobody can judge),
@@ -170,6 +208,17 @@ pub trait Media {
     fn devices(&self, kind: DeviceKind) -> Vec<Device>;
     /// Called on the main thread whenever a device comes or goes.
     fn on_devices_changed(&self, changed: Box<dyn Fn()>);
+    /// How far everything `identity` plays as music is turned down under
+    /// speech, from nought to one (duck.ts): on top of the listener's level
+    /// for it, which stays as it was set.
+    fn set_duck(&self, identity: &str, factor: f32) {
+        let _ = (identity, factor);
+    }
+    /// How loud each remote voice played was over the last 40 ms, by
+    /// identity, as an RMS from nought to one: what the duck listens to.
+    fn voice_levels(&self) -> Vec<(String, f32)> {
+        Vec::new()
+    }
 
     /// Opens the microphone (`None`: the system's default).
     fn open_microphone(
@@ -187,6 +236,17 @@ pub trait Media {
     ) -> Local<Result<Rc<dyn ScreenShare>, MediaError>>;
     /// Whether sharing is possible here at all, for the share button.
     fn can_share_screen(&self) -> bool;
+    /// Shares the computer's sound alone, without a picture (the web's
+    /// "Share only sound", sound.ts `startListening`), as
+    /// `SoundKind::Listening`, losslessly as well where `lossless`.
+    fn share_sound(
+        &self,
+        call: Arc<Call>,
+        lossless: bool,
+    ) -> Local<Result<Rc<dyn ScreenShare>, MediaError>> {
+        let _ = (call, lossless);
+        Box::pin(async { Err(MediaError::Unsupported) })
+    }
 
     /// Takes what is the whole call's rather than one track's: the lossless
     /// sound, which arrives on the data channel and not as a track
@@ -197,6 +257,10 @@ pub trait Media {
     /// Lets go of the call: stops everything it was playing. The room calls
     /// it when the call ends, however it ends.
     fn detach_call(&self);
+    fn local_sound(&self, name: &str) -> Option<Arc<dyn tomoshibi_core::call::PcmSink>> {
+        let _ = name;
+        None
+    }
 
     /// Plays a remote sound track (`call.attach_pcm` into the mixer), as the
     /// participant `identity`'s voice, screen sound or music.

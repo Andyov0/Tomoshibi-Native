@@ -314,6 +314,18 @@ fn act(model: &AppModel, action: &str) {
                 }
             });
         }
+        "share-quality" => {
+            let quality =
+                tomoshibi_protocol::share::share_remembered_quality(Some(value.to_owned()));
+            super::choose_share(model, quality, None);
+        }
+        "share-fps" => {
+            if let Ok(fps) = value.parse::<u32>() {
+                let (quality, _) = super::share_shown(model);
+                super::choose_share(model, quality, Some(fps));
+            }
+        }
+        "music" => super::music::script(model, value),
         "shot" => shot(model, value),
         other => log(&format!("room script: no such action {other:?}")),
     }

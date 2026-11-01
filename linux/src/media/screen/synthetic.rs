@@ -165,7 +165,13 @@ pub fn sound(sink: SoundSink) -> Generator {
                         (right + std::f64::consts::TAU * RIGHT_HZ / RATE) % std::f64::consts::TAU;
                 }
                 if let Some(input) = sink.lock().unwrap_or_else(|e| e.into_inner()).clone() {
+                    // And losslessly, as the capture of a real computer's
+                    // sound does (sound.rs).
+                    let floats: Vec<f32> =
+                        samples.iter().map(|s| f32::from(*s) / 32768.0).collect();
+                    let at = (chunks * 10_000) as i64;
                     input.push(samples);
+                    input.push_lossless(floats, 2, 48_000, at);
                     made.fetch_add(1, Ordering::Relaxed);
                 }
                 chunks += 1;
