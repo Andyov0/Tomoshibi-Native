@@ -4324,6 +4324,7 @@ dependencies = [
  "tokio",
  "tomoshibi-core",
  "tomoshibi-protocol",
+ "url",
  "v4l",
  "zune-jpeg",
 ]

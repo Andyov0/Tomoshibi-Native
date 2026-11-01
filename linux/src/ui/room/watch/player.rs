@@ -577,10 +577,19 @@ fn build(
                             .unwrap_or_default()
                     })
                     .unwrap_or_default();
-                if address.starts_with(base.trim_end_matches('/'))
-                    && source.find_property("cookies").is_some()
-                {
+                if same_origin(&address, &base) && source.find_property("cookies").is_some() {
                     source.set_property_from_value("cookies", &vec![cookie.clone()].to_value());
+                    // Not followed anywhere: libsoup sends a request's own
+                    // headers on to wherever a redirect points (it strips
+                    // Authorization alone when the host changes), so a 3xx
+                    // to another host would carry the session there. The
+                    // deployment's relay answers with the bytes and never
+                    // with a redirect (it passes no Location on), and a
+                    // browser's cookie would not follow one to another
+                    // origin either.
+                    if source.find_property("automatic-redirect").is_some() {
+                        source.set_property("automatic-redirect", false);
+                    }
                 }
                 None
             });
@@ -594,6 +603,29 @@ fn build(
             None
         }
     }
+}
+
+/// Whether `address` is on the deployment at `base`: the same scheme, host
+/// and port, read as a URL, as a browser decides where its cookie goes.
+///
+/// The session cookie is the whole account. It was given to any address
+/// that began with the base's text, and the base without its slash is a
+/// prefix of `https://meet.example.com.attacker.tld/` and of
+/// `https://meet.example.com@attacker.tld/` (whose host is the part after
+/// the `@`); a direct link is whatever somebody in the call pasted, so
+/// anybody in a call could have had a signed-in Linux participant's player
+/// send them that participant's session.
+fn same_origin(address: &str, base: &str) -> bool {
+    let (Ok(address), Ok(base)) = (url::Url::parse(address), url::Url::parse(base)) else {
+        return false;
+    };
+    // Only addresses that name a host: an origin of nothing is nobody's.
+    if address.host_str().is_none() {
+        return false;
+    }
+    address.scheme() == base.scheme()
+        && address.host_str() == base.host_str()
+        && address.port_or_known_default() == base.port_or_known_default()
 }
 
 /// A sample of I420 as the core's frames are: each plane packed without the
@@ -629,4 +661,32 @@ fn packed_i420(sample: &gst::Sample) -> Option<RemoteFrame> {
         timestamp_us: 0,
         i420: Some(packed),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::same_origin;
+
+    const BASE: &str = "https://meet.example.com/";
+
+    #[test]
+    fn the_session_goes_to_the_deployment_alone() {
+        // The relay's own addresses, as the core resolves `media?t=...`.
+        assert!(same_origin("https://meet.example.com/watch/media?t=abc", BASE));
+        assert!(same_origin("https://meet.example.com:443/watch/media?t=abc", BASE));
+        assert!(same_origin("https://MEET.example.com/watch/media", BASE));
+        // What a prefix of the base's text let through.
+        assert!(!same_origin("https://meet.example.com.attacker.tld/v.mp4", BASE));
+        assert!(!same_origin("https://meet.example.com@attacker.tld/v.mp4", BASE));
+        assert!(!same_origin("https://meet.example.com:8443/v.mp4", BASE));
+        assert!(!same_origin("http://meet.example.com/v.mp4", BASE));
+        assert!(!same_origin("https://example.com/v.mp4", BASE));
+        assert!(!same_origin("not a link", BASE));
+        assert!(!same_origin("", BASE));
+        // A deployment on a port of its own, as a local one is.
+        let local = "http://127.0.0.1:8080/";
+        assert!(same_origin("http://127.0.0.1:8080/watch/media?t=x", local));
+        assert!(!same_origin("http://127.0.0.1:8081/watch/media?t=x", local));
+        assert!(!same_origin("http://127.0.0.1/watch/media?t=x", local));
+    }
 }

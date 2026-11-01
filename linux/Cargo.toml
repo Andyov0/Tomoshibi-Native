@@ -79,6 +79,10 @@ tokio = { version = "1", default-features = false, features = ["sync"] }
 gstreamer = "0.25"
 gstreamer-app = "0.25"
 gstreamer-video = "0.25"
+# ui/room/watch: an address read as a URL, to tell whether it is on the
+# deployment the session cookie belongs to (player.rs `same_origin`). The
+# version reqwest and the core already compile; nothing new enters the build.
+url = "2"
 
 # --- media/ (audio, camera, screen) adds its crates below this line ---
 
