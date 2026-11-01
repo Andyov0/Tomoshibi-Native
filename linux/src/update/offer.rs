@@ -521,6 +521,20 @@ async fn check(model: &AppModel, asked: bool) -> bool {
     }
 }
 
+/// A build offered as if the deployment had one, in a debug build: for a
+/// picture of the lobby's offer (`TOMOSHIBI_DEBUG_LOBBY=update`), since
+/// the local deployments the tests run have no Linux build to offer.
+#[cfg(debug_assertions)]
+pub fn pose(model: &AppModel, build: AppBuild) {
+    set(
+        model,
+        Step::Offered {
+            build,
+            problem: None,
+        },
+    );
+}
+
 /// `TOMOSHIBI_DEBUG_UPDATE=install`, in a debug build: takes an offered
 /// build at once, as the button would, for the update's end-to-end test.
 fn debug_install(model: &AppModel) {

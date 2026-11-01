@@ -24,6 +24,11 @@ pub fn offer(model: &AppModel) -> gtk::Revealer {
     let detail = gtk::Label::builder().wrap(true).xalign(0.0).build();
     detail.add_css_class("tmsb-muted");
     detail.add_css_class("tmsb-small");
+    // Why the button downloads rather than updates, where the app does not
+    // run from an AppImage and cannot replace itself (update::offer).
+    let why = gtk::Label::builder().wrap(true).xalign(0.0).build();
+    why.add_css_class("tmsb-muted");
+    why.add_css_class("tmsb-small");
     let bar = gtk::ProgressBar::new();
     bar.add_css_class("tmsb-progress");
     let later = kit::plain_button(&t("Later"));
@@ -46,6 +51,7 @@ pub fn offer(model: &AppModel) -> gtk::Revealer {
     card.set_widget_name("lobby.update");
     card.append(&title);
     card.append(&detail);
+    card.append(&why);
     card.append(&bar);
     card.append(&buttons);
     let revealer = gtk::Revealer::builder()
@@ -55,10 +61,11 @@ pub fn offer(model: &AppModel) -> gtk::Revealer {
         .build();
 
     let fill = {
-        let (revealer, title, detail, bar, later, update, cancel) = (
+        let (revealer, title, detail, why, bar, later, update, cancel) = (
             revealer.downgrade(),
             title.downgrade(),
             detail.downgrade(),
+            why.downgrade(),
             bar.downgrade(),
             later.downgrade(),
             update.downgrade(),
@@ -69,6 +76,7 @@ pub fn offer(model: &AppModel) -> gtk::Revealer {
                 Some(revealer),
                 Some(title),
                 Some(detail),
+                Some(why),
                 Some(bar),
                 Some(later),
                 Some(update),
@@ -77,6 +85,7 @@ pub fn offer(model: &AppModel) -> gtk::Revealer {
                 revealer.upgrade(),
                 title.upgrade(),
                 detail.upgrade(),
+                why.upgrade(),
                 bar.upgrade(),
                 later.upgrade(),
                 update.upgrade(),
@@ -90,12 +99,20 @@ pub fn offer(model: &AppModel) -> gtk::Revealer {
             if !shown {
                 return;
             }
-            let step = model.kept::<updates::UpdateState>().step.borrow().clone();
-            let label = |build: &tomoshibi_protocol::api::AppBuild| {
-                tomoshibi_protocol::api::version_label(build.version.clone())
-            };
+            let step = updates::step(model);
+            let label = updates::version_label;
+            let not_installable = updates::why_not_installable();
+            why.set_visible(matches!(step, Step::Offered { .. }) && not_installable.is_some());
+            why.set_label(not_installable.as_deref().unwrap_or_default());
+            update.set_label(&if not_installable.is_some() {
+                t("Download")
+            } else {
+                t("Update")
+            });
             match step {
-                Step::None => {}
+                // A held download is not shown (`shown`): it is held
+                // because the person went towards a call.
+                Step::None | Step::Held { .. } => {}
                 Step::Offered { build, problem } => {
                     title.set_label(&t_with(
                         "Tomoshibi {version} is available",

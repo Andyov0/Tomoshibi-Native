@@ -106,13 +106,13 @@ fn update_row(model: &AppModel) -> adw::ActionRow {
                 return;
             };
             row.set_visible(updates::speaks(model));
-            let state = model.kept::<updates::UpdateState>();
-            let step = state.step.borrow().clone();
-            let label = |build: &tomoshibi_protocol::api::AppBuild| {
-                tomoshibi_protocol::api::version_label(build.version.clone())
-            };
+            let step = updates::step(model);
+            let label = updates::version_label;
             let (said, action) = match step {
                 Step::Downloading {
+                    received, total, ..
+                }
+                | Step::Held {
                     received, total, ..
                 } => (
                     t_with(
@@ -141,7 +141,7 @@ fn update_row(model: &AppModel) -> adw::ActionRow {
                     Some(t("Update")),
                 ),
                 Step::None => (
-                    match state.said.get() {
+                    match updates::said(model) {
                         Some(Said::Checking) => t("Checking for updates…"),
                         Some(Said::Current) => t("You have the latest version."),
                         Some(Said::Failed) => t("Could not check for updates. Try again later."),
@@ -155,7 +155,7 @@ fn update_row(model: &AppModel) -> adw::ActionRow {
                 Some(words) => {
                     button.set_label(&words);
                     button.set_visible(true);
-                    button.set_sensitive(state.said.get() != Some(Said::Checking));
+                    button.set_sensitive(updates::said(model) != Some(Said::Checking));
                 }
                 None => button.set_visible(false),
             }
@@ -167,9 +167,8 @@ fn update_row(model: &AppModel) -> adw::ActionRow {
         let Some(model) = weak.upgrade() else {
             return;
         };
-        let step = model.kept::<updates::UpdateState>().step.borrow().clone();
-        match step {
-            Step::Downloading { .. } => updates::cancel(&model),
+        match updates::step(&model) {
+            Step::Downloading { .. } | Step::Held { .. } => updates::cancel(&model),
             Step::Offered { .. } => updates::accept(&model),
             _ => updates::check_now(&model),
         }
