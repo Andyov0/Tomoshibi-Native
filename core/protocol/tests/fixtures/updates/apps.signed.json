@@ -56,5 +56,24 @@
     "en": "TestFlight installs this one."
    }
   }
+ ],
+ "linux-x86_64": [
+  {
+   "version": "0.1.7",
+   "file": "Tomoshibi-0.1.7-x86_64.AppImage",
+   "size": 33,
+   "sha256": "1e5112ed53b648e71bd161d08e594e5857516bfc21bf5e0172a72ac0344fd2d6",
+   "sig": "OmSSUghlz4Uc3Nm1bMRFB4xFUfHjGkI6xNm5bFVPwjTo6nU2e53ZanPV0AS9D3NwNogILzG62F0Tm4mpXcmcBQ=="
+  }
+ ],
+ "linux-aarch64": [
+  {
+   "version": "0.1.7",
+   "file": "Tomoshibi-0.1.7.2-aarch64.AppImage",
+   "size": 28,
+   "sha256": "5d372fc2274dc9efe6d45dbf746d53cf16a4d6e150be309f5f3d88e7c611fc97",
+   "build": "2",
+   "sig": "0FJRJ07L+PvTI6/jlwyFqji/HC+ak9w9L1PndJCa4l14E7wJKqB0/x3cLxMXPA1y9TLcmpAXHsyjCVLQjMJkDw=="
+  }
  ]
 }
