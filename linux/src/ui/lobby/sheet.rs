@@ -80,7 +80,7 @@ pub fn present(context: &Context, mode: Mode) {
         .width_chars(8)
         .build();
     room.add_css_class("tmsb-input");
-    room.add_css_class("tmsb-mono");
+    mono_once_typed(&room);
     room.set_widget_name("sheet.room");
     let scope_warning = gtk::Label::builder().wrap(true).xalign(0.0).build();
     scope_warning.add_css_class("tmsb-small");
@@ -458,6 +458,19 @@ pub fn present(context: &Context, mode: Mode) {
 
     dialog.present(Some(&window));
     room.grab_focus();
+}
+
+/// A room's field is in the machine's monospace once something is in it,
+/// as the room is written everywhere else, and in the page's own type while
+/// it shows its prompt: the long prompt in monospace was cut off at both
+/// the sheet's widths ("...for one nobody ha..."), where the Mac's field
+/// changes type the same way.
+pub fn mono_once_typed(entry: &gtk::Entry) {
+    let follow = |entry: &gtk::Entry| {
+        pieces::set_class(entry, "tmsb-mono", !entry.text().is_empty());
+    };
+    follow(entry);
+    entry.connect_changed(follow);
 }
 
 /// A room's name with the part after `@` completed from the account's own

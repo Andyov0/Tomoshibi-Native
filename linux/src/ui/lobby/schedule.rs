@@ -162,7 +162,7 @@ fn form(context: &Context, draft: &Rc<Draft>) -> gtk::Box {
         .text(draft.planning.borrow().as_str())
         .build();
     room.add_css_class("tmsb-input");
-    room.add_css_class("tmsb-mono");
+    super::sheet::mono_once_typed(&room);
     room.set_widget_name("schedule.room");
     room.update_property(&[gtk::accessible::Property::Label(&t("Room name"))]);
     let hint = gtk::Label::builder()
