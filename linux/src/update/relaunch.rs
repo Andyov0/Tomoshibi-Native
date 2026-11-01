@@ -460,11 +460,27 @@ mod tests {
         let dir = scratch("inherited");
         let image = Dir(&dir).image();
         let listed = dir.join("descriptors");
-        script(&image, &format!("ls /proc/$$/fd > '{}'", listed.display()));
+        // What each of its descriptors is, rather than their numbers: the
+        // shell running the image's script holds that script open on a
+        // descriptor of its own from 10 up, and with the other tests' files
+        // open beside this one the pipe was given 10 and 11, which the new
+        // image then seemed to have been handed.
+        script(
+            &image,
+            &format!(
+                "for held in /proc/$$/fd/*; do readlink \"$held\"; done > '{}'",
+                listed.display()
+            ),
+        );
         // A descriptor as the AppImage runtime hands one over: not marked
         // close-on-exec.
         let mut ends = [0 as libc::c_int; 2];
         assert_eq!(unsafe { libc::pipe(ends.as_mut_ptr()) }, 0);
+        let pipe = {
+            let mut stat: libc::stat = unsafe { std::mem::zeroed() };
+            assert_eq!(unsafe { libc::fstat(ends[0], &mut stat) }, 0);
+            format!("pipe:[{}]", stat.st_ino)
+        };
         let mut app = stand_in(&dir);
         relaunch_after(app.id(), &image, None).unwrap();
         fs::write(dir.join("stop"), b"").unwrap();
@@ -480,12 +496,10 @@ mod tests {
             libc::close(ends[0]);
             libc::close(ends[1]);
         }
-        for end in ends {
-            assert!(
-                !held.contains(&end.to_string()),
-                "descriptor {end} reached the new image: {held:?}"
-            );
-        }
+        assert!(
+            !held.contains(&pipe),
+            "the pipe {pipe} reached the new image: {held:?}"
+        );
         let _ = fs::remove_dir_all(&dir);
     }
 
