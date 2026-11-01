@@ -252,6 +252,7 @@ fn section(platform: UpdatePlatform) -> &'static str {
         UpdatePlatform::Android => "android",
         UpdatePlatform::Windows => "windows",
         UpdatePlatform::Ios => "ios",
+        UpdatePlatform::Linux => "linux",
     }
 }
 
@@ -472,6 +473,7 @@ async fn the_check_asks_for_its_own_platform_as_the_app() {
         (UpdatePlatform::Android, "/api/apps/latest/android"),
         (UpdatePlatform::Windows, "/api/apps/latest/windows"),
         (UpdatePlatform::Ios, "/api/apps/latest/ios"),
+        (UpdatePlatform::Linux, "/api/apps/latest/linux"),
     ] {
         deployment
             .clone()

@@ -73,19 +73,27 @@ use super::{network, Api, Deployment};
 use crate::{runtime::on_core, ProtocolError};
 
 /// The platforms the deployment says the newest build of, by the section of
-/// its manifest each is in. The Mac, Android and Windows builds are files it
-/// hands over; the iOS app is installed by TestFlight, and the deployment
-/// only says which version is newest there and what changed in it.
+/// its manifest each is in. The Mac, Android, Windows and Linux builds are
+/// files it hands over; the iOS app is installed by TestFlight, and the
+/// deployment only says which version is newest there and what changed in it.
+///
+/// A variant crosses into the apps as its position counted from one, so new
+/// platforms go on the end and nothing is ever put before another: a binding
+/// generated before a variant was added still reads every earlier one
+/// rightly, and one put first would have such a binding read the Mac as
+/// Android.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum UpdatePlatform {
     Mac,
     Android,
     Windows,
-    /// Last, and to stay last. A variant crosses into the apps as its
-    /// position counted from one, so a binding generated before this one
-    /// was added still reads the other three rightly; put first, it would
-    /// have such a binding read the Mac as Android.
+    /// After the first three, which were there before it, for the rule above.
     Ios,
+    /// The Linux app, an AppImage that replaces itself. After `Ios` for the
+    /// same rule: the bindings the other apps were built with before Linux
+    /// existed number the four before it as they always did, and never see
+    /// this one, since no app but Linux's asks for it.
+    Linux,
 }
 
 impl UpdatePlatform {
@@ -96,6 +104,7 @@ impl UpdatePlatform {
             Self::Android => "android",
             Self::Windows => "windows",
             Self::Ios => "ios",
+            Self::Linux => "linux",
         }
     }
 
@@ -1341,6 +1350,64 @@ mod tests {
     }
 
     #[test]
+    fn the_platforms_keep_their_places_and_linux_is_last() {
+        // The bindings number the variants by place; a platform added before
+        // another, or the five reordered, would have an app built against
+        // the earlier list ask for somebody else's builds.
+        let places = [
+            UpdatePlatform::Mac,
+            UpdatePlatform::Android,
+            UpdatePlatform::Windows,
+            UpdatePlatform::Ios,
+            UpdatePlatform::Linux,
+        ]
+        .map(|platform| platform as u8);
+        assert_eq!(places, [0, 1, 2, 3, 4]);
+        assert_eq!(UpdatePlatform::Linux.section(), "linux", "updates.go's word");
+        assert!(!UpdatePlatform::Linux.elsewhere(), "a Linux build is a file");
+    }
+
+    #[test]
+    fn a_linux_build_is_signed_as_linux_and_as_nothing_else() {
+        let (pair, key) = test_pair(TEST_SEED);
+        let image = b"an appimage";
+        let sha256 = hash_of(image);
+        let file = "Tomoshibi-0.1.7-x86_64.AppImage";
+        let signed = |platform| Signed {
+            platform,
+            version: "0.1.7",
+            file_name: file,
+            size: image.len() as u64,
+            sha256: &sha256,
+        };
+        assert!(String::from_utf8(signed(UpdatePlatform::Linux).message())
+            .unwrap()
+            .contains("\nplatform=linux\n"));
+
+        let answer = json!({
+            "platform": "linux", "version": "0.1.7", "file": file,
+            "size": image.len(), "sha256": sha256,
+            "sig": signature_of(&pair, &signed(UpdatePlatform::Linux)),
+        });
+        let build = read_build(UpdatePlatform::Linux, &answer, Some(&key)).unwrap();
+        assert_eq!(build.platform, UpdatePlatform::Linux);
+        assert_eq!(build.size, image.len() as u64);
+
+        // Windows' signature of the very same file is not Linux's.
+        let as_windows = with(
+            &answer,
+            "sig",
+            json!(signature_of(&pair, &signed(UpdatePlatform::Windows))),
+        );
+        assert!(
+            refused(&read_build(UpdatePlatform::Linux, &as_windows, Some(&key))),
+            "a signature made for Windows passed for Linux"
+        );
+        // And Linux's answer is not taken for another platform's.
+        assert!(refused(&read_build(UpdatePlatform::Windows, &answer, Some(&key))));
+    }
+
+    #[test]
     fn a_signed_build_is_offered_with_its_signature() {
         let (pair, key) = test_pair(TEST_SEED);
         let answer = signed_answer(&pair, b"a setup");
@@ -1580,6 +1647,7 @@ mod tests {
             ("mac", UpdatePlatform::Mac),
             ("android", UpdatePlatform::Android),
             ("windows", UpdatePlatform::Windows),
+            ("linux", UpdatePlatform::Linux),
         ] {
             for line in manifest[section].as_array().into_iter().flatten() {
                 if line.get("file").is_none() {

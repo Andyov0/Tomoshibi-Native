@@ -60,6 +60,7 @@ use url::Url;
 use crate::ProtocolError;
 
 pub use account::Account;
+pub use agent::describe_client;
 pub use meetings::{host_not_coming_after_ms, meeting_ask_every_ms, Arrangement};
 pub use music::{
     describe_music_audio, music_clock, MusicAudio, MusicLibrary, MusicLink, MusicLinkKind,
@@ -74,8 +75,8 @@ pub use rooms::{
     Opening,
 };
 pub use updates::{
-    update_key, update_notes, version_is_newer, AppBuild, UpdateCheck, UpdateDownload,
-    UpdateError, UpdatePlatform, UpdateProgress,
+    update_key, update_notes, version_is_newer, version_label, version_with_build, AppBuild,
+    UpdateCheck, UpdateDownload, UpdateError, UpdatePlatform, UpdateProgress,
 };
 pub use watch::{
     read_resolved, watch_media_link, MediaItem, MediaServer, ResolvedLink, ResolvedPlay,
