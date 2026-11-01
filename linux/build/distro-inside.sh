@@ -48,11 +48,11 @@ cp "$IMAGE" "$app_image"
 chmod 755 "$app_image"
 say "image: $(basename "$IMAGE"), $(stat -c %s "$app_image") bytes, sha256 $(sha256sum "$app_image" | cut -d' ' -f1)"
 if [ "${EMULATED:-0}" = 1 ]; then
-  # Run through Rosetta, whose binfmt entry does not match an ELF header
-  # with the AppImage magic in its padding (package.Dockerfile): zeroed in
-  # this copy, which changes nothing the runtime reads.
+  # Run through an emulator whose binfmt entry does not match an ELF
+  # header with the AppImage magic in its padding (package.Dockerfile):
+  # zeroed in this copy, which changes nothing the runtime reads.
   printf '\000\000\000' | dd of="$app_image" bs=1 seek=8 conv=notrunc status=none
-  say "emulated: the AppImage magic is zeroed in this copy, for Rosetta's binfmt"
+  say "emulated: the AppImage magic is zeroed in this copy, for the emulator's binfmt"
 fi
 started_sha=$(sha256sum "$app_image" | cut -d' ' -f1)
 

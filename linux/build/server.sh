@@ -7,25 +7,25 @@
 #   linux/build/server.sh url <port>        what TOMOSHIBI_BASE to give the app
 #
 # The binary is a Linux build of the server (Tomoshibi Server, built with
-# GOOS=linux for the architecture of the build VM, which runs it natively;
+# GOOS=linux for the docker host's own architecture, which runs it natively;
 # statically linked, so any image runs it). Four ports from <port> are used:
 # <port> for the web, the API and the signalling, <port>+1 the media server's
-# own HTTP on loopback, <port>+2 its UDP and <port>+3 its TCP. Each checkout
-# that runs one picks <port> from its own range.
+# own HTTP on loopback, <port>+2 its UDP and <port>+3 its TCP. Runs side by
+# side need a <port> each, four apart at least.
 #
 # The app reaches it as http://tmsb-server-<port>:<port> from any container
 # on the network tomoshibi-linux-net. The web port and the media server's
-# TCP port are also published on the VM's loopback, which is forwarded
-# to the Mac's, for a browser there; media over UDP from the Mac is not
-# forwarded (the media server hands out the container's own address), so a
-# browser that has to receive media runs in a container on the network too.
+# TCP port are also published on the docker host's loopback, for a browser
+# there; media over UDP from outside the docker network is not reachable
+# (the media server hands out the container's own address), so a browser
+# that has to receive media runs in a container on the network too.
 #
 # Everything the server writes is in the container and goes with it: every
 # start is a deployment nobody has used.
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
-context=${TOMOSHIBI_DOCKER_CONTEXT:-linux-build}
+context=${TOMOSHIBI_DOCKER_CONTEXT:-${DOCKER_CONTEXT:-default}}
 docker=(docker --context "$context")
 network=tomoshibi-linux-net
 
@@ -92,7 +92,7 @@ meet:
 
 for _ in $(seq 1 60); do
   if "${docker[@]}" exec "$name" curl -fsS "http://127.0.0.1:$port/api/deployment" >/dev/null 2>&1; then
-    echo "started $name: http://$name:$port on $network (and http://127.0.0.1:$port on the Mac)"
+    echo "started $name: http://$name:$port on $network (and http://127.0.0.1:$port on the docker host)"
     exit 0
   fi
   sleep 0.5

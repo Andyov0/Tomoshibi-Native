@@ -7,7 +7,7 @@
 #
 #   --base URL        the deployment (TOMOSHIBI_BASE); required, since a
 #                     debug build without one opens on its home deployment
-#   --out DIR         a directory on the Mac for the pictures and the logs
+#   --out DIR         a directory on this machine for the pictures and the logs
 #   --label NAME      what the files are called (default: <arch>-<appearance>)
 #   --appearance day|night   the system's preference the app follows
 #                     (libadwaita's ADW_DEBUG_COLOR_SCHEME, read as the
@@ -36,7 +36,7 @@ set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
 checkout=$(cd "$here/../.." && pwd)
-context=${TOMOSHIBI_DOCKER_CONTEXT:-linux-build}
+context=${TOMOSHIBI_DOCKER_CONTEXT:-${DOCKER_CONTEXT:-default}}
 docker=(docker --context "$context")
 
 arch=${1:?"usage: run-headless.sh <aarch64|x86_64> --base <url> --out <dir> [options]"}
@@ -92,9 +92,10 @@ app_env=(
 [ -n "$after" ] && app_env+=(-e "TOMOSHIBI_DEBUG_SNAPSHOT_AFTER_MS=$after")
 
 # The last run's pictures of this label are removed inside the container
-# (headless-inside.sh), not here: removed on the Mac, the VM's view of the
-# shared directory still held them, and creating the same names from the
-# container failed with "No such file or directory", every second run.
+# (headless-inside.sh), not here: removed outside the docker host, the
+# host's view of a shared directory can still hold them, and creating the
+# same names from the container failed with "No such file or directory",
+# every second run.
 exec "${docker[@]}" run --rm \
   --name "tmsb-headless-$name-$arch-$$" \
   --platform "$platform" \
