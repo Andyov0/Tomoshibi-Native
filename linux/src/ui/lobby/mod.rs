@@ -178,6 +178,8 @@ progressbar.tmsb-progress > trough > progress { min-height: 4px; border-radius: 
 }
 .tmsb-well-row { padding: 12px 14px; min-height: 24px; }
 separator.tmsb-well-rule { background-color: @tmsb_border; min-height: 1px; }
+/* A prompt too wide for its field, a step smaller (sheet.rs). */
+entry.tmsb-input.tmsb-snug > text > placeholder { font-size: 13px; }
 entry.tmsb-input, passwordentry.tmsb-input {
   background-color: mix(@tmsb_surface, @tmsb_wash, 0.04); border: 1px solid @tmsb_border;
   border-radius: 12px; min-height: 38px; padding: 0 12px; box-shadow: none; outline: none;

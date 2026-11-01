@@ -35,6 +35,8 @@ pub enum Mode {
 
 /// The sheet's width, as the Mac's.
 const WIDTH: i32 = 560;
+/// The room field's padding and border, both sides (entry.tmsb-input).
+const FIELD_INSET: i32 = 2 * (12 + 1);
 
 pub fn present(context: &Context, mode: Mode) {
     let Some(window) = context.window() else {
@@ -170,11 +172,24 @@ pub fn present(context: &Context, mode: Mode) {
                 return;
             };
             let starting = matches!(*mode.borrow(), Mode::Start);
-            room.set_placeholder_text(Some(&if starting {
+            let prompt = if starting {
                 t("Name it yourself, or leave it blank for one nobody has used.")
             } else {
                 t("Room name or invite link")
-            }));
+            };
+            room.set_placeholder_text(Some(&prompt));
+            // A prompt wider than the field is drawn a step smaller rather
+            // than cut short: Japanese's runs about 520 wide at the field's
+            // size, in a field that has 494 inside its padding, and lost
+            // its last words to an ellipsis. Measured in the field's own
+            // font, so that whatever the language and the fonts, the class
+            // is there only where it is needed.
+            let (wide, _) = room.create_pango_layout(Some(&prompt)).pixel_size();
+            if wide > WIDTH - 40 - FIELD_INSET {
+                room.add_css_class("tmsb-snug");
+            } else {
+                room.remove_css_class("tmsb-snug");
+            }
             room.update_property(&[gtk::accessible::Property::Label(&t("Room name"))]);
             go.set_label(&if starting { t("Start") } else { t("Join") });
         }
