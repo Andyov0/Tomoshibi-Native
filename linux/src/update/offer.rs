@@ -509,7 +509,9 @@ async fn check(model: &AppModel, asked: bool) -> bool {
             true
         }
         Err(fault) => {
-            log(&format!("update: the check did not answer: {fault}"));
+            // Not answering and answering with a build nobody signed are
+            // both failures here, said as what they were.
+            log(&format!("update: the check failed: {fault}"));
             if asked {
                 updates(model).state.borrow_mut().said = Some(Said::Failed);
                 model.announce(Change::Update);

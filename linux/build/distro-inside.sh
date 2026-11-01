@@ -3,12 +3,15 @@
 # (dbus-run-session). Everything it starts is its own child and stops with
 # the container.
 #
-# With UPDATE_TO set (update-check.sh), the run goes on after the first
-# window: the app, told by TOMOSHIBI_DEBUG_UPDATE=install to take the
-# update its deployment offers, downloads it, puts it in its own place and
-# starts it; this waits for the new version to say it has started and has
-# removed the image it replaced, takes the new window's picture, and checks
-# that the image in place is, byte for byte, the build offered.
+# With UPDATE_TO set (update-check.sh), the app, told by
+# TOMOSHIBI_DEBUG_UPDATE=install to take the update its deployment offers,
+# downloads it, puts it in its own place and starts it; this waits for the
+# new version to say it has started and has removed the image it replaced,
+# takes the new window's picture, and checks that the image in place is,
+# byte for byte, the build offered (UPDATE_TO is its SHA-256).
+#
+# With TOMOSHIBI_DEBUG_DESKTOP=add, it also checks the desktop entry the
+# start wrote.
 set -euo pipefail
 
 export XDG_RUNTIME_DIR=/tmp/runtime
@@ -77,29 +80,67 @@ shot() {
 }
 
 deadline=$(( $(date +%s) + SECONDS_LEFT ))
-until grep -q "snapshot written" "$log.app.log" 2>/dev/null; do
-  if ! kill -0 "$app_pid" 2>/dev/null; then say "the app exited early; see $LABEL.stderr"; tail -20 "$log.stderr"; exit 1; fi
-  if [ "$(date +%s)" -ge "$deadline" ]; then say "the window never settled; see $LABEL.app.log"; exit 1; fi
-  sleep 0.25
-done
-shot "$log.weston.png"
-# The same switch writes the next start's snapshot over this one.
-[ -z "${UPDATE_TO:-}" ] || cp "$log.gtk.png" "$log.before.gtk.png"
-say "first window: $(grep -m1 '^showing ' "$log.app.log" || true); $(grep -m1 '^Tomoshibi ' "$log.app.log" || true)"
+
+# What a start with TOMOSHIBI_DEBUG_DESKTOP=add wrote: the entry naming this
+# image, with the scheme, and the entry as the scheme's default.
+check_desktop() {
+  local entry=$HOME/.local/share/applications/app.tomoshibi.Linux.desktop
+  for _ in $(seq 1 40); do [ -f "$entry" ] && break; sleep 0.25; done
+  [ -f "$entry" ] || { say "no desktop entry was written"; return 1; }
+  grep -qx "Exec=\"$app_image\" %U" "$entry" || { say "the entry does not run this image:"; say "$(grep '^Exec=' "$entry")"; return 1; }
+  grep -qx 'MimeType=x-scheme-handler/tomoshibi;' "$entry" || { say "the entry does not open tomoshibi:// links"; return 1; }
+  grep -qx 'x-scheme-handler/tomoshibi=app.tomoshibi.Linux.desktop' "$HOME/.config/mimeapps.list" \
+    || { say "the entry is not the scheme's default"; return 1; }
+  [ -f "$HOME/.local/share/icons/hicolor/scalable/apps/app.tomoshibi.Linux.svg" ] || { say "no icon was written"; return 1; }
+  say "desktop: the entry runs $app_image, opens tomoshibi:// links by default, and has its icon ($(ls "$HOME/.local/share/icons/hicolor" | tr '\n' ' '))"
+}
 
 if [ -z "${UPDATE_TO:-}" ]; then
+  until grep -q "snapshot written" "$log.app.log" 2>/dev/null; do
+    if ! kill -0 "$app_pid" 2>/dev/null; then say "the app exited early; see $LABEL.stderr"; tail -20 "$log.stderr"; exit 1; fi
+    if [ "$(date +%s)" -ge "$deadline" ]; then say "the window never settled; see $LABEL.app.log"; exit 1; fi
+    sleep 0.25
+  done
+  shot "$log.weston.png"
+  say "first window: $(grep -m1 '^showing ' "$log.app.log" || true); $(grep -m1 '^Tomoshibi ' "$log.app.log" || true)"
+  if [ -n "${TOMOSHIBI_DEBUG_DESKTOP:-}" ] && [ "$TOMOSHIBI_DEBUG_DESKTOP" = add ]; then check_desktop; fi
   exit 0
 fi
 
-# The update: the new version says it started, then that it removed the
-# image it replaced (update/mod.rs at_start).
-deadline=$(( $(date +%s) + SECONDS_LEFT ))
+# An update that must be refused: the app says the build is not signed by
+# its key, downloads nothing, and goes on as it was.
+case $UPDATE_TO in
+  refused:*)
+    until grep -q 'update: the check failed' "$log.app.log" 2>/dev/null; do
+      if [ "$(date +%s)" -ge "$deadline" ]; then say "the app never said the check failed; see $LABEL.app.log"; exit 1; fi
+      sleep 0.25
+    done
+    # Long enough for a download and a restart, had either begun.
+    sleep 5
+    say "update: $(grep -m1 'update: the check failed' "$log.app.log")"
+    if grep -q 'update: downloading\|update: closing' "$log.app.log"; then say "the app went on with a build it should have refused"; exit 1; fi
+    kill -0 "$app_pid" 2>/dev/null || { say "the app is not running any more"; exit 1; }
+    have=$(sha256sum "$app_image" | cut -d' ' -f1)
+    [ "$have" = "${UPDATE_TO#refused:}" ] || { say "the image changed: $have"; exit 1; }
+    leftovers=$(ls -A "$HOME/Applications" | grep -v "^$(basename "$app_image")\$" || true)
+    [ -z "$leftovers" ] || { say "something was left beside the image: $leftovers"; exit 1; }
+    shot "$log.weston.png"
+    say "refused: the image is unchanged (sha256 $have) and nothing was downloaded beside it"
+    exit 0
+    ;;
+esac
+
+# The update. The first start may close before its window has been drawn
+# long enough for a snapshot (a local deployment hands the build over in a
+# moment), so nothing here waits for one: it waits for the new version to say
+# it has started and has removed the image it replaced (update/mod.rs
+# at_start), then for the new window's own snapshot.
 until grep -q "removed the image this one replaced" "$log.app.log" 2>/dev/null; do
-  if [ "$(date +%s)" -ge "$deadline" ]; then say "the new version never said it had started; see $LABEL.app.log"; exit 1; fi
+  if [ "$(date +%s)" -ge "$deadline" ]; then say "the new version never said it had started; see $LABEL.app.log"; tail -20 "$log.stderr"; exit 1; fi
   sleep 0.25
 done
 say "update: $(grep -c '^Tomoshibi ' "$log.app.log") starts in the log:"
-grep '^Tomoshibi \|^update: \|removed the image' "$log.app.log" | tee -a "$log.check.txt"
+grep '^Tomoshibi \|^update: ' "$log.app.log" | tee -a "$log.check.txt"
 
 have=$(sha256sum "$app_image" | cut -d' ' -f1)
 if [ "$have" != "$UPDATE_TO" ]; then say "the image in place is $have, not the build offered ($UPDATE_TO)"; exit 1; fi
@@ -108,12 +149,14 @@ if [ -e "$app_image.old" ]; then say "the replaced image is still there"; exit 1
 say "the replaced image is gone; the folder holds: $(ls -A "$HOME/Applications" | tr '\n' ' ')"
 [ -x "$app_image" ] || { say "the new image is not executable"; exit 1; }
 
-# The new window, once it has drawn: its own snapshot is written over the
-# first one's by the same switch, so wait for a second "snapshot written".
-until [ "$(grep -c 'snapshot written' "$log.app.log")" -ge 2 ]; do
+# The new window's snapshot: one written after the old start said it was
+# closing.
+closing=$(grep -n 'update: closing' "$log.app.log" | tail -1 | cut -d: -f1)
+until tail -n +"${closing:-1}" "$log.app.log" | grep -q 'snapshot written'; do
   if [ "$(date +%s)" -ge "$deadline" ]; then say "the new window never settled"; exit 1; fi
   sleep 0.25
 done
 shot "$log.after.weston.png"
 cp "$log.gtk.png" "$log.after.gtk.png"
+if [ -n "${TOMOSHIBI_DEBUG_DESKTOP:-}" ] && [ "$TOMOSHIBI_DEBUG_DESKTOP" = add ]; then check_desktop; fi
 say "update done"
