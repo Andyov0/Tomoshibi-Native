@@ -234,10 +234,7 @@ pub fn snapshot_when_settled(window: &adw::ApplicationWindow, model: &AppModel, 
                     if let Err(fault) = std::fs::write(&tree, lines) {
                         log(&format!("the widget tree could not be written: {fault}"));
                     }
-                    match render_png(&window, &path) {
-                        Ok(()) => log(&format!("snapshot written to {path}")),
-                        Err(fault) => log(&format!("snapshot failed: {fault}")),
-                    }
+                    render_after_paint(&window, path);
                 }
             });
         }
@@ -311,6 +308,42 @@ fn describe(widget: &gtk::Widget, depth: usize, lines: &mut String) {
         describe(&next, depth + 1, lines);
         child = next.next_sibling();
     }
+}
+
+/// Renders the window's picture right after its next paint, when every
+/// widget's render node is fresh.
+///
+/// A widget's render node is thrown away the moment anything under it asks
+/// to be drawn again, and a paintable of the window made in between has
+/// nothing to draw: with a camera's preview or a call's pictures redrawing
+/// thirty times a second that is most of the time, and a pre-join with the
+/// camera on failed its picture with "nothing was drawn" one run in three.
+/// Just after a paint, and before the main loop hands over the next frame,
+/// the nodes are all there.
+#[cfg(debug_assertions)]
+fn render_after_paint(window: &adw::ApplicationWindow, path: String) {
+    let write = |window: &adw::ApplicationWindow, path: &str| match render_png(window, path) {
+        Ok(()) => log(&format!("snapshot written to {path}")),
+        Err(fault) => log(&format!("snapshot failed: {fault}")),
+    };
+    let Some(clock) = window.frame_clock() else {
+        write(window, &path);
+        return;
+    };
+    let handler: Rc<std::cell::Cell<Option<glib::SignalHandlerId>>> = Rc::default();
+    let id = clock.connect_after_paint({
+        let (window, handler) = (window.downgrade(), handler.clone());
+        move |clock| {
+            if let Some(id) = handler.take() {
+                clock.disconnect(id);
+            }
+            if let Some(window) = window.upgrade() {
+                write(&window, &path);
+            }
+        }
+    });
+    handler.set(Some(id));
+    window.queue_draw();
 }
 
 #[cfg(debug_assertions)]
