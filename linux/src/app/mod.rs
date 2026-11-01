@@ -861,6 +861,12 @@ impl AppModel {
         if let Some(camera) = self.preview_camera() {
             camera.set_blur(self.blur());
         }
+        // The settings window stays open over a call too: the camera the
+        // call is sending follows the switch at once, as the preview does.
+        let room = self.kept::<crate::ui::room::RoomState>();
+        if let Some(camera) = room.local.camera.borrow().as_ref() {
+            camera.set_blur(self.blur());
+        }
         self.changed(CHANGED);
     }
 
@@ -887,16 +893,16 @@ impl AppModel {
 
     /// Opens a page in the person's browser: the deployment's own page for
     /// a download, a meeting's link.
+    ///
+    /// Started with the system's environment rather than the AppImage's
+    /// (update::relaunch `launch_context`): a browser started from inside
+    /// the image inherited its pixbuf loaders, GIO module directory and
+    /// data directories, and a GTK 3 browser came up without its icons.
     pub fn open_in_browser(&self, uri: &str) {
-        let launcher = gtk::UriLauncher::new(uri);
-        let window = gtk::Window::list_toplevels()
-            .into_iter()
-            .find_map(|widget| widget.downcast::<gtk::Window>().ok());
-        launcher.launch(window.as_ref(), gio::Cancellable::NONE, |result| {
-            if let Err(fault) = result {
-                log(&format!("the browser could not be opened: {fault}"));
-            }
-        });
+        let context = crate::update::relaunch::launch_context();
+        if let Err(fault) = gio::AppInfo::launch_default_for_uri(uri, Some(&context)) {
+            log(&format!("the browser could not be opened: {fault}"));
+        }
     }
 }
 
