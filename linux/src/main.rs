@@ -108,8 +108,9 @@ fn start(application: &adw::Application, running: &Rc<RefCell<Option<Running>>>,
         .unwrap_or(theme::Accent::Amber);
     theme::install(accent);
 
-    let window = ui::window::open(application, &model, media::standard());
-    debug_switches(application, &window, &model);
+    let media = media::standard();
+    let window = ui::window::open(application, &model, media.clone());
+    debug_switches(application, &window, &model, media);
     log(&format!(
         "Tomoshibi {} for Linux, core {}, {}",
         client::version_label(),
@@ -130,20 +131,34 @@ fn debug_switches(
     application: &adw::Application,
     window: &adw::ApplicationWindow,
     model: &AppModel,
+    media: std::rc::Rc<dyn media::Media>,
 ) {
     if let Some(path) = model.launch().snapshot.clone() {
         ui::window::snapshot_when_settled(window, model, path);
     }
     if let Some(seconds) = model.launch().quit_after_seconds {
-        let application = application.downgrade();
+        let (application, model) = (application.downgrade(), model.downgrade());
         glib::timeout_add_seconds_local_once(seconds, move || {
-            if let Some(application) = application.upgrade() {
-                log("quitting, as TOMOSHIBI_DEBUG_QUIT_AFTER asked");
-                application.quit();
-            }
+            glib::spawn_future_local(async move {
+                // Out of the call first, so that the others see this one
+                // leave rather than time out.
+                if let Some(model) = model.upgrade() {
+                    ui::room::leave(&model, media.as_ref()).await;
+                }
+                if let Some(application) = application.upgrade() {
+                    log("quitting, as TOMOSHIBI_DEBUG_QUIT_AFTER asked");
+                    application.quit();
+                }
+            });
         });
     }
 }
 
 #[cfg(not(debug_assertions))]
-fn debug_switches(_: &adw::Application, _: &adw::ApplicationWindow, _: &AppModel) {}
+fn debug_switches(
+    _: &adw::Application,
+    _: &adw::ApplicationWindow,
+    _: &AppModel,
+    _: std::rc::Rc<dyn media::Media>,
+) {
+}

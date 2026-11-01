@@ -208,6 +208,9 @@ fn unreachable(context: &Context) -> gtk::Widget {
 #[cfg(debug_assertions)]
 pub fn snapshot_when_settled(window: &adw::ApplicationWindow, model: &AppModel, path: String) {
     let wanted = model.launch().show.clone();
+    // The rises take 420 ms after delays of up to about 100 ms, and the
+    // crossfade 320; a second and a half is past all of them.
+    let after = model.launch().snapshot_after_ms.unwrap_or(1500);
     let taken = Rc::new(std::cell::Cell::new(false));
     let take = {
         let (window, taken) = (window.downgrade(), taken.clone());
@@ -221,9 +224,7 @@ pub fn snapshot_when_settled(window: &adw::ApplicationWindow, model: &AppModel, 
                 return;
             }
             let (window, path) = (window.clone(), path.clone());
-            // The rises take 420 ms after delays of up to about 100 ms, and
-            // the crossfade 320; a second and a half is past all of them.
-            glib::timeout_add_local_once(std::time::Duration::from_millis(1500), move || {
+            glib::timeout_add_local_once(std::time::Duration::from_millis(after), move || {
                 if let Some(window) = window.upgrade() {
                     // The tree first, so that it is there by the time the
                     // log says the picture is.

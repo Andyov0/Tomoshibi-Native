@@ -448,6 +448,9 @@ impl AppModel {
                 if let Some(link) = self.inner.state.borrow_mut().opened_with.take() {
                     self.open_link(&link);
                 }
+                if let Some(room) = self.launch().autojoin.clone() {
+                    self.autojoin(room);
+                }
             }
             Err(fault) => {
                 log(&format!("the deployment did not answer: {fault}"));
@@ -517,6 +520,66 @@ impl AppModel {
                     model.show(Screen::Lobby);
                 }
                 Err(fault) => model.tell(explain_sign_in(&fault)),
+            }
+        });
+    }
+
+    /// `TOMOSHIBI_AUTOJOIN`, in a debug run: joins `room` as soon as the
+    /// deployment has answered, under `TOMOSHIBI_NAME` (or "Linux"), with no
+    /// devices, straight into the call. What the interop scripts and the
+    /// headless runs use to put the app in a room; the lobby module may send
+    /// it through the pre-join instead, as the Mac does.
+    pub fn autojoin(&self, room: String) {
+        let Some(deployment) = self.deployment() else {
+            return;
+        };
+        let name = self
+            .launch()
+            .name
+            .clone()
+            .unwrap_or_else(|| "Linux".to_owned());
+        let invite = self.launch().invite.clone();
+        let passphrase = self
+            .launch()
+            .passphrase_file
+            .as_ref()
+            .and_then(|file| std::fs::read_to_string(file).ok())
+            .map(|text| text.trim().to_owned())
+            .unwrap_or_default();
+        let model = self.clone();
+        glib::spawn_future_local(async move {
+            model.ask(1);
+            let granted = deployment
+                .clone()
+                .join(
+                    room,
+                    name.clone(),
+                    passphrase,
+                    None,
+                    None,
+                    String::new(),
+                    invite,
+                )
+                .await;
+            model.ask(-1);
+            match granted {
+                Ok(grant) => {
+                    log(&format!("granted the room {}", grant.room));
+                    model.enter_call(CallEntry {
+                        deployment,
+                        grant,
+                        sealing_word: None,
+                        name,
+                        microphone_on: false,
+                        camera_on: false,
+                        microphone: None,
+                        camera: None,
+                    });
+                }
+                Err(fault) => {
+                    log(&format!("the join was refused: {fault}"));
+                    model.tell(explain(&fault));
+                }
             }
         });
     }

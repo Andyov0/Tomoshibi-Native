@@ -20,6 +20,8 @@
 #   --open URI        once the pictures are taken, launch a second instance
 #                     with URI and check that the first one was handed it
 #   --profile NAME    the build to run (default debug)
+#   --after MS        draw the pictures this long after the screen is shown
+#                     (default 1500), for a state that takes longer to come
 #   --seconds N       give up after this long (default 40)
 #   --env NAME=VALUE  more of the app's environment; may be repeated
 #
@@ -39,7 +41,7 @@ docker=(docker --context "$context")
 
 arch=${1:?"usage: run-headless.sh <aarch64|x86_64> --base <url> --out <dir> [options]"}
 shift
-deployment="" out="" label="" appearance=day size=1100x720 show="" language="" open_uri="" profile=debug seconds=40
+deployment="" out="" label="" appearance=day size=1100x720 show="" language="" open_uri="" profile=debug seconds=40 after=""
 extra_env=()
 while [ $# -gt 0 ]; do
   case $1 in
@@ -53,6 +55,7 @@ while [ $# -gt 0 ]; do
     --open) open_uri=$2; shift 2 ;;
     --profile) profile=$2; shift 2 ;;
     --seconds) seconds=$2; shift 2 ;;
+    --after) after=$2; shift 2 ;;
     --env) extra_env+=(-e "$2"); shift 2 ;;
     *) echo "run-headless.sh: unknown option $1" >&2; exit 64 ;;
   esac
@@ -86,6 +89,7 @@ app_env=(
 )
 [ -n "$show" ] && app_env+=(-e "TOMOSHIBI_SHOW=$show")
 [ -n "$language" ] && app_env+=(-e "TOMOSHIBI_LANGUAGE=$language")
+[ -n "$after" ] && app_env+=(-e "TOMOSHIBI_DEBUG_SNAPSHOT_AFTER_MS=$after")
 
 # The last run's pictures of this label are removed inside the container
 # (headless-inside.sh), not here: removed on the Mac, the VM's view of the

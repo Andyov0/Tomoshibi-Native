@@ -23,6 +23,19 @@ pub struct Launch {
     /// `TOMOSHIBI_AUTOJOIN`: the room to join as soon as the deployment
     /// answers.
     pub autojoin: Option<String>,
+    /// `TOMOSHIBI_PASSPHRASE_FILE`: a file holding the passphrase the
+    /// autojoin enters with, which makes the identity one the deployment
+    /// can prove and so the host of a room it opens; read from a file so
+    /// that it never appears on a command line.
+    pub passphrase_file: Option<String>,
+    /// `TOMOSHIBI_INVITE`: an invite token the autojoin enters with, for a
+    /// room that already has somebody in it (a deployment's rooms are
+    /// joined by invitation unless one is signed in).
+    pub invite: Option<String>,
+    /// `TOMOSHIBI_DEBUG_MAKE_INVITE`: once in a call it opened, the app makes
+    /// an invite to it and writes the token to its log, for a second app or
+    /// browser in a test to join with.
+    pub make_invite: bool,
     /// `TOMOSHIBI_LANGUAGE`: the interface's language for this run, not kept.
     pub language: Option<String>,
     /// `TOMOSHIBI_MUTE`: start with the microphone off; `speakers` silences
@@ -40,6 +53,10 @@ pub struct Launch {
     /// `TOMOSHIBI_DEBUG_SNAPSHOT=path.png`: draws the window into this file
     /// once it has settled, independent of any compositor's screenshot.
     pub snapshot: Option<String>,
+    /// `TOMOSHIBI_DEBUG_SNAPSHOT_AFTER_MS`: how long after the screen is
+    /// shown the snapshot is drawn (1500 when not given), for a picture of
+    /// a state that takes longer to arrive (a second person in the call).
+    pub snapshot_after_ms: Option<u64>,
     /// `TOMOSHIBI_DEBUG_QUIT_AFTER`: seconds after which the app leaves any
     /// call and quits.
     pub quit_after_seconds: Option<u32>,
@@ -74,12 +91,17 @@ impl Launch {
             name: get("TOMOSHIBI_NAME"),
             sign_in,
             autojoin: get("TOMOSHIBI_AUTOJOIN"),
+            invite: get("TOMOSHIBI_INVITE"),
+            passphrase_file: get("TOMOSHIBI_PASSPHRASE_FILE"),
+            make_invite: get("TOMOSHIBI_DEBUG_MAKE_INVITE").is_some(),
             language: get("TOMOSHIBI_LANGUAGE"),
             mute: get("TOMOSHIBI_MUTE"),
             source: get("TOMOSHIBI_SOURCE"),
             show: get("TOMOSHIBI_SHOW"),
             log_file: get("TOMOSHIBI_DEBUG_LOG"),
             snapshot: get("TOMOSHIBI_DEBUG_SNAPSHOT"),
+            snapshot_after_ms: get("TOMOSHIBI_DEBUG_SNAPSHOT_AFTER_MS")
+                .and_then(|value| value.parse().ok()),
             quit_after_seconds: get("TOMOSHIBI_DEBUG_QUIT_AFTER")
                 .and_then(|value| value.parse().ok()),
         }

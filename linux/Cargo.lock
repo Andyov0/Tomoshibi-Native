@@ -3233,6 +3233,7 @@ dependencies = [
  "libadwaita",
  "serde",
  "serde_json",
+ "tokio",
  "tomoshibi-core",
  "tomoshibi-protocol",
 ]
