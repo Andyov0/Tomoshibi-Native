@@ -2,6 +2,8 @@
 //! here and your picture, what you can use, the passphrase, and guest links
 //! into your scopes' rooms. Somebody not signed in is told where to do it.
 
+use std::rc::Rc;
+
 use adw::prelude::*;
 use gtk::glib;
 
@@ -336,9 +338,14 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
         .title(t("Works until"))
         .model(&until_list)
         .build();
+    // When it starts working: now, or a day and a quarter hour chosen on
+    // the month (Account.tsx's "Works from", which the Mac offers as a
+    // calendar and a clock). The end above is counted from when it starts.
+    let (from, from_at) = works_from();
     group.add(&room);
     group.add(&scope);
     group.add(&name);
+    group.add(&from);
     group.add(&until);
     let make = kit::primary_button(&t("Make a link"));
     make.set_height_request(36);
@@ -376,12 +383,13 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
         }
     };
     {
-        let (weak, target, name, until, said) = (
+        let (weak, target, name, until, said, from_at) = (
             model.downgrade(),
             target.clone(),
             name.downgrade(),
             until.downgrade(),
             said.downgrade(),
+            from_at.clone(),
         );
         make.connect_clicked(move |button| {
             let (Some(model), Some(room)) = (weak.upgrade(), target()) else {
@@ -391,15 +399,16 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
                 .upgrade()
                 .map(|name| name.text().to_string())
                 .unwrap_or_default();
+            let starts = from_at();
             let until_at = until
                 .upgrade()
                 .and_then(|until| hours.get(until.selected() as usize).copied())
                 .and_then(|hours| hours.parse::<i64>().ok())
-                .map(|hours| words::now() + hours * 3600);
+                .map(|hours| starts.unwrap_or_else(words::now) + hours * 3600);
             button.set_sensitive(false);
             let (button, said) = (button.downgrade(), said.clone());
             glib::spawn_future_local(async move {
-                let made = model.make_guest_link(room, who, None, until_at).await;
+                let made = model.make_guest_link(room, who, starts, until_at).await;
                 if let Some(button) = button.upgrade() {
                     button.set_sensitive(true);
                 }
@@ -463,6 +472,108 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
         });
     }
     group
+}
+
+/// "Works from": a row whose switch says whether the link waits for a
+/// moment, opening onto the month and a quarter-hour clock; and what it
+/// says (`None` while it works from now).
+fn works_from() -> (adw::ExpanderRow, Rc<dyn Fn() -> Option<i64>>) {
+    use crate::app::schedule::{self, Day, LocalZone};
+    let (day, hour, minute) = schedule::start(words::now(), &LocalZone);
+    let chosen = Rc::new(std::cell::Cell::new((day, hour, minute)));
+    let row = adw::ExpanderRow::builder()
+        .title(t("Works from"))
+        .subtitle("—")
+        .show_enable_switch(true)
+        .enable_expansion(false)
+        .build();
+    row.set_widget_name("settings.guest-from");
+    let at = {
+        let (chosen, row) = (chosen.clone(), row.downgrade());
+        Rc::new(move || -> Option<i64> {
+            let row = row.upgrade()?;
+            if !row.enables_expansion() {
+                return None;
+            }
+            let (day, hour, minute) = chosen.get();
+            Some(schedule::instant(day, hour, minute, &LocalZone, words::now()))
+        }) as Rc<dyn Fn() -> Option<i64>>
+    };
+    let say = {
+        let (row, at) = (row.downgrade(), at.clone());
+        Rc::new(move || {
+            if let Some(row) = row.upgrade() {
+                row.set_subtitle(&at().map(words::said).unwrap_or_else(|| "—".to_owned()));
+            }
+        })
+    };
+    let today = {
+        let wall = words::Wall::local(words::now());
+        Day {
+            year: wall.year,
+            month: wall.month,
+            day: wall.day,
+        }
+    };
+    let month = {
+        let (chosen, say) = (chosen.clone(), say.clone());
+        crate::ui::lobby::calendar::month(day, today, today, today.add_days(365), move |day| {
+            let (_, hour, minute) = chosen.get();
+            chosen.set((day, hour, minute));
+            say();
+        })
+    };
+    month.set_margin_top(8);
+    month.set_margin_bottom(4);
+    month.set_margin_start(8);
+    month.set_margin_end(8);
+    let hours: Vec<String> = (0..24).map(|hour| format!("{hour:02}")).collect();
+    let hour_choice =
+        gtk::DropDown::from_strings(&hours.iter().map(String::as_str).collect::<Vec<_>>());
+    hour_choice.set_selected(hour);
+    hour_choice.update_property(&[gtk::accessible::Property::Label(&t("Hour"))]);
+    let minute_choice = gtk::DropDown::from_strings(&["00", "15", "30", "45"]);
+    minute_choice.set_selected(minute / 15);
+    minute_choice.update_property(&[gtk::accessible::Property::Label(&t("Minute"))]);
+    for choice in [&hour_choice, &minute_choice] {
+        let (chosen, say, hour_choice, minute_choice) = (
+            chosen.clone(),
+            say.clone(),
+            hour_choice.downgrade(),
+            minute_choice.downgrade(),
+        );
+        choice.connect_selected_notify(move |_| {
+            let (Some(hour), Some(minute)) = (hour_choice.upgrade(), minute_choice.upgrade())
+            else {
+                return;
+            };
+            let (day, _, _) = chosen.get();
+            chosen.set((day, hour.selected(), minute.selected() * 15));
+            say();
+        });
+    }
+    let clock = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+    clock.append(&hour_choice);
+    clock.append(&gtk::Label::new(Some(":")));
+    clock.append(&minute_choice);
+    let time = adw::ActionRow::builder().title(t("Time")).build();
+    clock.set_valign(gtk::Align::Center);
+    time.add_suffix(&clock);
+    let holder = gtk::ListBoxRow::builder()
+        .child(&month)
+        .activatable(false)
+        .selectable(false)
+        .build();
+    row.add_row(&holder);
+    row.add_row(&time);
+    row.connect_enable_expansion_notify(move |_| say());
+    // TOMOSHIBI_DEBUG_GUEST_FROM=1 opens it, for a picture.
+    #[cfg(debug_assertions)]
+    if std::env::var_os("TOMOSHIBI_DEBUG_GUEST_FROM").is_some() {
+        row.set_enable_expansion(true);
+        row.set_expanded(true);
+    }
+    (row, at)
 }
 
 /// Unfolds the revealer a line was put in.
