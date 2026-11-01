@@ -16,14 +16,26 @@
 //! what arrives is the mix of every other application at the volume each
 //! is set to, before the output's own volume. Left out:
 //!
-//! - this process's streams (`application.process.id`): the call's
-//!   playback, whether through PulseAudio (pipewire-pulse names the client's
-//!   process) or PipeWire directly;
+//! - this process's streams: the call's playback, whether through
+//!   PulseAudio or PipeWire directly. A node is this process's when its own
+//!   properties say `application.process.id` is (pipewire-pulse copies a
+//!   PulseAudio client's there), or when its client's do, or when its
+//!   client's connection is (`pipewire.sec.pid`, which the PipeWire server
+//!   takes from the socket and no client can claim falsely);
 //! - the playback halves of loopbacks, filter chains and echo cancellers
 //!   (any node in a `node.link-group`): they carry sound some application
 //!   already played, which is either captured at that application or, for
 //!   the call played into an echo canceller's sink, exactly what must not
 //!   go back.
+//!
+//! None of that is in what the registry announces about a node: a node's
+//! global carries a short list of keys (its name, class and client), and its
+//! process and link group are only in its full properties, which arrive once
+//! the node is bound. So every playback node and every client is bound, and
+//! a node is linked only once it has described itself and its client is
+//! known: the first rig run linked the test's own tone in the moment before
+//! anything said whose it was, and kept it, since the announcement never
+//! said.
 //!
 //! Where there is no PipeWire (PulseAudio alone) there is no way to leave
 //! the call out short of a capture per sink input mixed here, and a share
@@ -52,7 +64,9 @@ use std::{
 
 use pipewire as pw;
 use pw::{
+    client::{Client, ClientListener},
     link::Link,
+    node::{Node, NodeListener},
     properties::properties,
     registry::GlobalObject,
     spa::{
@@ -84,12 +98,28 @@ pub enum Side {
     Right,
 }
 
-/// A node as the registry describes it, as far as choosing what to hear.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A node, as far as choosing what to hear.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct NodeInfo {
     pub class: String,
+    /// The client that made it (`client.id`).
+    pub client: Option<u32>,
+    /// `application.process.id` among its full properties.
     pub process: Option<u32>,
     pub in_link_group: bool,
+    /// Its full properties have arrived; until then nothing above but the
+    /// class and the client is known.
+    pub described: bool,
+}
+
+/// A client: a connection to PipeWire.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ClientInfo {
+    /// The process at the other end of its socket (`pipewire.sec.pid`).
+    pub connected_from: Option<u32>,
+    /// The process it says it is (`application.process.id`); for
+    /// pipewire-pulse's clients, the PulseAudio application's.
+    pub process: Option<u32>,
 }
 
 /// A port as the registry describes it.
@@ -104,17 +134,26 @@ pub struct PortInfo {
 /// One link: from (node, port) to (node, port).
 pub type Wire = (u32, u32, u32, u32);
 
+/// What to bind to learn more of a global.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Bind {
+    Node,
+    Client,
+}
+
 /// What the registry has said, and which node is this capture's.
 #[derive(Debug, Default)]
 pub struct Graph {
     pub nodes: BTreeMap<u32, NodeInfo>,
+    pub clients: BTreeMap<u32, ClientInfo>,
     pub ports: BTreeMap<u32, PortInfo>,
     pub ours: Option<u32>,
 }
 
-/// Whether a node's sound is the screen's: another application's playback.
-pub fn is_heard(node: &NodeInfo, own_process: u32) -> bool {
-    node.class == "Stream/Output/Audio" && node.process != Some(own_process) && !node.in_link_group
+const PLAYBACK: &str = "Stream/Output/Audio";
+
+fn number(props: &DictRef, key: &str) -> Option<u32> {
+    props.get(key).and_then(|value| value.parse().ok())
 }
 
 /// Which of the capture's inputs a channel goes to. Front and back and side
@@ -134,6 +173,25 @@ fn sides(channel: Option<&str>, place: usize) -> &'static [Side] {
 }
 
 impl Graph {
+    /// Whether a node's sound is the screen's: another application's
+    /// playback, known to be another's.
+    pub fn is_heard(&self, node: &NodeInfo, own_process: u32) -> bool {
+        if node.class != PLAYBACK || !node.described || node.in_link_group {
+            return false;
+        }
+        let client = match node.client {
+            Some(id) => match self.clients.get(&id) {
+                Some(client) => Some(client),
+                // Not yet announced: whose it is cannot be told.
+                None => return false,
+            },
+            None => None,
+        };
+        let own = Some(own_process);
+        !(node.process == own
+            || client.is_some_and(|client| client.process == own || client.connected_from == own))
+    }
+
     /// Every link the capture should have now.
     pub fn wanted(&self, own_process: u32) -> BTreeSet<Wire> {
         let mut wanted = BTreeSet::new();
@@ -154,7 +212,7 @@ impl Graph {
             return wanted;
         }
         for (node_id, node) in &self.nodes {
-            if *node_id == ours || !is_heard(node, own_process) {
+            if *node_id == ours || !self.is_heard(node, own_process) {
                 continue;
             }
             let outputs = self
@@ -172,28 +230,36 @@ impl Graph {
         wanted
     }
 
-    /// Takes in a global the registry announced.
-    pub fn add(&mut self, id: u32, kind: &ObjectType, props: Option<&DictRef>) {
-        let Some(props) = props else {
-            return;
-        };
+    /// Takes in a global the registry announced; says what to bind to learn
+    /// the rest of it.
+    pub fn add(&mut self, id: u32, kind: &ObjectType, props: Option<&DictRef>) -> Option<Bind> {
+        let props = props?;
         match kind {
             ObjectType::Node => {
+                let class = props.get("media.class").unwrap_or_default().to_owned();
+                let playback = class == PLAYBACK;
                 self.nodes.insert(
                     id,
                     NodeInfo {
-                        class: props.get("media.class").unwrap_or_default().to_owned(),
-                        process: props
-                            .get("application.process.id")
-                            .and_then(|pid| pid.parse().ok()),
-                        in_link_group: props.get("node.link-group").is_some(),
+                        class,
+                        client: number(props, "client.id"),
+                        ..NodeInfo::default()
                     },
                 );
+                playback.then_some(Bind::Node)
+            }
+            ObjectType::Client => {
+                self.clients.insert(
+                    id,
+                    ClientInfo {
+                        connected_from: number(props, "pipewire.sec.pid"),
+                        process: number(props, "application.process.id"),
+                    },
+                );
+                Some(Bind::Client)
             }
             ObjectType::Port => {
-                let Some(node) = props.get("node.id").and_then(|node| node.parse().ok()) else {
-                    return;
-                };
+                let node = number(props, "node.id")?;
                 self.ports.insert(
                     id,
                     PortInfo {
@@ -203,13 +269,37 @@ impl Graph {
                         monitor: props.get("port.monitor") == Some("true"),
                     },
                 );
+                None
             }
-            _ => {}
+            _ => None,
         }
+    }
+
+    /// A bound node's full properties.
+    pub fn describe_node(&mut self, id: u32, props: Option<&DictRef>) {
+        let Some(node) = self.nodes.get_mut(&id) else {
+            return;
+        };
+        if let Some(props) = props {
+            node.process = number(props, "application.process.id");
+            node.in_link_group = props.get("node.link-group").is_some();
+            node.client = number(props, "client.id").or(node.client);
+        }
+        node.described = true;
+    }
+
+    /// A bound client's full properties.
+    pub fn describe_client(&mut self, id: u32, props: Option<&DictRef>) {
+        let (Some(client), Some(props)) = (self.clients.get_mut(&id), props) else {
+            return;
+        };
+        client.process = number(props, "application.process.id").or(client.process);
+        client.connected_from = number(props, "pipewire.sec.pid").or(client.connected_from);
     }
 
     pub fn remove(&mut self, id: u32) {
         self.nodes.remove(&id);
+        self.clients.remove(&id);
         self.ports.remove(&id);
         self.ports.retain(|_, port| port.node != id);
     }
@@ -419,19 +509,33 @@ fn run(
         .register()
         .map_err(|e| format!("listener: {e}"))?;
 
+    // The nodes and clients bound to read their full properties, each with
+    // its listener, kept for as long as the global is there.
+    let bound: Rc<RefCell<BTreeMap<u32, Bound>>> = Rc::default();
     let _registry_listener = registry
         .add_listener_local()
         .global({
-            let linker = linker.clone();
+            let (linker, bound, registry) = (linker.clone(), bound.clone(), registry.clone());
             move |global: &GlobalObject<&DictRef>| {
-                let mut linker = linker.borrow_mut();
-                linker.graph.add(global.id, &global.type_, global.props);
-                linker.relink();
+                let bind = linker
+                    .borrow_mut()
+                    .graph
+                    .add(global.id, &global.type_, global.props);
+                let made = match bind {
+                    Some(Bind::Node) => bind_node(&registry, global, &linker),
+                    Some(Bind::Client) => bind_client(&registry, global, &linker),
+                    None => None,
+                };
+                if let Some(made) = made {
+                    bound.borrow_mut().insert(global.id, made);
+                }
+                linker.borrow_mut().relink();
             }
         })
         .global_remove({
-            let linker = linker.clone();
+            let (linker, bound) = (linker.clone(), bound.clone());
             move |id| {
+                bound.borrow_mut().remove(&id);
                 let mut linker = linker.borrow_mut();
                 linker.graph.remove(id);
                 linker.relink();
@@ -456,9 +560,71 @@ fn run(
         move |()| mainloop.quit()
     });
     mainloop.run();
+    bound.borrow_mut().clear();
     linker.borrow_mut().links.clear();
     let _ = stream.disconnect();
     Ok(())
+}
+
+/// A node or client bound to hear its full properties.
+enum Bound {
+    Node(#[allow(dead_code)] Node, #[allow(dead_code)] NodeListener),
+    Client(
+        #[allow(dead_code)] Client,
+        #[allow(dead_code)] ClientListener,
+    ),
+}
+
+fn bind_node(
+    registry: &pw::registry::RegistryRc,
+    global: &GlobalObject<&DictRef>,
+    linker: &Rc<RefCell<Linker>>,
+) -> Option<Bound> {
+    let node: Node = registry
+        .bind(global)
+        .map_err(|fault| {
+            log(&format!(
+                "screen sound: node {} not bound: {fault}",
+                global.id
+            ))
+        })
+        .ok()?;
+    let (id, linker) = (global.id, linker.clone());
+    let listener = node
+        .add_listener_local()
+        .info(move |info| {
+            let mut linker = linker.borrow_mut();
+            linker.graph.describe_node(id, info.props());
+            linker.relink();
+        })
+        .register();
+    Some(Bound::Node(node, listener))
+}
+
+fn bind_client(
+    registry: &pw::registry::RegistryRc,
+    global: &GlobalObject<&DictRef>,
+    linker: &Rc<RefCell<Linker>>,
+) -> Option<Bound> {
+    let client: Client = registry
+        .bind(global)
+        .map_err(|fault| {
+            log(&format!(
+                "screen sound: client {} not bound: {fault}",
+                global.id
+            ))
+        })
+        .ok()?;
+    let (id, linker) = (global.id, linker.clone());
+    let listener = client
+        .add_listener_local()
+        .info(move |info| {
+            let mut linker = linker.borrow_mut();
+            linker.graph.describe_client(id, info.props());
+            linker.relink();
+        })
+        .register();
+    Some(Bound::Client(client, listener))
 }
 
 /// 16-bit stereo at 48 kHz, front left and right: what `AudioInput::push_pcm`
@@ -494,8 +660,10 @@ mod tests {
             id,
             NodeInfo {
                 class: class.into(),
+                client: None,
                 process: Some(process),
                 in_link_group,
+                described: true,
             },
         );
     }
@@ -604,6 +772,84 @@ mod tests {
         graph.remove(2);
         assert!(graph.wanted(ME).iter().all(|wire| wire.0 != 2));
         assert!(!graph.ports.contains_key(&20));
+    }
+
+    /// What the registry announces of a node (its class and client, not
+    /// its process) and what binding it then says, as PipeWire 1.0 does: a
+    /// node is heard only once both are known, and never when its client is
+    /// this process, however it was announced.
+    #[test]
+    fn a_node_is_heard_only_once_it_is_known_to_be_another_process() {
+        let mut graph = graph();
+        let props = |pairs: &[(&str, &str)]| {
+            let mut props = pw::properties::PropertiesBox::new();
+            for (key, value) in pairs {
+                props.insert(*key, *value);
+            }
+            props
+        };
+        let heard_from =
+            |graph: &Graph, node: u32| graph.wanted(ME).iter().any(|wire| wire.0 == node);
+
+        // This process's own tone through PipeWire directly: client 90,
+        // connected from this process; the node says nothing of a process.
+        let client = props(&[("pipewire.sec.pid", &ME.to_string())]);
+        assert_eq!(
+            graph.add(90, &ObjectType::Client, Some(client.as_ref())),
+            Some(Bind::Client)
+        );
+        let announced = props(&[("media.class", "Stream/Output/Audio"), ("client.id", "90")]);
+        assert_eq!(
+            graph.add(9, &ObjectType::Node, Some(announced.as_ref())),
+            Some(Bind::Node)
+        );
+        port(&mut graph, 95, 9, true, "FL");
+        assert!(!heard_from(&graph, 9), "linked before it said whose it is");
+        graph.describe_node(
+            9,
+            Some(props(&[("node.name", "own-tone"), ("client.id", "90")]).as_ref()),
+        );
+        assert!(
+            !heard_from(&graph, 9),
+            "this process's own playback was heard"
+        );
+
+        // Another application's, announced the same way, through a client
+        // not announced yet.
+        let announced = props(&[("media.class", "Stream/Output/Audio"), ("client.id", "91")]);
+        graph.add(8, &ObjectType::Node, Some(announced.as_ref()));
+        port(&mut graph, 85, 8, true, "FL");
+        graph.describe_node(8, Some(props(&[("client.id", "91")]).as_ref()));
+        assert!(!heard_from(&graph, 8), "heard before its client was known");
+        graph.add(
+            91,
+            &ObjectType::Client,
+            Some(props(&[("pipewire.sec.pid", "777")]).as_ref()),
+        );
+        assert!(heard_from(&graph, 8));
+
+        // A PulseAudio application through pipewire-pulse: the connection is
+        // pipewire-pulse's, and the process is in the client's properties.
+        graph.add(
+            92,
+            &ObjectType::Client,
+            Some(props(&[("pipewire.sec.pid", "555")]).as_ref()),
+        );
+        graph.describe_client(
+            92,
+            Some(props(&[("application.process.id", &ME.to_string())]).as_ref()),
+        );
+        graph.add(
+            7,
+            &ObjectType::Node,
+            Some(props(&[("media.class", "Stream/Output/Audio"), ("client.id", "92")]).as_ref()),
+        );
+        port(&mut graph, 75, 7, true, "FR");
+        graph.describe_node(7, Some(props(&[("client.id", "92")]).as_ref()));
+        assert!(
+            !heard_from(&graph, 7),
+            "this process's PulseAudio playback was heard"
+        );
     }
 
     #[test]
