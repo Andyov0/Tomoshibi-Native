@@ -432,7 +432,11 @@ button.tmsb-primary {
 }
 button.tmsb-primary:hover { background-color: mix(@tmsb_tally, @tmsb_fg, 0.10); }
 button.tmsb-primary:active { background-color: mix(@tmsb_tally, @tmsb_fg, 0.16); transform: scale(0.95); }
-button.tmsb-primary:disabled { background-color: @tmsb_surface_high; color: @tmsb_muted; }
+/* libadwaita draws a disabled button at half its opacity (button:disabled
+   { filter: opacity(0.5) }), which put the grey plate halfway into the
+   ground: by night it was darker than the Cancel beside it and could
+   hardly be seen. The plate is the one drawn, at its full colour. */
+button.tmsb-primary:disabled { background-color: @tmsb_surface_high; color: @tmsb_muted; filter: none; }
 button.tmsb-plain {
   background-color: mix(@tmsb_surface, @tmsb_wash, 0.06);
   color: @tmsb_fg;
@@ -445,7 +449,7 @@ button.tmsb-plain {
 }
 button.tmsb-plain:hover { background-color: mix(@tmsb_surface, @tmsb_fg, 0.10); }
 button.tmsb-plain:active { background-color: mix(@tmsb_surface, @tmsb_fg, 0.16); transform: scale(0.95); }
-button.tmsb-plain:disabled { opacity: 0.4; }
+button.tmsb-plain:disabled { opacity: 0.4; filter: none; }
 .tmsb-divider { background-color: @tmsb_border; min-height: 1px; }
 .tmsb-small { font-size: 11px; }
 .tmsb-footnote { font-size: 11px; color: @tmsb_muted; font-family: monospace; }
@@ -464,7 +468,7 @@ window.tmsb-window.tmsb-call button.tmsb-plain:active { background-color: mix(@t
 window.tmsb-window.tmsb-call button.tmsb-primary { background-color: @tmsb_call_tally; color: @tmsb_call_on_tally; }
 window.tmsb-window.tmsb-call button.tmsb-primary:hover { background-color: mix(@tmsb_call_tally, @tmsb_call_fg, 0.10); }
 window.tmsb-window.tmsb-call button.tmsb-primary:active { background-color: mix(@tmsb_call_tally, @tmsb_call_fg, 0.16); }
-window.tmsb-window.tmsb-call button.tmsb-primary:disabled { background-color: @tmsb_call_surface_high; color: @tmsb_call_muted; }
+window.tmsb-window.tmsb-call button.tmsb-primary:disabled { background-color: @tmsb_call_surface_high; color: @tmsb_call_muted; filter: none; }
 "#;
 
 thread_local! {
@@ -625,6 +629,21 @@ mod tests {
         let css = stylesheet(Scheme::Dark, Accent::Teal);
         assert!(css.contains("@define-color accent_bg_color @tmsb_tally;"));
         assert!(css.contains("@define-color tmsb_tally #40c8e0;"));
+    }
+
+    #[test]
+    fn a_disabled_primary_is_drawn_at_its_own_colour() {
+        // libadwaita's button:disabled halves the opacity of whatever is
+        // drawn; the neutral plate must not be put halfway into the ground.
+        let css = stylesheet(Scheme::Dark, Accent::Amber);
+        for rule in [
+            "button.tmsb-primary:disabled {",
+            "window.tmsb-window.tmsb-call button.tmsb-primary:disabled {",
+        ] {
+            let at = css.find(rule).unwrap_or_else(|| panic!("no rule {rule}"));
+            let body = &css[at..at + css[at..].find('}').unwrap()];
+            assert!(body.contains("filter: none"), "{rule} keeps the filter");
+        }
     }
 
     #[test]
