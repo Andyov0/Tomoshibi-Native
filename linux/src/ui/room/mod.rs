@@ -762,6 +762,11 @@ pub(crate) fn set_camera(model: &AppModel, on: bool) {
                 None => {
                     let chosen = chosen_device(&model, crate::media::DeviceKind::Camera);
                     let opened = media.open_camera(chosen).await?;
+                    // A camera the pre-join opened was handed over with
+                    // the blur already set; one opened here is set the
+                    // same way, from the same switch and the deployment's
+                    // word on it.
+                    opened.set_blur(model.blur());
                     room.local.camera.replace(Some(opened.clone()));
                     opened
                 }
@@ -969,6 +974,22 @@ pub(crate) fn start_share(model: &AppModel) {
                         changed(&model);
                     }
                 }));
+                // Asked for with its sound and sent without it (no PipeWire
+                // to capture it from, or its capture failed): said, as the
+                // web says it (notices.ts `noSoundShared`), rather than left
+                // as a share the others watch in silence. The web's second
+                // line is about a browser's picker, which is not this one.
+                if choice.with_sound && !share.sends_sound() {
+                    announce(
+                        &model,
+                        Toast {
+                            closable: true,
+                            lasts_ms: Some(8000),
+                            key: Some("no-sound-shared".into()),
+                            ..Toast::failure(t("No sound was shared"))
+                        },
+                    );
+                }
                 room.local.share.replace(Some(share));
             }
             // The person closing the system's picker is no failure.
