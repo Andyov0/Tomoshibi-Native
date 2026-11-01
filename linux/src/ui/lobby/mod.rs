@@ -9,6 +9,7 @@
 //! deployment's grant to `AppModel::enter_call`, which shows the room.
 
 pub mod animals;
+pub mod calendar;
 pub mod doors;
 pub mod home;
 pub mod pieces;
@@ -26,6 +27,7 @@ use crate::{app::Screen, theme};
 /// knocking and waiting.
 pub fn page(context: &Context, screen: Screen) -> gtk::Widget {
     theme::add_module_css("lobby", CSS);
+    theme::add_module_css("lobby-calendar", calendar::CSS);
     match screen {
         Screen::SignIn => sign_in::page(context),
         Screen::Lobby => home::page(context),
@@ -202,9 +204,7 @@ dialog.tmsb-sheet .dialog-contents, dialog.tmsb-sheet > widget > floating-sheet 
   font-size: 11px; font-weight: 600; color: @tmsb_on_tally; background-color: @tmsb_tally;
   border-radius: 999px; padding: 1px 8px;
 }
-calendar.tmsb-calendar { background: none; border: none; }
-calendar.tmsb-calendar > grid > label.day-number { min-height: 32px; }
-calendar.tmsb-calendar > grid > label.day-number:selected { background-color: @tmsb_tally; color: @tmsb_on_tally; border-radius: 999px; }
+.tmsb-month-well { padding: 10px 8px 6px 8px; }
 button.tmsb-choice-row {
   padding: 12px 14px; border-radius: 14px; border: 1px solid @tmsb_border; box-shadow: none;
   background-color: @tmsb_surface;

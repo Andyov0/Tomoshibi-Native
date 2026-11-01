@@ -282,6 +282,81 @@ pub fn lately(at: i64) -> String {
     lately_on(&Wall::local(at), &Wall::local(now()), language())
 }
 
+const MONTH_NAMES: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
+
+/// The days of the week from Sunday, as narrow as a calendar's heading
+/// writes them (veryShortStandaloneWeekdaySymbols): Chinese numbers the
+/// days after Sunday, Japanese names them.
+const WEEKDAYS_EN: [&str; 7] = ["S", "M", "T", "W", "T", "F", "S"];
+const WEEKDAYS_ZH: [&str; 7] = [
+    "\u{65e5}", "\u{4e00}", "\u{4e8c}", "\u{4e09}", "\u{56db}", "\u{4e94}", "\u{516d}",
+];
+const WEEKDAYS_JA: [&str; 7] = [
+    "\u{65e5}", "\u{6708}", "\u{706b}", "\u{6c34}", "\u{6728}", "\u{91d1}", "\u{571f}",
+];
+
+/// A month as a calendar's heading says it in the app's language (the
+/// Mac's `.year().month(.wide)`), rather than in the system's, which is what
+/// GtkCalendar followed: a Japanese window had an English month.
+pub fn month_title(year: i32, month: u32, language: Language) -> String {
+    match language {
+        Language::En => format!(
+            "{} {year}",
+            MONTH_NAMES[(month as usize).saturating_sub(1) % 12]
+        ),
+        _ => format!("{year}{YEAR}{month}{MONTH}"),
+    }
+}
+
+/// The day a week starts on in the language's own region, 0 for Sunday:
+/// Monday in mainland China, Sunday in the United States, Taiwan and Japan.
+pub fn first_weekday(language: Language) -> u32 {
+    match language {
+        Language::ZhHans => 1,
+        _ => 0,
+    }
+}
+
+/// The calendar's heading of weekdays, starting on [`first_weekday`].
+pub fn weekday_letters(language: Language) -> [&'static str; 7] {
+    let names = match language {
+        Language::En => WEEKDAYS_EN,
+        Language::ZhHans | Language::ZhHant => WEEKDAYS_ZH,
+        Language::Ja => WEEKDAYS_JA,
+    };
+    let first = first_weekday(language) as usize;
+    std::array::from_fn(|index| names[(first + index) % 7])
+}
+
+/// A day of the calendar as the language writes the date, for a day's
+/// button to be read out by.
+pub fn day_said(year: i32, month: u32, day: u32, language: Language) -> String {
+    date(
+        &Wall {
+            year,
+            month,
+            day,
+            hour: 0,
+            minute: 0,
+            offset: 0,
+        },
+        language,
+    )
+}
+
 /// A size in megabytes with one decimal, as the update's progress says it.
 pub fn megabytes(bytes: u64) -> String {
     format!("{:.1} MB", bytes as f64 / 1_000_000.0)
@@ -290,6 +365,19 @@ pub fn megabytes(bytes: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_calendar_speaks_the_app_s_language() {
+        assert_eq!(month_title(2026, 11, Language::En), "November 2026");
+        assert_eq!(month_title(2026, 11, Language::Ja), "2026\u{5e74}11\u{6708}");
+        assert_eq!(weekday_letters(Language::En)[0], "S");
+        // Japanese: Sunday first, the days named.
+        assert_eq!(weekday_letters(Language::Ja)[1], "\u{6708}");
+        // Mainland Chinese: Monday first.
+        assert_eq!(weekday_letters(Language::ZhHans)[0], "\u{4e00}");
+        assert_eq!(weekday_letters(Language::ZhHans)[6], "\u{65e5}");
+        assert_eq!(weekday_letters(Language::ZhHant)[0], "\u{65e5}");
+    }
 
     #[test]
     fn instants_are_read_with_or_without_fractions() {

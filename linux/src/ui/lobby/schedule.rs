@@ -22,7 +22,7 @@ use super::pieces::{self, icon, set_class};
 use crate::{
     app::{
         lobby::{self, Status},
-        schedule::{Day, LocalZone, ScheduleForm, TooSoonOrLate},
+        schedule::{Day, LocalZone, ScheduleForm, TooSoonOrLate, AHEAD_DAYS},
         words, AppModel, Change,
     },
     i18n::{t, t_with},
@@ -80,8 +80,12 @@ pub fn section(context: &Context) -> gtk::Widget {
     list.set_hexpand(true);
     list.set_widget_name("schedule.list");
 
-    // Side by side once both fit, one above the other below that.
-    let together = gtk::Box::new(gtk::Orientation::Horizontal, 20);
+    // Side by side once both fit, one above the other below that; one
+    // above the other at first, which fits any width: side by side at
+    // first, the section asked for 782 at its first layout in a window
+    // 1000 wide, before it was told its width, and the split view was 22
+    // too wide for the window (seen in Japanese).
+    let together = gtk::Box::new(gtk::Orientation::Vertical, 20);
     let form_arrival = kit::Arrival::new(&form).rises(40);
     form_arrival.set_size_request(360, -1);
     form_arrival.set_valign(gtk::Align::Start);
@@ -176,15 +180,35 @@ fn form(context: &Context, draft: &Rc<Draft>) -> gtk::Box {
     hint.add_css_class("tmsb-small");
 
     let form = draft.form.borrow().clone();
-    let calendar = gtk::Calendar::builder()
-        .year(form.day.year)
-        .month(form.day.month as i32 - 1)
-        .day(form.day.day as i32)
-        .build();
-    calendar.add_css_class("tmsb-calendar");
-    calendar.set_widget_name("schedule.day");
+    // From today to the furthest day a meeting can be arranged for, as the
+    // Mac's month offers (the verdict below says why any other is refused).
+    let today = {
+        let wall = words::Wall::local(words::now());
+        Day {
+            year: wall.year,
+            month: wall.month,
+            day: wall.day,
+        }
+    };
+    let say_later: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+    let calendar = {
+        let (draft, say_later) = (draft.clone(), say_later.clone());
+        super::calendar::month(
+            form.day,
+            today,
+            today,
+            today.add_days(AHEAD_DAYS),
+            move |day| {
+                draft.form.borrow_mut().choose_day(day);
+                if let Some(say) = say_later.borrow().as_ref() {
+                    say();
+                }
+            },
+        )
+    };
     let calendar_well = gtk::Box::new(gtk::Orientation::Vertical, 0);
     calendar_well.add_css_class("tmsb-well");
+    calendar_well.add_css_class("tmsb-month-well");
     calendar_well.append(&calendar);
 
     let hours: Vec<String> = (0..24).map(|hour| format!("{hour:02}")).collect();
@@ -284,16 +308,8 @@ fn form(context: &Context, draft: &Rc<Draft>) -> gtk::Box {
         });
     }
     {
-        let (draft, say) = (draft.clone(), say.clone());
-        calendar.connect_day_selected(move |calendar| {
-            let date = calendar.date();
-            draft.form.borrow_mut().choose_day(Day {
-                year: date.year(),
-                month: date.month() as u32,
-                day: date.day_of_month() as u32,
-            });
-            say();
-        });
+        let say = say.clone();
+        say_later.replace(Some(Rc::new(move || say())));
     }
     {
         let (draft, say, minute) = (draft.clone(), say.clone(), minute.downgrade());
