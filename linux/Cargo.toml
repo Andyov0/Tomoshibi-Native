@@ -67,6 +67,19 @@ tokio = { version = "1", default-features = false, features = ["sync"] }
 
 # --- ui/room adds its crates below this line ---
 
+# ui/room/watch: GStreamer, the player of watching together. playbin plays a
+# file or an HLS playlist from where it is, the way a browser's video element
+# does, and hands its picture and its sound to sinks of the app's own
+# (gstreamer-app's appsink): the picture to render::VideoView as the core's
+# frames are, the sound into the call's mixer, where the echo canceller
+# hears it. gstreamer-video for the planes and strides of a frame. 0.25 is
+# the release on glib 0.22, the toolkit's: two glib-sys in one binary do not
+# link. The system's GStreamer is 1.24 on Ubuntu 24.04; nothing past 1.14's
+# API is asked for.
+gstreamer = "0.25"
+gstreamer-app = "0.25"
+gstreamer-video = "0.25"
+
 # --- media/ (audio, camera, screen) adds its crates below this line ---
 
 # media/screen: the xdg-desktop-portal's ScreenCast, and the PipeWire stream

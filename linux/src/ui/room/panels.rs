@@ -41,6 +41,7 @@ pub fn build(model: &AppModel, panel: Panel) -> PanelView {
         Panel::Sound => sound(model),
         Panel::Devices => devices(model),
         Panel::Host => host(model),
+        Panel::Watch => super::watch::panel(model),
     }
 }
 
@@ -89,6 +90,7 @@ fn frame(model: &AppModel, panel: Panel, title: &str, close_label: &str) -> (gtk
         Panel::Sound => "panel.sound",
         Panel::Devices => "panel.devices",
         Panel::Host => "panel.host",
+        Panel::Watch => "panel.watch",
     });
     (outer, body)
 }

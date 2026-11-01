@@ -43,6 +43,7 @@ mod script;
 mod stage;
 pub mod talk;
 mod tile;
+mod watch;
 
 use std::{
     cell::{Cell, RefCell},
@@ -104,17 +105,17 @@ pub struct RoomState {
     next_notice: Cell<u64>,
 }
 
-/// The panels beside the call (the Mac's `RoomView.Panel`). Watch together
-/// and music are not here: the core's protocols for them are, but playing
-/// a shared video or the song desk needs a player on this platform, which
-/// does not exist yet; their buttons are not offered rather than offered
-/// and empty.
+/// The panels beside the call (the Mac's `RoomView.Panel`). Music is not
+/// here: the song desk needs a player of its own on this platform, which
+/// does not exist yet; its button is not offered rather than offered and
+/// empty. Watching together is (watch/).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Panel {
     Messages,
     Sound,
     Devices,
     Host,
+    Watch,
 }
 
 impl Panel {
@@ -124,6 +125,7 @@ impl Panel {
             "sound" => Some(Panel::Sound),
             "devices" => Some(Panel::Devices),
             "host" => Some(Panel::Host),
+            "watch" => Some(Panel::Watch),
             _ => None,
         }
     }
@@ -473,6 +475,7 @@ fn make_invite(entry: &CallEntry) {
 /// One event of the call; false once the call is over.
 fn follow(model: &AppModel, call: &Arc<Call>, event: CallEvent) -> bool {
     let room = model.kept::<RoomState>();
+    watch::follow(model, call, &event);
     let effects = {
         let mut talk = room.talk.borrow_mut();
         let Some(talk) = talk.as_mut() else {
@@ -1775,7 +1778,7 @@ mod tests {
     fn panels_and_popovers_are_named_as_the_mac_names_them() {
         assert_eq!(Panel::of("messages"), Some(Panel::Messages));
         assert_eq!(Panel::of("host"), Some(Panel::Host));
-        assert_eq!(Panel::of("watch"), None);
+        assert_eq!(Panel::of("watch"), Some(Panel::Watch));
         assert_eq!(Pop::of("share.screen"), Some(Pop::Share));
         assert_eq!(Pop::of("reactions"), Some(Pop::Reactions));
     }

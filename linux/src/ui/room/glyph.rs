@@ -1,6 +1,6 @@
 //! The few symbols the call needs that the system's icon theme has no
-//! version of: a raised hand, a crown, a filled message bubble and the
-//! send arrow. Everything else on the bar is Adwaita's own symbolic icon,
+//! version of: a raised hand, a crown, a filled message bubble, the
+//! clapperboard of watching together and the send arrow. Everything else on the bar is Adwaita's own symbolic icon,
 //! so that a control means on Linux what it looks like on Linux, the rule
 //! windows/Tomoshibi/UI/Kit/Symbols.cs follows with Segoe; where the set
 //! has nothing near (a hand, a crown) the symbol is drawn as a path, in the
@@ -43,6 +43,23 @@ pub const MESSAGE: Shape = Shape {
     data: "M 5,3 H 19 C 20.1,3 21,3.9 21,5 V 15 C 21,16.1 20.1,17 19,17 H 7.5 L 3.6,20.6 C 3.3,20.9 3,20.7 3,20.3 V 5 C 3,3.9 3.9,3 5,3 Z",
     grid: 24.0,
     stroke: None,
+};
+
+/// Watching together's clapperboard (the web's Clapperboard, ControlBar.tsx),
+/// stroked on its 24-unit grid: the icon theme's film symbols are a reel and
+/// a strip of film, which read as a recording.
+pub const CLAPPERBOARD: Shape = Shape {
+    data: "M 20.2,6 L 3,11 L 2.1,8.6 C 1.8,7.5 2.4,6.4 3.4,6.1 L 16.9,2.1 C 18,1.8 19.1,2.4 19.4,3.4 Z M 6.2,5.3 L 9.3,9.2 M 12.4,3.4 L 15.5,7.4 M 3,11 L 21,11 L 21,19 C 21,20.1 20.1,21 19,21 L 5,21 C 3.9,21 3,20.1 3,19 Z",
+    grid: 24.0,
+    stroke: Some(2.0),
+};
+
+/// The room's link (the web's Link), stroked on its 24-unit grid: the icon
+/// theme's insert-link is an arrow into a box, which reads as "insert".
+pub const LINK: Shape = Shape {
+    data: "M 10,13 A 5,5 0 0 0 17.54,13.54 L 20.54,10.54 A 5,5 0 0 0 13.47,3.47 L 11.75,5.18 M 14,11 A 5,5 0 0 0 6.46,10.46 L 3.46,13.46 A 5,5 0 0 0 10.53,20.53 L 12.24,18.82",
+    grid: 24.0,
+    stroke: Some(2.0),
 };
 
 /// The send arrow (the web's ArrowUp).
@@ -150,7 +167,7 @@ mod tests {
 
     #[test]
     fn every_symbol_parses() {
-        for shape in [HAND, CROWN, MESSAGE, ARROW_UP] {
+        for shape in [HAND, CROWN, MESSAGE, ARROW_UP, CLAPPERBOARD, LINK] {
             assert!(gsk::Path::parse(shape.data).is_ok(), "{}", shape.data);
         }
     }

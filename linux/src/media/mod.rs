@@ -197,6 +197,7 @@ pub trait Media {
     /// Lets go of the call: stops everything it was playing. The room calls
     /// it when the call ends, however it ends.
     fn detach_call(&self);
+    fn local_sound(&self, name: &str) -> Option<Arc<dyn tomoshibi_core::call::PcmSink>> { let _ = name; None }
 
     /// Plays a remote sound track (`call.attach_pcm` into the mixer), as the
     /// participant `identity`'s voice, screen sound or music.
