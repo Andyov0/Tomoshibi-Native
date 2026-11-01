@@ -700,10 +700,18 @@ struct Ending {
 
 impl Ending {
     fn new(model: &AppModel) -> Ending {
+        // Not of one width either: a stack of one width asks every page for
+        // its width at that page's least height, and the hidden "are you
+        // sure" page, asked so, wanted its sentence on one line, 572 wide,
+        // which held the host's panel at 604 where every other panel is 360
+        // (over most of the call at 1000 wide, and over the notices placed
+        // beside a panel of 360). Only the page showing is measured now; it
+        // is the column's width that wraps the sentence when it shows.
         let stack = gtk::Stack::builder()
             .transition_type(gtk::StackTransitionType::Crossfade)
             .transition_duration(motion::SETTLE_MS)
             .vhomogeneous(false)
+            .hhomogeneous(false)
             .interpolate_size(true)
             .build();
         let ask_card = gtk::Box::new(gtk::Orientation::Vertical, 0);

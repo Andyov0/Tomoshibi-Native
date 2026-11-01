@@ -122,6 +122,8 @@ pub struct Page {
     said: gtk::Box,
     said_widgets: RefCell<Vec<(u64, Motion)>>,
     panel_motion: Motion,
+    /// Holds the panel to its width: see where it is made.
+    panel_clamp: adw::Clamp,
     panel_holder: gtk::Box,
     panel_shown: Cell<Option<Panel>>,
     panel_view: RefCell<Option<panels::PanelView>>,
@@ -443,7 +445,20 @@ impl Page {
         let panel_holder = gtk::Box::new(gtk::Orientation::Vertical, 0);
         panel_holder.add_css_class("tmsb-panel");
         panel_holder.set_overflow(gtk::Overflow::Hidden);
-        let panel_motion = Motion::hidden(&panel_holder, Away::SIDE);
+        // The panel's width is a width, not only the least it may be: the
+        // width asked of it below is a minimum, and a panel is otherwise as
+        // wide as the widest thing in it would like, a wrapping label its
+        // whole line. Clamped, what is in it wraps at the width it is given
+        // (a panel's contents must still be able to be that narrow: the
+        // host panel's were not, see host_panel.rs `Ending`).
+        let panel_clamp = adw::Clamp::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .maximum_size(360)
+            .tightening_threshold(360)
+            .unit(adw::LengthUnit::Px)
+            .child(&panel_holder)
+            .build();
+        let panel_motion = Motion::hidden(&panel_clamp, Away::SIDE);
         panel_motion.set_halign(gtk::Align::End);
         panel_motion.set_valign(gtk::Align::Fill);
         // Below the window's own buttons, which are at the top right here
@@ -538,6 +553,7 @@ impl Page {
             said,
             said_widgets: RefCell::new(Vec::new()),
             panel_motion,
+            panel_clamp,
             panel_holder,
             panel_shown: Cell::new(None),
             panel_view: RefCell::new(None),
@@ -1483,7 +1499,8 @@ impl Page {
         if width <= 0.0 || height <= 0.0 {
             return;
         }
-        let planned = self.plan(width, height);
+        let mut planned = self.plan(width, height);
+        self.keep_my_card_clear(&mut planned, pictures);
         {
             let mut view = room.view.borrow_mut();
             view.page = planned.page;
@@ -2335,18 +2352,14 @@ impl Page {
         // `panelWidth`); from the side beside it, from the foot over it.
         // Beside the bar's lane where it stands down the side.
         let lane = if self.side.get() { SIDE_LANE } else { 0 };
+        let (panel_width, narrow) = self.panel_size(width);
         let width = width - lane;
         self.panel_motion.set_margin_end(12 + lane);
         self.panel_motion.set_margin_bottom(self.island() as i32);
-        let beside = 360.min(width - 32);
-        let narrow = width > 0 && width < beside + 24 + 172 + 22;
-        let panel_width = if narrow {
-            (width - 24).max(0)
-        } else {
-            beside.max(0)
-        };
         if panel_width > 0 {
             self.panel_motion.set_width_request(panel_width);
+            self.panel_clamp.set_maximum_size(panel_width);
+            self.panel_clamp.set_tightening_threshold(panel_width);
         }
         self.panel_motion
             .set_from(if narrow { Away::FOOT } else { Away::SIDE });
@@ -2392,6 +2405,56 @@ impl Page {
             },
         );
         self.toasts.set_margin_bottom(self.island() as i32 + 8);
+    }
+
+    /// How wide a panel is in a room `width` wide, and whether it comes up
+    /// over the call from its foot (narrow) rather than standing beside it.
+    fn panel_size(&self, width: i32) -> (i32, bool) {
+        let lane = if self.side.get() { SIDE_LANE } else { 0 };
+        let width = width - lane;
+        let beside = 360.min(width - 32);
+        let narrow = width > 0 && width < beside + 24 + 172 + 22;
+        let panel_width = if narrow {
+            (width - 24).max(0)
+        } else {
+            beside.max(0)
+        };
+        (panel_width, narrow)
+    }
+
+    /// In a call of two, one's own card in the corner moves out from under
+    /// a panel open beside the call, to its left, and back when it closes
+    /// (the stage moves it over the settle time). The panel stands 12 in
+    /// from the edge and the card 8, so a panel over the card covered all
+    /// of it but a strip four pixels wide down its right side, which read
+    /// as a fault; and the card is the one picture of oneself there is. The
+    /// list of who is watching a share moves beside an open panel the same
+    /// way on the Mac, rather than going behind it.
+    fn keep_my_card_clear(&self, planned: &mut plan::Room, pictures: &[super::talk::Picture]) {
+        let room = self.model.kept::<RoomState>();
+        let view = room.view.borrow();
+        if view.panel.is_none()
+            || view.pin.pinned().is_some()
+            || pictures.len() != plan::ALONE_TOGETHER
+        {
+            return;
+        }
+        let (panel_width, narrow) = self.panel_size(self.root.width());
+        if narrow || panel_width <= 0 {
+            return;
+        }
+        let (stage_width, _) = self.stage.size();
+        let Some(card) = planned.spots.get_mut(ME) else {
+            return;
+        };
+        // The panel's left edge where the stage measures: 12 in from the
+        // stage's right edge, the bar's lane (where it stands down the side)
+        // being beside the stage rather than in it.
+        let panel_left = stage_width - 12.0 - f64::from(panel_width);
+        if card.max_x() <= panel_left - plan::GAP {
+            return;
+        }
+        card.x = (panel_left - plan::GAP - card.width).max(plan::GAP);
     }
 
     fn fill_panel(&self, panel: Panel) {
