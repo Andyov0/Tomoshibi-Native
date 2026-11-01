@@ -23,6 +23,33 @@ struct Running {
 }
 
 fn main() -> glib::ExitCode {
+    // The links AppRun took off the command line (an invitation's token is
+    // as good as a key to the room, and a command line can be read by every
+    // user of the machine): a start from an image that has them on its
+    // runtime's line hands them to a fresh start of the image and ends, so
+    // that the runtime's line goes with it (update/relaunch.rs). Taken out
+    // of the environment either way, so that nothing this starts has them.
+    let links = std::env::var(update::relaunch::OPEN_LINKS).unwrap_or_default();
+    let handed = std::env::var_os(update::relaunch::LINKS_HANDED).is_some();
+    std::env::remove_var(update::relaunch::OPEN_LINKS);
+    std::env::remove_var(update::relaunch::LINKS_HANDED);
+    let links: Vec<String> = links
+        .lines()
+        .filter(|line| !line.is_empty())
+        .map(str::to_owned)
+        .collect();
+    if !links.is_empty() && !handed {
+        if let Some(image) = update::running_image() {
+            match update::relaunch::hand_links_over(&image, &links.join("\n")) {
+                Ok(()) => {
+                    log("handed the links to a start of the image without them on its line");
+                    return glib::ExitCode::SUCCESS;
+                }
+                Err(fault) => log(&format!("the links could not be handed on: {fault}")),
+            }
+        }
+    }
+
     // Said before the first Deployment is made, which reads it then
     // (core/protocol/src/api/agent.rs).
     client::tell();
@@ -95,7 +122,16 @@ fn main() -> glib::ExitCode {
         }
     });
 
-    application.run()
+    // The links, as the application's own arguments: opened here, or
+    // handed over the session bus to the instance already running, as a
+    // second launch's are.
+    if links.is_empty() {
+        application.run()
+    } else {
+        let mut arguments = vec![std::env::args().next().unwrap_or_else(|| "tomoshibi".into())];
+        arguments.extend(links);
+        application.run_with_args(&arguments)
+    }
 }
 
 /// Builds the model and the window the first time the application is asked
@@ -148,6 +184,35 @@ fn debug_switches(
 ) {
     if let Some(path) = model.launch().snapshot.clone() {
         ui::window::snapshot_when_settled(window, model, path);
+    }
+    // TOMOSHIBI_DEBUG_FRAMES=<seconds>: every frame the window paints for
+    // that long from the start, with how long since the one before, to see
+    // a transition starved of frames (a dialog's first frames, drawn in
+    // software).
+    if let Some(seconds) = std::env::var("TOMOSHIBI_DEBUG_FRAMES")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+    {
+        let until = glib::monotonic_time() + seconds as i64 * 1_000_000;
+        window.connect_realize(move |window| {
+            let Some(clock) = window.frame_clock() else {
+                return;
+            };
+            let last = std::cell::Cell::new(0i64);
+            clock.connect_after_paint(move |clock| {
+                let now = glib::monotonic_time();
+                if now > until {
+                    return;
+                }
+                let since = if last.get() > 0 { (now - last.get()) / 1000 } else { 0 };
+                last.set(now);
+                log(&format!(
+                    "frame {} painted at {} ms, {since} ms after the last",
+                    clock.frame_counter(),
+                    now / 1000
+                ));
+            });
+        });
     }
     if let Some(seconds) = model.launch().quit_after_seconds {
         let (application, model) = (application.downgrade(), model.downgrade());

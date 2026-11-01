@@ -162,6 +162,30 @@ if [ -d "$here/usr/lib/lend/libstdc++" ] && [ -n "$NEEDS_GLIBCXX" ]; then
   fi
 fi
 
+# ---- links ---------------------------------------------------------------------
+#
+# A link the app was opened with (the desktop entry's %U: an invitation's
+# tomoshibi://host/?invite=TOKEN) is handed to it in the environment, which
+# only this user can read, rather than on the command line, which every
+# user of the machine can; the app then starts afresh without it, so that
+# the runtime's own command line, which still has it, goes too
+# (update/relaunch.rs). Only when every argument is a link; anything else
+# is left as it was.
+links=
+for argument in "$@"; do
+  case $argument in
+    tomoshibi:*|http://*|https://*)
+      links="${links:+$links
+}$argument" ;;
+    *) links=; break ;;
+  esac
+done
+if [ -n "$links" ]; then
+  TOMOSHIBI_OPEN_LINKS=$links
+  export TOMOSHIBI_OPEN_LINKS
+  set --
+fi
+
 TOMOSHIBI_APPRUN_SET=
 set_for_app() {
   if eval "[ -n \"\${$1+x}\" ]"; then
