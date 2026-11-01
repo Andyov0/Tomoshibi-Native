@@ -267,7 +267,10 @@ impl Source {
             return FRAME;
         }
         let available = (self.queue.len() / self.channels).min(FRAME);
-        for (slot, sample) in frame.iter_mut().zip(self.queue.drain(..available * self.channels)) {
+        for (slot, sample) in frame
+            .iter_mut()
+            .zip(self.queue.drain(..available * self.channels))
+        {
             *slot = sample;
         }
         for slot in frame.iter_mut().skip(available * self.channels) {
@@ -691,8 +694,18 @@ mod tests {
 
     fn queued(mixer: &Mixer) -> usize {
         let reading = mixer.reading();
-        let line = reading.iter().find(|line| line.contains("queued=")).unwrap();
-        line.split("queued=").nth(1).unwrap().split(' ').next().unwrap().parse().unwrap()
+        let line = reading
+            .iter()
+            .find(|line| line.contains("queued="))
+            .unwrap();
+        line.split("queued=")
+            .nth(1)
+            .unwrap()
+            .split(' ')
+            .next()
+            .unwrap()
+            .parse()
+            .unwrap()
     }
 
     #[test]
@@ -757,7 +770,11 @@ mod tests {
             feed(&mixer);
         }
         let out = feed(&mixer);
-        assert!(out.iter().all(|&s| (s - 12_500).abs() <= 2), "{:?}", &out[..4]);
+        assert!(
+            out.iter().all(|&s| (s - 12_500).abs() <= 2),
+            "{:?}",
+            &out[..4]
+        );
     }
 
     #[test]
@@ -778,7 +795,11 @@ mod tests {
         mixer.set_level("ann", 0.5);
         let state = mixer.state();
         assert_eq!(state.level_of("ann", Kind::Voice), 0.5);
-        assert_eq!(state.level_of("ann", Kind::Music), 0.5, "the person's, until set");
+        assert_eq!(
+            state.level_of("ann", Kind::Music),
+            0.5,
+            "the person's, until set"
+        );
         drop(state);
         mixer.set_kind_level("ann", true, 0.8);
         mixer.set_duck("ann", 0.3);
