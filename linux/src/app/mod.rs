@@ -25,10 +25,20 @@
 //! it. The screens are thrown away and built again (a change of language
 //! does it), so nothing a screen must not lose may live in a widget.
 
+pub mod account;
 pub mod client;
+pub mod joining;
+pub mod kept;
 pub mod launch;
+pub mod links;
+pub mod lobby;
+pub mod network;
 pub mod prefs;
+pub mod remote;
+pub mod schedule;
 pub mod secrets;
+pub mod updates;
+pub mod words;
 
 use std::{
     any::{Any, TypeId},
@@ -41,12 +51,15 @@ use std::{
 use adw::prelude::*;
 use tomoshibi_core::call::{CallOptions, IceServer};
 use tomoshibi_protocol::{
-    api::{Account, Deployment, DeploymentInfo, JoinGrant},
+    api::{Account, Arrangement, Deployment, DeploymentInfo, InviteInfo, JoinGrant},
+    relays::RelayList,
     ProtocolError,
 };
 
 use crate::media::{Camera, Microphone};
 
+pub use joining::{Gone, Waiting};
+pub use kept::{DeviceMemory, DeviceSlot};
 pub use launch::Launch;
 pub use prefs::Preferences;
 pub use secrets::Secrets;
@@ -97,6 +110,14 @@ impl Screen {
     pub fn is_call(self) -> bool {
         matches!(self, Screen::Call | Screen::Ended)
     }
+
+    /// The screens before a call that show the picture of yourself.
+    pub fn before_call(self) -> bool {
+        matches!(
+            self,
+            Screen::Lobby | Screen::Prejoin | Screen::Knocking | Screen::Waiting
+        )
+    }
 }
 
 /// Why the last call ended (the Mac's AppModel `Ending`, App.tsx's `ended`
@@ -119,8 +140,8 @@ pub enum Ending {
 /// Everything the room needs to open a call, handed from the screens before
 /// it (the pre-join, the knock, the wait) to the room's screen through the
 /// model: the deployment's grant, the word if the call is sealed, the name,
-/// and the devices the pre-join already opened, so that the microphone the
-/// person just heard on the meter is the one the call sends.
+/// and the devices the pre-join already opened, so that the camera the
+/// person just saw on the preview is the one the call sends.
 #[derive(Clone)]
 pub struct CallEntry {
     pub deployment: Arc<Deployment>,
@@ -177,6 +198,12 @@ pub enum Change {
     Module(&'static str),
 }
 
+/// The model's own change for what the screens before a call fill in and
+/// choose (the room, the name, the devices to start with, the relay, the
+/// invitation, the wait and the knock), which the skeleton's `Change` has
+/// no case for.
+pub const CHANGED: Change = Change::Module("app");
+
 /// A subscription, to give back with [`AppModel::unsubscribe`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Subscription(u64);
@@ -188,6 +215,12 @@ struct State {
     screen: Option<Screen>,
     asking: u32,
     problem: Option<String>,
+    /// The problem is about why somebody is not in a meeting, and stays
+    /// until closed (notices.ts `joinFailed`); otherwise it fades.
+    problem_stays: bool,
+    /// Moved on by every problem said, so that a fade only takes the one it
+    /// was set for.
+    problem_said: u64,
     deployment: Option<Arc<Deployment>>,
     info: Option<DeploymentInfo>,
     account: Option<Account>,
@@ -198,6 +231,29 @@ struct State {
     call: Option<CallEntry>,
     /// How the last call ended, for the ended screen.
     ending: Option<Ending>,
+    /// What the screens before a call hold (joining.rs).
+    room: String,
+    name: String,
+    passphrase: String,
+    sealing_word: String,
+    invite: Option<String>,
+    invitation: Option<InviteInfo>,
+    arrived_by_link: bool,
+    relays: Option<RelayList>,
+    relay_choice: Option<String>,
+    start_microphone: bool,
+    start_camera: bool,
+    joining: bool,
+    join_attempt: u64,
+    arrangement: Option<Arrangement>,
+    meeting_token: Option<String>,
+    waiting: Waiting,
+    wait_task: u64,
+    knock_task: u64,
+    /// Moved on by every new picture, so the old one is not shown from a
+    /// cache under the same address.
+    picture_version: u32,
+    started: bool,
 }
 
 struct Inner {
@@ -209,6 +265,10 @@ struct Inner {
     next: Cell<u64>,
     /// What the modules keep, one value per type (`kept`).
     kept: RefCell<HashMap<TypeId, Rc<dyn Any>>>,
+    /// The camera opened for the picture of yourself before a call: the
+    /// lobby's stage, the sheets and the pre-join show it, and the call
+    /// takes it over (`CallEntry::camera`) rather than opening it again.
+    preview: RefCell<Option<Rc<dyn Camera>>>,
 }
 
 /// The model, cheap to clone: every clone is the same model.
@@ -225,7 +285,11 @@ impl AppModel {
         let keeps = !launch.rehearsal();
         let preferences = Preferences::standard(keeps);
         let secrets = secrets::standard(launch.rehearsal());
-        Self::with_parts(launch, preferences, secrets)
+        let model = Self::with_parts(launch, preferences, secrets);
+        // What the deployment said last time applies before the first
+        // screen is drawn, as the language does.
+        remote::restore(&model);
+        model
     }
 
     /// A model with the parts given, for tests.
@@ -234,17 +298,49 @@ impl AppModel {
         preferences: Preferences,
         secrets: Box<dyn Secrets>,
     ) -> AppModel {
-        AppModel {
+        let joining = DeviceMemory::joining(&preferences);
+        let state = State {
+            name: preferences.string(joining::NAME_KEY).unwrap_or_default(),
+            // A relay the person picked on their own deployment means
+            // nothing on a test's.
+            relay_choice: if launch.rehearsal() {
+                None
+            } else {
+                preferences.string(joining::RELAY_KEY)
+            },
+            start_microphone: launch.microphone.unwrap_or(joining.microphone),
+            start_camera: launch.camera.unwrap_or(joining.camera),
+            ..State::default()
+        };
+        let model = AppModel {
             inner: Rc::new(Inner {
                 launch,
                 preferences,
                 secrets,
-                state: RefCell::new(State::default()),
+                state: RefCell::new(state),
                 listeners: RefCell::new(Vec::new()),
                 next: Cell::new(1),
                 kept: RefCell::new(HashMap::new()),
+                preview: RefCell::new(None),
             }),
+        };
+        // TOMOSHIBI_MUTE: the microphone starts off for this run.
+        if model
+            .launch()
+            .mute
+            .as_deref()
+            .is_some_and(|mute| mute != "speakers")
+        {
+            model.inner.state.borrow_mut().start_microphone = false;
         }
+        // The camera seen before a call is let go of once nothing before a
+        // call shows it, unless the call has taken it.
+        model.subscribe(|model, change| {
+            if change == Change::Screen && !model.screen().before_call() {
+                model.set_preview_camera(None);
+            }
+        });
+        model
     }
 
     pub fn launch(&self) -> &Launch {
@@ -274,6 +370,12 @@ impl AppModel {
         self.inner.state.borrow().problem.clone()
     }
 
+    /// Whether the problem shown stays until somebody closes it, rather than
+    /// fading by itself.
+    pub fn problem_stays(&self) -> bool {
+        self.inner.state.borrow().problem_stays
+    }
+
     pub fn deployment(&self) -> Option<Arc<Deployment>> {
         self.inner.state.borrow().deployment.clone()
     }
@@ -294,6 +396,14 @@ impl AppModel {
     /// How the last call ended.
     pub fn ending(&self) -> Option<Ending> {
         self.inner.state.borrow().ending.clone()
+    }
+
+    /// The deployment's address, as the core writes it, or the one the app
+    /// opens on before it has answered.
+    pub fn base_url(&self) -> String {
+        self.deployment()
+            .map(|deployment| deployment.base_url())
+            .unwrap_or_else(|| self.launch().deployment_base())
     }
 
     /// A module's own state, one value per type, made with `Default` the
@@ -378,22 +488,65 @@ impl AppModel {
 
     // ---- what the screens do ----------------------------------------------
 
-    /// Moves to `screen`, and says so if it is another.
+    /// Moves to `screen`, and says so if it is another. The lobby is
+    /// signing in for somebody who is not signed in: the room's "Back to
+    /// meetings" asks for the lobby whoever pressed it.
     pub fn show(&self, screen: Screen) {
+        let screen = if screen == Screen::Lobby && self.account().is_none() {
+            Screen::SignIn
+        } else {
+            screen
+        };
         let before = self.inner.state.borrow_mut().screen.replace(screen);
         if before != Some(screen) {
             self.changed(Change::Screen);
         }
     }
 
-    /// Shows a sentence for something that went wrong.
+    /// Shows a sentence about why somebody is not where they meant to be,
+    /// which stays until they close it (notices.ts `joinFailed`): an
+    /// invitation that opens tomorrow said when, and was gone in five
+    /// seconds while the person was still reading it.
     pub fn tell(&self, sentence: impl Into<String>) {
-        self.inner.state.borrow_mut().problem = Some(sentence.into());
+        {
+            let mut state = self.inner.state.borrow_mut();
+            state.problem = Some(sentence.into());
+            state.problem_stays = true;
+            state.problem_said += 1;
+        }
         self.changed(Change::Problem);
     }
 
+    /// Shows a sentence about something that happened and is over, which
+    /// fades by itself after ten seconds (notices.ts `actionFailed`).
+    pub fn mention(&self, sentence: impl Into<String>) {
+        let said = {
+            let mut state = self.inner.state.borrow_mut();
+            state.problem = Some(sentence.into());
+            state.problem_stays = false;
+            state.problem_said += 1;
+            state.problem_said
+        };
+        self.changed(Change::Problem);
+        let weak = self.downgrade();
+        glib::timeout_add_seconds_local_once(10, move || {
+            let Some(model) = weak.upgrade() else {
+                return;
+            };
+            let still = model.inner.state.borrow().problem_said == said;
+            if still {
+                model.clear_problem();
+            }
+        });
+    }
+
     pub fn clear_problem(&self) {
-        if self.inner.state.borrow_mut().problem.take().is_some() {
+        let had = {
+            let mut state = self.inner.state.borrow_mut();
+            state.problem_stays = false;
+            state.problem.take().is_some()
+        };
+        if had {
             self.changed(Change::Problem);
         }
     }
@@ -419,6 +572,11 @@ impl AppModel {
 
     /// [`connect`](Self::connect), awaited.
     pub async fn connect_now(&self) -> Result<(), ProtocolError> {
+        // Nothing here may take the screen off a call that is live; the only
+        // way from a call to another deployment is to leave it first.
+        if self.screen() == Screen::Call {
+            return Ok(());
+        }
         self.ask(1);
         let reached = self.reach().await;
         self.ask(-1);
@@ -440,16 +598,18 @@ impl AppModel {
                         .unwrap_or("unknown"),
                 ));
                 self.clear_problem();
-                self.show(if self.account().is_some() {
-                    Screen::Lobby
-                } else {
-                    Screen::SignIn
-                });
+                let preparing = !self.room().is_empty() && self.screen() == Screen::Prejoin;
+                if !preparing {
+                    self.show(self.home());
+                }
+                self.refresh_relays();
+                self.refresh_arrangements();
+                let first = !std::mem::replace(&mut self.inner.state.borrow_mut().started, true);
+                if first {
+                    self.started().await;
+                }
                 if let Some(link) = self.inner.state.borrow_mut().opened_with.take() {
                     self.open_link(&link);
-                }
-                if let Some(room) = self.launch().autojoin.clone() {
-                    self.autojoin(room);
                 }
             }
             Err(fault) => {
@@ -463,6 +623,60 @@ impl AppModel {
             }
         }
         reached
+    }
+
+    /// The screen somebody goes back to before a call: the lobby, or for
+    /// somebody not signed in, signing in.
+    pub fn home(&self) -> Screen {
+        if self.account().is_some() {
+            Screen::Lobby
+        } else {
+            Screen::SignIn
+        }
+    }
+
+    /// Once, the first time the deployment answers: what runs for the life
+    /// of the app, and what a test's launch asks for.
+    async fn started(&self) {
+        remote::start(self);
+        updates::start(self);
+        network::start(self);
+        // The relays' light, asked again every minute while no call shows.
+        let weak = self.downgrade();
+        glib::timeout_add_seconds_local(60, move || match weak.upgrade() {
+            Some(model) => {
+                if !model.screen().is_call() {
+                    model.refresh_relays();
+                }
+                glib::ControlFlow::Continue
+            }
+            None => glib::ControlFlow::Break,
+        });
+
+        let launch = self.launch().clone();
+        if let Some(name) = &launch.name {
+            self.inner.state.borrow_mut().name = name.clone();
+        }
+        if let Some((name, file)) = &launch.sign_in {
+            // Read into a variable and never written anywhere: the file is
+            // the test's, and the log is read over a shared folder.
+            match std::fs::read_to_string(file) {
+                Ok(passphrase) => {
+                    self.sign_in_now(name.clone(), passphrase.trim().to_owned())
+                        .await
+                }
+                Err(fault) => log(&format!(
+                    "TOMOSHIBI_SIGNIN's file could not be read: {fault}"
+                )),
+            }
+        }
+        if let Some(room) = launch.autojoin.clone() {
+            self.autojoin(room);
+        } else if let Some(room) = launch.prepare.clone() {
+            self.prepare(&room);
+        } else if let Some(link) = launch.open.clone() {
+            self.open_link(&link);
+        }
     }
 
     async fn reach(&self) -> Result<(), ProtocolError> {
@@ -479,11 +693,18 @@ impl AppModel {
         // a deployment that answers the first and not the second is reached,
         // with nobody signed in, as the web reads it.
         let account = deployment.clone().me().await.unwrap_or(None);
+        let passphrase = self
+            .secrets()
+            .read(&secrets::passphrase_key(&deployment.base_url()))
+            .unwrap_or_default();
         {
             let mut state = self.inner.state.borrow_mut();
             state.deployment = Some(deployment);
             state.info = Some(info);
             state.account = account;
+            if state.passphrase.is_empty() {
+                state.passphrase = passphrase;
+            }
         }
         self.changed(Change::Info);
         self.changed(Change::Account);
@@ -493,128 +714,189 @@ impl AppModel {
     /// Signs in with an account's name and passphrase, keeps the session, and
     /// moves to the lobby; a refusal is shown as its sentence.
     pub fn sign_in(&self, name: String, passphrase: String) {
+        let model = self.clone();
+        glib::spawn_future_local(async move {
+            model.sign_in_now(name, passphrase).await;
+        });
+    }
+
+    /// [`sign_in`](Self::sign_in), awaited.
+    pub async fn sign_in_now(&self, name: String, passphrase: String) {
         let Some(deployment) = self.deployment() else {
             return;
         };
         if self.busy() || name.trim().is_empty() || passphrase.is_empty() {
             return;
         }
-        let model = self.clone();
-        glib::spawn_future_local(async move {
-            model.ask(1);
-            let result = deployment
-                .clone()
-                .sign_in(name.trim().to_owned(), passphrase)
-                .await;
-            model.ask(-1);
-            match result {
-                Ok(account) => {
-                    if let Some(cookie) = deployment.account_cookie() {
-                        model
-                            .secrets()
-                            .write(&secrets::session_key(&deployment.base_url()), &cookie);
-                    }
-                    model.inner.state.borrow_mut().account = Some(account);
-                    model.changed(Change::Account);
-                    model.clear_problem();
-                    model.show(Screen::Lobby);
-                }
-                Err(fault) => model.tell(explain_sign_in(&fault)),
-            }
-        });
-    }
-
-    /// `TOMOSHIBI_AUTOJOIN`, in a debug run: joins `room` as soon as the
-    /// deployment has answered, under `TOMOSHIBI_NAME` (or "Linux"), with no
-    /// devices, straight into the call. What the interop scripts and the
-    /// headless runs use to put the app in a room; the lobby module may send
-    /// it through the pre-join instead, as the Mac does.
-    pub fn autojoin(&self, room: String) {
-        let Some(deployment) = self.deployment() else {
-            return;
-        };
-        let name = self
-            .launch()
-            .name
+        self.ask(1);
+        let result = deployment
             .clone()
-            .unwrap_or_else(|| "Linux".to_owned());
-        let invite = self.launch().invite.clone();
-        let passphrase = self
-            .launch()
-            .passphrase_file
-            .as_ref()
-            .and_then(|file| std::fs::read_to_string(file).ok())
-            .map(|text| text.trim().to_owned())
-            .unwrap_or_default();
-        let model = self.clone();
-        glib::spawn_future_local(async move {
-            model.ask(1);
-            let granted = deployment
-                .clone()
-                .join(
-                    room,
-                    name.clone(),
-                    passphrase,
-                    None,
-                    None,
-                    String::new(),
-                    invite,
-                )
-                .await;
-            model.ask(-1);
-            match granted {
-                Ok(grant) => {
-                    log(&format!("granted the room {}", grant.room));
-                    model.enter_call(CallEntry {
-                        deployment,
-                        grant,
-                        sealing_word: None,
-                        name,
-                        microphone_on: false,
-                        camera_on: false,
-                        microphone: None,
-                        camera: None,
-                    });
+            .sign_in(name.trim().to_owned(), passphrase)
+            .await;
+        self.ask(-1);
+        match result {
+            Ok(account) => {
+                if let Some(cookie) = deployment.account_cookie() {
+                    self.secrets()
+                        .write(&secrets::session_key(&deployment.base_url()), &cookie);
                 }
-                Err(fault) => {
-                    log(&format!("the join was refused: {fault}"));
-                    model.tell(explain(&fault));
+                log("signed in");
+                self.inner.state.borrow_mut().account = Some(account);
+                self.changed(Change::Account);
+                self.clear_problem();
+                self.refresh_arrangements();
+                self.refresh_relays();
+                if self.screen() == Screen::SignIn {
+                    self.show(Screen::Lobby);
                 }
             }
-        });
+            Err(fault) => {
+                log(&format!("sign-in refused: {fault}"));
+                self.mention(explain_sign_in(&fault));
+            }
+        }
     }
 
     /// Hands a call to the room and shows it: what the pre-join (or the
     /// knock, or the wait) calls once the deployment has granted the join.
     pub fn enter_call(&self, entry: CallEntry) {
+        let room = entry.grant.room.clone();
         {
             let mut state = self.inner.state.borrow_mut();
             state.call = Some(entry);
             state.ending = None;
+            state.joining = false;
+            state.room = room.clone();
         }
+        self.remember_room(&room);
+        self.clear_problem();
         self.show(Screen::Call);
     }
 
     /// The room says the call is over, and why; the ended screen follows.
     pub fn end_call(&self, ending: Ending) {
         log(&format!("the call ended: {ending:?}"));
+        let lost = matches!(ending, Ending::Lost(_));
         {
             let mut state = self.inner.state.borrow_mut();
             state.call = None;
             state.ending = Some(ending);
         }
+        if lost {
+            self.forget_relay_measurement();
+        }
         self.show(Screen::Ended);
     }
 
-    /// Opens a link somebody was sent: an invitation, a meeting, or a room
-    /// on this deployment. Before the deployment has answered it is kept and
-    /// opened after. The lobby module fills in what each kind of link does.
-    pub fn open_link(&self, link: &str) {
-        if self.deployment().is_none() {
-            self.inner.state.borrow_mut().opened_with = Some(link.to_owned());
-            return;
+    // ---- the devices a call starts with ------------------------------------
+
+    pub fn start_with_microphone(&self) -> bool {
+        self.inner.state.borrow().start_microphone
+    }
+
+    pub fn start_with_camera(&self) -> bool {
+        self.inner.state.borrow().start_camera
+    }
+
+    /// What starts on when somebody joins (preferences.ts `meet-live.devices`),
+    /// written as it is switched, so that the settings and the join screens
+    /// are one choice and not two that disagree.
+    pub fn set_start_with_microphone(&self, on: bool) {
+        self.inner.state.borrow_mut().start_microphone = on;
+        self.remember_devices();
+    }
+
+    pub fn set_start_with_camera(&self, on: bool) {
+        self.inner.state.borrow_mut().start_camera = on;
+        self.remember_devices();
+    }
+
+    fn remember_devices(&self) {
+        let joining = kept::Joining {
+            camera: self.start_with_camera(),
+            microphone: self.start_with_microphone(),
+        };
+        DeviceMemory::remember_joining(self.preferences(), joining);
+        self.changed(CHANGED);
+    }
+
+    /// The device last picked of a kind, or none for the system's.
+    pub fn device_choice(&self, slot: DeviceSlot) -> Option<String> {
+        DeviceMemory::choice(self.preferences(), slot)
+    }
+
+    pub fn choose_device(&self, slot: DeviceSlot, id: Option<&str>) {
+        DeviceMemory::remember_choice(self.preferences(), slot, id);
+        self.changed(CHANGED);
+    }
+
+    /// The devices picked are forgotten: from now on, the system's.
+    pub fn forget_devices(&self) {
+        DeviceMemory::forget_choices(self.preferences());
+        self.changed(CHANGED);
+    }
+
+    pub fn original_sound(&self) -> bool {
+        DeviceMemory::original_sound(self.preferences())
+    }
+
+    pub fn set_original_sound(&self, on: bool) {
+        DeviceMemory::set_original_sound(self.preferences(), on);
+        self.changed(CHANGED);
+    }
+
+    /// Whether the background is blurred: what was chosen, where the
+    /// deployment offers it (Remote.cs `Blur`).
+    pub fn blur(&self) -> bool {
+        DeviceMemory::blur(self.preferences())
+            && remote::allows(self, remote::feature::BACKGROUND_BLUR)
+    }
+
+    pub fn blur_chosen(&self) -> bool {
+        DeviceMemory::blur(self.preferences())
+    }
+
+    pub fn set_blur(&self, on: bool) {
+        DeviceMemory::set_blur(self.preferences(), on);
+        if let Some(camera) = self.preview_camera() {
+            camera.set_blur(self.blur());
         }
-        log("a link was handed to the app; opening links is not written yet");
+        self.changed(CHANGED);
+    }
+
+    /// The camera showing the picture of yourself before a call.
+    pub fn preview_camera(&self) -> Option<Rc<dyn Camera>> {
+        self.inner.preview.borrow().clone()
+    }
+
+    /// Holds `camera` as the preview, letting go of the one before.
+    pub fn set_preview_camera(&self, camera: Option<Rc<dyn Camera>>) {
+        let old = self.inner.preview.replace(camera.clone());
+        if let Some(old) = old {
+            let same = camera.as_ref().is_some_and(|new| Rc::ptr_eq(new, &old));
+            if !same {
+                old.close();
+            }
+        }
+    }
+
+    /// The preview handed over to a call, which keeps it from here.
+    pub fn take_preview_camera(&self) -> Option<Rc<dyn Camera>> {
+        self.inner.preview.borrow_mut().take()
+    }
+
+    /// Opens a page in the person's browser: the deployment's own page for
+    /// a download, a meeting's link.
+    pub fn open_in_browser(&self, uri: &str) {
+        let launcher = gtk::UriLauncher::new(uri);
+        let window = gtk::Window::list_toplevels()
+            .into_iter()
+            .find_map(|widget| widget.downcast::<gtk::Window>().ok());
+        launcher.launch(window.as_ref(), gio::Cancellable::NONE, |result| {
+            if let Err(fault) = result {
+                log(&format!("the browser could not be opened: {fault}"));
+            }
+        });
     }
 }
 

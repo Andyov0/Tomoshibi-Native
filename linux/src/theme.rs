@@ -367,6 +367,9 @@ fn named_colors(prefix: &str, palette: &Palette, accent: Accent, scheme: Scheme)
 }
 
 /// The rules every screen shares, written once against the named colours.
+/// libadwaita's own accent (a switch that is on, a selected day, the focus
+/// ring) is the person's tally rather than the system's blue, as the other
+/// apps draw their switches in it.
 /// `.tmsb-primary` is the amber button with dark ink, a neutral grey plate
 /// with grey words when disabled, never faded amber (UI-SYNC decision 4).
 ///
@@ -376,6 +379,9 @@ fn named_colors(prefix: &str, palette: &Palette, accent: Accent, scheme: Scheme)
 /// vertical padding and no border, and a bordered field's min-height is its
 /// height less the two borders, so that what is drawn is the scale's size.
 const SHARED_RULES: &str = r#"
+@define-color accent_bg_color @tmsb_tally;
+@define-color accent_fg_color @tmsb_on_tally;
+@define-color accent_color @tmsb_tally_text;
 window.tmsb-window, window.tmsb-window > contents {
   background-color: @tmsb_bg;
   color: @tmsb_fg;
@@ -612,6 +618,13 @@ mod tests {
                 "{rule} uses the system's palette"
             );
         }
+    }
+
+    #[test]
+    fn libadwaitas_accent_is_the_tally() {
+        let css = stylesheet(Scheme::Dark, Accent::Teal);
+        assert!(css.contains("@define-color accent_bg_color @tmsb_tally;"));
+        assert!(css.contains("@define-color tmsb_tally #40c8e0;"));
     }
 
     #[test]

@@ -3,12 +3,14 @@
 //! the Mac does: the mark and the heading, then one pane with the two
 //! fields, the primary button, and the way in with a link under a divider.
 //!
-//! The skeleton's first version, for the lobby module to finish: the narrow
-//! layout (the link at the foot), the language menu, the deployment's
-//! notice and the update offer above the heading are still to come.
+//! Above the mark, in the page's flow and never one over the other, the
+//! deployment's notice (which is for whoever has the app, signed in or not)
+//! and under it a newer build; the language is in the bar's corner, as on
+//! every web page before a call.
 
 use adw::prelude::*;
 
+use super::{pieces, update_offer};
 use crate::{
     app::{pasted_link, AppModel, Change},
     i18n::t,
@@ -64,6 +66,7 @@ pub fn page(context: &Context) -> gtk::Widget {
 
     let link = gtk::Entry::builder()
         .placeholder_text(t("Paste the link you were sent."))
+        .primary_icon_name("insert-link-symbolic")
         .hexpand(true)
         .build();
     link.add_css_class("tmsb-link-field");
@@ -96,10 +99,24 @@ pub fn page(context: &Context) -> gtk::Widget {
         .margin_start(scale::SPACING[7])
         .margin_end(scale::SPACING[7])
         .build();
+    // The notice and a newer build, as wide as each other and no wider
+    // than the column's head.
+    let head = gtk::Box::new(gtk::Orientation::Vertical, 10);
+    head.append(&pieces::notice_card(model));
+    head.append(&update_offer::offer(model));
+    let head = adw::Clamp::builder()
+        .maximum_size(520)
+        .child(&head)
+        .margin_start(scale::SPACING[7])
+        .margin_end(scale::SPACING[7])
+        .build();
+    let flow = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    flow.append(&head);
+    flow.append(&clamp);
     let scroller = gtk::ScrolledWindow::builder()
         .hscrollbar_policy(gtk::PolicyType::Never)
         .vexpand(true)
-        .child(&clamp)
+        .child(&flow)
         .build();
 
     let body = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -107,12 +124,13 @@ pub fn page(context: &Context) -> gtk::Widget {
     #[cfg(debug_assertions)]
     body.append(&footnote(model));
 
-    // Something that went wrong arrives as a toast and leaves by itself,
+    // Something that went wrong arrives at the foot and leaves by itself,
     // rather than a line that appears and vanishes.
-    let toasts = adw::ToastOverlay::new();
-    toasts.set_child(Some(&body));
+    let toasts = pieces::with_toast(model, &body);
+    let bar = kit::bar();
+    bar.pack_end(&pieces::language_button(model));
     let page = adw::ToolbarView::new();
-    page.add_top_bar(&kit::bar());
+    page.add_top_bar(&bar);
     page.set_content(Some(&toasts));
 
     // ---- what it does ---------------------------------------------------
@@ -201,25 +219,19 @@ pub fn page(context: &Context) -> gtk::Widget {
     link.connect_activate(move |_| open_link());
 
     let passphrase_kept = passphrase.downgrade();
-    let toasts_kept = toasts.downgrade();
     model.subscribe_while(&page, move |model, change| match change {
         Change::Busy | Change::Info => update(model),
-        Change::Problem => {
-            let (Some(problem), Some(toasts)) = (model.problem(), toasts_kept.upgrade()) else {
-                return;
-            };
-            toasts.add_toast(adw::Toast::new(&problem));
-            // A refused passphrase is cleared, as SignIn.cs clears it, so
-            // that the next attempt is typed rather than resent.
-            if model.account().is_none() {
-                if let Some(passphrase) = passphrase_kept.upgrade() {
-                    passphrase.set_text("");
-                }
+        // A refused passphrase is cleared, as SignIn.cs clears it, so that
+        // the next attempt is typed rather than resent.
+        Change::Problem if model.problem().is_some() && model.account().is_none() => {
+            if let Some(passphrase) = passphrase_kept.upgrade() {
+                passphrase.set_text("");
             }
         }
         _ => {}
     });
 
+    super::home::open_from_debug(context, &page, true);
     page.upcast()
 }
 
