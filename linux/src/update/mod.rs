@@ -62,11 +62,101 @@ pub async fn check(deployment: Arc<Deployment>) -> Result<UpdateCheck, ProtocolE
 
 /// The AppImage this process runs from, which is what an update replaces.
 /// `None` when the app runs from anywhere else (a build tree, a package
-/// manager's install), which is never replaced: the offer then says where
-/// to get the new build instead.
+/// manager's install, an image unpacked by hand), which is never replaced:
+/// the offer then says where to get the new build instead.
+///
+/// `$APPIMAGE` is trusted only when this process is that image's: its
+/// program is inside `$APPDIR`, and `$APPDIR` is that image's own mount
+/// (the runtime mounts it under the image's file name) or, where the image
+/// was unpacked rather than mounted, the runtime that unpacked it is this
+/// process's parent and is that image. The variable is inherited by
+/// whatever an AppImage starts: Tomoshibi started from another AppImage
+/// application's terminal, while itself running unpacked or from a
+/// distribution's package, saw that application's image there, and an
+/// update would have been renamed over it and the desktop entry pointed
+/// at it.
 pub fn running_image() -> Option<PathBuf> {
-    let path = PathBuf::from(std::env::var_os("APPIMAGE")?);
-    path.is_absolute().then_some(path)
+    static RUNNING: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    RUNNING
+        .get_or_init(|| {
+            let image = PathBuf::from(std::env::var_os("APPIMAGE")?);
+            let appdir = PathBuf::from(std::env::var_os("APPDIR")?);
+            let program = std::env::current_exe().ok()?;
+            let mounts = std::fs::read_to_string("/proc/self/mounts").unwrap_or_default();
+            let parent = std::fs::read_link(format!(
+                "/proc/{}/exe",
+                std::os::unix::process::parent_id()
+            ))
+            .ok();
+            let trusted = trusted_image(&image, &appdir, &program, &mounts, parent.as_deref());
+            if !trusted {
+                log("update: APPIMAGE names an image this process is not running from; not using it");
+            }
+            trusted.then_some(image)
+        })
+        .clone()
+}
+
+/// [`running_image`]'s judgement, on what it read.
+pub fn trusted_image(
+    image: &Path,
+    appdir: &Path,
+    program: &Path,
+    mounts: &str,
+    parent: Option<&Path>,
+) -> bool {
+    if !image.is_absolute() || !appdir.is_absolute() || !program.starts_with(appdir) {
+        return false;
+    }
+    let Some(name) = image.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    let mounted = mounts.lines().any(|line| {
+        let mut fields = line.split(' ');
+        let (Some(source), Some(point), Some(kind)) = (fields.next(), fields.next(), fields.next())
+        else {
+            return false;
+        };
+        kind.starts_with("fuse")
+            && Path::new(&unescape_mount(point)) == appdir
+            && {
+                let source = unescape_mount(source);
+                source == name || Path::new(&source) == image
+            }
+    });
+    let unpacked = appdir
+        .file_name()
+        .and_then(|name| name.to_str())
+        .is_some_and(|name| name.starts_with("appimage_extracted_"))
+        && parent.is_some_and(|parent| {
+            parent == image
+                || std::fs::canonicalize(image).is_ok_and(|image| image == parent)
+        });
+    mounted || unpacked
+}
+
+/// A path as /proc/mounts writes it: a space, a tab, a line break and a
+/// backslash as three octal digits after a backslash.
+fn unescape_mount(field: &str) -> String {
+    let bytes = field.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut index = 0;
+    while index < bytes.len() {
+        if bytes[index] == b'\\' && index + 4 <= bytes.len() {
+            let digits = &bytes[index + 1..index + 4];
+            if digits.iter().all(|digit| (b'0'..=b'7').contains(digit)) {
+                let code = digits
+                    .iter()
+                    .fold(0u32, |code, digit| code * 8 + (digit - b'0') as u32);
+                out.push(code as u8);
+                index += 4;
+                continue;
+            }
+        }
+        out.push(bytes[index]);
+        index += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// What a Storage error says when the image's folder takes no new file,
@@ -189,6 +279,43 @@ pub fn at_start(model: &AppModel, window: &adw::ApplicationWindow) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_image_is_trusted_only_by_the_process_running_from_it() {
+        let image = Path::new("/home/ann/Apps/Tomoshibi-0.1.7-x86_64.AppImage");
+        let appdir = Path::new("/tmp/.mount_TomoshAbCdEf");
+        let program = Path::new("/tmp/.mount_TomoshAbCdEf/usr/bin/tomoshibi");
+        let mounts = "proc /proc proc rw 0 0\nTomoshibi-0.1.7-x86_64.AppImage /tmp/.mount_TomoshAbCdEf fuse.Tomoshibi-0.1.7-x86_64.AppImage ro,nosuid,nodev 0 0\n";
+        assert!(trusted_image(image, appdir, program, mounts, None));
+        // Another application's image, inherited: its mount is not ours.
+        let other = Path::new("/home/ann/Apps/Editor.AppImage");
+        assert!(!trusted_image(other, appdir, program, mounts, None));
+        // Running unpacked by hand, with another image's variables.
+        let unpacked = Path::new("/home/ann/squashfs-root/usr/bin/tomoshibi");
+        assert!(!trusted_image(image, appdir, unpacked, mounts, None));
+        // Unpacked by the runtime, which is the parent and is the image.
+        let extracted = Path::new("/tmp/appimage_extracted_0123456789abcdef0123456789abcdef");
+        let inside = extracted.join("usr/bin/tomoshibi");
+        assert!(trusted_image(image, extracted, &inside, "", Some(image)));
+        assert!(!trusted_image(image, extracted, &inside, "", Some(Path::new("/usr/bin/bash"))));
+        // A path with a space, as /proc/mounts escapes it.
+        let spaced = Path::new("/tmp/.mount_Tomosh X");
+        let mounts = "Tomoshibi.AppImage /tmp/.mount_Tomosh\\040X fuse.Tomoshibi.AppImage ro 0 0\n";
+        assert!(trusted_image(
+            Path::new("/opt/Tomoshibi.AppImage"),
+            spaced,
+            &spaced.join("usr/bin/tomoshibi"),
+            mounts,
+            None
+        ));
+    }
+
+    #[test]
+    fn a_mount_s_path_is_read_back_whole() {
+        assert_eq!(unescape_mount("/tmp/a\\040b\\134c"), "/tmp/a b\\c");
+        assert_eq!(unescape_mount("/home/\u{5c71}\u{7530}/x"), "/home/\u{5c71}\u{7530}/x");
+        assert_eq!(unescape_mount("/end\\04"), "/end\\04");
+    }
 
     #[test]
     fn the_linux_app_asks_for_linux_builds() {
