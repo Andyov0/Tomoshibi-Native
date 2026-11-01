@@ -58,13 +58,18 @@ impl Language {
     }
 
     /// What the language calls itself. Never translated: a language picker
-    /// is read by somebody who cannot yet read the language on screen.
+    /// is read by somebody who cannot yet read the language on screen. The
+    /// Chinese and Japanese names are escaped, so that the source stays
+    /// ASCII as the repository asks of everything that is not a phrase table.
     pub fn display_name(self) -> &'static str {
         match self {
             Language::En => "English",
-            Language::ZhHans => "简体中文",
-            Language::ZhHant => "繁體中文",
-            Language::Ja => "日本語",
+            // Simplified Chinese, in Simplified Chinese.
+            Language::ZhHans => "\u{7b80}\u{4f53}\u{4e2d}\u{6587}",
+            // Traditional Chinese, in Traditional Chinese.
+            Language::ZhHant => "\u{7e41}\u{9ad4}\u{4e2d}\u{6587}",
+            // Japanese, in Japanese.
+            Language::Ja => "\u{65e5}\u{672c}\u{8a9e}",
         }
     }
 
