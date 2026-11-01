@@ -1188,6 +1188,7 @@ fn files_matching(query: &str) -> Vec<MusicTrack> {
 /// A room script's `music=<what>`: `ask:<words>`, `pause`, `play`, `skip`,
 /// `vote`, `close`, `duck:<on|off>`, `monitor:<0-100>`, `volume:<0-100>`
 /// (the first person's music), `tab:<desk|search>`, `search:<words>`.
+#[cfg(debug_assertions)]
 pub(super) fn script(model: &AppModel, value: &str) {
     let Some(desk) = desk_of(model) else { return };
     let (verb, rest) = value.split_once(':').unwrap_or((value, ""));
