@@ -766,6 +766,15 @@ fn show_moving(model: &AppModel, to: String) {
 fn rejoin_where_moved(model: &AppModel, ended: Arc<Call>, to: String) {
     log("the meeting moved: joining it again");
     show_moving(model, to);
+    // Nobody's pictures are kept from the call that ended: each was drawn
+    // from that call's track, and a person whose track kept its name across
+    // the move (somebody else's, when only this participant was placed
+    // elsewhere) kept a picture attached to the old call, frozen on its
+    // last frame. Under the veil they go, and come back from the new call.
+    if let Some(talk) = model.kept::<RoomState>().talk.borrow_mut().as_mut() {
+        talk.people.clear();
+        talk.leaving.clear();
+    }
     let_go_of_devices(model);
     if let Some(media) = media_of(model) {
         media.detach_call();
@@ -1777,6 +1786,10 @@ pub(crate) fn dismiss_key(model: &AppModel, key: &str) {
 /// it (AtTheDoor.tsx `LOOK_EVERY`).
 fn watch_the_door(model: &AppModel) {
     let weak = model.downgrade();
+    // For this call only: one joined again after a move starts its own, and
+    // this one, still waiting out its four seconds, would have gone on
+    // beside it, asking twice.
+    let watched = call_of(model);
     glib::timeout_add_local(Duration::from_secs(4), move || {
         let Some(model) = weak.upgrade() else {
             return glib::ControlFlow::Break;
@@ -1785,6 +1798,12 @@ fn watch_the_door(model: &AppModel) {
         let Some(call) = call_of(&model) else {
             return glib::ControlFlow::Break;
         };
+        if !watched
+            .as_ref()
+            .is_some_and(|watched| Arc::ptr_eq(watched, &call))
+        {
+            return glib::ControlFlow::Break;
+        }
         if !room.host.borrow().yours() {
             return glib::ControlFlow::Continue;
         }
