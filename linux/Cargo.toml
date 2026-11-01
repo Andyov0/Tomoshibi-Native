@@ -1,0 +1,79 @@
+[package]
+name = "tomoshibi-linux"
+# The product's version, as every platform numbers it (apple/project.yml,
+# android/app/build.gradle.kts, windows/Tomoshibi/Tomoshibi.csproj); the
+# build within it is app::client::BUILD.
+version = "0.1.7"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+publish = false
+description = "Tomoshibi for Linux: GTK 4 and libadwaita over the shared core"
+
+# Everything but the entry is a library, so that what one module offers
+# another (the AppModel, the Media traits, the VideoView, the kit) is public
+# API rather than dead code while the module that will use it is being
+# written, and so that the tests link without the GtkApplication.
+[lib]
+name = "tomoshibi_linux"
+path = "src/lib.rs"
+
+[[bin]]
+name = "tomoshibi"
+path = "src/main.rs"
+
+# Its own workspace, not a member of the core's.
+#
+# The core's [patch.crates-io] (three vendored LiveKit crates, each change in
+# them marked "Tomoshibi:") applies only in the workspace whose root declares
+# it, and a patch in a dependency's manifest is ignored without an error. So
+# a package that links the core must either sit in the core's workspace or
+# repeat the patch at its own root. Joining the core's workspace would put GTK,
+# libadwaita and PipeWire into core/Cargo.lock, which the Apple, Android and
+# Windows builds resolve from, and every core build would read a lock full of
+# crates it never compiles; a Linux change could then move a version the other
+# three ship. Repeating the patch keeps the core untouched, and the lock here
+# was started as a copy of the core's, so the core links with exactly the
+# versions it is tested with on the other platforms. Anything the core pins
+# that this lock resolves differently is a mistake: compare the two with
+# build/check-lock.sh before merging a dependency change.
+[workspace]
+
+[patch.crates-io]
+livekit = { path = "../core/vendor/livekit" }
+livekit-signaling = { path = "../core/vendor/livekit-signaling" }
+libwebrtc = { path = "../core/vendor/libwebrtc" }
+
+[dependencies]
+# The shared core, linked directly: the media crate and the protocol crate
+# beneath it. Their exports are ordinary Rust functions as well as UniFFI
+# bindings, so no bindings are generated for this app.
+tomoshibi-core = { path = "../core" }
+tomoshibi-protocol = { path = "../core/protocol" }
+
+# The toolkit, at the oldest versions the oldest supported system has:
+# Ubuntu 24.04's GTK 4.14 and libadwaita 1.5. Asking for more would make a
+# binary that does not start there.
+gtk = { package = "gtk4", version = "0.11", features = ["v4_14"] }
+adw = { package = "libadwaita", version = "0.9", features = ["v1_5"] }
+glib = "0.22"
+gio = "0.22"
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# --- media/ (audio, camera, screen) adds its crates below this line ---
+
+# --- render/ adds its crates below this line ---
+
+# --- update/ adds its crates below this line ---
+
+# --- app/ (secrets, network watch) adds its crates below this line ---
+
+[dev-dependencies]
+
+# The core's [profile.local] (release with debug assertions on, for measuring
+# against a local deployment), repeated because profiles too are read only at
+# the workspace root.
+[profile.local]
+inherits = "release"
+debug-assertions = true
