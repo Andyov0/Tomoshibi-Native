@@ -85,8 +85,9 @@ pub fn build(model: &AppModel) -> PanelView {
     let other_holder = slider(&other);
     content.append(&other_holder);
 
-    // Everything for whoever runs it.
-    let yours = gtk::Box::new(gtk::Orientation::Vertical, 12);
+    // Everything for whoever runs it. The space between the sections is
+    // each section's own, so that one slid shut leaves none behind.
+    let yours = gtk::Box::new(gtk::Orientation::Vertical, 0);
     let yours_holder = slider(&yours);
     content.append(&yours_holder);
 
@@ -100,9 +101,17 @@ pub fn build(model: &AppModel) -> PanelView {
     yours.append(&people.card);
     let ending = Ending::new(model);
     yours.append(&ending.stack);
+    for section in [
+        inviting.card.upcast_ref::<gtk::Widget>(),
+        people.card.upcast_ref(),
+        ending.stack.upcast_ref(),
+    ] {
+        section.set_margin_bottom(12);
+    }
     let foot = gtk::Label::builder()
         .xalign(0.0)
         .wrap(true)
+        .max_width_chars(48)
         .margin_start(6)
         .margin_end(6)
         .build();
@@ -127,7 +136,7 @@ pub fn build(model: &AppModel) -> PanelView {
             };
             let room = model.kept::<RoomState>();
             let host = room.host.borrow();
-            let standing = host.standing.clone();
+            let standing = host.standing;
             measuring.set_reveal_child(standing.is_none());
             let yours = standing.as_ref().is_some_and(|standing| standing.yours);
             other_holder.set_reveal_child(standing.is_some() && !yours);
@@ -235,15 +244,23 @@ impl Inviting {
         link_box.set_margin_end(8);
         link_box.set_margin_top(4);
         link_box.set_margin_bottom(8);
+        // Its natural width held to the panel's: a label that wraps still
+        // asks for its whole line, and a link's line widened the panel to
+        // twice its width.
         let link = gtk::Label::builder()
             .xalign(0.0)
             .wrap(true)
             .wrap_mode(gtk::pango::WrapMode::Char)
+            .max_width_chars(36)
             .selectable(true)
             .build();
         link.add_css_class("tmsb-host-link");
         link.set_widget_name("host.link");
-        let explained = gtk::Label::builder().xalign(0.0).wrap(true).build();
+        let explained = gtk::Label::builder()
+            .xalign(0.0)
+            .wrap(true)
+            .max_width_chars(48)
+            .build();
         explained.add_css_class("tmsb-host-note");
         // A link goes out and cannot be taken back; this stops it without
         // ending the meeting.
@@ -332,6 +349,7 @@ impl Door {
         let card = gtk::Box::new(gtk::Orientation::Vertical, 4);
         card.add_css_class("tmsb-host-card");
         card.add_css_class("door");
+        card.set_margin_bottom(12);
         let heading = section(&t("Waiting to be let in"));
         heading.set_margin_start(10);
         heading.set_margin_top(8);
@@ -424,6 +442,7 @@ impl Elsewhere {
     fn new(model: &AppModel) -> Elsewhere {
         let card = gtk::Box::new(gtk::Orientation::Vertical, 2);
         card.add_css_class("tmsb-host-card");
+        card.set_margin_bottom(12);
         let (open_button, _, words) = menu_item(
             "network-server-symbolic",
             &t("Hold this call somewhere else"),
@@ -454,6 +473,7 @@ impl Elsewhere {
             .label(t("Everybody is reconnected. Nobody has to do anything."))
             .xalign(0.0)
             .wrap(true)
+            .max_width_chars(48)
             .margin_start(10)
             .margin_end(10)
             .margin_top(2)
@@ -702,7 +722,11 @@ impl Ending {
         let sure = gtk::Box::new(gtk::Orientation::Vertical, 12);
         sure.add_css_class("tmsb-host-card");
         sure.add_css_class("danger");
-        let sentence = gtk::Label::builder().xalign(0.0).wrap(true).build();
+        let sentence = gtk::Label::builder()
+            .xalign(0.0)
+            .wrap(true)
+            .max_width_chars(36)
+            .build();
         sure.append(&sentence);
         let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         let cancel = pill(&t("Cancel"));

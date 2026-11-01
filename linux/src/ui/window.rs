@@ -308,12 +308,15 @@ fn keep_passphrase_when_left(window: &adw::ApplicationWindow, model: &AppModel) 
     });
 }
 
+/// A window action's name and what it does.
+type Action = (&'static str, fn(&AppModel));
+
 /// The two switches people reach for without looking, on the keys other
 /// call apps use for them (the Mac's ⌘D and ⌘E, its Call menu): Ctrl+D the
 /// microphone, Ctrl+E the camera, and Leave, as window actions. Leave has no
 /// key, as it has none on the Mac; it is there for the desktop to offer.
 fn call_keys(window: &adw::ApplicationWindow, model: &AppModel) {
-    let actions: [(&str, fn(&AppModel)); 3] = [
+    let actions: [Action; 3] = [
         ("toggle-microphone", room::toggle_microphone),
         ("toggle-camera", room::toggle_camera),
         ("leave-call", |model: &AppModel| {
