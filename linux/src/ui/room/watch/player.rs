@@ -69,56 +69,15 @@ pub enum Lost {
 /// GStreamer, started once for the process; `None` where it could not be.
 fn started() -> bool {
     static STARTED: OnceLock<bool> = OnceLock::new();
-    *STARTED.get_or_init(|| {
-        from_the_image();
-        match gst::init() {
-            Ok(()) => true,
-            Err(fault) => {
-                log(&format!("GStreamer did not start: {fault}"));
-                false
-            }
+    // Run from the AppImage, AppRun has pointed GStreamer at the image's own
+    // plugins, scanner and registry (linux/build/AppRun says why).
+    *STARTED.get_or_init(|| match gst::init() {
+        Ok(()) => true,
+        Err(fault) => {
+            log(&format!("GStreamer did not start: {fault}"));
+            false
         }
     })
-}
-
-/// Run from the AppImage, GStreamer reads the plugins the image carries
-/// (appimage-inside.sh) and keeps its registry of them apart from the
-/// system's. Its own default is the build machine's plugin directory, which
-/// on another system is that system's plugins, built against another
-/// GStreamer than the one in the image. Set before GStreamer starts, and
-/// only what AppRun has not set already.
-fn from_the_image() {
-    let Some(appdir) = std::env::var_os("APPDIR").map(std::path::PathBuf::from) else {
-        return;
-    };
-    let plugins = appdir.join("usr/lib/gstreamer-1.0");
-    if !plugins.is_dir() {
-        return;
-    }
-    let set = |name: &str, value: &std::ffi::OsStr| {
-        if std::env::var_os(name).is_none() {
-            std::env::set_var(name, value);
-        }
-    };
-    set("GST_PLUGIN_SYSTEM_PATH_1_0", plugins.as_os_str());
-    set("GST_PLUGIN_PATH_1_0", std::ffi::OsStr::new(""));
-    set(
-        "GST_PLUGIN_SCANNER_1_0",
-        appdir
-            .join("usr/lib/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner")
-            .as_os_str(),
-    );
-    let cache = std::env::var_os("XDG_CACHE_HOME")
-        .map(std::path::PathBuf::from)
-        .or_else(|| {
-            std::env::var_os("HOME").map(|home| std::path::PathBuf::from(home).join(".cache"))
-        });
-    if let Some(cache) = cache {
-        let registry = cache
-            .join("tomoshibi")
-            .join(format!("gstreamer-registry-{}.bin", std::env::consts::ARCH));
-        set("GST_REGISTRY_1_0", registry.as_os_str());
-    }
 }
 
 struct State {

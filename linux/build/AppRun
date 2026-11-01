@@ -28,6 +28,11 @@
 #   LD_LIBRARY_PATH          only where a library the image lends is
 #                            missing from the system (below), and then only
 #                            that library's folder
+#   GST_PLUGIN_SYSTEM_PATH_1_0, GST_PLUGIN_PATH_1_0, GST_PLUGIN_SCANNER_1_0,
+#   GST_REGISTRY_1_0         the GStreamer plugins the image carries for
+#                            watching together, the scanner that reads them,
+#                            and a registry of them apart from the system's
+#                            (below)
 #
 # Nothing else. In particular not GDK_BACKEND or GTK_THEME, which
 # linuxdeploy's GTK plugin sets: the first would keep the app off Wayland
@@ -204,6 +209,25 @@ set_for_app GDK_PIXBUF_MODULE_FILE "$here/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.
 set_for_app GIO_MODULE_DIR "$here/usr/lib/gio/modules"
 if [ -n "$lent" ]; then
   set_for_app LD_LIBRARY_PATH "$lent${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+# GStreamer's own default is the build machine's plugin directory, which on
+# another system is that system's plugins, built against another GStreamer
+# than the image's; so the image's plugins (appimage-inside.sh), its own
+# scanner, and a registry of them that is not the system's one, which names
+# the system's plugins. Here rather than in the app, where they were set at
+# first: set by the app, they followed everything it started (a browser for
+# a link, the update's next start), which update/relaunch.rs hands the
+# system's environment only for what this script names. What somebody set
+# for themselves is left as it is.
+if [ -d "$here/usr/lib/gstreamer-1.0" ]; then
+  [ -n "${GST_PLUGIN_SYSTEM_PATH_1_0+x}" ] || set_for_app GST_PLUGIN_SYSTEM_PATH_1_0 "$here/usr/lib/gstreamer-1.0"
+  [ -n "${GST_PLUGIN_PATH_1_0+x}" ] || set_for_app GST_PLUGIN_PATH_1_0 ""
+  [ -n "${GST_PLUGIN_SCANNER_1_0+x}" ] \
+    || set_for_app GST_PLUGIN_SCANNER_1_0 "$here/usr/lib/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner"
+  cache=${XDG_CACHE_HOME:-${HOME:+$HOME/.cache}}
+  if [ -n "$cache" ] && [ -z "${GST_REGISTRY_1_0+x}" ]; then
+    set_for_app GST_REGISTRY_1_0 "$cache/tomoshibi/gstreamer-registry-$(uname -m).bin"
+  fi
 fi
 export TOMOSHIBI_APPRUN_SET
 
