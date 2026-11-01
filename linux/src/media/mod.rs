@@ -14,8 +14,8 @@
 //! written and screenshotted against [`Quiet`] (no devices at all) while the
 //! media module writes the real ones, and so that a test can hand the room a
 //! fake. This file is the contract; the media module owns audio.rs,
-//! camera.rs and screen.rs, which implement it, and changes here are agreed
-//! with the room module.
+//! camera.rs, screen.rs and devices.rs (which says what [`standard`] is),
+//! and changes here are agreed with the room module.
 //!
 //! Threads. Every method is called on GTK's main thread and every callback
 //! given here is called there. Capture runs on threads of its own and pushes
@@ -23,12 +23,15 @@
 
 pub mod audio;
 pub mod camera;
+pub mod devices;
 pub mod screen;
 
 use std::{future::Future, pin::Pin, rc::Rc, sync::Arc};
 
 use tomoshibi_core::call::{Call, VideoSink};
-use tomoshibi_protocol::share::{ShareQuality, SoundCapture};
+use tomoshibi_protocol::share::ShareQuality;
+
+pub use devices::standard;
 
 /// A future the media module gives back, polled on GTK's main context
 /// (`glib::spawn_future_local`); it may hold widgets and `Rc`s.
@@ -92,10 +95,13 @@ impl std::fmt::Display for MediaError {
 pub trait Microphone {
     /// The level now, from nought to one, for a meter; read on a timer.
     fn level(&self) -> f32;
-    /// Starts sending it into `call` as the voice (`SoundKind::Voice`),
-    /// with the capture the web would ask for (echo cancellation, noise
-    /// suppression, gain), or stops and starts again with new ones.
-    fn publish(&self, call: Arc<Call>, capture: SoundCapture) -> Local<Result<(), MediaError>>;
+    /// Starts sending it into `call` as the voice, `SoundKind::Voice {
+    /// original }`, captured as the core's `sound_profile` of that kind
+    /// says the web asks for it (`.capture`: echo cancellation always, noise
+    /// suppression and gain unless `original`, the "original sound" switch).
+    /// Called again with the other `original`, it starts again with that
+    /// capture; the room never publishes a second voice.
+    fn publish(&self, call: Arc<Call>, original: bool) -> Local<Result<(), MediaError>>;
     /// Stops sending, and keeps capturing for the meter.
     fn unpublish(&self) -> Local<()>;
     /// Mutes the track the others hear (the call's microphone button).
@@ -166,6 +172,16 @@ pub trait Media {
     /// Whether sharing is possible here at all, for the share button.
     fn can_share_screen(&self) -> bool;
 
+    /// Takes what is the whole call's rather than one track's: the lossless
+    /// sound, which arrives on the data channel and not as a track
+    /// (`call.set_lossless_sink` into the same mixer), and each person's
+    /// level for it (`call.set_hearing`). The room calls it once the call
+    /// is joined, before the first `play`.
+    fn attach_call(&self, call: &Arc<Call>);
+    /// Lets go of the call: stops everything it was playing. The room calls
+    /// it when the call ends, however it ends.
+    fn detach_call(&self);
+
     /// Plays a remote sound track (`call.attach_pcm` into the mixer), as the
     /// participant `identity`'s voice, screen sound or music.
     fn play(&self, call: &Arc<Call>, track_sid: &str, identity: &str);
@@ -206,15 +222,11 @@ impl Media for Quiet {
     fn can_share_screen(&self) -> bool {
         false
     }
+    fn attach_call(&self, _: &Arc<Call>) {}
+    fn detach_call(&self) {}
     fn play(&self, _: &Arc<Call>, _: &str, _: &str) {}
     fn stop_playing(&self, _: &Arc<Call>, _: &str) {}
     fn set_speaker(&self, _: Option<String>) {}
     fn set_volume(&self, _: &str, _: f32) {}
     fn set_silent(&self, _: bool) {}
-}
-
-/// The media this machine has: the real devices once the media module has
-/// written them; [`Quiet`] until then.
-pub fn standard() -> Rc<dyn Media> {
-    Rc::new(Quiet)
 }

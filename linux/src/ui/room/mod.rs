@@ -6,10 +6,19 @@
 //! Owned by the room module. The window asks [`page`] for the call when the
 //! model moves to `Screen::Call` (after `AppModel::enter_call`) and for the
 //! ending at `Screen::Ended`. The call is opened with [`join`]; every remote
-//! picture is a `render::VideoView` given to `Call::attach_video`, every
-//! remote sound goes to `Media::play`, and the devices are the
-//! `media::Media` in the context. When the call is over the room says why
-//! with `AppModel::end_call`.
+//! picture is a `render::VideoView` given to `Call::attach_video`, the call
+//! is handed to `Media::attach_call` once joined and every remote sound
+//! then goes to `Media::play`, and the devices are the `media::Media` in the
+//! context. When the call is over the room says why with
+//! `AppModel::end_call` (after `Media::detach_call`).
+//!
+//! The call outlives its widgets: the window throws a screen away and
+//! builds it again, so the joined `Call` and what the room knows about it
+//! live in the model (`AppModel::kept::<YourRoomState>()`), and the call's
+//! screens re-word themselves on `i18n::on_change` rather than being built
+//! again in the middle of a call (ui/window.rs). The observer is called on
+//! the core's threads; it sends each `CallEvent` to the main thread
+//! (`glib::MainContext::default().invoke`) before anything is drawn.
 
 use std::sync::Arc;
 

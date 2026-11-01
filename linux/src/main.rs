@@ -39,17 +39,6 @@ fn main() -> glib::ExitCode {
         // and the call draws itself dark in either (theme.rs).
         adw::StyleManager::default().set_color_scheme(adw::ColorScheme::Default);
         gtk::Window::set_default_icon_name(APP_ID);
-        // A session with no settings daemon and no settings portal (a bare
-        // compositor such as weston or sway without one) leaves gtk-xft-dpi
-        // at -1, which libadwaita converts to no dpi at all: every length in
-        // sp becomes nought, and every AdwClamp collapses to its child's
-        // smallest width (the sign-in's column was 168 wide in a window of
-        // 1100). GTK draws text at 96 then anyway, so 96 is what is set.
-        if let Some(settings) = gtk::Settings::default() {
-            if settings.gtk_xft_dpi() <= 0 {
-                settings.set_gtk_xft_dpi(96 * 1024);
-            }
-        }
     });
 
     application.connect_activate({

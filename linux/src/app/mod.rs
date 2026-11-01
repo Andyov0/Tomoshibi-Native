@@ -17,6 +17,13 @@
 //! Owned by the app module; the screens use only what is `pub` here, and a
 //! screen that needs more asks for it here rather than reaching into the
 //! core itself, so that one place decides what is kept and what is shown.
+//!
+//! A module's own state that outlives its screens (the room's call, the
+//! update offer, the settings' open page) need not be added here: it keeps
+//! it in [`AppModel::kept`], one value per type of its own, and says it
+//! changed with [`AppModel::announce`] and a [`Change::Module`] named for
+//! it. The screens are thrown away and built again (a change of language
+//! does it), so nothing a screen must not lose may live in a widget.
 
 pub mod client;
 pub mod launch;
@@ -24,7 +31,9 @@ pub mod prefs;
 pub mod secrets;
 
 use std::{
+    any::{Any, TypeId},
     cell::{Cell, RefCell},
+    collections::HashMap,
     rc::Rc,
     sync::Arc,
 };
@@ -162,6 +171,10 @@ pub enum Change {
     Remote,
     /// A newer build was found, or a download moved.
     Update,
+    /// Something a module keeps in [`AppModel::kept`] changed, by the
+    /// module's own name for it ("room", "settings", "update/offer"); only
+    /// that module's screens read it.
+    Module(&'static str),
 }
 
 /// A subscription, to give back with [`AppModel::unsubscribe`].
@@ -194,6 +207,8 @@ struct Inner {
     state: RefCell<State>,
     listeners: RefCell<Vec<(u64, Listener)>>,
     next: Cell<u64>,
+    /// What the modules keep, one value per type (`kept`).
+    kept: RefCell<HashMap<TypeId, Rc<dyn Any>>>,
 }
 
 /// The model, cheap to clone: every clone is the same model.
@@ -227,6 +242,7 @@ impl AppModel {
                 state: RefCell::new(State::default()),
                 listeners: RefCell::new(Vec::new()),
                 next: Cell::new(1),
+                kept: RefCell::new(HashMap::new()),
             }),
         }
     }
@@ -280,6 +296,23 @@ impl AppModel {
         self.inner.state.borrow().ending.clone()
     }
 
+    /// A module's own state, one value per type, made with `Default` the
+    /// first time it is asked for and the same value every time after, for
+    /// as long as the model lives. The type is the key, so a module uses a
+    /// type of its own (`struct RoomState { .. }` in ui/room), with `Cell`s
+    /// and `RefCell`s inside for what changes.
+    pub fn kept<T: Default + 'static>(&self) -> Rc<T> {
+        let made = self
+            .inner
+            .kept
+            .borrow_mut()
+            .entry(TypeId::of::<T>())
+            .or_insert_with(|| Rc::new(T::default()) as Rc<dyn Any>)
+            .clone();
+        // The entry for a type is only ever made from that type above.
+        made.downcast::<T>().expect("kept under its own type")
+    }
+
     // ---- being told -------------------------------------------------------
 
     /// Calls `listener` on the main thread after every change.
@@ -319,6 +352,13 @@ impl AppModel {
 
     pub fn downgrade(&self) -> WeakModel {
         WeakModel(Rc::downgrade(&self.inner))
+    }
+
+    /// Tells every listener of a change; what a module calls after changing
+    /// what it keeps ([`Change::Module`]). The model's own changes are said
+    /// by the model.
+    pub fn announce(&self, change: Change) {
+        self.changed(change);
     }
 
     fn changed(&self, change: Change) {
@@ -601,6 +641,35 @@ mod tests {
         model.unsubscribe(subscription);
         model.show(Screen::Lobby);
         assert_eq!(*told.borrow(), vec![Change::Screen, Change::Problem]);
+    }
+
+    #[test]
+    fn a_module_keeps_one_value_of_its_own_type() {
+        #[derive(Default)]
+        struct Counted(Cell<u32>);
+        #[derive(Default)]
+        struct Other(Cell<u32>);
+
+        let model = model();
+        model.kept::<Counted>().0.set(3);
+        assert_eq!(model.kept::<Counted>().0.get(), 3, "the same value again");
+        assert_eq!(
+            model.kept::<Other>().0.get(),
+            0,
+            "another type, another value"
+        );
+        let clone = model.clone();
+        assert_eq!(
+            clone.kept::<Counted>().0.get(),
+            3,
+            "every clone is the model"
+        );
+
+        let told = Rc::new(RefCell::new(Vec::new()));
+        let kept = told.clone();
+        model.subscribe(move |_, change| kept.borrow_mut().push(change));
+        model.announce(Change::Module("room"));
+        assert_eq!(*told.borrow(), vec![Change::Module("room")]);
     }
 
     #[test]

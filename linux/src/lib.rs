@@ -15,7 +15,7 @@
 //! - `render`: remote pictures on screen (`VideoView`).
 //! - `media`: the devices (the `Media` traits in media/mod.rs are agreed
 //!   between the media and room modules; audio.rs, camera.rs and screen.rs
-//!   implement them).
+//!   implement them, and devices.rs says which the app runs with).
 //! - `update`: the AppImage replacing itself, and the desktop integration.
 //!
 //! The entry, the GtkApplication, is main.rs.

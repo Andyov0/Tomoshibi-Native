@@ -472,11 +472,13 @@ pub fn install(accent: Accent) {
     };
     // libadwaita turns its lengths in sp (a clamp's width, a breakpoint's
     // condition) into pixels by the text DPI. Where nothing gives one (a
-    // bare compositor, a container, a desktop without a settings service)
-    // GTK leaves it unset, at -1, and every such length comes out as
-    // nothing: the sign-in column shrank to its narrowest. Unset means 96,
-    // which is what GTK draws text at then; it is said here so that
-    // libadwaita reads the same.
+    // bare compositor such as weston or sway, a container, a desktop
+    // without a settings daemon or portal) GTK leaves it unset, at -1, and
+    // every such length comes out as nothing: every AdwClamp collapsed to
+    // its child's narrowest, and the sign-in's column was 168 wide in a
+    // window of 1100. Unset means 96, which is what GTK draws text at then;
+    // it is said here, before the first window, so that libadwaita reads
+    // the same.
     let settings = gtk::Settings::for_display(&display);
     if settings.gtk_xft_dpi() <= 0 {
         settings.set_gtk_xft_dpi(96 * 1024);

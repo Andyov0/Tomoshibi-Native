@@ -6,7 +6,9 @@
 //! model moves to it, and throws the one it left away once the crossfade is
 //! over, so that coming back to a screen builds it fresh from the model. A
 //! change of language builds the screen showing again, in the new language,
-//! and crossfades to it.
+//! and crossfades to it; except the call and its ending, which the room
+//! re-words in place (`i18n::on_change`), since building the call again
+//! would build its every picture and panel again in the middle of the call.
 //!
 //! The two screens with nothing to fill in, starting and unreachable, are
 //! drawn here. Owned by the skeleton; a module changes what its screens look
@@ -122,7 +124,15 @@ pub fn open(
         }
     });
     let on_language = present.clone();
-    crate::i18n::on_change(move |_| on_language(true));
+    let model = context.model.downgrade();
+    crate::i18n::on_change(move |_| {
+        let in_call = model
+            .upgrade()
+            .is_some_and(|model| model.screen().is_call());
+        if !in_call {
+            on_language(true);
+        }
+    });
 
     present(false);
     window
