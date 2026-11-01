@@ -49,6 +49,9 @@ pub fn page(context: &Context) -> adw::PreferencesPage {
     about.add(&fact(&t("Version"), &client::version_label()));
     let update_row = update_row(model);
     about.add(&update_row);
+    if let Some(row) = desktop_row(model) {
+        about.add(&row);
+    }
     about.add(&fact(&t("Media core"), &tomoshibi_core::core_version()));
     if let Some(info) = model.info() {
         // The server's build and not its address: which server this is is
@@ -77,6 +80,51 @@ pub fn page(context: &Context) -> adw::PreferencesPage {
     }
     page.add(&about);
     page
+}
+
+/// The desktop's app list, offered again here: the question a first start
+/// from an AppImage asks is asked once (update::desktop), and somebody who
+/// said "Not now" had no other way back to it. Only for an app running from
+/// an AppImage that the desktop does not list yet. Once added, the row
+/// stays and says so, rather than vanishing from under the pointer.
+fn desktop_row(model: &AppModel) -> Option<adw::ActionRow> {
+    crate::update::running_image()?;
+    if crate::update::desktop::integrated() {
+        return None;
+    }
+    let row = adw::ActionRow::builder()
+        .title(t("Add Tomoshibi to your apps?"))
+        .subtitle(t(
+            "Tomoshibi will appear with your other apps, and meeting links will open in it.",
+        ))
+        .build();
+    row.set_widget_name("settings.desktop");
+    let button = gtk::Button::with_label(&t("Add"));
+    button.set_valign(gtk::Align::Center);
+    row.add_suffix(&button);
+    let weak = model.downgrade();
+    button.connect_clicked(move |button| {
+        let Some(model) = weak.upgrade() else {
+            return;
+        };
+        match crate::update::desktop::integrate_desktop() {
+            Ok(()) => {
+                crate::app::log("settings: added to the desktop's apps");
+                model
+                    .preferences()
+                    .set(crate::update::desktop::KEPT, "added");
+                button.set_icon_name("object-select-symbolic");
+                button.set_sensitive(false);
+            }
+            Err(fault) => {
+                crate::app::log(&format!(
+                    "settings: the desktop entry could not be written: {fault}"
+                ));
+                model.mention(t("That could not be done. Try again."));
+            }
+        }
+    });
+    Some(row)
 }
 
 fn fact(title: &str, value: &str) -> adw::ActionRow {
