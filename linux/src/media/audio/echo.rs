@@ -282,7 +282,7 @@ impl Processor {
     /// taken up.
     fn listen(&mut self, frame: &[i16]) {
         let align = &mut self.align;
-        for block in frame.chunks_exact(DECIMATE) {
+        for block in frame.as_chunks::<DECIMATE>().0 {
             let sum: f32 = block.iter().map(|&s| f32::from(s)).sum();
             align.slow.push_back(sum / DECIMATE as f32);
         }
@@ -538,7 +538,7 @@ fn measure(job: &Job) -> Option<Measure> {
     }
     let mut best = (0usize, f32::MIN);
     let mut values = vec![0f32; longest + 1];
-    for delay in 0..=longest {
+    for (delay, slot) in values.iter_mut().enumerate() {
         let start = m - n - delay;
         if delay > 0 {
             let entering = f64::from(speakers[start]);
@@ -551,7 +551,7 @@ fn measure(job: &Job) -> Option<Measure> {
             .map(|(a, b)| a * b)
             .sum();
         let value = dot / ((energy_microphone as f64 * window.max(1.0)).sqrt() as f32);
-        values[delay] = value;
+        *slot = value;
         if value > best.1 {
             best = (delay, value);
         }

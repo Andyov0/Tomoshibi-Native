@@ -656,7 +656,7 @@ fn limit(sum: &mut [f32], from: f32) -> (f32, bool) {
         (if back > 0.998 { 1.0 } else { back }).min(needed)
     };
     let frames = sum.len() / 2;
-    for (index, pair) in sum.chunks_exact_mut(2).enumerate() {
+    for (index, pair) in sum.as_chunks_mut::<2>().0.iter_mut().enumerate() {
         let gain = from + (to - from) * ((index + 1) as f32 / frames as f32);
         for value in pair {
             *value = knee(*value * gain);
@@ -859,10 +859,8 @@ mod tests {
         for n in 0..15 {
             mixer.push("TR_a", &tone(1, 1, pattern(n)), 1);
         }
-        let mut n = 15;
-        for _ in 0..300 {
+        for n in (15..).take(300) {
             mixer.push("TR_a", &tone(1, 1, pattern(n)), 1);
-            n += 1;
             mixed(&mixer);
         }
         assert!(queued(&mixer) <= TARGET + 1, "{:?}", mixer.reading());

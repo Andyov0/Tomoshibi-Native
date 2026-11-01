@@ -643,8 +643,10 @@ fn bind_client(
 
 /// Little-endian 16-bit samples as floats from minus one to one.
 pub fn pcm_floats(pcm: &[u8]) -> Vec<f32> {
-    pcm.chunks_exact(2)
-        .map(|pair| f32::from(i16::from_le_bytes([pair[0], pair[1]])) / 32768.0)
+    pcm.as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| f32::from(i16::from_le_bytes(*pair)) / 32768.0)
         .collect()
 }
 
