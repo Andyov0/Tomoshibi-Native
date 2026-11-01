@@ -234,8 +234,6 @@ pub struct View {
     pub other_hearing: HashMap<(String, Sound), Hearing>,
     pub toasts: Vec<(u64, Toast)>,
     pub said: Vec<(u64, Line)>,
-    /// The share's size setting in the share popover.
-    pub share_quality: Option<ShareQuality>,
     /// A press that failed, said over the stage until pressed.
     pub problem: Option<String>,
     /// The controls are stepped aside (idle while the stage fills the

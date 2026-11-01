@@ -2025,11 +2025,15 @@ impl Page {
         let microphone = room.local.microphone_on.get();
         let camera = room.local.camera_on.get();
         let sharing = room.local.share.borrow().is_some();
+        // Sound shared on its own lights the same button, which is where it
+        // is stopped (ShareButton.tsx).
+        let listening = model.kept::<super::Shares>().listening.borrow().is_some();
         let hand = room.talk.borrow().as_ref().is_some_and(|talk| talk.hand_up);
         let unread = room.talk.borrow().as_ref().is_some_and(|talk| talk.unread);
         let host = room.host.borrow();
-        let can_share =
-            super::media_of(model).is_some_and(|media| media.can_share_screen()) || sharing;
+        let can_share = super::media_of(model).is_some_and(|media| media.can_share_screen())
+            || sharing
+            || listening;
 
         class(&bar.island, "compact", compact);
         bar.microphone.set_icon_name(if microphone {
@@ -2061,12 +2065,18 @@ impl Page {
         );
         class(&bar.camera, "off", !camera);
         come_or_go(&bar.share, can_share);
-        class(&bar.share, "lit", sharing);
+        class(&bar.share, "lit", sharing || listening);
         class(&bar.share, "held", view.pop == Some(Pop::Share));
+        // The button opens the share menu whatever is shared, so it is named
+        // for what a press does there (ShareButton.tsx): the settings of a
+        // running share, the sound being shared, or a share to start. It
+        // said "Stop sharing" from before the menu, when a press stopped it.
         set_label(
             &bar.share,
             &if sharing {
-                t("Stop sharing")
+                t("Screen sharing settings")
+            } else if listening {
+                t("Sharing sound")
             } else {
                 t("Share your screen")
             },
