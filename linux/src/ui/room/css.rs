@@ -250,7 +250,7 @@ button.tmsb-choice {
 button.tmsb-choice:hover { background-color: alpha(@tmsb_call_wash, 0.10); }
 button.tmsb-choice.held { background-color: alpha(@tmsb_call_wash, 0.16); }
 button.tmsb-choice label { font-weight: normal; }
-button.tmsb-choice image.tick { color: @tmsb_call_tally; }
+button.tmsb-choice image.tick { color: @tmsb_call_fg; }
 
 /* Messages. */
 .tmsb-line-name { font-size: 12px; font-weight: 600; color: @tmsb_call_muted; }

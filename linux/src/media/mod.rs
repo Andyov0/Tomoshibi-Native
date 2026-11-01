@@ -153,6 +153,11 @@ pub trait Camera {
     fn on_ended(&self, ended: Box<dyn Fn()>) {
         let _ = ended;
     }
+    /// A debug run's stand-in for pulling the camera out
+    /// (TOMOSHIBI_DEBUG_DEVICES `camera-gone`): a test picture stops as an
+    /// unplugged camera does, and its device leaves the list.
+    #[cfg(debug_assertions)]
+    fn pretend_unplugged(&self) {}
 }
 
 /// What a shared screen is sent as: the share menu's choices.

@@ -97,6 +97,8 @@ pub struct Cameras {
     /// is taken out first: closing a PipeWire stream reports it unconnected
     /// like an unplugged camera does.
     running: RefCell<std::collections::HashMap<u64, std::rc::Weak<EndedSlot>>>,
+    /// Test cameras pretended unplugged, gone from the list.
+    gone: RefCell<std::collections::HashSet<String>>,
 }
 
 fn wanted() -> Wanted {
@@ -123,6 +125,7 @@ impl Cameras {
             monitor: RefCell::new(None),
             next_token: Cell::new(1),
             running: RefCell::new(std::collections::HashMap::new()),
+            gone: RefCell::new(std::collections::HashSet::new()),
         });
         let weak = Rc::downgrade(&cameras);
         glib::spawn_future_local(async move {
@@ -238,12 +241,20 @@ impl Cameras {
                 TestPicture::Pattern(format) => format!("Test picture ({format:?})"),
                 TestPicture::Y4m(path) => format!("Test picture ({})", path.display()),
             };
-            return vec![Device {
-                id: "test".into(),
-                label,
-                kind: DeviceKind::Camera,
-                is_default: true,
-            }];
+            // Two, so that a test can move the call from one to the other
+            // and take either away (`pretend_unplugged`).
+            let gone = self.gone.borrow();
+            return [("test", label), ("test-2", "Test picture 2".to_owned())]
+                .into_iter()
+                .filter(|(id, _)| !gone.contains(*id))
+                .enumerate()
+                .map(|(index, (id, label))| Device {
+                    id: id.into(),
+                    label,
+                    kind: DeviceKind::Camera,
+                    is_default: index == 0,
+                })
+                .collect();
         }
         self.start();
         let devices: Vec<(String, String)> = match self.pipewire_nodes() {
@@ -339,8 +350,19 @@ impl Cameras {
         let token = self.next_token.get();
         self.next_token.set(token + 1);
         if let Some(picture) = self.options.test_picture.clone() {
+            // The second test camera draws the pattern from other planes,
+            // which proves the frames come from another capture.
+            let second = choice.as_deref() == Some("test-2");
+            let picture = match picture {
+                TestPicture::Pattern(PixelFormat::Nv12) if second => {
+                    TestPicture::Pattern(PixelFormat::I420)
+                }
+                TestPicture::Pattern(_) if second => TestPicture::Pattern(PixelFormat::Nv12),
+                other => other,
+            };
             pattern::start(picture, feed.clone(), stop.clone(), opened);
-            return Ok((Backend::Thread, "test".into(), token));
+            let id = if second { "test-2" } else { "test" };
+            return Ok((Backend::Thread, id.into(), token));
         }
         let choice = choice.filter(|c| !c.is_empty());
         let events = self.events.clone();
@@ -576,6 +598,28 @@ impl Camera for Opened {
 
     fn device(&self) -> Option<String> {
         Some(self.capture.borrow().device.clone())
+    }
+
+    #[cfg(debug_assertions)]
+    fn pretend_unplugged(&self) {
+        if self.cameras.options.test_picture.is_none() {
+            return;
+        }
+        let capture = self.capture.borrow();
+        log(&format!(
+            "camera: pretending {} was pulled out",
+            capture.device
+        ));
+        self.cameras
+            .gone
+            .borrow_mut()
+            .insert(capture.device.clone());
+        capture.stop.store(true, Ordering::Relaxed);
+        let _ = self.cameras.events.send(Event::Ended {
+            label: capture.device.clone(),
+            token: capture.token,
+        });
+        (self.cameras.changed)();
     }
 
     fn on_ended(&self, ended: Box<dyn Fn()>) {
