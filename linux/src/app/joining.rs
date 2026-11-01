@@ -28,6 +28,13 @@ pub const NAME_KEY: &str = "meet-live.name";
 /// A relay chosen by hand (api.ts `rememberRelay`).
 pub const RELAY_KEY: &str = "meet-live.relay";
 
+/// Whether the passphrase in the model has changed since it was last kept
+/// (`AppModel::kept`).
+#[derive(Default)]
+struct PassphraseTyped {
+    dirty: std::cell::Cell<bool>,
+}
+
 /// How an arranged meeting's wait stands (Waiting.tsx).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Waiting {
@@ -72,19 +79,36 @@ impl AppModel {
         self.inner.state.borrow().passphrase.clone()
     }
 
-    /// A guest's passphrase, kept in the secret store for this deployment.
+    /// A guest's passphrase as it is typed. Kept in the secret store for
+    /// this deployment once it is finished with ([`keep_passphrase`]), not
+    /// at every key: each key pressed wrote what had been typed so far into
+    /// the keyring, half a passphrase among them, and with the keyring
+    /// locked every one of those waited on its unlock prompt.
+    ///
+    /// [`keep_passphrase`]: Self::keep_passphrase
     pub fn set_passphrase(&self, passphrase: &str) {
         if self.inner.state.borrow().passphrase == passphrase {
             return;
         }
         self.inner.state.borrow_mut().passphrase = passphrase.to_owned();
+        self.kept::<PassphraseTyped>().dirty.set(true);
+        self.changed(CHANGED);
+    }
+
+    /// Keeps the passphrase typed, if it changed since it was last kept:
+    /// what the join does as it is pressed, and the window when the field is
+    /// left, the screen changes or the app is closed.
+    pub fn keep_passphrase(&self) {
+        if !self.kept::<PassphraseTyped>().dirty.replace(false) {
+            return;
+        }
+        let passphrase = self.passphrase();
         let key = secrets::passphrase_key(&self.base_url());
         if passphrase.is_empty() {
             self.secrets().remove(&key);
         } else {
-            self.secrets().write(&key, passphrase);
+            self.secrets().write(&key, &passphrase);
         }
-        self.changed(CHANGED);
     }
 
     /// Never stored, as the web never stores it (secrecy.ts).
@@ -402,6 +426,8 @@ impl AppModel {
         if self.joining() || self.refused_for_update() {
             return;
         }
+        // Pressing Join is the passphrase finished with.
+        self.keep_passphrase();
         let attempt = {
             let mut state = self.inner.state.borrow_mut();
             state.joining = true;
