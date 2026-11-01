@@ -30,6 +30,9 @@ fn card_screen(context: &Context, width: i32, content: &gtk::Box) -> gtk::Widget
         .maximum_size(width)
         .tightening_threshold(width)
         .child(&kit::Arrival::new(&card).rises(0))
+        // As tall as what is in it: given the page's height, the knock's
+        // short card ran down to the window's foot.
+        .valign(gtk::Align::Start)
         .margin_top(24)
         .margin_bottom(48)
         .margin_start(16)

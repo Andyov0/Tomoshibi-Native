@@ -358,19 +358,23 @@ pub fn page(context: &Context) -> gtk::Widget {
         });
     }
 
-    open_from_debug(context, &bin);
+    open_from_debug(context, &bin, false);
     bin.upcast()
 }
 
 /// TOMOSHIBI_DEBUG_LOBBY: a part of the lobby opened at start, once, for a
 /// picture (the Mac's LobbyDebug).
-fn open_from_debug(context: &Context, anchor: &impl IsA<gtk::Widget>) {
+pub fn open_from_debug(context: &Context, anchor: &impl IsA<gtk::Widget>, signing_in: bool) {
     #[derive(Default)]
     struct Taken(Cell<bool>);
     let model = &context.model;
     let Some(part) = model.launch().lobby.clone() else {
         return;
     };
+    // The sign-in has the language and nothing else of these.
+    if signing_in != (part == "language") {
+        return;
+    }
     if model.kept::<Taken>().0.replace(true) {
         return;
     }
@@ -390,11 +394,20 @@ fn open_from_debug(context: &Context, anchor: &impl IsA<gtk::Widget>) {
                 sheet::present(&ctx, sheet::Mode::Again(room));
             }
             "scheduled" => go(model, Place::Scheduled),
+            #[cfg(debug_assertions)]
+            "update" => crate::app::updates::pose_offer(model),
             "servers" => go(model, Place::Servers),
-            "account" | "language" => {
+            "account" | "language" | "server" => {
                 if let Some(anchor) = anchor.upgrade() {
-                    let name = if part == "account" { "lobby.account" } else { "lobby.language" };
+                    let name = format!("lobby.{part}");
+                    let name = name.as_str();
                     if let Some(button) = find(&anchor, name).and_then(|w| w.downcast::<gtk::MenuButton>().ok()) {
+                        // Without a press there is no input serial, and a
+                        // compositor refuses a popup that grabs without
+                        // one: a picture's menu is opened without the grab.
+                        if let Some(popover) = button.popover() {
+                            popover.set_autohide(false);
+                        }
                         button.popup();
                     }
                 }

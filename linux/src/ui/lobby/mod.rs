@@ -41,7 +41,8 @@ pub fn page(context: &Context, screen: Screen) -> gtk::Widget {
 const CSS: &str = r#"
 .tmsb-lobby .tmsb-sidebar { background-color: @tmsb_surface; border-right: 1px solid @tmsb_border; }
 .tmsb-lobby .tmsb-main, .tmsb-stage-ground { background-color: @tmsb_bg; }
-.tmsb-stage-card { border-radius: 20px; background-color: @tmsb_surface_high; }
+.tmsb-stage-card { border-radius: 20px; border: 1px solid @tmsb_border; }
+.tmsb-stage-card .tmsb-stage-ground { background-color: @tmsb_surface; }
 .tmsb-greeting { font-size: 34px; font-weight: 700; }
 .tmsb-greeting-sub { font-size: 15px; color: alpha(@tmsb_fg, 0.78); }
 .tmsb-section-heading { font-size: 26px; font-weight: 700; }

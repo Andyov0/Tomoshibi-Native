@@ -45,7 +45,6 @@ pub fn present(context: &Context, mode: Mode) {
     let mode = Rc::new(RefCell::new(mode));
     let dialog = adw::Dialog::builder()
         .content_width(WIDTH)
-        .follows_content_size(true)
         .build();
     dialog.add_css_class("tmsb-sheet");
     dialog.set_widget_name("lobby.sheet");
@@ -75,7 +74,13 @@ pub fn present(context: &Context, mode: Mode) {
 
     // ---- the form ---------------------------------------------------------
 
-    let room = gtk::Entry::builder().text(&room_typed).hexpand(true).build();
+    // As narrow as the sheet: a field's natural width is its placeholder's,
+    // and the long one in monospace made the sheet 780 wide.
+    let room = gtk::Entry::builder()
+        .text(&room_typed)
+        .hexpand(true)
+        .width_chars(8)
+        .build();
     room.add_css_class("tmsb-input");
     room.add_css_class("tmsb-mono");
     room.set_widget_name("sheet.room");

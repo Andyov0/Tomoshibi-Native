@@ -483,8 +483,15 @@ impl AppModel {
 
     // ---- what the screens do ----------------------------------------------
 
-    /// Moves to `screen`, and says so if it is another.
+    /// Moves to `screen`, and says so if it is another. The lobby is
+    /// signing in for somebody who is not signed in: the room's "Back to
+    /// meetings" asks for the lobby whoever pressed it.
     pub fn show(&self, screen: Screen) {
+        let screen = if screen == Screen::Lobby && self.account().is_none() {
+            Screen::SignIn
+        } else {
+            screen
+        };
         let before = self.inner.state.borrow_mut().screen.replace(screen);
         if before != Some(screen) {
             self.changed(Change::Screen);

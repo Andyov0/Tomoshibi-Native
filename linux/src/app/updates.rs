@@ -247,6 +247,29 @@ async fn look(model: &AppModel, asked: bool) -> Option<bool> {
     }
 }
 
+/// `TOMOSHIBI_DEBUG_LOBBY=update`, in a debug run: a build offered as if
+/// the deployment had one, for a picture of the offer. The local deployments
+/// the tests run have no Linux build to offer; nothing is downloaded unless
+/// somebody presses Update, and then the install is refused (no AppImage).
+#[cfg(debug_assertions)]
+pub fn pose_offer(model: &AppModel) {
+    let build = AppBuild {
+        platform: crate::update::PLATFORM,
+        version: "0.1.8".into(),
+        size: 98_600_000,
+        sha256: String::new(),
+        notes: [("en".to_owned(), "Calls start faster on a slow network.".to_owned())]
+            .into_iter()
+            .collect(),
+        file_name: String::new(),
+        signature: String::new(),
+    };
+    set(model, Step::Offered {
+        build,
+        problem: None,
+    });
+}
+
 /// "Later": this version is put away until the app is next started.
 pub fn later(model: &AppModel) {
     if let Some(build) = build(model) {

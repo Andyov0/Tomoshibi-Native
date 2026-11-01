@@ -233,6 +233,7 @@ pub fn page(context: &Context) -> gtk::Widget {
         _ => {}
     });
 
+    super::home::open_from_debug(context, &page, true);
     page.upcast()
 }
 
