@@ -1,6 +1,6 @@
 //! What can be done to one picture, on the gesture that has always meant
-//! that: the secondary press, or a long press (PictureMenu.tsx, the Mac's
-//! `pictureMenu`). Everything here is reachable another way, and that is the
+//! that: the secondary press, a long press, or the menu key on a picture
+//! that has the keyboard (PictureMenu.tsx, the Mac's `pictureMenu`). Everything here is reachable another way, and that is the
 //! point: a double press nobody finds is a feature nobody has, and a menu
 //! says the names out loud. Each item names the picture, since a menu opened
 //! on a small tile in a busy grid has to say which one it caught.
@@ -53,6 +53,24 @@ pub(super) fn items(model: &AppModel, id: &str) -> Vec<Item> {
         return Vec::new();
     };
     let view = room.view.borrow();
+    // The video watched together is a picture of nobody's: it can be put on
+    // the stage and fill the screen, and nothing else here is about it.
+    if id == super::watch::STAGE_ID {
+        let on_stage = view.pin.pinned() == Some(id);
+        let mut out = vec![if on_stage {
+            Item::Everybody
+        } else {
+            Item::Larger(t("Watch together"))
+        }];
+        if on_stage {
+            out.push(if view.filled {
+                Item::LeaveFullscreen
+            } else {
+                Item::Fill
+            });
+        }
+        return out;
+    }
     let (owner, kind) = id.rsplit_once('/').unwrap_or((id, "camera"));
     let mine = id == ME || id == MY_SHARE;
     let identity = if mine {
@@ -140,7 +158,15 @@ fn words(item: &Item) -> (String, &'static str) {
 
 fn act(model: &AppModel, id: &str, item: &Item) {
     match item {
-        Item::Larger(_) | Item::Everybody => super::toggle_stage(model, id),
+        Item::Larger(_) | Item::Everybody => {
+            // Out of the full screen first: what fills it is the stage, and
+            // a stage changed under it would fill the screen with something
+            // nobody chose.
+            if model.kept::<RoomState>().view.borrow().filled {
+                super::unfill(model);
+            }
+            super::toggle_stage(model, id);
+        }
         Item::Fill => super::fill(model),
         Item::LeaveFullscreen => super::unfill(model),
         Item::Mute(_, sound, mute) => {
@@ -183,9 +209,30 @@ fn act(model: &AppModel, id: &str, item: &Item) {
 
 const MENU_NAME: &str = "picture-menu";
 
+/// The menu laid over the call's screen: opened from what attach() does not
+/// see itself (the menu key on a focused tile, page.rs), and closed by the
+/// window's Escape before Escape leaves the full screen.
+#[derive(Clone)]
+pub struct PictureMenu {
+    open: Rc<dyn Fn(String, f64, f64)>,
+    close: Rc<dyn Fn() -> bool>,
+}
+
+impl PictureMenu {
+    /// Opens the menu on the picture `id` at a point of the call's screen.
+    pub fn open(&self, id: &str, x: f64, y: f64) {
+        (self.open)(id.to_owned(), x, y);
+    }
+
+    /// Closes it; whether it was open.
+    pub fn close(&self) -> bool {
+        (self.close)()
+    }
+}
+
 /// Lays the menu over `root`, the call's screen, opened on the pictures of
 /// `stage`.
-pub fn attach(root: &gtk::Overlay, stage: &Stage, model: &AppModel) {
+pub fn attach(root: &gtk::Overlay, stage: &Stage, model: &AppModel) -> PictureMenu {
     let card = gtk::Box::new(gtk::Orientation::Vertical, 2);
     card.add_css_class("tmsb-menu");
     card.set_width_request(240);
@@ -199,14 +246,16 @@ pub fn attach(root: &gtk::Overlay, stage: &Stage, model: &AppModel) {
     let close = {
         let (motion, on) = (motion.downgrade(), on.clone());
         move || {
-            if on.borrow_mut().take().is_some() {
-                if let Some(motion) = motion.upgrade() {
-                    motion.show(false);
-                }
+            if on.borrow_mut().take().is_none() {
+                return false;
             }
+            if let Some(motion) = motion.upgrade() {
+                motion.show(false);
+            }
+            true
         }
     };
-    let close: Rc<dyn Fn()> = Rc::new(close);
+    let close: Rc<dyn Fn() -> bool> = Rc::new(close);
 
     let open = {
         let (root, motion, card, at, on, close, model) = (
@@ -416,6 +465,7 @@ pub fn attach(root: &gtk::Overlay, stage: &Stage, model: &AppModel) {
             weak_close();
         }
     });
+    PictureMenu { open, close }
 }
 
 /// The menu as the script opens it (script.rs `menu=`): on the picture
@@ -425,7 +475,7 @@ type TestHandles = (
     glib::WeakRef<Stage>,
     glib::WeakRef<gtk::Overlay>,
     std::rc::Weak<dyn Fn(String, f64, f64)>,
-    std::rc::Weak<dyn Fn()>,
+    std::rc::Weak<dyn Fn() -> bool>,
 );
 
 #[cfg(debug_assertions)]

@@ -896,6 +896,18 @@
       "zh-Hans": "通话中",
       "zh-Hant": "通話中",
       "ja": "通話中"
+    },
+    "Another sealing word": {
+      "en": "Another sealing word",
+      "zh-Hans": "暗号不同",
+      "zh-Hant": "暗號不同",
+      "ja": "合言葉が違います"
+    },
+    "This person sealed the call with another word, so nothing of theirs can be seen or heard here.": {
+      "en": "This person sealed the call with another word, so nothing of theirs can be seen or heard here.",
+      "zh-Hans": "对方用的暗号和你不同，这里看不到也听不到对方。",
+      "zh-Hant": "對方用的暗號和你不同，這裡看不到也聽不到對方。",
+      "ja": "この人は別の合言葉で通話を封じているため、ここでは映像も音声も届きません。"
     }
   }
 }

@@ -90,6 +90,28 @@ cp /usr/share/icons/hicolor/index.theme "$app/usr/share/icons/hicolor/"
 mkdir -p "$app/usr/lib/gio/modules"
 : >"$app/usr/lib/gio/modules/.none"
 
+# 4b. GStreamer, the player of watching together (ui/room/watch): the
+# plugins it plays a file or an HLS playlist with, in usr/lib/gstreamer-1.0,
+# and the scanner GStreamer runs to read them. linuxdeploy below copies what
+# they link and points their run paths into the image (--deploy-deps-only).
+# libav is not among them: Ubuntu's FFmpeg links every codec it was built
+# with, about 126 MB more on aarch64; H.264 is decoded by OpenH264 and AAC by
+# FAAD instead, VP8 and VP9 by libvpx, Opus and Vorbis by theirs. libsoup is
+# named, since the HTTP source opens it at run time rather than linking it.
+# The app points GStreamer at these, and at a registry of its own, when it
+# runs from the image (ui/room/watch/player.rs `started`).
+gst=$lib/gstreamer-1.0
+mkdir -p "$app/usr/lib/gstreamer-1.0" "$app/usr/lib/gstreamer1.0/gstreamer-1.0"
+for plugin in coreelements playback typefindfunctions app videoconvertscale audioconvert \
+  audioresample volume autodetect pulseaudio isomp4 matroska ogg vorbis opus vpx audioparsers \
+  id3demux soup hls adaptivedemux2 mpegtsdemux videoparsersbad openh264 faad; do
+  cp -L "$gst/libgst$plugin.so" "$app/usr/lib/gstreamer-1.0/"
+done
+cp -L "$lib/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner" "$app/usr/lib/gstreamer1.0/gstreamer-1.0/"
+gstreamer=(--deploy-deps-only "$app/usr/lib/gstreamer-1.0"
+  --deploy-deps-only "$app/usr/lib/gstreamer1.0/gstreamer-1.0"
+  --library "$lib/libsoup-3.0.so.0")
+
 # 5. The libraries. linuxdeploy copies every one the binary and the loaders
 # need into usr/lib, except the ones its list says every system has and must
 # be the system's own (glibc, the GL drivers, fontconfig and freetype, X11
@@ -103,6 +125,7 @@ linuxdeploy --appdir "$app" \
   --desktop-file "$desktop" \
   "${icons[@]}" \
   "${loaders[@]}" \
+  "${gstreamer[@]}" \
   --custom-apprun "$here/AppRun" \
   --exclude-library 'libwayland-client.so*' \
   --exclude-library 'libwayland-cursor.so*' \

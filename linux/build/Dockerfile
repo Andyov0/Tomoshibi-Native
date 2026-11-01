@@ -89,4 +89,20 @@ RUN curl -fsSL https://sh.rustup.rs -o /tmp/rustup-init.sh \
  && chmod -R a+rwX /opt/cargo /opt/rustup \
  && rustc --version && cargo --version && ${CXX} --version | head -1
 
+# ui/room/watch: GStreamer for watching together. The headers gstreamer-rs
+# builds against (the core library, and the base plugins' library for the
+# app sink and video frames), and the plugins a headless run plays a local
+# file and a local HLS playlist with: playbin and the converters (base), MP4,
+# Matroska and the HTTP source (good), HLS and MPEG-TS (bad), and the
+# decoders for what such files carry (libav). The AppImage carries the same
+# plugins (appimage-inside.sh). Last of the layers, so that adding it built
+# one layer on top of what every checkout already has, and libsoup, which
+# the HTTP source opens at run time rather than linking.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+      gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+      gstreamer1.0-libav gstreamer1.0-tools libsoup-3.0-0 \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /work

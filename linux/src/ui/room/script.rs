@@ -326,6 +326,63 @@ fn act(model: &AppModel, action: &str) {
             }
         }
         "music" => super::music::script(model, value),
+        // Watching together, as its panel and its stage would drive it
+        // (watch/mod.rs `script`): `watch=add <link>`, `play`, `pause`,
+        // `seek <seconds>`, `skip`, `stop`, `panel`, `media`.
+        "watch" => super::watch::script(model, value),
+        // The screen or the camera of the first person sharing (or of the
+        // first person, where nobody is) on the stage, as "Their screen"
+        // and "Their camera" put it there.
+        "stage" => {
+            let first = room.talk.borrow().as_ref().and_then(|talk| {
+                talk.people
+                    .iter()
+                    .find(|person| person.screen_sid().is_some())
+                    .or_else(|| talk.people.first())
+                    .map(|person| person.id.clone())
+            });
+            if let Some(first) = first {
+                room.view
+                    .borrow_mut()
+                    .pin
+                    .pin(Some(format!("{first}/{value}")));
+                super::changed(model);
+            }
+        }
+        // Where the controls stand and what the signal says (the settings'
+        // values: side, always, idle; detailed, signal, hidden); `hover`,
+        // the stage's buttons shown as the pointer shows them, and `menu`,
+        // the first person's picture's menu, for a run that has no pointer.
+        "controls" => {
+            use crate::theme::{BADGE_KEY, CONTROLS_KEY};
+            match value {
+                "side" | "idle" => model.preferences().set(CONTROLS_KEY, value),
+                "always" => model.preferences().remove(CONTROLS_KEY),
+                "detailed" | "hidden" => model.preferences().set(BADGE_KEY, value),
+                "signal" => model.preferences().remove(BADGE_KEY),
+                "hover" => {
+                    if let Some(page) = room.page.borrow().clone() {
+                        page.hover_for_test();
+                    }
+                }
+                // The keyboard: the first picture focused as Tab would
+                // focus it, with its ring, and `tab`, the focus moved on
+                // as Tab moves it, saying where it went.
+                "focus" | "tab" => {
+                    if let Some(page) = room.page.borrow().clone() {
+                        page.focus_for_test(value == "tab");
+                    }
+                }
+                // The first person's picture's menu, as a right press opens it.
+                "menu" => {
+                    if let Some(page) = room.page.borrow().clone() {
+                        page.menu_for_test();
+                    }
+                }
+                _ => {}
+            }
+            super::changed(model);
+        }
         "shot" => shot(model, value),
         other => log(&format!("room script: no such action {other:?}")),
     }

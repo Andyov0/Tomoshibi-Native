@@ -41,6 +41,7 @@ pub fn build(model: &AppModel, panel: Panel) -> PanelView {
         Panel::Devices => super::devices_panel::build(model),
         Panel::Music => super::music::panel(model),
         Panel::Host => super::host_panel::build(model),
+        Panel::Watch => super::watch::panel(model),
     }
 }
 
@@ -95,6 +96,7 @@ pub(super) fn frame(
         Panel::Devices => "panel.devices",
         Panel::Host => "panel.host",
         Panel::Music => "panel.music",
+        Panel::Watch => "panel.watch",
     });
     (outer, body)
 }

@@ -15,13 +15,26 @@ pub const ROOM_CSS: &str = r#"
 .tmsb-room { background-color: @tmsb_call_bg; color: @tmsb_call_fg; }
 
 /* The window's own buttons over the call: the call's ink, whatever the
-   system's appearance, which libadwaita's style otherwise follows. */
+   system's appearance, which libadwaita's style otherwise follows, on a
+   dark plate with a hairline, as the stage's buttons are: on a tenth of
+   white over a bright shared screen the minimise button could not be seen
+   at all (KDE and Xfce show it; GNOME shows only close). */
 window.tmsb-call headerbar.tmsb-bar windowcontrols > button {
-  color: @tmsb_call_fg;
-  background-color: alpha(@tmsb_call_wash, 0.10);
+  color: white;
+  background: none;
+  box-shadow: none;
 }
-window.tmsb-call headerbar.tmsb-bar windowcontrols > button:hover {
-  background-color: alpha(@tmsb_call_wash, 0.18);
+/* libadwaita draws the button as the circle round its symbol. */
+window.tmsb-call headerbar.tmsb-bar windowcontrols > button > image {
+  background-color: rgba(0, 0, 0, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+  transition: background-color 120ms ease-out;
+}
+window.tmsb-call headerbar.tmsb-bar windowcontrols > button:hover > image {
+  background-color: rgba(0, 0, 0, 0.7);
+}
+window.tmsb-call headerbar.tmsb-bar windowcontrols > button:active > image {
+  background-color: rgba(0, 0, 0, 0.8);
 }
 
 /* A picture: the tile's grey around a picture of another shape, the tile
@@ -83,7 +96,8 @@ window.tmsb-call headerbar.tmsb-bar windowcontrols > button:hover {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 .tmsb-hand.compact { min-width: 22px; min-height: 22px; }
-.tmsb-hand.small { min-width: 18px; min-height: 18px; box-shadow: none; }
+/* Beside the name: a circle as tall as the name's line, not a pill. */
+.tmsb-hand.small { min-width: 18px; min-height: 18px; padding: 0; box-shadow: none; }
 
 /* The buttons drawn on a picture: 36 (scale::STAGE_BUTTON). */
 button.tmsb-stage-button {
@@ -97,6 +111,42 @@ button.tmsb-stage-button {
 }
 button.tmsb-stage-button:hover { background-color: rgba(0, 0, 0, 0.7); }
 button.tmsb-stage-button:active { background-color: rgba(0, 0, 0, 0.8); transform: scale(0.95); }
+/* "Their screen", "Their camera": the same height, with its words. */
+button.tmsb-stage-button.words { padding: 0 14px 0 12px; }
+button.tmsb-stage-button.words label { font-size: 13px; font-weight: 500; }
+
+/* The keyboard's focus on a picture: a ring inside its edge, faded in. */
+.tmsb-focus-ring {
+  border-radius: 8px;
+  border: 2px solid transparent;
+  transition: border-color 200ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+.tmsb-tile:focus-visible > .tmsb-focus-ring { border-color: alpha(white, 0.85); }
+.tmsb-tile.filled > .tmsb-focus-ring { border-radius: 0; }
+
+/* Somebody else's screen while it is not on the stage (ShareCard.tsx, the
+   Mac's ShareCardFace): flat, a step lighter than a person's tile; the
+   colour is on Watch alone. */
+.tmsb-tile.share-card { background-color: @tmsb_call_surface_high; }
+.tmsb-share-card-mark {
+  background-color: alpha(white, 0.08); color: alpha(@tmsb_call_fg, 0.9);
+  border-radius: 999px; min-width: 48px; min-height: 48px; -gtk-icon-size: 22px;
+}
+.compact .tmsb-share-card-mark { min-width: 30px; min-height: 30px; -gtk-icon-size: 15px; }
+.tmsb-share-card .tmsb-share-said { font-size: 13.5px; }
+.compact .tmsb-share-card .tmsb-share-said, .tmsb-share-card.compact .tmsb-share-said { font-size: 11px; }
+.tmsb-watch-pill {
+  background-color: @tmsb_call_tally; color: @tmsb_call_on_tally;
+  border-radius: 999px; min-height: 26px; padding: 0 12px;
+  font-size: 12px; font-weight: 600; -gtk-icon-size: 10px;
+}
+
+/* A sealed call whose word this participant does not share with them. */
+.tmsb-unreadable {
+  background-color: rgba(0, 0, 0, 0.7); color: white;
+  border-radius: 999px; min-height: 24px; padding: 0 10px;
+  font-size: 12px; font-weight: 500; -gtk-icon-size: 12px;
+}
 
 /* One's own share, which has no picture here (the Mac's MyShareFace). */
 .tmsb-tile.mine-shared { background-color: @tmsb_call_surface_high; }
@@ -121,6 +171,9 @@ button.tmsb-stage-button:active { background-color: rgba(0, 0, 0, 0.8); transfor
 }
 .tmsb-island.compact { padding: 5px; }
 .tmsb-island-rule { background-color: @tmsb_call_border; min-width: 1px; min-height: 26px; margin: 0 2px; }
+/* Down the side of the room: the rule lies across the column. */
+.tmsb-island.side .tmsb-island-rule { min-width: 26px; min-height: 1px; margin: 2px 0; }
+.tmsb-island.side button.tmsb-bar-button.narrow { min-width: 44px; min-height: 28px; }
 
 button.tmsb-bar-button {
   min-width: 44px; min-height: 44px; padding: 0;
@@ -187,12 +240,15 @@ button.tmsb-bar-button.leave:active, button.tmsb-bar-button.leave.held { backgro
   padding: 6px;
   box-shadow: inset 0 0 0 1px alpha(@tmsb_call_wash, 0.10), 0 12px 32px rgba(0, 0, 0, 0.45);
 }
+/* A row is 32 on screen (scale::MENU_ROW): min-height is the content's, so
+   any padding above and below makes it taller, and 4 each way made 40. */
 button.tmsb-menu-row {
   border: none; border-radius: 10px; box-shadow: none;
   background-color: transparent; color: @tmsb_call_fg;
-  min-height: 32px; padding: 4px 10px;
+  min-height: 32px; padding: 0 10px;
   transition: background-color 120ms ease-out;
 }
+/* A row with a line beneath its title (the leave confirmation): 44. */
 button.tmsb-menu-row.tall { min-height: 36px; padding: 4px 10px; }
 button.tmsb-menu-row:hover { background-color: alpha(@tmsb_call_wash, 0.10); }
 button.tmsb-menu-row:active { background-color: alpha(@tmsb_call_wash, 0.16); }
@@ -285,6 +341,11 @@ button.tmsb-signal {
   box-shadow: inset 0 0 0 1px alpha(@tmsb_call_wash, 0.10); color: @tmsb_call_fg;
 }
 button.tmsb-signal:hover { background-color: mix(@tmsb_call_surface, @tmsb_call_fg, 0.10); }
+/* "Signal only": the bars, with nothing to press. */
+button.tmsb-signal.quiet:hover, button.tmsb-signal.quiet:active { background-color: alpha(@tmsb_call_surface, 0.92); }
+button.tmsb-signal.detailed { padding: 0 11px; }
+button.tmsb-signal.round { padding: 0; min-width: 32px; }
+.tmsb-signal-figure { font-size: 11.5px; font-weight: 500; font-feature-settings: "tnum"; color: @tmsb_call_muted; }
 .tmsb-signal-figures label { font-size: 12px; }
 .tmsb-signal-figures label.figure { font-family: monospace; }
 
@@ -335,6 +396,70 @@ button.tmsb-pager {
 }
 button.tmsb-pager:hover { background-color: mix(@tmsb_call_surface, @tmsb_call_fg, 0.10); }
 .tmsb-pages { font-size: 11px; color: @tmsb_call_muted; }
+
+/* Watching together: the video on the stage, black around it. */
+.tmsb-tile.tmsb-watch-stage { background-color: black; }
+.tmsb-watch-stage .tmsb-watch-film { -gtk-icon-size: 28px; color: @tmsb_call_muted; }
+.tmsb-watch-empty label { color: @tmsb_call_muted; font-size: 13px; }
+.tmsb-watch-quiet { color: alpha(white, 0.65); font-size: 12px; }
+.tmsb-watch-lost {
+  background-color: rgba(0, 0, 0, 0.85); border-radius: 14px; padding: 16px 20px;
+}
+.tmsb-watch-lost-mark {
+  background-color: alpha(white, 0.08); color: alpha(white, 0.75);
+  border-radius: 999px; min-width: 48px; min-height: 48px; -gtk-icon-size: 20px;
+}
+.tmsb-watch-lost-title { color: white; font-size: 14px; font-weight: 600; }
+/* The controls under the video: one dark band, not a fade into it. */
+.tmsb-watch-controls { background-color: rgba(0, 0, 0, 0.72); padding: 10px 12px 8px 12px; color: white; }
+.tmsb-watch-title { font-size: 13px; font-weight: 500; color: white; }
+.tmsb-watch-time { font-size: 11px; color: alpha(white, 0.8); font-feature-settings: "tnum"; margin: 0 4px; }
+button.tmsb-watch-control {
+  min-width: 34px; min-height: 34px; padding: 0; border: none; border-radius: 999px; box-shadow: none;
+  background-color: transparent; color: white; -gtk-icon-size: 14px;
+  transition: background-color 120ms ease-out, transform 140ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+button.tmsb-watch-control:hover { background-color: alpha(white, 0.16); }
+button.tmsb-watch-control:active { background-color: alpha(white, 0.24); transform: scale(0.95); }
+.tmsb-watch-position trough, .tmsb-watch-volume trough { background-color: alpha(white, 0.2); min-height: 4px; border-radius: 999px; }
+.tmsb-watch-position highlight { background-color: @tmsb_call_tally; border-radius: 999px; }
+.tmsb-watch-volume highlight { background-color: white; border-radius: 999px; }
+.tmsb-watch-position slider, .tmsb-watch-volume slider {
+  background-color: white; min-width: 14px; min-height: 14px; margin: -5px; border-radius: 999px; box-shadow: none; border: none;
+}
+button.tmsb-watch-pill-button {
+  min-height: 32px; padding: 0 14px; border: none; border-radius: 999px; box-shadow: none;
+  background-color: alpha(white, 0.14); color: white; font-size: 12.5px; font-weight: 600;
+  transition: background-color 120ms ease-out;
+}
+button.tmsb-watch-pill-button:hover { background-color: alpha(white, 0.22); }
+button.tmsb-watch-pill-button.prominent { background-color: @tmsb_call_tally; color: @tmsb_call_on_tally; }
+button.tmsb-watch-pill-button.prominent:hover { background-color: mix(@tmsb_call_tally, @tmsb_call_fg, 0.10); }
+.tmsb-watch-tag {
+  background-color: rgba(0, 0, 0, 0.55); color: @tmsb_call_fg; border-radius: 999px;
+  padding: 3px 6px; font-size: 10.5px; font-weight: 500;
+}
+
+/* The watch together panel. */
+.tmsb-watch-field {
+  background-color: alpha(@tmsb_call_wash, 0.06); color: @tmsb_call_fg;
+  border-radius: 999px; border: 1px solid @tmsb_call_border; min-height: 32px; padding: 0 12px; box-shadow: none;
+}
+.tmsb-watch-field:focus-within { border-color: alpha(@tmsb_call_tally, 0.7); }
+button.tmsb-watch-add { min-width: 32px; min-height: 32px; background-color: @tmsb_call_surface_high; color: @tmsb_call_muted; }
+button.tmsb-watch-add.ready { background-color: @tmsb_call_tally; color: @tmsb_call_on_tally; }
+button.tmsb-watch-add:disabled { opacity: 0.4; }
+.tmsb-watch-row { border-radius: 10px; padding: 6px; }
+.playing > .tmsb-watch-row { background-color: alpha(@tmsb_call_tally, 0.10); }
+.tmsb-watch-poster { background-color: @tmsb_call_surface_high; border-radius: 6px; color: @tmsb_call_muted; }
+.tmsb-watch-playing-mark {
+  background-color: @tmsb_call_tally; color: @tmsb_call_on_tally; border-radius: 999px;
+  min-width: 16px; min-height: 16px; -gtk-icon-size: 8px; margin: 3px;
+}
+.tmsb-watch-row-title { font-size: 12.5px; font-weight: 500; }
+.tmsb-watch-row-detail { font-size: 10.5px; color: @tmsb_call_muted; }
+.tmsb-watch-row-detail.playing { color: @tmsb_call_tally; }
+.tmsb-watch-tabs { background-color: alpha(@tmsb_call_wash, 0.06); border-radius: 10px; padding: 2px; }
 
 /* The ended screen. */
 .tmsb-ended-title { font-size: 22px; font-weight: 600; }

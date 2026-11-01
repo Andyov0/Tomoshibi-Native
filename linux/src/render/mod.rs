@@ -26,6 +26,13 @@
 //! connect_size_wanted`] says the size in device pixels whenever the
 //! allocation changes, for `Call::request_video_size`.
 //!
+//! A camera is framed as the Mac and Android frame it ([`framing_fills`],
+//! TomoshibiBasics Framing.swift): it fills its place while the two shapes
+//! are close, and is shown whole otherwise, on a blurred and darkened copy
+//! of itself rather than between bars ([`backdrop_pixels`], the Mac's
+//! PictureBackdrop). A change between the two is animated, the picture
+//! growing to fill or shrinking to be whole as the copy fades.
+//!
 //! Owned by the render module.
 
 use std::{
@@ -36,6 +43,7 @@ use std::{
     },
 };
 
+use adw::prelude::AnimationExt as _;
 use gtk::{gdk, glib, graphene, gsk, prelude::*, subclass::prelude::*};
 use libwebrtc::native::yuv_helper;
 use tokio::sync::Notify;
@@ -47,8 +55,159 @@ pub enum Fit {
     /// Whole, with bars where the shapes differ (a shared screen).
     #[default]
     Contain,
-    /// Filling the view, cut where the shapes differ (a camera in a tile).
+    /// Filling the view, cut where the shapes differ (the lobby's preview).
     Cover,
+    /// A camera in the call: filling while the shapes are close, whole on a
+    /// blurred copy of itself where filling would cut most of it away
+    /// ([`framing_fills`]).
+    Framed,
+}
+
+/// Whether a camera's picture, as shown (after its rotation), fills a view
+/// of this size or is shown whole in it (TomoshibiBasics Framing.swift, and
+/// Android's copy, whose cases the tests below repeat one for one).
+///
+/// The share of the picture a fill keeps along the side it cuts decides:
+/// three quarters or more and it fills; half or more and it still fills
+/// when the two are the same way round, since a tall picture in a tall
+/// place loses only the room around a face; anything less is shown whole.
+/// A laptop's landscape camera in an upright place kept a little over half
+/// its width, and whoever sat beside the person was cut out of the call
+/// (the owner's test on a phone, 2026-10-19). A size not yet known fills, as
+/// every camera did before, so that a first frame does not jump between the
+/// two before its shape has arrived.
+pub fn framing_fills(picture: (f32, f32), view: (f32, f32)) -> bool {
+    let ((pw, ph), (vw, vh)) = (picture, view);
+    if pw <= 0.0 || ph <= 0.0 || vw <= 0.0 || vh <= 0.0 {
+        return true;
+    }
+    let (a, b) = (pw / ph, vw / vh);
+    let kept = a.min(b) / a.max(b);
+    if kept >= 0.75 {
+        return true;
+    }
+    // An exact square is neither way round.
+    let same_way = (a > 1.0 && b > 1.0) || (a < 1.0 && b < 1.0);
+    same_way && kept >= 0.5
+}
+
+/// The long side of a backdrop's picture, in pixels (PictureBackdrop
+/// `side`): shrunk this far it is colour and light and nothing that could
+/// be read as a face beside the face.
+pub const BACKDROP_SIDE: u32 = 48;
+/// The blur, in those pixels (PictureBackdrop `sigma`).
+const BACKDROP_SIGMA: f32 = 4.5;
+/// What a pixel keeps of its light: the picture under black at about 35 per
+/// cent, so that the picture in front stays the brightest thing in its
+/// place (PictureBackdrop `kept`).
+const BACKDROP_KEPT: f32 = 0.65;
+/// How often a backdrop is taken again from the picture it is behind, and
+/// how long a new one takes to fade in over the last.
+const BACKDROP_EVERY_MS: u64 = 1000;
+const BACKDROP_CROSSFADE_MS: u32 = 600;
+
+/// The backdrop of a picture in GDK's default layout (blue, green, red,
+/// alpha bytes, `stride` a row): shrunk by averaging to [`BACKDROP_SIDE`] on
+/// its long side, blurred, and darkened, in the same layout. Returns the
+/// bytes and their width and height. Done once a second on a few thousand
+/// pixels, so that nothing runs per frame and nothing is decoded twice: the
+/// GPU's blur over a whole stage at thirty frames a second was the
+/// alternative.
+pub fn backdrop_pixels(
+    bgra: &[u8],
+    width: u32,
+    height: u32,
+    stride: usize,
+) -> Option<(Vec<u8>, u32, u32)> {
+    if width == 0 || height == 0 || bgra.len() < stride * (height as usize - 1) + width as usize * 4
+    {
+        return None;
+    }
+    let long = width.max(height) as f32;
+    let shrink = (BACKDROP_SIDE as f32 / long).min(1.0);
+    let (out_w, out_h) = (
+        ((width as f32 * shrink).round() as u32).max(1),
+        ((height as f32 * shrink).round() as u32).max(1),
+    );
+    // Averaged over the whole of each output pixel's area, so that a
+    // picture shrunk thirty times is its colours and not a sample of them.
+    let mut small = vec![0f32; (out_w * out_h * 3) as usize];
+    for oy in 0..out_h {
+        let y0 = (oy as u64 * height as u64 / out_h as u64) as usize;
+        let y1 = (((oy + 1) as u64 * height as u64).div_ceil(out_h as u64) as usize).max(y0 + 1);
+        for ox in 0..out_w {
+            let x0 = (ox as u64 * width as u64 / out_w as u64) as usize;
+            let x1 = (((ox + 1) as u64 * width as u64).div_ceil(out_w as u64) as usize).max(x0 + 1);
+            let mut sum = [0u64; 3];
+            for y in y0..y1.min(height as usize) {
+                let row = &bgra[y * stride..];
+                for x in x0..x1.min(width as usize) {
+                    let at = x * 4;
+                    sum[0] += row[at] as u64;
+                    sum[1] += row[at + 1] as u64;
+                    sum[2] += row[at + 2] as u64;
+                }
+            }
+            let count =
+                ((y1.min(height as usize) - y0) * (x1.min(width as usize) - x0)).max(1) as f32;
+            let at = ((oy * out_w + ox) * 3) as usize;
+            for channel in 0..3 {
+                small[at + channel] = sum[channel] as f32 / count;
+            }
+        }
+    }
+    let blurred = gaussian(&small, out_w as usize, out_h as usize, BACKDROP_SIGMA);
+    let mut out = vec![255u8; (out_w * out_h * 4) as usize];
+    for index in 0..(out_w * out_h) as usize {
+        for channel in 0..3 {
+            out[index * 4 + channel] = (blurred[index * 3 + channel] * BACKDROP_KEPT)
+                .round()
+                .clamp(0.0, 255.0) as u8;
+        }
+    }
+    Some((out, out_w, out_h))
+}
+
+/// A separable Gaussian blur of three-channel pixels, the edges held.
+fn gaussian(pixels: &[f32], width: usize, height: usize, sigma: f32) -> Vec<f32> {
+    let reach = (sigma * 3.0).ceil() as isize;
+    let weights: Vec<f32> = (-reach..=reach)
+        .map(|at| (-((at * at) as f32) / (2.0 * sigma * sigma)).exp())
+        .collect();
+    let total: f32 = weights.iter().sum();
+    let pass = |from: &[f32], horizontal: bool| {
+        let mut to = vec![0f32; from.len()];
+        for y in 0..height {
+            for x in 0..width {
+                let mut sum = [0f32; 3];
+                for (index, weight) in weights.iter().enumerate() {
+                    let offset = index as isize - reach;
+                    let (sx, sy) = if horizontal {
+                        (
+                            (x as isize + offset).clamp(0, width as isize - 1) as usize,
+                            y,
+                        )
+                    } else {
+                        (
+                            x,
+                            (y as isize + offset).clamp(0, height as isize - 1) as usize,
+                        )
+                    };
+                    let at = (sy * width + sx) * 3;
+                    for channel in 0..3 {
+                        sum[channel] += from[at + channel] * weight;
+                    }
+                }
+                let at = (y * width + x) * 3;
+                for channel in 0..3 {
+                    to[at + channel] = sum[channel] / total;
+                }
+            }
+        }
+        to
+    };
+    let across = pass(pixels, true);
+    pass(&across, false)
 }
 
 /// One picture converted and ready for the main thread.
@@ -215,6 +374,8 @@ pub fn fitted(view: (f32, f32), picture: (f32, f32), fit: Fit) -> (f32, f32) {
     let scale = match fit {
         Fit::Contain => (vw / pw).min(vh / ph),
         Fit::Cover => (vw / pw).max(vh / ph),
+        Fit::Framed if framing_fills(picture, view) => (vw / pw).max(vh / ph),
+        Fit::Framed => (vw / pw).min(vh / ph),
     };
     (pw * scale, ph * scale)
 }
@@ -231,6 +392,23 @@ mod imp {
         pub mirrored: Cell<bool>,
         pub drawn: Cell<u64>,
         pub wanted: Cell<(u32, u32)>,
+        /// How far a framed camera is toward filling its place: 1 fills,
+        /// 0 is whole on its backdrop, and between while it changes.
+        pub filling: Cell<f64>,
+        /// What the framing was last decided as, and whether the picture's
+        /// shape was known then: the first decision made with it is taken
+        /// at once, since a picture that arrives already shown whole should
+        /// not first be seen shrinking to it.
+        pub fills: Cell<Option<bool>>,
+        pub shaped: Cell<bool>,
+        pub framing: RefCell<Option<adw::TimedAnimation>>,
+        /// The backdrop behind a camera shown whole, the one before it while
+        /// a new one fades in, how far it has, and when it was taken.
+        pub backdrop: RefCell<Option<gdk::Texture>>,
+        pub backdrop_before: RefCell<Option<gdk::Texture>>,
+        pub backdrop_fade: Cell<f64>,
+        pub backdrop_at: Cell<Option<std::time::Instant>>,
+        pub crossfade: RefCell<Option<adw::TimedAnimation>>,
         #[allow(clippy::type_complexity)]
         pub size_wanted: RefCell<Vec<Box<dyn Fn(&super::VideoView, u32, u32)>>>,
         #[allow(clippy::type_complexity)]
@@ -247,6 +425,9 @@ mod imp {
     impl ObjectImpl for VideoView {
         fn constructed(&self) {
             self.parent_constructed();
+            // Filling until decided otherwise, as every camera did before.
+            self.filling.set(1.0);
+            self.backdrop_fade.set(1.0);
             let view = self.obj();
             view.set_hexpand(true);
             view.set_vexpand(true);
@@ -273,6 +454,12 @@ mod imp {
         fn dispose(&self) {
             self.slot.closed.store(true, Ordering::Relaxed);
             self.slot.wake.notify_one();
+            for animation in [self.framing.take(), self.crossfade.take()]
+                .into_iter()
+                .flatten()
+            {
+                animation.pause();
+            }
         }
     }
 
@@ -292,8 +479,17 @@ mod imp {
                 let (w, h) = turned_size(texture.width() as u32, texture.height() as u32, rotation);
                 (w as f32, h as f32)
             };
-            let (fit_w, _) = fitted((view_w, view_h), (shown_w, shown_h), self.fit.get());
-            let scale = fit_w / shown_w;
+            let scale = match self.fit.get() {
+                // Between whole and filling by how far the framing has got,
+                // so that a change between them is a picture growing or
+                // shrinking rather than a jump.
+                Fit::Framed => {
+                    let whole = (view_w / shown_w).min(view_h / shown_h);
+                    let fill = (view_w / shown_w).max(view_h / shown_h);
+                    whole + (fill - whole) * self.filling.get().clamp(0.0, 1.0) as f32
+                }
+                fit => fitted((view_w, view_h), (shown_w, shown_h), fit).0 / shown_w,
+            };
             let (draw_w, draw_h) = (pic_w * scale, pic_h * scale);
             // A share shown much smaller than it was sent is drawn from the
             // texture's mipmaps, so that its words stay readable rather than
@@ -306,6 +502,40 @@ mod imp {
             };
 
             snapshot.push_clip(&graphene::Rect::new(0.0, 0.0, view_w, view_h));
+            // Behind a camera shown whole, its blurred copy filling the
+            // place, faded out as the picture grows to fill it.
+            let behind = 1.0 - self.filling.get().clamp(0.0, 1.0);
+            if self.fit.get() == Fit::Framed && behind > 0.0 {
+                let cover = (view_w / shown_w).max(view_h / shown_h);
+                let (cover_w, cover_h) = (pic_w * cover, pic_h * cover);
+                let fade = self.backdrop_fade.get().clamp(0.0, 1.0);
+                let layers = [
+                    (self.backdrop_before.borrow().clone(), behind * (1.0 - fade)),
+                    (self.backdrop.borrow().clone(), behind * fade),
+                ];
+                for (layer, opacity) in layers {
+                    let Some(layer) = layer else { continue };
+                    if opacity <= 0.0 {
+                        continue;
+                    }
+                    snapshot.push_opacity(opacity);
+                    snapshot.save();
+                    snapshot.translate(&graphene::Point::new(view_w / 2.0, view_h / 2.0));
+                    if self.mirrored.get() {
+                        snapshot.scale(-1.0, 1.0);
+                    }
+                    if rotation != 0 {
+                        snapshot.rotate(rotation as f32);
+                    }
+                    snapshot.append_scaled_texture(
+                        &layer,
+                        gsk::ScalingFilter::Linear,
+                        &graphene::Rect::new(-cover_w / 2.0, -cover_h / 2.0, cover_w, cover_h),
+                    );
+                    snapshot.restore();
+                    snapshot.pop();
+                }
+            }
             snapshot.save();
             snapshot.translate(&graphene::Point::new(view_w / 2.0, view_h / 2.0));
             if self.mirrored.get() {
@@ -325,6 +555,7 @@ mod imp {
 
         fn size_allocate(&self, width: i32, height: i32, baseline: i32) {
             self.parent_size_allocate(width, height, baseline);
+            self.decide();
             let factor = self.obj().scale_factor().max(1);
             let wanted = (
                 (width * factor).max(0) as u32,
@@ -348,11 +579,142 @@ mod imp {
             let first = self.texture.replace(Some(picture.texture)).is_none();
             self.rotation.set(picture.rotation);
             self.drawn.set(self.drawn.get() + 1);
+            self.decide();
+            self.take_backdrop();
             let view = self.obj();
             view.queue_draw();
             if first {
                 self.tell_picture(true);
             }
+        }
+
+        /// Fills or shows whole, by the picture's shape and the view's,
+        /// again whenever either changes: the sender turning their phone,
+        /// the window being resized, the picture going to the stage.
+        pub(super) fn decide(&self) {
+            let view = self.obj();
+            let framed = self.fit.get() == Fit::Framed;
+            let picture = self.texture.borrow().as_ref().map(|texture| {
+                turned_size(
+                    texture.width() as u32,
+                    texture.height() as u32,
+                    self.rotation.get(),
+                )
+            });
+            let size = (view.width() as f32, view.height() as f32);
+            let fill = !framed
+                || framing_fills(
+                    picture.map_or((0.0, 0.0), |(w, h)| (w as f32, h as f32)),
+                    size,
+                );
+            let known = picture.is_some() && size.0 > 0.0 && size.1 > 0.0;
+            if self.fills.get() == Some(fill) && (!known || self.shaped.get()) {
+                return;
+            }
+            let animated = self.fills.get().is_some() && self.shaped.get() && known;
+            if known {
+                self.shaped.set(true);
+            }
+            self.fills.set(Some(fill));
+            let to = if fill { 1.0 } else { 0.0 };
+            if let Some(running) = self.framing.take() {
+                running.pause();
+            }
+            if !fill {
+                // The copy is wanted now, not at the next second.
+                self.backdrop_at.set(None);
+                self.take_backdrop();
+            }
+            if !animated || !adw::is_animations_enabled(&*view) {
+                self.filling.set(to);
+                view.queue_draw();
+                return;
+            }
+            let target = adw::CallbackAnimationTarget::new(glib::clone!(
+                #[weak]
+                view,
+                move |value| {
+                    view.imp().filling.set(value);
+                    view.queue_draw();
+                }
+            ));
+            let animation = adw::TimedAnimation::builder()
+                .widget(&*view)
+                .value_from(self.filling.get())
+                .value_to(to)
+                .duration(crate::theme::motion::SETTLE_MS)
+                .easing(adw::Easing::EaseOutCubic)
+                .target(&target)
+                .build();
+            self.framing.replace(Some(animation.clone()));
+            animation.play();
+        }
+
+        /// A new backdrop from the picture showing, once a second while a
+        /// camera is shown whole and never otherwise; it fades in over the
+        /// last one.
+        fn take_backdrop(&self) {
+            if self.fit.get() != Fit::Framed || self.fills.get() != Some(false) {
+                return;
+            }
+            let now = std::time::Instant::now();
+            if self
+                .backdrop_at
+                .get()
+                .is_some_and(|at| now.duration_since(at).as_millis() < BACKDROP_EVERY_MS as u128)
+            {
+                return;
+            }
+            let Some(texture) = self.texture.borrow().clone() else {
+                return;
+            };
+            self.backdrop_at.set(Some(now));
+            let (width, height) = (texture.width() as u32, texture.height() as u32);
+            let stride = width as usize * 4;
+            let mut bytes = vec![0u8; stride * height as usize];
+            texture.download(&mut bytes, stride);
+            let Some((pixels, w, h)) = backdrop_pixels(&bytes, width, height, stride) else {
+                return;
+            };
+            let made: gdk::Texture = gdk::MemoryTexture::new(
+                w as i32,
+                h as i32,
+                gdk::MemoryFormat::B8g8r8a8Premultiplied,
+                &glib::Bytes::from_owned(pixels),
+                w as usize * 4,
+            )
+            .upcast();
+            let before = self.backdrop.replace(Some(made));
+            let view = self.obj();
+            if let Some(running) = self.crossfade.take() {
+                running.pause();
+            }
+            if before.is_none() || !adw::is_animations_enabled(&*view) {
+                self.backdrop_before.replace(None);
+                self.backdrop_fade.set(1.0);
+                view.queue_draw();
+                return;
+            }
+            self.backdrop_before.replace(before);
+            self.backdrop_fade.set(0.0);
+            let target = adw::CallbackAnimationTarget::new(glib::clone!(
+                #[weak]
+                view,
+                move |value| {
+                    view.imp().backdrop_fade.set(value);
+                    view.queue_draw();
+                }
+            ));
+            let animation = adw::TimedAnimation::builder()
+                .widget(&*view)
+                .value_from(0.0)
+                .value_to(1.0)
+                .duration(BACKDROP_CROSSFADE_MS)
+                .easing(adw::Easing::Linear)
+                .target(&target)
+                .build();
+            self.crossfade.replace(Some(animation.clone()));
+            animation.play();
         }
 
         pub(super) fn tell_picture(&self, has: bool) {
@@ -395,8 +757,15 @@ impl VideoView {
 
     pub fn set_fit(&self, fit: Fit) {
         if self.imp().fit.replace(fit) != fit {
+            self.imp().decide();
             self.queue_draw();
         }
+    }
+
+    /// Whether a framed camera fills its place now (rather than being shown
+    /// whole on its backdrop), once it has been decided; for tests.
+    pub fn framed_fills(&self) -> Option<bool> {
+        self.imp().fills.get()
     }
 
     pub fn fit(&self) -> Fit {
@@ -439,6 +808,12 @@ impl VideoView {
         if imp.texture.replace(None).is_some() {
             imp.tell_picture(false);
         }
+        // The next picture is framed afresh, by its own shape, and is not
+        // seen against the last one's backdrop.
+        imp.shaped.set(false);
+        imp.backdrop.replace(None);
+        imp.backdrop_before.replace(None);
+        imp.backdrop_at.set(None);
         self.queue_draw();
     }
 
@@ -588,6 +963,95 @@ mod tests {
         assert_eq!(turned_size(1280, 720, 270), (720, 1280));
         assert_eq!(turned_size(1280, 720, 180), (1280, 720));
         assert_eq!(turned_size(1280, 720, 0), (1280, 720));
+    }
+
+    /// The Mac's FramingTests, case for case, and Android's with them: a
+    /// case added there is added here.
+    #[test]
+    fn a_camera_fills_or_is_shown_whole_by_the_two_shapes() {
+        type Case = ((f32, f32), (f32, f32), bool);
+        let cases: [Case; 13] = [
+            ((640.0, 480.0), (300.0, 400.0), false),
+            ((640.0, 480.0), (1856.0, 2160.0), false),
+            ((720.0, 960.0), (1856.0, 2160.0), true),
+            ((720.0, 960.0), (968.0, 2376.0), true),
+            ((640.0, 480.0), (968.0, 2376.0), false),
+            ((1280.0, 720.0), (1440.0, 900.0), true),
+            ((720.0, 960.0), (1440.0, 900.0), false),
+            ((480.0, 480.0), (300.0, 400.0), true),
+            ((1280.0, 720.0), (500.0, 500.0), false),
+            ((720.0, 960.0), (1080.0, 2340.0), true),
+            ((720.0, 1280.0), (968.0, 2376.0), true),
+            ((640.0, 480.0), (1600.0, 900.0), true),
+            ((720.0, 1280.0), (400.0, 1600.0), false),
+        ];
+        for (picture, view, fills) in cases {
+            assert_eq!(
+                framing_fills(picture, view),
+                fills,
+                "{picture:?} in {view:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn an_unknown_size_fills() {
+        assert!(framing_fills((0.0, 0.0), (300.0, 400.0)));
+        assert!(framing_fills((640.0, 480.0), (0.0, 0.0)));
+        assert!(framing_fills((640.0, 0.0), (300.0, 400.0)));
+        assert!(framing_fills((640.0, 480.0), (300.0, 0.0)));
+    }
+
+    #[test]
+    fn an_upright_phone_in_a_wide_tile_is_drawn_whole() {
+        // A phone held upright (720 by 1280) on the stage of a wide window:
+        // filling it kept less than a third of the picture.
+        let (w, h) = fitted((1200.0, 675.0), (720.0, 1280.0), Fit::Framed);
+        assert_eq!(h.round(), 675.0);
+        assert!(w < 1200.0);
+        // And a laptop's camera in the same tile fills it.
+        let (w, _) = fitted((1200.0, 675.0), (1280.0, 720.0), Fit::Framed);
+        assert_eq!(w.round(), 1200.0);
+    }
+
+    #[test]
+    fn the_backdrop_is_small_dark_and_the_picture_s_colour() {
+        // A plain red picture, 640 by 360, in GDK's order.
+        let (width, height) = (640u32, 360u32);
+        let mut bgra = Vec::new();
+        for _ in 0..width * height {
+            bgra.extend_from_slice(&[0, 0, 200, 255]);
+        }
+        let (pixels, w, h) = backdrop_pixels(&bgra, width, height, width as usize * 4).unwrap();
+        assert_eq!((w, h), (48, 27));
+        assert_eq!(pixels.len(), (w * h * 4) as usize);
+        // Darkened to about two thirds, and still red all over: a blur of
+        // one colour is that colour.
+        for pixel in pixels.chunks(4) {
+            assert_eq!(pixel, &[0, 0, 130, 255]);
+        }
+        assert!(backdrop_pixels(&[0; 10], 640, 360, 2560).is_none());
+        assert!(backdrop_pixels(&[], 0, 0, 0).is_none());
+    }
+
+    #[test]
+    fn the_backdrop_blurs_an_edge_into_a_gradient() {
+        // Left half black, right half white: blurred, the middle is grey
+        // and the ends keep their own.
+        let (width, height) = (96u32, 48u32);
+        let mut bgra = Vec::new();
+        for _ in 0..height {
+            for x in 0..width {
+                let v = if x < width / 2 { 0 } else { 255 };
+                bgra.extend_from_slice(&[v, v, v, 255]);
+            }
+        }
+        let (pixels, w, _) = backdrop_pixels(&bgra, width, height, width as usize * 4).unwrap();
+        let at = |x: u32| pixels[(x * 4) as usize];
+        assert!(at(0) < 10, "{}", at(0));
+        assert!(at(w - 1) > 155, "{}", at(w - 1));
+        let middle = at(w / 2);
+        assert!(middle > 40 && middle < 130, "{middle}");
     }
 
     #[test]

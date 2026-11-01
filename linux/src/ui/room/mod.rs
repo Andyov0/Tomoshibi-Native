@@ -28,8 +28,8 @@
 //! (the pictures), page.rs (the screen and everything on it), panels.rs
 //! (the panels beside the call; sound_panel.rs, host_panel.rs and
 //! devices_panel.rs are three of them), share_menu.rs (the share button's
-//! menu), strain.rs (the uplink's card), music/ (the song desk),
-//! signal.rs (the signal's figures), picture_menu.rs (what can be done to
+//! menu), strain.rs (the uplink's card), music/ (the song desk), watch/
+//! (watching together), signal.rs (the signal's figures), picture_menu.rs (what can be done to
 //! one picture), veil.rs (the meeting moving), ended.rs (the screen after
 //! the call), motion.rs and glyph.rs (how pieces come and go, and the
 //! symbols the icon theme lacks), and, in a debug build, fake.rs (devices
@@ -60,6 +60,7 @@ mod strain;
 pub mod talk;
 mod tile;
 mod veil;
+mod watch;
 
 use std::{
     cell::{Cell, RefCell},
@@ -129,10 +130,8 @@ pub struct RoomState {
     next_notice: Cell<u64>,
 }
 
-/// The panels beside the call (the Mac's `RoomView.Panel`). Watch together
-/// is not here: the core's protocol for it is, but playing a shared video
-/// needs a player on this platform, which does not exist yet; its button is
-/// not offered rather than offered and empty. The song desk is in music/.
+/// The panels beside the call (the Mac's `RoomView.Panel`): the song desk
+/// is music/, watching together watch/.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Panel {
     Messages,
@@ -140,6 +139,7 @@ pub enum Panel {
     Devices,
     Host,
     Music,
+    Watch,
 }
 
 impl Panel {
@@ -150,6 +150,7 @@ impl Panel {
             "devices" => Some(Panel::Devices),
             "host" => Some(Panel::Host),
             "music" => Some(Panel::Music),
+            "watch" => Some(Panel::Watch),
             _ => None,
         }
     }
@@ -587,6 +588,7 @@ fn follow(model: &AppModel, call: &Arc<Call>, event: CallEvent) -> bool {
         return false;
     }
     music::follow(model, call, &event);
+    watch::follow(model, call, &event);
     let effects = {
         let mut talk = room.talk.borrow_mut();
         let Some(talk) = talk.as_mut() else {
@@ -1838,7 +1840,8 @@ mod tests {
     fn panels_and_popovers_are_named_as_the_mac_names_them() {
         assert_eq!(Panel::of("messages"), Some(Panel::Messages));
         assert_eq!(Panel::of("host"), Some(Panel::Host));
-        assert_eq!(Panel::of("watch"), None);
+        assert_eq!(Panel::of("watch"), Some(Panel::Watch));
+        assert_eq!(Panel::of("music"), Some(Panel::Music));
         assert_eq!(Pop::of("share.screen"), Some(Pop::Share));
         assert_eq!(Pop::of("reactions"), Some(Pop::Reactions));
     }

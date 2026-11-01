@@ -11,7 +11,7 @@
 
 use std::{
     cell::{Cell, RefCell},
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     rc::Rc,
 };
 
@@ -30,9 +30,9 @@ use super::{
     panels,
     plan::{self, Size},
     stage::Stage,
-    talk::{PictureKind, Toast, ToastKind, ME},
+    talk::{PictureKind, Toast, ToastKind, ME, MY_SHARE},
     tile::{Marks, Tile},
-    Panel, Pop, RoomState, CHANGED,
+    watch, Panel, Pop, RoomState, CHANGED,
 };
 use crate::{
     app::{AppModel, Screen},
@@ -68,6 +68,8 @@ struct Bar {
     sound: gtk::Button,
     music: gtk::Button,
     music_dot: Motion,
+    watch: gtk::Button,
+    watch_dot: Motion,
     devices: gtk::Button,
     host: gtk::Button,
     host_count: gtk::Label,
@@ -95,8 +97,12 @@ pub struct Page {
     self_preview: RefCell<Option<(Rc<dyn crate::media::Camera>, u64)>>,
     title_motion: Motion,
     title: gtk::Label,
+    share_link: gtk::Button,
+    share_link_motion: Motion,
     signal: gtk::Button,
+    signal_motion: Motion,
     signal_bars: gtk::DrawingArea,
+    signal_figure: gtk::Label,
     signal_grade: Cell<Option<ConnectionGrade>>,
     notice_motion: Motion,
     notice: gtk::Label,
@@ -125,7 +131,27 @@ pub struct Page {
     pop_content: RefCell<HashMap<&'static str, Refresh>>,
     last_press: RefCell<Option<String>>,
     idle_timer: RefCell<Option<glib::SourceId>>,
+    /// Remote screens this page stopped at the server because they are not
+    /// on the stage (ShareCard.tsx: a share in the grid is not subscribed
+    /// to), so that each is let flow again when it goes there.
+    held_back: RefCell<HashSet<String>>,
+    /// The menu of one picture (PictureMenu.tsx, picture_menu.rs).
+    picture_menu: super::picture_menu::PictureMenu,
+    /// The bar stands down the side of the room rather than across its foot
+    /// (the setting's "At the side").
+    side: Cell<bool>,
+    /// The bar is on its way from one edge to the other: nothing else shows
+    /// it until it has arrived.
+    moving_bar: Cell<bool>,
+    /// The video watched together, while there is a show.
+    watch_view: RefCell<Option<Rc<watch::StageView>>>,
 }
+
+/// The lane the controls take down the side of the room (Plan.swift
+/// `sideLane`, the web's `mr-[5.75rem]`), and how tall a room has to be
+/// before they fit there at all (`sideNeeds`, useRoomFor.ts).
+const SIDE_LANE: i32 = 92;
+const SIDE_NEEDS: i32 = 480;
 
 fn icon_button(icon: &str, label: &str) -> gtk::Button {
     let button = gtk::Button::from_icon_name(icon);
@@ -248,7 +274,7 @@ impl Page {
         stage.set_widget_name("room.stage");
         root.set_child(Some(&stage));
         super::veil::attach(&root, &model);
-        super::picture_menu::attach(&root, &stage, &model);
+        let picture_menu = super::picture_menu::attach(&root, &stage, &model);
 
         // The window's own buttons, and where it is dragged from, over the
         // pictures: the call reaches the top of the window as the Mac's
@@ -269,12 +295,36 @@ impl Page {
             .content_height(12)
             .can_target(false)
             .build();
-        let signal = gtk::Button::builder().child(&signal_bars).build();
+        // The signal's bars and, with the setting's "With details", the
+        // round trip beside them, which then opens the figures (the Mac's
+        // SignalBadge); with "Signal only" the bars alone, pressing nothing.
+        let signal_figure = gtk::Label::builder().visible(false).build();
+        signal_figure.add_css_class("tmsb-signal-figure");
+        let signal_inner = gtk::Box::new(gtk::Orientation::Horizontal, 7);
+        signal_inner.set_halign(gtk::Align::Center);
+        signal_inner.append(&signal_bars);
+        signal_inner.append(&signal_figure);
+        let signal = gtk::Button::builder().child(&signal_inner).build();
         signal.add_css_class("tmsb-signal");
         signal.set_widget_name("room.signal");
+        // Only once connected, and only when the setting does not hide it:
+        // it comes and goes rather than appearing between two frames.
+        let signal_motion = Motion::hidden(&signal, Away::GROW);
+        // The room's link from the row at the top, for as long as the call
+        // lasts, rather than only from the capsule while alone in the room:
+        // the link, or for whoever runs a room the link does not let people
+        // into, an invitation (EmptyRoom.tsx `share`).
+        let share_link = gtk::Button::builder()
+            .child(&Glyph::new(glyph::LINK, 14))
+            .build();
+        share_link.add_css_class("tmsb-signal");
+        share_link.add_css_class("round");
+        share_link.set_widget_name("room.share-link");
+        let share_link_motion = Motion::hidden(&share_link, Away::GROW);
         let title_row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         title_row.append(&title);
-        title_row.append(&signal);
+        title_row.append(&share_link_motion);
+        title_row.append(&signal_motion);
         let title_motion = Motion::new(&title_row, Away::TOP);
         title_motion.set_halign(gtk::Align::Start);
         title_motion.set_valign(gtk::Align::Start);
@@ -463,8 +513,12 @@ impl Page {
             self_preview: RefCell::new(None),
             title_motion,
             title,
+            share_link,
+            share_link_motion,
             signal,
+            signal_motion,
             signal_bars,
+            signal_figure,
             signal_grade: Cell::new(None),
             notice_motion,
             notice,
@@ -493,6 +547,11 @@ impl Page {
             pop_content,
             last_press: RefCell::new(None),
             idle_timer: RefCell::new(None),
+            held_back: RefCell::new(HashSet::new()),
+            picture_menu,
+            side: Cell::new(false),
+            moving_bar: Cell::new(false),
+            watch_view: RefCell::new(None),
         });
         page.connect(&previous, &next, &alone_close);
         page.refresh();
@@ -549,6 +608,23 @@ impl Page {
         music_dot.set_can_target(false);
         let music_holder = gtk::Overlay::builder().child(&music).build();
         music_holder.add_overlay(&music_dot);
+        // Watching together, beside the music and apart from it as the web
+        // puts it (ControlBar.tsx): the one puts a picture on the stage, the
+        // other plays into the sound. A dot while a video plays and its panel
+        // is closed.
+        let watch = glyph_button(glyph::CLAPPERBOARD, 17, "");
+        watch.set_widget_name("bar.watch");
+        let watch_spot = gtk::Box::builder()
+            .halign(gtk::Align::Center)
+            .valign(gtk::Align::Center)
+            .build();
+        watch_spot.add_css_class("tmsb-dot");
+        let watch_dot = Motion::hidden(&watch_spot, Away::GROW);
+        watch_dot.set_halign(gtk::Align::End);
+        watch_dot.set_valign(gtk::Align::Start);
+        watch_dot.set_can_target(false);
+        let watch_holder = gtk::Overlay::builder().child(&watch).build();
+        watch_holder.add_overlay(&watch_dot);
         let devices = icon_button("emblem-system-symbolic", "");
         devices.set_widget_name("bar.devices");
         let host = glyph_button(glyph::CROWN, 17, "");
@@ -581,6 +657,12 @@ impl Page {
         // Music beside the sound it is part of (ControlBar.tsx), shown once
         // there is something to show.
         island.append(&coming(&music_holder));
+        let watch_coming = coming(&watch_holder);
+        // Not offered until the deployment says this person may start a
+        // show or one is running: shown at once, it was a button for nothing.
+        watch_coming.set_reveal_child(false);
+        watch_coming.set_visible(false);
+        island.append(&watch_coming);
         island.append(&coming(&host_holder));
         island.append(&coming(&devices));
         island.append(&coming(&more));
@@ -598,6 +680,8 @@ impl Page {
             sound,
             music,
             music_dot,
+            watch,
+            watch_dot,
             devices,
             host,
             host_count,
@@ -656,6 +740,10 @@ impl Page {
                     let weak = model.downgrade();
                     glib::spawn_future_local(async move {
                         if let Some(model) = weak.upgrade() {
+                            // A show this participant runs is closed, and
+                            // the word that it closed sent, before the call
+                            // goes: sent after, it never arrived.
+                            watch::leaving(&model).await;
                             let media = super::media_of(&model);
                             let quiet = crate::media::Quiet;
                             let media: &dyn Media = match media.as_deref() {
@@ -702,9 +790,13 @@ impl Page {
                 let (devices, _) = menu_row(&t("Devices"), None, Some("emblem-system-symbolic"));
                 let (host, _) =
                     menu_row(&t("Running this room"), None, Some("system-users-symbolic"));
+                let (watch_row, _) =
+                    menu_row(&t("Watch together"), None, Some("video-x-generic-symbolic"));
+                watch_row.set_widget_name("more.watch");
                 for (row, panel) in [
                     (&sound, Panel::Sound),
                     (&music, Panel::Music),
+                    (&watch_row, Panel::Watch),
                     (&devices, Panel::Devices),
                     (&host, Panel::Host),
                 ] {
@@ -719,6 +811,7 @@ impl Page {
                 card.set_width_request(240);
                 let host_row = host.downgrade();
                 let music_row = music.downgrade();
+                let watch_row = watch_row.downgrade();
                 (
                     card,
                     Box::new(move |model: &AppModel| {
@@ -729,6 +822,9 @@ impl Page {
                             let open =
                                 model.kept::<RoomState>().view.borrow().panel == Some(Panel::Music);
                             music.set_visible(open || super::music::available(model));
+                        }
+                        if let Some(watch_row) = watch_row.upgrade() {
+                            watch_row.set_visible(watch::offered(model));
                         }
                     }),
                 )
@@ -787,6 +883,9 @@ impl Page {
         on(&self.bar.sound, |model| {
             super::toggle_panel(model, Panel::Sound)
         });
+        on(&self.bar.watch, |model| {
+            super::toggle_panel(model, Panel::Watch)
+        });
         on(&self.bar.devices, |model| {
             super::toggle_panel(model, Panel::Devices)
         });
@@ -800,7 +899,20 @@ impl Page {
         on(&self.bar.leave, |model| {
             super::toggle_pop(model, Pop::Leave)
         });
-        on(&self.signal, |model| super::toggle_pop(model, Pop::Signal));
+        // The figures only with the setting's "With details"; the bars alone
+        // say what they say and open nothing (the Mac's SignalBadge).
+        on(&self.signal, |model| {
+            if model.preferences().string(theme::BADGE_KEY).as_deref() == Some("detailed") {
+                super::toggle_pop(model, Pop::Signal);
+            }
+        });
+        on(&self.share_link, |model| {
+            if super::link_works(model) {
+                super::copy_link(model);
+            } else {
+                super::invite(model);
+            }
+        });
         on(previous, |model| super::turn_page(model, -1));
         on(next, |model| super::turn_page(model, 1));
         on(&self.alone_button, |model| {
@@ -860,16 +972,16 @@ impl Page {
         outside.connect_pressed(move |gesture, _, x, y| {
             let Some(page) = page.upgrade() else { return };
             page.poke();
-            let open = page.model.kept::<RoomState>().view.borrow().pop;
-            let Some(open) = open else { return };
-            let Some(pop) = page.pops.get(pop_name(open)) else {
-                return;
-            };
             let point = graphene::Point::new(x as f32, y as f32);
             let inside = |widget: &gtk::Widget| {
                 widget
                     .compute_bounds(&page.root)
                     .is_some_and(|bounds| bounds.contains_point(&point))
+            };
+            let open = page.model.kept::<RoomState>().view.borrow().pop;
+            let Some(open) = open else { return };
+            let Some(pop) = page.pops.get(pop_name(open)) else {
+                return;
             };
             if inside(pop.motion.upcast_ref()) || inside(&pop.anchor) {
                 return;
@@ -895,12 +1007,16 @@ impl Page {
             let keys = gtk::EventControllerKey::new();
             keys.set_propagation_phase(gtk::PropagationPhase::Capture);
             let weak = weak_model.clone();
+            let page = Rc::downgrade(self);
             keys.connect_key_pressed(move |_, key, _, _| {
                 let Some(model) = weak.upgrade() else {
                     return glib::Propagation::Proceed;
                 };
                 if key != gdk::Key::Escape || model.screen() != Screen::Call {
                     return glib::Propagation::Proceed;
+                }
+                if page.upgrade().is_some_and(|page| page.picture_menu.close()) {
+                    return glib::Propagation::Stop;
                 }
                 if super::close_pop(&model) {
                     return glib::Propagation::Stop;
@@ -926,11 +1042,19 @@ impl Page {
             let page = page.upgrade()?;
             let name = child.widget_name();
             let name = name.strip_prefix("pop:")?;
-            let pop = page.pops.get(name)?;
-            let anchor = pop.anchor.compute_bounds(overlay)?;
             let (_, natural) = child.preferred_size();
             let (width, height) = (natural.width(), natural.height());
-            let whole = overlay.width();
+            let (whole, tall) = (overlay.width(), overlay.height());
+            let pop = page.pops.get(name)?;
+            let anchor = pop.anchor.compute_bounds(overlay)?;
+            // Beside the bar's buttons where the bar stands down the side,
+            // centred on the one pressed.
+            if page.side.get() && name != "signal" {
+                let x = (anchor.x().round() as i32 - width - 12).max(8);
+                let y = (anchor.y() + anchor.height() / 2.0 - height as f32 / 2.0).round() as i32;
+                let y = y.clamp(8, (tall - height - 8).max(8));
+                return Some(gdk::Rectangle::new(x, y, width, height));
+            }
             let x = if pop.end {
                 anchor.x() + anchor.width() - width as f32
             } else {
@@ -1056,6 +1180,13 @@ impl Page {
             }
             self.pop_content.borrow_mut().insert(name, refresh);
         }
+        for tile in self.tiles.borrow().values() {
+            tile.reword();
+        }
+        if let Some(view) = self.watch_view.borrow().as_ref() {
+            view.reword();
+        }
+        self.picture_menu.close();
     }
 
     /// The controls come back on any sign of somebody, and step aside again
@@ -1114,8 +1245,97 @@ impl Page {
                 tile.speaking(),
                 marks.muted,
             ));
+            let (buttons, switch) = tile.controls_shown();
+            out.push_str(&format!(
+                "tile {id} stage buttons {buttons}, their other picture {switch}, share card {}\n",
+                marks.share_card
+            ));
+        }
+        if let Some(view) = self.watch_view.borrow().as_ref() {
+            let spot = self.stage.spot(watch::STAGE_ID).unwrap_or_default();
+            out.push_str(&format!(
+                "watch at {:.0},{:.0} {:.0}x{:.0}: frames drawn {}\n",
+                spot.x,
+                spot.y,
+                spot.width,
+                spot.height,
+                view.frames_drawn()
+            ));
         }
         out
+    }
+
+    /// Shows the stage's buttons on every picture that has them, as the
+    /// pointer over it would, for a run that has no pointer.
+    #[cfg(debug_assertions)]
+    pub fn hover_for_test(&self) {
+        for tile in self.tiles.borrow().values() {
+            tile.hover_for_test(true);
+        }
+        if let Some(view) = self.watch_view.borrow().as_ref() {
+            view.hover_for_test();
+        }
+    }
+
+    /// The keyboard's focus on the first picture (`tab`: moved on as Tab
+    /// moves it), with the ring a keyboard's focus shows, and where it is
+    /// written to the log.
+    #[cfg(debug_assertions)]
+    pub fn focus_for_test(&self, tab: bool) {
+        let Some(window) = self.window.upgrade() else {
+            return;
+        };
+        window.set_focus_visible(true);
+        if tab {
+            window.child_focus(gtk::DirectionType::TabForward);
+        } else {
+            let first = self
+                .stage
+                .ids()
+                .into_iter()
+                .filter_map(|id| self.tiles.borrow().get(&id).cloned())
+                .next();
+            if let Some(tile) = first {
+                tile.root.grab_focus();
+            }
+        }
+        let focused = gtk::prelude::GtkWindowExt::focus(&window)
+            .map(|widget| format!("{} {}", widget.type_().name(), widget.widget_name()))
+            .unwrap_or_else(|| "nothing".into());
+        crate::app::log(&format!("room script: focus on {focused}"));
+    }
+
+    /// Opens the first person's camera picture's menu, in its middle, as a
+    /// right press would, for a run that has no pointer.
+    #[cfg(debug_assertions)]
+    pub fn menu_for_test(self: &Rc<Self>) {
+        let id = self
+            .model
+            .kept::<RoomState>()
+            .talk
+            .borrow()
+            .as_ref()
+            .and_then(|talk| {
+                talk.people
+                    .first()
+                    .map(|person| format!("{}/camera", person.id))
+            });
+        let Some(id) = id else { return };
+        let Some(spot) = self.stage.spot(&id) else {
+            return;
+        };
+        let at = self
+            .stage
+            .compute_point(
+                &self.root,
+                &graphene::Point::new(
+                    (spot.x + spot.width / 2.0) as f32,
+                    (spot.y + spot.height / 2.0) as f32,
+                ),
+            )
+            .map(|point| (point.x() as f64, point.y() as f64))
+            .unwrap_or((spot.x, spot.y));
+        self.picture_menu.open(&id, at.0, at.1);
     }
 
     pub fn fullscreen(&self, on: bool) {
@@ -1128,19 +1348,54 @@ impl Page {
         }
     }
 
-    /// Where every picture goes at a size, from the state as it is.
-    fn plan(&self, width: f64, height: f64) -> plan::Room {
+    /// Every picture, in the order they are drawn: the video watched
+    /// together first while there is a show (the web lists it as a picture,
+    /// surface.ts `surfaces`, and so does the Mac), then the call's own.
+    fn pictures(&self) -> Vec<super::talk::Picture> {
         let room = self.model.kept::<RoomState>();
         let talk = room.talk.borrow();
         let Some(talk) = talk.as_ref() else {
-            return plan::Room::default();
+            return Vec::new();
         };
-        let view = room.view.borrow();
-        let pictures = talk.pictures(
+        let mut pictures = Vec::new();
+        if watch::on_stage(&self.model) {
+            pictures.push(super::talk::Picture {
+                id: watch::STAGE_ID.to_owned(),
+                identity: String::new(),
+                kind: PictureKind::Screen,
+                sid: None,
+                mine: false,
+            });
+        }
+        pictures.extend(talk.pictures(
             room.local.camera_on.get(),
             room.local.share.borrow().is_some(),
-        );
-        let ids: Vec<String> = pictures.into_iter().map(|picture| picture.id).collect();
+        ));
+        pictures
+    }
+
+    /// The controls' reserve at the room's foot: the bar's lane there, or
+    /// only the gap where it stands down the side.
+    fn island(&self) -> f64 {
+        if self.side.get() {
+            plan::GAP
+        } else {
+            plan::ISLAND
+        }
+    }
+
+    /// Where every picture goes at a size, from the state as it is.
+    fn plan(&self, width: f64, height: f64) -> plan::Room {
+        let room = self.model.kept::<RoomState>();
+        if room.talk.borrow().is_none() {
+            return plan::Room::default();
+        }
+        let view = room.view.borrow();
+        let ids: Vec<String> = self
+            .pictures()
+            .into_iter()
+            .map(|picture| picture.id)
+            .collect();
         plan::room(
             Size::new(width, height),
             &ids,
@@ -1148,7 +1403,7 @@ impl Page {
             view.pin.pinned(),
             view.filled,
             view.page,
-            plan::ISLAND,
+            self.island(),
         )
     }
 
@@ -1181,25 +1436,24 @@ impl Page {
 
         // The stage first: who has it, as the pictures now are.
         let joined = room.talk.borrow().is_some();
+        // Where the bar stands, before anything is placed around it.
+        self.place_bar(compact);
         if joined {
-            let pictures = room
-                .talk
-                .borrow()
-                .as_ref()
-                .map(|talk| {
-                    talk.pictures(
-                        room.local.camera_on.get(),
-                        room.local.share.borrow().is_some(),
-                    )
-                })
-                .unwrap_or_default();
+            let pictures = self.pictures();
             let ids: Vec<String> = pictures.iter().map(|picture| picture.id.clone()).collect();
-            let shares = room
-                .talk
-                .borrow()
-                .as_ref()
-                .map(|talk| talk.shares())
-                .unwrap_or_default();
+            // The video watched together takes the stage when a show starts,
+            // before anybody's screen, as on the Mac (RoomView `shares`).
+            let mut shares: Vec<String> = Vec::new();
+            if watch::on_stage(&model) {
+                shares.push(watch::STAGE_ID.to_owned());
+            }
+            shares.extend(
+                room.talk
+                    .borrow()
+                    .as_ref()
+                    .map(|talk| talk.shares())
+                    .unwrap_or_default(),
+            );
             let unfill = {
                 let mut view = room.view.borrow_mut();
                 view.pin.update(&ids, &shares);
@@ -1244,6 +1498,7 @@ impl Page {
         let view = room.view.borrow();
         let pinned = view.pin.pinned().map(str::to_owned);
         let two = pinned.is_none() && pictures.len() <= plan::ALONE_TOGETHER && pictures.len() == 2;
+        let island = self.island();
 
         // Tiles for the pictures drawn, and none for the rest.
         let roster: Vec<NamedIdentity> = std::iter::once(NamedIdentity {
@@ -1268,28 +1523,118 @@ impl Page {
                 self.stage.remove(&id);
             }
         }
+        // A track this page held back that has gone is forgotten with it.
+        let live: HashSet<String> = pictures
+            .iter()
+            .filter_map(|picture| picture.sid.clone())
+            .collect();
+        self.held_back.borrow_mut().retain(|sid| live.contains(sid));
+
+        // What reaches across the top of the room: the row with the room's
+        // name and the signal at the left, the window's own buttons at the
+        // right, and an open panel down the right; the stage's buttons keep
+        // below and beside them, as the web's keep below the host's console
+        // (StageControls.tsx `group-data-[hosting]`).
+        let furniture: Vec<graphene::Rect> = [
+            self.title_motion
+                .compute_bounds(&self.stage)
+                .filter(|_| self.title_motion.is_shown()),
+            self.window_buttons(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
+        let panel_left = self
+            .panel_motion
+            .compute_bounds(&self.stage)
+            .filter(|_| self.panel_motion.is_shown() && view.panel.is_some())
+            .map(|panel| panel.x() as f64);
+
+        // The watch stage, while there is a show.
+        let watching = pictures.iter().any(|picture| picture.id == watch::STAGE_ID);
+        if !watching {
+            if let Some(gone) = self.watch_view.borrow_mut().take() {
+                gone.stop();
+                self.stage.remove(watch::STAGE_ID);
+            }
+        }
+
         for picture in pictures {
             let Some(spot) = planned.spots.get(&picture.id) else {
                 continue;
             };
+            let on_stage = pinned.as_deref() == Some(picture.id.as_str());
+            let filled = view.filled && on_stage;
+            let filling_two = two && !picture.mine;
+            // The stage's buttons in the corner of the picture, below what
+            // reaches across it and clear of a panel over it.
+            let controls_top = furniture
+                .iter()
+                .filter(|reach| {
+                    let corner = graphene::Rect::new(
+                        (spot.max_x() - 12.0 - 132.0) as f32,
+                        spot.y as f32,
+                        132.0,
+                        12.0 + 36.0,
+                    );
+                    reach.intersection(&corner).is_some()
+                })
+                .map(|reach| (reach.y() + reach.height()) as f64 + 8.0 - spot.y)
+                .fold(12.0, f64::max)
+                .round() as i32;
+            let controls_end = panel_left
+                .filter(|left| *left < spot.max_x())
+                .map(|left| (spot.max_x() - left + 8.0).round() as i32)
+                .unwrap_or(12);
+            if picture.id == watch::STAGE_ID {
+                let view_widget = self.watch_view_for(*spot);
+                view_widget.set_place(watch::Place {
+                    on_stage,
+                    filled,
+                    compact: spot.height < 200.0,
+                    controls_top,
+                    controls_end,
+                    lift: if spot.max_y() > height - island + 1.0
+                        && self.bar_motion.is_shown()
+                        && !self.side.get()
+                    {
+                        (island - plan::GAP) as i32
+                    } else {
+                        0
+                    },
+                });
+                continue;
+            }
             let tile = self.tile_for(&picture.id, *spot);
             let person = talk.person(&picture.identity);
-            let label = if picture.mine {
-                t_with("{name} (you)", &[("name", &talk.local_name)])
+            let name = if picture.mine {
+                talk.local_name.clone()
             } else {
                 person
                     .map(|person| person.label())
                     .unwrap_or_else(|| picture.identity.clone())
+            };
+            let is_camera = picture.kind == PictureKind::Camera;
+            // Somebody else's screen that is not on the stage is a card in
+            // its place, and nothing of it is received (ShareCard.tsx).
+            let share_card = !picture.mine && !is_camera && !on_stage;
+            // What the plate says: a screen says so, and one's own pictures
+            // say so (surface.ts `label`, the Mac's RoomView): a shared
+            // screen read as its owner's camera turned off.
+            let label = match (picture.mine, is_camera) {
+                (true, true) => t_with("{name} (you)", &[("name", &name)]),
+                (true, false) => t_with(
+                    "{name} (you)",
+                    &[("name", &t_with("{name} (screen)", &[("name", &name)]))],
+                ),
+                (false, false) if !share_card => t_with("{name} (screen)", &[("name", &name)]),
+                _ => name.clone(),
             };
             let hearing = view
                 .hearing
                 .get(&picture.identity)
                 .copied()
                 .unwrap_or_default();
-            let is_camera = picture.kind == PictureKind::Camera;
-            let filled = view.filled && pinned.as_deref() == Some(picture.id.as_str());
-            let on_stage = pinned.as_deref() == Some(picture.id.as_str());
-            let filling_two = two && !picture.mine;
             // Under the row at the top (the room's name and the signal),
             // whose bounds are where they are drawn now.
             let cornered = self
@@ -1308,9 +1653,10 @@ impl Page {
             // A picture that runs under the bar keeps its name above it,
             // unless it is wide enough that the bar, centred, misses the
             // corner the name is in (the Mac's `underBar`).
-            let under_bar = spot.max_y() > height - plan::ISLAND + 1.0 && spot.width < 900.0;
+            let under_bar =
+                !self.side.get() && spot.max_y() > height - island + 1.0 && spot.width < 900.0;
             let lift = if under_bar && self.bar_motion.is_shown() {
-                (plan::ISLAND - plan::GAP) as i32
+                (island - plan::GAP) as i32
             } else {
                 0
             };
@@ -1323,17 +1669,22 @@ impl Page {
                     }
                 });
             }
+            let other = counterpart(&picture.id, pictures);
             let marks = Marks {
                 my_share,
+                share_card,
                 hand_beside_name: cornered,
                 lift,
                 label,
+                name,
                 identity: picture.identity.clone(),
-                proven: signature_of(picture.identity.clone()).is_some_and(|mark| mark.proven),
-                unverified: roster
-                    .iter()
-                    .find(|named| named.identity == picture.identity)
-                    .is_some_and(|named| impersonating(named.clone(), roster.clone())),
+                proven: is_camera
+                    && signature_of(picture.identity.clone()).is_some_and(|mark| mark.proven),
+                unverified: is_camera
+                    && roster
+                        .iter()
+                        .find(|named| named.identity == picture.identity)
+                        .is_some_and(|named| impersonating(named.clone(), roster.clone())),
                 speaking: is_camera
                     && if picture.mine {
                         talk.me_speaking && room.local.microphone_on.get()
@@ -1353,6 +1704,8 @@ impl Page {
                     } else {
                         person.is_some_and(|person| person.hand_up())
                     },
+                unreadable: !picture.mine
+                    && person.is_some_and(|person| person.readable == Some(false)),
                 compact: spot.height < 140.0,
                 floating: two && picture.mine,
                 filled,
@@ -1361,6 +1714,10 @@ impl Page {
                 } else {
                     None
                 },
+                other: other.as_ref().map(|(_, kind)| *kind),
+                controls_at_foot: filling_two && !on_stage,
+                controls_top,
+                controls_end,
                 kind: Some(picture.kind),
                 mirrored: picture.mine && is_camera,
                 unlabelled: false,
@@ -1383,6 +1740,22 @@ impl Page {
                     super::fill_alone(&model, &fill_target);
                 }
             });
+            // "Their screen" or "Their camera": the same person's other
+            // picture on the stage in this one's place.
+            if let Some((other_id, _)) = other {
+                let weak = model.downgrade();
+                tile.on_switch(move || {
+                    if let Some(model) = weak.upgrade() {
+                        model
+                            .kept::<RoomState>()
+                            .view
+                            .borrow_mut()
+                            .pin
+                            .pin(Some(other_id.clone()));
+                        super::changed(&model);
+                    }
+                });
+            }
 
             // The picture: a remote track's frames, or one's own camera.
             if picture.mine {
@@ -1390,7 +1763,32 @@ impl Page {
                     self.preview_into(&tile);
                 }
             } else if let Some(call) = call.as_ref() {
-                let wanted = picture.sid.clone();
+                // A share in the grid is received not at all: the server is
+                // told to stop sending it, as a browser's adaptive stream
+                // stops a track no element shows, and it flows again when
+                // it goes to the stage. Its sound is another track and
+                // plays on.
+                let wanted = if share_card {
+                    None
+                } else {
+                    picture.sid.clone()
+                };
+                if let Some(sid) = picture.sid.as_ref().filter(|_| !is_camera) {
+                    let held = self.held_back.borrow().contains(sid);
+                    if share_card && !held {
+                        match call.set_remote_enabled(sid.clone(), false) {
+                            Ok(()) => {
+                                self.held_back.borrow_mut().insert(sid.clone());
+                            }
+                            Err(fault) => crate::app::log(&format!(
+                                "a share in the grid was not held back: {fault}"
+                            )),
+                        }
+                    } else if !share_card && held {
+                        let _ = call.set_remote_enabled(sid.clone(), true);
+                        self.held_back.borrow_mut().remove(sid);
+                    }
+                }
                 let attached = tile.attached.borrow().clone();
                 if attached != wanted {
                     if let Some(old) = attached {
@@ -1417,6 +1815,44 @@ impl Page {
         self.next_motion.show(pages > 1 && planned.page + 1 < pages);
     }
 
+    /// Where the window's own buttons are drawn over the room, in the
+    /// stage's coordinates: at the top right on most desktops, over the
+    /// pictures as the Mac's hidden title bar's are.
+    fn window_buttons(&self) -> Option<graphene::Rect> {
+        let window = self.window.upgrade()?;
+        let mut found = None;
+        let mut queue: Vec<gtk::Widget> = vec![window.upcast()];
+        while let Some(widget) = queue.pop() {
+            if widget.css_name() == "windowcontrols" && widget.is_visible() && widget.width() > 0 {
+                if let Some(bounds) = widget.compute_bounds(&self.stage) {
+                    found = Some(match found {
+                        None => bounds,
+                        Some(seen) => bounds.union(&seen),
+                    });
+                }
+                continue;
+            }
+            let mut child = widget.first_child();
+            while let Some(next) = child {
+                child = next.next_sibling();
+                queue.push(next);
+            }
+        }
+        found
+    }
+
+    /// The watch stage's view, made the first time a show is drawn.
+    fn watch_view_for(self: &Rc<Self>, spot: plan::Rect) -> Rc<watch::StageView> {
+        if let Some(view) = self.watch_view.borrow().as_ref() {
+            return view.clone();
+        }
+        let view = watch::StageView::new(&self.model);
+        let motion = Motion::hidden(view.widget(), Away::GROW);
+        self.stage.add(watch::STAGE_ID, &motion, spot);
+        self.watch_view.replace(Some(view.clone()));
+        view
+    }
+
     /// The tile for a picture, made the first time it is drawn.
     fn tile_for(self: &Rc<Self>, id: &str, spot: plan::Rect) -> Rc<Tile> {
         if let Some(tile) = self.tiles.borrow().get(id) {
@@ -1435,10 +1871,106 @@ impl Page {
                 let _ = call.request_video_size(sid, width, height);
             }
         });
+        // Enter on the focused picture does what a press on it does, and
+        // the menu key opens its menu where it is.
+        let (weak_model, pressed) = (self.model.downgrade(), id.to_owned());
+        tile.on_press(move || {
+            if let Some(model) = weak_model.upgrade() {
+                super::press_picture(&model, &pressed);
+            }
+        });
+        let (page, asked, weak_tile) = (Rc::downgrade(self), id.to_owned(), Rc::downgrade(&tile));
+        tile.on_menu(move |x, y| {
+            let (Some(page), Some(tile)) = (page.upgrade(), weak_tile.upgrade()) else {
+                return;
+            };
+            let at = tile
+                .root
+                .compute_point(&page.root, &graphene::Point::new(x as f32, y as f32))
+                .map(|point| (point.x() as f64, point.y() as f64))
+                .unwrap_or((x, y));
+            page.picture_menu.open(&asked, at.0, at.1);
+        });
         let motion = Motion::hidden(&tile.root, Away::GROW);
         self.stage.add(id, &motion, spot);
         self.tiles.borrow_mut().insert(id.to_owned(), tile.clone());
         tile
+    }
+
+    /// Where the bar stands: across the foot of the room, or down its side
+    /// where the setting says so and the room is tall enough for the column
+    /// (the Mac's `barPlace`). The room is then narrower by the bar's lane,
+    /// so that the pictures, the panels and the cards on the right all keep
+    /// out of it, and the bar goes from one edge to the other by leaving and
+    /// coming back rather than jumping.
+    fn place_bar(self: &Rc<Self>, compact: bool) {
+        let room = self.model.kept::<RoomState>();
+        let filled = room.view.borrow().filled;
+        let height = self.root.height();
+        let side = self
+            .model
+            .preferences()
+            .string(theme::CONTROLS_KEY)
+            .as_deref()
+            == Some("side")
+            && height >= SIDE_NEEDS
+            && !filled;
+        let _ = compact;
+        if self.side.get() == side {
+            return;
+        }
+        self.side.set(side);
+        self.stage.set_margin_end(if side { SIDE_LANE } else { 0 });
+        let page = Rc::downgrade(self);
+        let arrange = move || {
+            let Some(page) = page.upgrade() else { return };
+            let side = page.side.get();
+            let bar = &page.bar;
+            let axis = if side {
+                gtk::Orientation::Vertical
+            } else {
+                gtk::Orientation::Horizontal
+            };
+            bar.island.set_orientation(axis);
+            if let Some(pair) = bar.hand.parent().and_downcast::<gtk::Box>() {
+                pair.set_orientation(axis);
+            }
+            class(&bar.island, "side", side);
+            let mut child = bar.island.first_child();
+            while let Some(next) = child {
+                if let Some(revealer) = next.downcast_ref::<gtk::Revealer>() {
+                    revealer.set_transition_type(if side {
+                        gtk::RevealerTransitionType::SlideDown
+                    } else {
+                        gtk::RevealerTransitionType::SlideRight
+                    });
+                }
+                child = next.next_sibling();
+            }
+            let motion = &page.bar_motion;
+            if side {
+                motion.set_halign(gtk::Align::End);
+                motion.set_valign(gtk::Align::Center);
+                motion.set_margin_end(12);
+                motion.set_margin_bottom(0);
+                motion.set_from(Away::SIDE);
+            } else {
+                motion.set_halign(gtk::Align::Center);
+                motion.set_valign(gtk::Align::End);
+                motion.set_margin_end(0);
+                motion.set_margin_bottom(BAR_FOOT);
+                motion.set_from(Away::FOOT);
+            }
+            page.moving_bar.set(false);
+            motion.show(true);
+            page.refresh();
+        };
+        if self.bar_motion.is_shown() && adw::is_animations_enabled(&self.root) {
+            self.moving_bar.set(true);
+            self.bar_motion.leave(arrange);
+        } else {
+            arrange();
+        }
     }
 
     /// Stops drawing into a tile that is going: its track detached, or its
@@ -1587,6 +2119,21 @@ impl Page {
             (music || super::music::available(model)) && !compact,
         );
         bar.music_dot.show(!music && super::music::playing(model));
+        let watch_open = view.panel == Some(Panel::Watch);
+        come_or_go(
+            &bar.watch,
+            (watch::offered(model) || watch_open) && !compact,
+        );
+        class(&bar.watch, "held", watch_open);
+        set_label(
+            &bar.watch,
+            &if watch_open {
+                t("Hide watch together")
+            } else {
+                t("Show watch together")
+            },
+        );
+        bar.watch_dot.show(watch::playing(model) && !watch_open);
         class(&bar.devices, "held", view.panel == Some(Panel::Devices));
         set_label(&bar.devices, &t("Devices"));
         come_or_go(&bar.devices, !compact);
@@ -1613,7 +2160,9 @@ impl Page {
         let hides = view.filled
             || model.preferences().string(theme::CONTROLS_KEY).as_deref() == Some("idle");
         let shown = !hides || !view.idle || view.pop.is_some();
-        self.bar_motion.show(shown);
+        if !self.moving_bar.get() {
+            self.bar_motion.show(shown);
+        }
         // Stillness is counted from the moment the controls may step aside
         // (the stage filled), not only from the pointer's last move: filled
         // from a key or a script, with the pointer still, they stayed.
@@ -1640,11 +2189,37 @@ impl Page {
             .show(!hides || !view.idle || view.pop == Some(Pop::Signal));
 
         // The signal, only once connected: a reading of a connection that is
-        // not there yet is a reading of nothing.
+        // not there yet is a reading of nothing. It arrives and leaves.
         let badge = model.preferences().string(theme::BADGE_KEY);
         let connected = room.state.get() == Some(CallState::Connected) && talk.is_some();
-        self.signal
-            .set_visible(connected && badge.as_deref() != Some("hidden"));
+        self.signal_motion
+            .show(connected && badge.as_deref() != Some("hidden"));
+        // "With details": the round trip beside the bars, and the bars
+        // press open the figures; "Signal only" is the bars and nothing to
+        // press.
+        let detailed = badge.as_deref() == Some("detailed");
+        let round_trip = talk
+            .as_ref()
+            .and_then(|talk| talk.connection.as_ref())
+            .filter(|reading| reading.measured)
+            .and_then(|reading| reading.rtt_ms)
+            .map(|ms| format!("{} ms", ms.round() as i64))
+            .unwrap_or_else(|| "\u{2014}".to_owned());
+        if self.signal_figure.label() != round_trip {
+            self.signal_figure.set_label(&round_trip);
+        }
+        self.signal_figure.set_visible(detailed);
+        class(&self.signal, "detailed", detailed);
+        class(&self.signal, "quiet", !detailed);
+        self.signal.set_can_focus(detailed);
+        if !detailed && view.pop == Some(Pop::Signal) {
+            let weak = model.downgrade();
+            glib::idle_add_local_once(move || {
+                if let Some(model) = weak.upgrade() {
+                    super::close_pop(&model);
+                }
+            });
+        }
         let grade = talk.as_ref().and_then(|talk| {
             talk.connection
                 .as_ref()
@@ -1699,7 +2274,50 @@ impl Page {
         }));
         self.alone_button
             .set_sensitive(host.busy.as_deref() != Some("invite"));
-        self.alone_motion.show(alone);
+        // Out of the way of a popover off the bar, which rises over where it
+        // sits: the share menu was drawn over it with half of it showing
+        // beside the menu.
+        let bar_pop = matches!(
+            view.pop,
+            Some(Pop::Share | Pop::Reactions | Pop::More | Pop::Leave)
+        );
+        self.alone_motion.show(alone && !bar_pop);
+        self.alone_motion.set_margin_bottom(if self.side.get() {
+            20
+        } else {
+            BAR_FOOT + 58 + 14
+        });
+
+        // The room's link from the row at the top: the link where it lets
+        // people in, an invitation for whoever runs a room it does not, and
+        // nothing for anybody else, who could only send people to a door
+        // that turns them away.
+        let shares_link = connected && (link_works || host.yours());
+        self.share_link_motion.show(shares_link);
+        // The link, and a tick for a moment once it is copied.
+        let ticked = self
+            .share_link
+            .child()
+            .is_some_and(|child| child.is::<gtk::Image>());
+        if view.copied != ticked {
+            if view.copied {
+                self.share_link
+                    .set_child(Some(&gtk::Image::from_icon_name("object-select-symbolic")));
+            } else {
+                self.share_link
+                    .set_child(Some(&Glyph::new(glyph::LINK, 14)));
+            }
+        }
+        set_label(
+            &self.share_link,
+            &if view.copied {
+                t("Link copied")
+            } else {
+                t("Share link")
+            },
+        );
+        self.share_link
+            .set_sensitive(host.busy.as_deref() != Some("invite"));
         let _ = compact;
     }
 
@@ -1709,6 +2327,11 @@ impl Page {
         // Beside the call where the window has room for it, the width of the
         // window less twelve either side where it has not (the Mac's
         // `panelWidth`); from the side beside it, from the foot over it.
+        // Beside the bar's lane where it stands down the side.
+        let lane = if self.side.get() { SIDE_LANE } else { 0 };
+        let width = width - lane;
+        self.panel_motion.set_margin_end(12 + lane);
+        self.panel_motion.set_margin_bottom(self.island() as i32);
         let beside = 360.min(width - 32);
         let narrow = width > 0 && width < beside + 24 + 172 + 22;
         let panel_width = if narrow {
@@ -1755,11 +2378,14 @@ impl Page {
         }
         // The notices sit beside an open panel where there is room for both.
         let beside_room = open.is_some() && width - panel_width - 48 >= 280;
-        self.toasts.set_margin_end(if beside_room {
-            panel_width + 24 + 8
-        } else {
-            16
-        });
+        self.toasts.set_margin_end(
+            lane + if beside_room {
+                panel_width + 24 + 8
+            } else {
+                16
+            },
+        );
+        self.toasts.set_margin_bottom(self.island() as i32 + 8);
     }
 
     fn fill_panel(&self, panel: Panel) {
@@ -1799,11 +2425,48 @@ impl Page {
             });
         }
         let panel_open = model.kept::<RoomState>().view.borrow().panel.is_some();
-        self.watchers_motion.set_margin_end(if panel_open {
-            self.panel_motion.width_request() + 12 + 8
-        } else {
-            14
-        });
+        let lane = if self.side.get() { SIDE_LANE } else { 0 };
+        let mut end = lane
+            + if panel_open {
+                self.panel_motion.width_request() + 12 + 8
+            } else {
+                14
+            };
+        let mut top = 56;
+        // Clear of one's own picture where it is the card in the top corner
+        // (a call of two, or alone with one's own share): the list was drawn
+        // over its top edge. Beside it where there is room, below it where
+        // there is not.
+        let card = self
+            .stage
+            .spot(ME)
+            .filter(|spot| spot.width < self.stage.size().0 / 2.0);
+        if let Some(card) = card {
+            let whole = self.root.width();
+            let (_, natural) = self.watchers_motion.preferred_size();
+            let list = graphene::Rect::new(
+                (whole - end - natural.width()) as f32,
+                top as f32,
+                natural.width() as f32,
+                natural.height().max(36) as f32,
+            );
+            let card_rect = graphene::Rect::new(
+                card.x as f32,
+                card.y as f32,
+                card.width as f32,
+                card.height as f32,
+            );
+            if list.intersection(&card_rect).is_some() {
+                let beside = (whole as f64 - card.x + 8.0).round() as i32;
+                if (card.x as i32) - natural.width() - 8 >= 8 {
+                    end = beside;
+                } else {
+                    top = (card.max_y() + 8.0).round() as i32;
+                }
+            }
+        }
+        self.watchers_motion.set_margin_end(end);
+        self.watchers_motion.set_margin_top(top);
         self.watchers_motion.show(watching.is_some());
         let room = model.kept::<RoomState>();
         let view = room.view.borrow();
@@ -1834,6 +2497,42 @@ impl Page {
         reconcile(&self.toasts, &self.toast_widgets, &wanted, |(id, toast)| {
             (*id, toast_widget(model, *id, toast))
         });
+        // What was said, bottom left, above the controls and clear of the
+        // name plates under it: in a grid of six at 1000 by 700 the card lay
+        // over the name of the picture in that corner.
+        let island = self.island();
+        let mut foot = island as i32 + 8;
+        let (said_width, said_height) = (self.said.width().max(240), self.said.height());
+        let stage_height = self.stage.size().1;
+        if said_height > 0 && stage_height > 0.0 {
+            for _ in 0..3 {
+                let bottom = stage_height - foot as f64;
+                let top = bottom - said_height as f64;
+                let covered = self
+                    .tiles
+                    .borrow()
+                    .iter()
+                    .filter_map(|(id, tile)| {
+                        let spot = self.stage.spot(id)?;
+                        let marks = tile.marks();
+                        let inset = if marks.compact { 4.0 } else { 8.0 };
+                        let plate_bottom = spot.max_y() - inset - marks.lift as f64;
+                        let plate_top = plate_bottom - 24.0;
+                        let plate_left = spot.x + inset;
+                        let overlaps = plate_left < 12.0 + said_width as f64
+                            && plate_left + 120.0 > 12.0
+                            && plate_bottom > top
+                            && plate_top < bottom;
+                        overlaps.then_some(plate_top)
+                    })
+                    .fold(f64::INFINITY, f64::min);
+                if !covered.is_finite() {
+                    break;
+                }
+                foot = (stage_height - covered + 8.0).round() as i32;
+            }
+        }
+        self.said.set_margin_bottom(foot);
         let said: Vec<(u64, super::talk::Line)> = view.said.clone();
         reconcile(&self.said, &self.said_widgets, &said, |(id, line)| {
             let card = gtk::Box::new(gtk::Orientation::Vertical, 2);
@@ -1854,6 +2553,30 @@ impl Page {
             (*id, card.upcast())
         });
     }
+}
+
+/// The same person's other picture, which the stage's switch offers
+/// (Room.tsx `counterpart`, the Mac's): their screen for their camera and
+/// back, one's own share for one's own camera; never the video watched
+/// together, which belongs to whoever runs it but is no picture of them.
+fn counterpart(id: &str, pictures: &[super::talk::Picture]) -> Option<(String, PictureKind)> {
+    let wanted = match id {
+        ME => (MY_SHARE.to_owned(), PictureKind::Screen),
+        MY_SHARE => (ME.to_owned(), PictureKind::Camera),
+        _ if id == watch::STAGE_ID => return None,
+        _ => {
+            let (owner, kind) = id.rsplit_once('/')?;
+            match kind {
+                "camera" => (format!("{owner}/screen"), PictureKind::Screen),
+                "screen" => (format!("{owner}/camera"), PictureKind::Camera),
+                _ => return None,
+            }
+        }
+    };
+    pictures
+        .iter()
+        .any(|picture| picture.id == wanted.0)
+        .then_some(wanted)
 }
 
 fn pop_name(pop: Pop) -> &'static str {

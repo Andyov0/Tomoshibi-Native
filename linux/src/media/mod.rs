@@ -257,6 +257,14 @@ pub trait Media {
     /// Lets go of the call: stops everything it was playing. The room calls
     /// it when the call ends, however it ends.
     fn detach_call(&self);
+    /// A sound this app plays itself into the call's mixer, beside the
+    /// remote ones (the song desk's songs, a video watched together): 48 kHz
+    /// 16-bit little-endian samples, one or two channels. It goes through
+    /// the mixer so that the echo canceller hears it as it hears a voice,
+    /// and it is the mixer's "local:<name>", music when the name is
+    /// "music" and screen sound otherwise, for set_kind_volume. Dropping
+    /// the sink stops it. None where there is no mixer: the caller plays
+    /// it some other way.
     fn local_sound(&self, name: &str) -> Option<Arc<dyn tomoshibi_core::call::PcmSink>> {
         let _ = name;
         None
@@ -271,6 +279,10 @@ pub trait Media {
     fn set_speaker(&self, choice: Option<String>);
     /// One person's volume, from nought to one (the sound panel's sliders).
     fn set_volume(&self, identity: &str, level: f32);
+    /// One person's screen sound (`music` false) or music (`music` true),
+    /// from nought to one, set apart from their voice (the sound panel's
+    /// second and third rows). Once set it is that sound's volume in place
+    /// of set_volume's, which is then the voice's alone.
     fn set_kind_volume(&self, identity: &str, music: bool, level: f32) {
         let _ = (identity, music, level);
     }
