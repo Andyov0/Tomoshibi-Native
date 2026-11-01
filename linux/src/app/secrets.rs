@@ -323,6 +323,22 @@ mod ffi {
         use super::*;
 
         #[test]
+        fn a_call_with_no_secret_service_is_an_error_not_a_crash() {
+            // The test runs with no session bus at all: libsecret must say
+            // so through the GError, which is read and freed here, and the
+            // store falls back on this run's memory. A schema laid out
+            // wrongly crashes inside libsecret instead.
+            if std::env::var_os("DBUS_SESSION_BUS_ADDRESS").is_some() {
+                return;
+            }
+            match lookup("tomoshibi-test-key") {
+                Ok(None) | Err(_) => {}
+                Ok(Some(found)) => panic!("a secret nobody stored: {found}"),
+            }
+            assert!(store("tomoshibi-test-key", "value").is_err());
+        }
+
+        #[test]
         fn the_schema_is_laid_out_as_libsecret_reads_it() {
             // secret-schema.h on a 64-bit system: a name, the flags, 32
             // attributes of a pointer and an int each, an int and seven
