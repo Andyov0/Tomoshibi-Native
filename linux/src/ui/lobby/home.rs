@@ -187,6 +187,32 @@ pub fn page(context: &Context) -> gtk::Widget {
     main.add_top_bar(&pieces::notice_card(model));
     main.set_content(Some(&pieces::with_toast(model, &sections)));
     main.add_css_class("tmsb-main");
+    // The stage reaches the top of the window under the bar, whose ground
+    // is clear, as the Mac's stage runs under its toolbar: below the bar,
+    // a camera picture had a strip of the page's ground above it, 46 high
+    // and light by day. The greeting and the other sections start below the
+    // bars, however tall the notice makes them.
+    main.set_extend_content_to_top_edge(true);
+    {
+        let (words, sections) = (home.2.downgrade(), sections.downgrade());
+        let follow = move |main: &adw::ToolbarView| {
+            let height = main.top_bar_height();
+            if let Some(words) = words.upgrade() {
+                words.set_margin_top(height + 10);
+            }
+            if let Some(sections) = sections.upgrade() {
+                let mut child = sections.first_child();
+                while let Some(section) = child {
+                    child = section.next_sibling();
+                    if sections.page(&section).name().as_deref() != Some(Place::Home.name()) {
+                        section.set_margin_top(height);
+                    }
+                }
+            }
+        };
+        follow(&main);
+        main.connect_top_bar_height_notify(follow);
+    }
 
     let split = adw::OverlaySplitView::builder()
         .sidebar(&sidebar)
@@ -274,6 +300,12 @@ pub fn page(context: &Context) -> gtk::Widget {
                     Place::Servers => servers::section(&ctx),
                     Place::Home => unreachable!(),
                 };
+                // Below the bars the stage runs under (above).
+                if let Some(main) = sections.ancestor(adw::ToolbarView::static_type()) {
+                    if let Ok(main) = main.downcast::<adw::ToolbarView>() {
+                        section.set_margin_top(main.top_bar_height());
+                    }
+                }
                 sections.add_named(&section, Some(place.name()));
             }
             sections.set_visible_child_name(place.name());
@@ -743,7 +775,7 @@ pub fn ask_to_sign_out(context: &Context) {
 
 /// Home: the picture of yourself, a greeting, and the switches for how you
 /// will arrive.
-fn home_stage(context: &Context, name: &str) -> (gtk::Overlay, Portraits) {
+fn home_stage(context: &Context, name: &str) -> (gtk::Overlay, Portraits, kit::Arrival) {
     let stage = stage::stage(context, super::animals::Placement::Stage);
     let overlay = gtk::Overlay::new();
     overlay.set_child(Some(&stage.widget));
@@ -775,5 +807,5 @@ fn home_stage(context: &Context, name: &str) -> (gtk::Overlay, Portraits) {
     switches.set_valign(gtk::Align::End);
     switches.set_margin_bottom(28);
     overlay.add_overlay(&switches);
-    (overlay, stage.portraits)
+    (overlay, stage.portraits, words)
 }

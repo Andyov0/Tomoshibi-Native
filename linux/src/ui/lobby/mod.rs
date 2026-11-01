@@ -43,8 +43,10 @@ const CSS: &str = r#"
 .tmsb-lobby .tmsb-main, .tmsb-stage-ground { background-color: @tmsb_bg; }
 .tmsb-stage-card { border-radius: 20px; border: 1px solid @tmsb_border; }
 .tmsb-stage-card .tmsb-stage-ground { background-color: @tmsb_surface; }
-.tmsb-greeting { font-size: 34px; font-weight: 700; }
-.tmsb-greeting-sub { font-size: 15px; color: alpha(@tmsb_fg, 0.78); }
+/* The Mac's shadow under the greeting (Lobby.swift: 0.45, radius 16, two
+   down), which keeps it legible over a busy or dark camera picture. */
+.tmsb-greeting { font-size: 34px; font-weight: 700; text-shadow: 0 2px 16px alpha(black, 0.45); }
+.tmsb-greeting-sub { font-size: 15px; color: alpha(@tmsb_fg, 0.78); text-shadow: 0 2px 16px alpha(black, 0.45); }
 .tmsb-section-heading { font-size: 26px; font-weight: 700; }
 .tmsb-heading { font-size: 24px; font-weight: 700; }
 .tmsb-room-heading { font-size: 20px; font-family: monospace; }
