@@ -185,6 +185,12 @@ impl Toast {
 
 /// notices.ts `aMoment`: how long something that happened is said.
 pub const NOTICE_MOMENT_MS: u64 = 3200;
+/// notices.ts `BACK_WITHIN`: how long a leave is held before it is said, in
+/// case it is somebody coming straight back (a reload, a reconnect).
+pub const BACK_WITHIN_MS: u64 = 5000;
+/// App.tsx `MOVING_HOLDS_FOR`: how long a server's word that the meeting is
+/// moving makes the end of the call a move rather than an ending.
+pub const MOVING_HOLDS_FOR_S: f64 = 15.0;
 /// How long a message said while the messages are closed stays in the
 /// corner (the Mac's `saidFor`, Said.tsx).
 pub const SAID_FOR_MS: u64 = 6000;
@@ -211,6 +217,16 @@ pub enum Effect {
     },
     /// Whoever runs the room may have changed: ask again.
     Standing,
+    /// Somebody left; whether to say so is asked again
+    /// ([`Talk::leave_due`]) once [`BACK_WITHIN_MS`] has passed.
+    LeaveLater {
+        identity: String,
+    },
+    /// The server says the meeting is about to move to `to` (the relay's
+    /// name, or nothing where it named none).
+    Moving {
+        to: String,
+    },
     /// A sound arrived: the volumes chosen for it are put back.
     Hearing,
     /// The call is over, with LiveKit's word for why.
@@ -245,6 +261,25 @@ pub struct Talk {
     /// Until the join has told who was already here, nobody arriving is
     /// announced (CallModel `settled`).
     pub settled: bool,
+    /// Leaves not yet said, by identity, with the name to say: somebody
+    /// back within [`BACK_WITHIN_MS`] is neither said to have left nor to
+    /// have joined (notices.ts `leaving`).
+    pub leaving: HashMap<String, String>,
+    /// When this participant's own connection was last made (seconds, as
+    /// `now`): everybody the core said had left while it was being made
+    /// again is waited for from then, not from when they were said to go.
+    pub connected_at: f64,
+}
+
+/// What [`Talk::leave_due`] makes of a leave being held.
+#[derive(Debug, Clone, PartialEq)]
+pub enum LeaveDue {
+    /// Gone for good: say so.
+    Say(Toast),
+    /// Ask again in this many milliseconds.
+    Wait(u64),
+    /// Back, or already said: nothing.
+    Nothing,
 }
 
 impl Talk {
@@ -267,7 +302,51 @@ impl Talk {
             local_tracks: BTreeMap::new(),
             moving: None,
             settled: false,
+            leaving: HashMap::new(),
+            connected_at: 0.0,
         }
+    }
+
+    /// Whether to say that `identity` left, asked once their leave has been
+    /// held [`BACK_WITHIN_MS`].
+    ///
+    /// A leave seen while this participant's own connection was being made
+    /// again is not news about them: the core says everybody left when it
+    /// reconnects and joined again when it is back, and "Web One left"
+    /// appeared for somebody who had not moved (the network tests of
+    /// 2026-11-01). So it waits until the connection has been back as long
+    /// as any leave is held, and is said only if they are still gone.
+    pub fn leave_due(&mut self, identity: &str, now: f64) -> LeaveDue {
+        if !self.leaving.contains_key(identity) {
+            return LeaveDue::Nothing;
+        }
+        if self.person(identity).is_some() {
+            self.leaving.remove(identity);
+            return LeaveDue::Nothing;
+        }
+        if self.state != CallState::Connected {
+            return LeaveDue::Wait(BACK_WITHIN_MS);
+        }
+        let back_for_ms = ((now - self.connected_at).max(0.0) * 1000.0) as u64;
+        if back_for_ms < BACK_WITHIN_MS {
+            return LeaveDue::Wait(BACK_WITHIN_MS - back_for_ms);
+        }
+        let name = self.leaving.remove(identity).unwrap_or_default();
+        LeaveDue::Say(Toast::said(t_with("{name} left", &[("name", &name)])))
+    }
+
+    /// Where the meeting went, when the call ending for `reason` at `now` is
+    /// a move rather than an ending: the room closed (a move) or this
+    /// participant put out of it (`placing`, one person moved) within
+    /// [`MOVING_HOLDS_FOR_S`] of the server saying so (App.tsx `ended`, the
+    /// Mac's CallModel). LiveKit's Rust SDK names the room's closing
+    /// `RoomDeleted`, the web's `RoomClosed`; both are read.
+    pub fn moved_to(&self, reason: &str, now: f64) -> Option<String> {
+        let (to, at) = self.moving.as_ref()?;
+        let gone = ["RoomDeleted", "RoomClosed", "ParticipantRemoved"]
+            .iter()
+            .any(|word| reason.contains(word));
+        (gone && now - at < MOVING_HOLDS_FOR_S).then(|| to.clone())
     }
 
     pub fn person(&self, identity: &str) -> Option<&Person> {
@@ -421,14 +500,20 @@ impl Talk {
         let mut effects = Vec::new();
         match event {
             CallEvent::StateChanged { state } => {
+                if state == CallState::Connected && self.state != CallState::Connected {
+                    self.connected_at = now;
+                }
                 self.state = state;
                 effects.push(Effect::Standing);
             }
             CallEvent::Ended { reason } => effects.push(Effect::Ended { reason }),
             CallEvent::ParticipantJoined { participant } => {
                 let arriving = self.person(&participant.identity).is_none();
+                // Back before their leave was said: neither half is
+                // (notices.ts `onJoin`).
+                let back = self.leaving.remove(&participant.identity).is_some();
                 self.upsert(&participant);
-                if arriving && self.settled {
+                if arriving && self.settled && !back {
                     effects.push(Effect::Toast(Toast::said(t_with(
                         "{name} joined",
                         &[("name", &named(&participant.name, &participant.identity))],
@@ -442,10 +527,13 @@ impl Talk {
                     for sid in person.tracks.keys() {
                         effects.push(Effect::StopPlaying { sid: sid.clone() });
                     }
-                    effects.push(Effect::Toast(Toast::said(t_with(
-                        "{name} left",
-                        &[("name", &person.label())],
-                    ))));
+                    // Held rather than said, in case they are back at once.
+                    if self.settled {
+                        self.leaving.insert(identity.clone(), person.label());
+                        effects.push(Effect::LeaveLater {
+                            identity: identity.clone(),
+                        });
+                    }
                 }
                 self.people.retain(|person| person.id != identity);
                 self.speaking_record.hear(&[], &self.identities(), now);
@@ -565,7 +653,9 @@ impl Talk {
                 // believed (host.ts, App.tsx).
                 match identity {
                     None if topic == "moving" || topic == "placing" => {
-                        self.moving = Some((String::from_utf8_lossy(&payload).into_owned(), now));
+                        let to = String::from_utf8_lossy(&payload).trim().to_owned();
+                        self.moving = Some((to.clone(), now));
+                        effects.push(Effect::Moving { to });
                     }
                     None if topic == "host" => effects.push(Effect::Standing),
                     Some(from) => {
@@ -882,6 +972,125 @@ mod tests {
             0.0,
         );
         assert!(effects.is_empty());
+    }
+
+    #[test]
+    fn somebody_back_at_once_is_neither_said_to_leave_nor_to_join() {
+        let mut talk = talk();
+        let effects = talk.apply(
+            CallEvent::ParticipantLeft {
+                identity: "a".into(),
+            },
+            10.0,
+        );
+        assert!(effects.contains(&Effect::LeaveLater {
+            identity: "a".into()
+        }));
+        assert!(!effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::Toast(_))));
+        let effects = talk.apply(
+            CallEvent::ParticipantJoined {
+                participant: participant("a", vec![]),
+            },
+            11.0,
+        );
+        assert!(!effects
+            .iter()
+            .any(|effect| matches!(effect, Effect::Toast(_))));
+        assert_eq!(talk.leave_due("a", 15.0), LeaveDue::Nothing);
+    }
+
+    #[test]
+    fn a_leave_is_said_once_it_has_been_held() {
+        let mut talk = talk();
+        talk.apply(
+            CallEvent::ParticipantLeft {
+                identity: "a".into(),
+            },
+            10.0,
+        );
+        match talk.leave_due("a", 15.0) {
+            LeaveDue::Say(toast) => assert_eq!(toast.title, "Name a left"),
+            other => panic!("not said: {other:?}"),
+        }
+        assert_eq!(talk.leave_due("a", 16.0), LeaveDue::Nothing, "said once");
+    }
+
+    #[test]
+    fn nobody_is_said_to_leave_while_this_app_reconnects() {
+        let mut talk = talk();
+        talk.apply(
+            CallEvent::StateChanged {
+                state: CallState::Reconnecting,
+            },
+            9.0,
+        );
+        talk.apply(
+            CallEvent::ParticipantLeft {
+                identity: "a".into(),
+            },
+            10.0,
+        );
+        // Still reconnecting when the leave comes due: asked again later.
+        assert!(matches!(talk.leave_due("a", 15.0), LeaveDue::Wait(_)));
+        talk.apply(
+            CallEvent::StateChanged {
+                state: CallState::Connected,
+            },
+            16.0,
+        );
+        // Back for a second only: they may not have been told about yet.
+        assert_eq!(talk.leave_due("a", 17.0), LeaveDue::Wait(4000));
+        // They were there all along.
+        talk.apply(
+            CallEvent::ParticipantJoined {
+                participant: participant("a", vec![]),
+            },
+            17.5,
+        );
+        assert_eq!(talk.leave_due("a", 21.0), LeaveDue::Nothing);
+    }
+
+    #[test]
+    fn the_end_of_the_call_is_a_move_only_soon_after_the_server_says_so() {
+        let mut talk = talk();
+        assert_eq!(talk.moved_to("RoomDeleted", 1.0), None, "no word of a move");
+        let effects = talk.apply(
+            CallEvent::Data {
+                topic: "moving".into(),
+                identity: None,
+                payload: b"tokyo".to_vec(),
+            },
+            100.0,
+        );
+        assert_eq!(effects, vec![Effect::Moving { to: "tokyo".into() }]);
+        assert_eq!(
+            talk.moved_to("RoomDeleted", 101.0).as_deref(),
+            Some("tokyo")
+        );
+        assert_eq!(talk.moved_to("RoomClosed", 101.0).as_deref(), Some("tokyo"));
+        assert_eq!(
+            talk.moved_to("ParticipantRemoved", 101.0).as_deref(),
+            Some("tokyo")
+        );
+        assert_eq!(
+            talk.moved_to("SignalClose", 101.0),
+            None,
+            "a lost connection"
+        );
+        assert_eq!(talk.moved_to("RoomDeleted", 115.5), None, "too late");
+        // Said by a participant, it is nobody's word.
+        let mut talk = super::tests::talk();
+        talk.apply(
+            CallEvent::Data {
+                topic: "moving".into(),
+                identity: Some("a".into()),
+                payload: b"tokyo".to_vec(),
+            },
+            100.0,
+        );
+        assert_eq!(talk.moved_to("RoomDeleted", 101.0), None);
     }
 
     #[test]

@@ -568,14 +568,61 @@ impl AppModel {
         self.show(self.home());
     }
 
-    /// "Join again", after a call: the pre-join for the room just left.
+    /// "Join again", after a call that was left or whose connection was
+    /// lost: straight back into the room just left, with the devices already
+    /// chosen, as the Mac's ending does (App.tsx leaves a lost call one press
+    /// from its Join button). Once: pressed twice it ran two joins as the
+    /// same participant and the server put one of them out. A refusal is said
+    /// on the ending, which keeps the button to try again.
     pub fn join_again(&self) {
-        let room = self.room();
-        if room.is_empty() {
+        if self.room().is_empty() {
             self.back_to_lobby();
-        } else {
+            return;
+        }
+        if self.joining() || self.busy() {
+            return;
+        }
+        self.clear_problem();
+        self.join();
+    }
+
+    /// The room could not open the call the deployment granted (the core's
+    /// `join_call` failed): back to the pre-join for the same room, with why
+    /// and its Join button, as the Mac's join does. A call that never began
+    /// did not end, and the ending's "Connection lost" said it had. The
+    /// measurement goes with it, as after a lost call (App.tsx), so that the
+    /// next press is not sent to the same machine.
+    pub fn call_not_joined(&self) {
+        let room = self.room();
+        {
+            let mut state = self.inner.state.borrow_mut();
+            state.call = None;
+            state.joining = false;
+        }
+        self.forget_relay_measurement();
+        self.tell(t_with("Could not join {room}.", &[("room", &room)]));
+        self.changed(CHANGED);
+        self.show(Screen::Prejoin);
+    }
+
+    /// The server moved the meeting to another relay (it said `moving` or
+    /// `placing`, then closed the call): joins it again at once as the same
+    /// person, with the same passphrase, word and invitation, asking for no
+    /// relay on this join alone so that the server puts it where the meeting
+    /// now is; a relay somebody chose stays chosen (App.tsx ~620 and ~676,
+    /// the Mac's AppModel `rejoin`). True when the meeting was granted, and
+    /// the room then opens it; otherwise the join screen, with the reason the
+    /// join gave, rather than a call's screen with no call on it.
+    pub async fn rejoin_moved(&self) -> bool {
+        self.inner.state.borrow_mut().call = None;
+        self.join_now(Some(String::new())).await;
+        if self.call_entry().is_some() {
+            return true;
+        }
+        if self.screen() == Screen::Call {
             self.show(Screen::Prejoin);
         }
+        false
     }
 
     // ---- a link ------------------------------------------------------------

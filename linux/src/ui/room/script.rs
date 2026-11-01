@@ -14,13 +14,25 @@
 //! to have joined again, as the core says it of everybody when its own
 //! connection is made again; `network=<offline|online>`, the path the system
 //! would report (`Call::path_seen`, nothing on it, or the path standing
-//! now); and `woke`, the machine back from sleep (`Call::woke`); and two that
-//! only look:
+//! now); and `woke`, the machine back from sleep (`Call::woke`); a few that
+//! reach what a person would reach with the pointer or the keyboard:
+//! `hear=<voice|screen|music>:<0-100|off|on>` (the first person's sound),
+//! `menu=<me|first|first-screen|none>` (a picture's menu, opened at its
+//! middle), `key=<microphone|camera|leave>` (the window's actions the
+//! keys are bound to), `end=<ask|cancel>` (the host's question),
+//! `relays=<name,name,...>` (relays to move the meeting to, as the
+//! deployment would list them), `move=<relay>` and `place=<relay>` (the
+//! server's word that the meeting, or this participant, is moving, and the
+//! call closing under it 400 ms later, through `follow` as the core says
+//! both), and `again` (the ending's "Join again"); and two that only look:
 //! `shot=<name>`, GTK's own picture of the window and its widget tree beside
 //! the run's main snapshot, and `report`, every tile and what it shows,
 //! written to the log. A headless run (linux/build/run-headless.sh) keeps
 //! the app until its main snapshot, so a script ends before
 //! TOMOSHIBI_DEBUG_SNAPSHOT_AFTER_MS.
+//!
+//! The script runs once a run: a call joined again (a move, "Join again")
+//! does not play it a second time.
 //!
 //! Debug builds only, like every switch (app::Launch).
 
@@ -35,6 +47,12 @@ pub fn run(model: &AppModel) {
     let Ok(script) = std::env::var("TOMOSHIBI_DEBUG_ROOM") else {
         return;
     };
+    thread_local! {
+        static RAN: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    }
+    if RAN.with(|ran| ran.replace(true)) {
+        return;
+    }
     for step in script
         .split(';')
         .map(str::trim)
@@ -127,6 +145,7 @@ fn act(model: &AppModel, action: &str) {
                 super::set_hearing(
                     model,
                     &first,
+                    super::Sound::Voice,
                     Hearing {
                         level: level / 100.0,
                         blocked: false,
@@ -168,6 +187,122 @@ fn act(model: &AppModel, action: &str) {
                 call.woke();
             }
         }
+        "hear" => {
+            let (which, level) = value.split_once(':').unwrap_or((value, ""));
+            let sound = match which {
+                "screen" => super::Sound::Screen,
+                "music" => super::Sound::Music,
+                _ => super::Sound::Voice,
+            };
+            let first = room
+                .talk
+                .borrow()
+                .as_ref()
+                .and_then(|talk| talk.people.first().map(|person| person.id.clone()));
+            if let Some(first) = first {
+                let now = room.view.borrow().hearing_of(&first, sound);
+                let hearing = match level {
+                    "off" => Hearing {
+                        blocked: true,
+                        ..now
+                    },
+                    "on" => Hearing {
+                        blocked: false,
+                        ..now
+                    },
+                    level => Hearing {
+                        level: level.parse::<f32>().unwrap_or(100.0) / 100.0,
+                        ..now
+                    },
+                };
+                super::set_hearing(model, &first, sound, hearing);
+            }
+        }
+        "menu" => {
+            let first = room
+                .talk
+                .borrow()
+                .as_ref()
+                .and_then(|talk| talk.people.first().map(|person| person.id.clone()));
+            let id = match value {
+                "me" => Some(super::talk::ME.to_owned()),
+                "first" => first.map(|first| format!("{first}/camera")),
+                "first-screen" => first.map(|first| format!("{first}/screen")),
+                _ => None,
+            };
+            super::picture_menu::open_for_test(id);
+        }
+        "key" => {
+            let name = match value {
+                "microphone" => "win.toggle-microphone",
+                "camera" => "win.toggle-camera",
+                _ => "win.leave-call",
+            };
+            let window = gtk::Window::toplevels()
+                .iter::<glib::Object>()
+                .flatten()
+                .find_map(|window| window.downcast::<adw::ApplicationWindow>().ok());
+            if let Some(window) = window {
+                if let Err(fault) = WidgetExt::activate_action(&window, name, None) {
+                    log(&format!("room script: {name} did not run: {fault}"));
+                }
+            }
+        }
+        "end" => super::ask_to_end(model, value != "cancel"),
+        "relays" => {
+            let relays = value
+                .split(',')
+                .filter(|name| !name.is_empty())
+                .map(|name| tomoshibi_protocol::relays::Relay {
+                    name: name.to_owned(),
+                    url: None,
+                    region: None,
+                    label: None,
+                    lat: None,
+                    lon: None,
+                    probe: None,
+                    maintenance: false,
+                    fallback: false,
+                    admin_only: false,
+                })
+                .collect();
+            room.host.borrow_mut().relays = Some(relays);
+            super::choose_relay(model, true);
+        }
+        "move" | "place" => {
+            let Some(call) = super::call_of(model) else {
+                return;
+            };
+            super::follow(
+                model,
+                &call,
+                tomoshibi_core::call::CallEvent::Data {
+                    topic: if verb == "move" { "moving" } else { "placing" }.to_owned(),
+                    identity: None,
+                    payload: value.as_bytes().to_vec(),
+                },
+            );
+            let (weak, reason) = (
+                model.downgrade(),
+                if verb == "move" {
+                    "RoomDeleted"
+                } else {
+                    "ParticipantRemoved"
+                },
+            );
+            glib::timeout_add_local_once(Duration::from_millis(400), move || {
+                if let Some(model) = weak.upgrade() {
+                    super::follow(
+                        &model,
+                        &call,
+                        tomoshibi_core::call::CallEvent::Ended {
+                            reason: reason.to_owned(),
+                        },
+                    );
+                }
+            });
+        }
+        "again" => model.join_again(),
         "report" => report(model),
         "leave" => {
             let weak = model.downgrade();
@@ -229,6 +364,18 @@ fn report(model: &AppModel) {
             log(&format!("room report: {line}"));
         }
     }
+    let toasts: Vec<String> = room
+        .view
+        .borrow()
+        .toasts
+        .iter()
+        .map(|(_, toast)| toast.title.clone())
+        .collect();
+    log(&format!(
+        "room report: screen {}, notices {toasts:?}, moving {:?}",
+        model.screen().name(),
+        room.moving.borrow().as_ref().map(|(to, _)| to.clone())
+    ));
     let talk = room.talk.borrow();
     if let Some(talk) = talk.as_ref() {
         log(&format!(

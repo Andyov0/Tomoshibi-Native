@@ -36,7 +36,7 @@ use super::{
     Panel, Pop, RoomState, CHANGED,
 };
 use crate::{
-    app::{AppModel, Ending, Screen},
+    app::{AppModel, Screen},
     i18n::{self, t, t_with},
     media::Media,
     theme,
@@ -246,6 +246,8 @@ impl Page {
         let stage = Stage::new();
         stage.set_widget_name("room.stage");
         root.set_child(Some(&stage));
+        super::veil::attach(&root, &model);
+        super::picture_menu::attach(&root, &stage, &model);
 
         // The window's own buttons, and where it is dragged from, over the
         // pictures: the call reaches the top of the window as the Mac's
@@ -780,105 +782,9 @@ impl Page {
                 )
             }
             _ => {
-                // The signal's figures (Signal.tsx), in a grid of label and
-                // value, filled in from the latest reading.
-                let grid = gtk::Grid::builder()
-                    .row_spacing(6)
-                    .column_spacing(16)
-                    .margin_start(10)
-                    .margin_end(10)
-                    .margin_top(8)
-                    .margin_bottom(8)
-                    .build();
-                grid.add_css_class("tmsb-signal-figures");
-                card.append(&grid);
-                card.set_width_request(260);
-                let grid = grid.downgrade();
-                (
-                    card,
-                    Box::new(move |model: &AppModel| {
-                        let Some(grid) = grid.upgrade() else { return };
-                        while let Some(child) = grid.first_child() {
-                            grid.remove(&child);
-                        }
-                        let room = model.kept::<RoomState>();
-                        let talk = room.talk.borrow();
-                        let reading = talk.as_ref().and_then(|talk| talk.connection.clone());
-                        let mut rows: Vec<(String, String, bool)> = Vec::new();
-                        let grade = reading.as_ref().map(|reading| reading.grade);
-                        rows.push((
-                            match grade {
-                                Some(ConnectionGrade::Lost) => t("Connection lost"),
-                                Some(ConnectionGrade::Poor) => t("Poor connection"),
-                                Some(ConnectionGrade::Fair) => t("Fair connection"),
-                                _ => t("Good connection"),
-                            },
-                            String::new(),
-                            false,
-                        ));
-                        match reading.as_ref().filter(|reading| reading.measured) {
-                            None => rows.push((t("Measuring…"), String::new(), false)),
-                            Some(reading) => {
-                                if let Some(address) = reading.own_address.as_ref() {
-                                    rows.push((t("Your address"), address.clone(), false));
-                                }
-                                let ms = |value: Option<f64>| {
-                                    value
-                                        .map(|v| format!("{} ms", v.round() as i64))
-                                        .unwrap_or_else(|| "—".into())
-                                };
-                                let rate = |value: Option<f64>| {
-                                    value
-                                        .map(|kbps| {
-                                            if kbps >= 1000.0 {
-                                                format!("{:.1} Mbps", kbps / 1000.0)
-                                            } else {
-                                                format!("{} kbps", kbps.round() as i64)
-                                            }
-                                        })
-                                        .unwrap_or_else(|| "—".into())
-                                };
-                                rows.push((t("Round trip"), ms(reading.rtt_ms), false));
-                                rows.push((
-                                    t("Lost"),
-                                    reading
-                                        .loss_percent
-                                        .map(|loss| format!("{loss:.1}%"))
-                                        .unwrap_or_else(|| "—".into()),
-                                    reading.loss_percent.unwrap_or(0.0) > 2.0,
-                                ));
-                                rows.push((t("Jitter"), ms(reading.jitter_ms), false));
-                                rows.push((t("Sending"), rate(reading.up_kbps), false));
-                                rows.push((t("Receiving"), rate(reading.down_kbps), false));
-                            }
-                        }
-                        for (index, (label, value, warn)) in rows.into_iter().enumerate() {
-                            let left = gtk::Label::builder().label(&label).xalign(0.0).build();
-                            if index > 0 {
-                                left.add_css_class("tmsb-muted");
-                            }
-                            grid.attach(
-                                &left,
-                                0,
-                                index as i32,
-                                if value.is_empty() { 2 } else { 1 },
-                                1,
-                            );
-                            if !value.is_empty() {
-                                let right = gtk::Label::builder()
-                                    .label(&value)
-                                    .xalign(1.0)
-                                    .hexpand(true)
-                                    .build();
-                                right.add_css_class("figure");
-                                if warn {
-                                    right.add_css_class("tmsb-warn");
-                                }
-                                grid.attach(&right, 1, index as i32, 1, 1);
-                            }
-                        }
-                    }),
-                )
+                // The signal's figures (signal.rs).
+                let refresh = super::signal::figures(model, &card);
+                (card, refresh)
             }
         }
     }
@@ -2080,79 +1986,4 @@ fn toast_widget(model: &AppModel, id: u64, toast: &Toast) -> gtk::Widget {
         card.append(&close);
     }
     card.upcast()
-}
-
-/// The sentence for how the call ended, and the way back (the Mac's ended
-/// screen): drawn dark, as the call was.
-pub fn ended(context: &Context) -> gtk::Widget {
-    let page = gtk::Box::new(gtk::Orientation::Vertical, 0);
-    page.add_css_class("tmsb-call-ground");
-    page.add_css_class("tmsb-room");
-    page.append(&kit::bar());
-    let column = gtk::Box::builder()
-        .orientation(gtk::Orientation::Vertical)
-        .spacing(14)
-        .valign(gtk::Align::Center)
-        .halign(gtk::Align::Center)
-        .vexpand(true)
-        .width_request(320)
-        .build();
-    let sentence = gtk::Label::builder()
-        .wrap(true)
-        .justify(gtk::Justification::Center)
-        .build();
-    sentence.add_css_class("tmsb-ended-title");
-    sentence.set_widget_name("ended.sentence");
-    let detail = kit::muted("");
-    let back = kit::primary_button("");
-    back.set_halign(gtk::Align::Center);
-    back.set_width_request(220);
-    back.set_widget_name("ended.back");
-    column.append(&sentence);
-    column.append(&detail);
-    column.append(&back);
-    page.append(&kit::Arrival::new(&column).rises(0));
-
-    let model = context.model.downgrade();
-    back.connect_clicked(move |_| {
-        if let Some(model) = model.upgrade() {
-            model.show(Screen::Lobby);
-        }
-    });
-    // Worded here and again on a change of language: the ended screen is a
-    // call screen, which the window does not build again (ui/window.rs).
-    let word = {
-        let (sentence, detail, back, model) = (
-            sentence.downgrade(),
-            detail.downgrade(),
-            back.downgrade(),
-            context.model.downgrade(),
-        );
-        move || {
-            let (Some(sentence), Some(detail), Some(back), Some(model)) = (
-                sentence.upgrade(),
-                detail.upgrade(),
-                back.upgrade(),
-                model.upgrade(),
-            ) else {
-                return;
-            };
-            let (said, more) = match model.ending() {
-                Some(Ending::Closed) => (t("The host closed this room."), String::new()),
-                Some(Ending::Removed) => (t("You were removed from this room."), String::new()),
-                Some(Ending::Lost(_)) => (
-                    t("Connection lost"),
-                    t("The connection to this room was lost."),
-                ),
-                Some(Ending::Left) | None => (t("You left the call."), String::new()),
-            };
-            sentence.set_label(&said);
-            detail.set_label(&more);
-            detail.set_visible(!more.is_empty());
-            back.set_label(&t("Back to meetings"));
-        }
-    };
-    word();
-    i18n::on_change(move |_| word());
-    page.upcast()
 }
