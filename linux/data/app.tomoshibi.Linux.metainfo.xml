@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- What software centres and AppImage catalogues say of the app.
+     linux/build/appimage.sh writes the release in at packaging time, from
+     the version the image is built from, so that the two never disagree. -->
+<component type="desktop-application">
+  <id>app.tomoshibi.Linux</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+  <name>Tomoshibi</name>
+  <summary>Join and hold video meetings</summary>
+  <description>
+    <p>
+      Tomoshibi is the desktop app for meetings on a Tomoshibi server: video,
+      sound, sharing a screen, messages, watching together and music, with the
+      same rooms, links and people as the server's web client.
+    </p>
+    <p>
+      Meeting links that start with tomoshibi:// open in the app.
+    </p>
+  </description>
+  <launchable type="desktop-id">app.tomoshibi.Linux.desktop</launchable>
+  <!-- The server the app is for, which the repository's own guide names;
+       its web client is the reference for everything the app does. -->
+  <url type="homepage">https://github.com/Andyov0/Tomoshibi-Server</url>
+  <developer id="app.tomoshibi">
+    <name>Tomoshibi</name>
+  </developer>
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-audio">intense</content_attribute>
+  </content_rating>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+  <categories>
+    <category>Network</category>
+    <category>VideoConference</category>
+  </categories>
+  <keywords>
+    <keyword>meeting</keyword>
+    <keyword>video call</keyword>
+    <keyword>conference</keyword>
+  </keywords>
+  <releases>
+    <release version="@VERSION@" date="@DATE@"/>
+  </releases>
+</component>

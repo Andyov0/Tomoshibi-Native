@@ -252,7 +252,13 @@ fn section(platform: UpdatePlatform) -> &'static str {
         UpdatePlatform::Android => "android",
         UpdatePlatform::Windows => "windows",
         UpdatePlatform::Ios => "ios",
-        UpdatePlatform::Linux => "linux",
+        UpdatePlatform::Linux => {
+            if cfg!(target_arch = "aarch64") {
+                "linux-aarch64"
+            } else {
+                "linux-x86_64"
+            }
+        }
     }
 }
 
@@ -468,12 +474,20 @@ async fn the_check_asks_for_its_own_platform_as_the_app() {
     .await;
     let deployment = stub.deployment();
 
+    // Linux's names the architecture the tests were built for.
     for (platform, path) in [
         (UpdatePlatform::Mac, "/api/apps/latest/mac"),
         (UpdatePlatform::Android, "/api/apps/latest/android"),
         (UpdatePlatform::Windows, "/api/apps/latest/windows"),
         (UpdatePlatform::Ios, "/api/apps/latest/ios"),
-        (UpdatePlatform::Linux, "/api/apps/latest/linux"),
+        (
+            UpdatePlatform::Linux,
+            if cfg!(target_arch = "aarch64") {
+                "/api/apps/latest/linux-aarch64"
+            } else {
+                "/api/apps/latest/linux-x86_64"
+            },
+        ),
     ] {
         deployment
             .clone()

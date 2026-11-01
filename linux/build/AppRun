@@ -1,0 +1,67 @@
+#!/bin/sh
+# The AppImage's entry: the runtime mounts the image and starts this, which
+# starts the app with what it needs to find in the image and nothing more.
+#
+# The app carries its own GTK, libadwaita and glib (the system may have
+# none, or older ones than Ubuntu 24.04's). linuxdeploy has pointed every
+# library's run path into the image, so no LD_LIBRARY_PATH is set, which
+# would follow every program the app starts (a browser for a link) and load
+# this image's libraries into it. What the libraries cannot find by their run
+# path is set here:
+#
+#   XDG_DATA_DIRS            the image's share first: the icon themes GTK
+#                            draws from (Adwaita's symbolic icons, the app's
+#                            own), the GSettings schemas of this GTK, and
+#                            then the system's as before
+#   GDK_PIXBUF_MODULE_FILE   the image's loaders.cache, whose loaders are
+#                            named without a directory and linked into
+#                            usr/lib, where gmodule's run path finds them;
+#                            the system's cache names the system's loaders,
+#                            built against another gdk-pixbuf, and without
+#                            one of these the symbolic icons, which are SVG,
+#                            are drawn as missing images
+#   GIO_MODULE_DIR           an empty directory, so that this glib loads no
+#                            GIO modules: the system's (dconf, gvfs) are
+#                            built against the system's glib, often newer,
+#                            and fail to load into this one with a warning
+#                            at every start; the app uses none of them
+#
+# Nothing else. In particular not GDK_BACKEND or GTK_THEME, which
+# linuxdeploy's GTK plugin sets: the first would keep the app off Wayland
+# and the second would override libadwaita's following of day and night.
+#
+# Each variable's value from before is kept beside it, as
+# TOMOSHIBI_ORIGINAL_<name>, with the names in TOMOSHIBI_APPRUN_SET, so that
+# the app hands the system's own values to what it starts (the update's next
+# start, a browser): update/relaunch.rs reads them back.
+here=$(dirname "$(readlink -f "$0")")
+
+# Started by an app of this image that did not hand the system's values
+# back: put them back first, so that what is kept below is the system's and
+# not this image's from a mount that has gone.
+if [ -n "${TOMOSHIBI_APPRUN_SET+x}" ]; then
+  for name in $TOMOSHIBI_APPRUN_SET; do
+    if eval "[ -n \"\${TOMOSHIBI_ORIGINAL_$name+x}\" ]"; then
+      eval "$name=\$TOMOSHIBI_ORIGINAL_$name; export $name; unset TOMOSHIBI_ORIGINAL_$name"
+    else
+      unset "$name"
+    fi
+  done
+  unset TOMOSHIBI_APPRUN_SET
+fi
+
+TOMOSHIBI_APPRUN_SET=
+set_for_app() {
+  if eval "[ -n \"\${$1+x}\" ]"; then
+    eval "TOMOSHIBI_ORIGINAL_$1=\$$1; export TOMOSHIBI_ORIGINAL_$1"
+  fi
+  eval "$1=\$2; export $1"
+  TOMOSHIBI_APPRUN_SET="${TOMOSHIBI_APPRUN_SET:+$TOMOSHIBI_APPRUN_SET }$1"
+}
+
+set_for_app XDG_DATA_DIRS "$here/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+set_for_app GDK_PIXBUF_MODULE_FILE "$here/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
+set_for_app GIO_MODULE_DIR "$here/usr/lib/gio/modules"
+export TOMOSHIBI_APPRUN_SET
+
+exec "$here/usr/bin/tomoshibi" "$@"
