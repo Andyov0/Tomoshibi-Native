@@ -294,7 +294,9 @@ impl Processor {
         if self.processing.echo_cancellation {
             self.listen(frame);
             self.reverse(delay_ms);
-            let _ = self.apm.set_stream_delay_ms((self.align.margin / 48.0) as i32);
+            let _ = self
+                .apm
+                .set_stream_delay_ms((self.align.margin / 48.0) as i32);
         }
         let _ = self.apm.process_stream(frame, RATE as i32, 1);
         self.align.captured += FRAME as u64;
@@ -1095,7 +1097,13 @@ mod tests {
         let moved_at = 1200;
         let (feeds, margin, raw, left) = run_path(
             20,
-            |block| if block < moved_at { before } else { before + 296 },
+            |block| {
+                if block < moved_at {
+                    before
+                } else {
+                    before + 296
+                }
+            },
             |block| if block == 0 { 2 } else { 1 },
         );
         let settled = feeds[moved_at - 10].expect("fed");
@@ -1130,7 +1138,8 @@ mod tests {
             move |block| {
                 if block == 0 {
                     2
-                } else if held(block) || held(block.wrapping_sub(1)) || held(block.wrapping_sub(2)) {
+                } else if held(block) || held(block.wrapping_sub(1)) || held(block.wrapping_sub(2))
+                {
                     0
                 } else if held(block.wrapping_sub(3)) {
                     4
