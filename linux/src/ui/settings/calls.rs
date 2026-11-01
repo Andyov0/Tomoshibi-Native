@@ -35,8 +35,17 @@ pub fn watching(context: &Context) -> adw::PreferencesPage {
         ))
         .build();
     // Resolutions are written the same in every language.
-    let options = [("auto", t("Automatic")), ("1080p", "1080p".to_owned()), ("720p", "720p".to_owned())];
-    let list = gtk::StringList::new(&options.iter().map(|(_, words)| words.as_str()).collect::<Vec<_>>());
+    let options = [
+        ("auto", t("Automatic")),
+        ("1080p", "1080p".to_owned()),
+        ("720p", "720p".to_owned()),
+    ];
+    let list = gtk::StringList::new(
+        &options
+            .iter()
+            .map(|(_, words)| words.as_str())
+            .collect::<Vec<_>>(),
+    );
     let combo = adw::ComboRow::builder()
         .title(t("Picture quality"))
         .model(&list)
@@ -62,7 +71,9 @@ pub fn watching(context: &Context) -> adw::PreferencesPage {
         model.announce(CHANGED);
     });
     group.add(&combo);
-    group.set_sensitive(remote::allows(model, remote::feature::WATCH_TOGETHER) && model.holds("watch"));
+    group.set_sensitive(
+        remote::allows(model, remote::feature::WATCH_TOGETHER) && model.holds("watch"),
+    );
     page.add(&group);
     page
 }
@@ -84,7 +95,11 @@ pub fn music(context: &Context) -> adw::PreferencesPage {
             String::new()
         }
     };
-    group.set_description(Some(&footer(model, best)).filter(|said| !said.is_empty()).map(String::as_str));
+    group.set_description(
+        Some(&footer(model, best))
+            .filter(|said| !said.is_empty())
+            .map(String::as_str),
+    );
     let duck = adw::SwitchRow::builder()
         .title(t("Lower the music while anybody talks"))
         .active(model.preferences().string(MUSIC_DUCK_KEY).as_deref() != Some("off"))
@@ -104,7 +119,10 @@ pub fn music(context: &Context) -> adw::PreferencesPage {
     group.add(&duck);
     if model.holds("music") {
         let list = gtk::StringList::new(&[t("Lossless").as_str(), t("Highest").as_str()]);
-        let quality = adw::ComboRow::builder().title(t("Quality")).model(&list).build();
+        let quality = adw::ComboRow::builder()
+            .title(t("Quality"))
+            .model(&list)
+            .build();
         quality.set_selected(if best { 1 } else { 0 });
         let (weak, group_weak) = (model.downgrade(), group.downgrade());
         quality.connect_selected_notify(move |row| {

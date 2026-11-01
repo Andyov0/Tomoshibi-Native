@@ -442,7 +442,11 @@ mod tests {
         // misspelt, or added here and not to native.json, would be shown in
         // English to everybody else.
         let asked = phrases_asked_for();
-        assert!(asked.len() > 100, "the scan found only {} phrases", asked.len());
+        assert!(
+            asked.len() > 100,
+            "the scan found only {} phrases",
+            asked.len()
+        );
         let missing: Vec<String> = asked
             .iter()
             .filter(|(phrase, _)| {
@@ -452,7 +456,10 @@ mod tests {
             })
             .map(|(phrase, file)| format!("{phrase:?} in {file}"))
             .collect();
-        assert!(missing.is_empty(), "phrases not in the catalogue: {missing:#?}");
+        assert!(
+            missing.is_empty(),
+            "phrases not in the catalogue: {missing:#?}"
+        );
     }
 
     #[test]

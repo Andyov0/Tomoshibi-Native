@@ -299,9 +299,18 @@ mod tests {
         // 01:30 on 1 November happens at 05:30 UTC (at -4) and 06:30 UTC (at -5).
         let first = AUTUMN - 30 * 60;
         let second = AUTUMN + 30 * 60;
-        assert_eq!(instant(day(2026, 11, 1), 1, 30, &NewYork, first - 3600), first);
-        assert_eq!(instant(day(2026, 11, 1), 1, 30, &NewYork, first + 60), second);
-        assert_eq!(instant(day(2026, 11, 1), 1, 30, &NewYork, second + 60), first);
+        assert_eq!(
+            instant(day(2026, 11, 1), 1, 30, &NewYork, first - 3600),
+            first
+        );
+        assert_eq!(
+            instant(day(2026, 11, 1), 1, 30, &NewYork, first + 60),
+            second
+        );
+        assert_eq!(
+            instant(day(2026, 11, 1), 1, 30, &NewYork, second + 60),
+            first
+        );
     }
 
     #[test]

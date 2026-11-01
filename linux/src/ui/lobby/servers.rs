@@ -59,7 +59,11 @@ pub fn section(context: &Context) -> gtk::Widget {
             };
             let measuring = model.lobby().measuring.get();
             again.set_sensitive(!measuring);
-            again.set_label(&if measuring { t("Measuring…") } else { t("Measure again") });
+            again.set_label(&if measuring {
+                t("Measuring…")
+            } else {
+                t("Measure again")
+            });
             while let Some(child) = list.first_child() {
                 list.remove(&child);
             }
@@ -69,7 +73,9 @@ pub fn section(context: &Context) -> gtk::Widget {
                 None,
                 &t("Automatic"),
                 &match &fastest {
-                    Some((name, millis)) => format!("{} · {}", model.relay_label(name), ms(*millis)),
+                    Some((name, millis)) => {
+                        format!("{} · {}", model.relay_label(name), ms(*millis))
+                    }
                     None => t("Whichever answers fastest"),
                 },
                 model.relay_choice().is_none(),
@@ -87,7 +93,10 @@ pub fn section(context: &Context) -> gtk::Widget {
                     let detail = if relay.maintenance {
                         t("Not taking calls")
                     } else {
-                        match measured.as_ref().map(|measured| measured.get(&relay.name).copied().flatten()) {
+                        match measured
+                            .as_ref()
+                            .map(|measured| measured.get(&relay.name).copied().flatten())
+                        {
                             Some(Some(millis)) => ms(millis),
                             Some(None) => t("Timeout"),
                             None if measuring => t("Measuring…"),
@@ -157,7 +166,10 @@ fn row(
     check.add_css_class("tmsb-tally-text");
     check.set_opacity(if chosen { 1.0 } else { 0.0 });
     line.append(&check);
-    let button = gtk::Button::builder().child(&line).sensitive(usable).build();
+    let button = gtk::Button::builder()
+        .child(&line)
+        .sensitive(usable)
+        .build();
     button.add_css_class("tmsb-choice-row");
     set_class(&button, "chosen", chosen);
     let (weak, name) = (model.downgrade(), name.map(str::to_owned));

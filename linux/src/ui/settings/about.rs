@@ -112,7 +112,9 @@ fn update_row(model: &AppModel) -> adw::ActionRow {
                 tomoshibi_protocol::api::version_label(build.version.clone())
             };
             let (said, action) = match step {
-                Step::Downloading { received, total, .. } => (
+                Step::Downloading {
+                    received, total, ..
+                } => (
                     t_with(
                         "{received} of {total}",
                         &[
@@ -123,12 +125,18 @@ fn update_row(model: &AppModel) -> adw::ActionRow {
                     Some(t("Cancel")),
                 ),
                 Step::Installing { build } => (
-                    t_with("Installing Tomoshibi {version}", &[("version", &label(&build))]),
+                    t_with(
+                        "Installing Tomoshibi {version}",
+                        &[("version", &label(&build))],
+                    ),
                     None,
                 ),
                 Step::Offered { build, problem } => (
                     problem.unwrap_or_else(|| {
-                        t_with("Version {version} is available.", &[("version", &label(&build))])
+                        t_with(
+                            "Version {version} is available.",
+                            &[("version", &label(&build))],
+                        )
                     }),
                     Some(t("Update")),
                 ),

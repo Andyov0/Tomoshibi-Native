@@ -288,7 +288,16 @@ pub fn page(context: &Context) -> gtk::Widget {
     show_place(model);
 
     let fill = {
-        let (servers_row, server_slot, scheduled_badge, upcoming, upcoming_revealer, recent, recent_revealer, ctx) = (
+        let (
+            servers_row,
+            server_slot,
+            scheduled_badge,
+            upcoming,
+            upcoming_revealer,
+            recent,
+            recent_revealer,
+            ctx,
+        ) = (
             servers_row.downgrade(),
             server_slot.downgrade(),
             scheduled_badge.downgrade(),
@@ -310,7 +319,8 @@ pub fn page(context: &Context) -> gtk::Widget {
                 badge.set_label(&coming.len().to_string());
                 badge.set_visible(!coming.is_empty());
             }
-            if let (Some(list), Some(revealer)) = (upcoming.upgrade(), upcoming_revealer.upgrade()) {
+            if let (Some(list), Some(revealer)) = (upcoming.upgrade(), upcoming_revealer.upgrade())
+            {
                 list.remove_all();
                 for one in coming.iter().take(5) {
                     list.append(&meeting_row(model, one));
@@ -401,7 +411,9 @@ pub fn open_from_debug(context: &Context, anchor: &impl IsA<gtk::Widget>, signin
                 if let Some(anchor) = anchor.upgrade() {
                     let name = format!("lobby.{part}");
                     let name = name.as_str();
-                    if let Some(button) = find(&anchor, name).and_then(|w| w.downcast::<gtk::MenuButton>().ok()) {
+                    if let Some(button) =
+                        find(&anchor, name).and_then(|w| w.downcast::<gtk::MenuButton>().ok())
+                    {
                         // Without a press there is no input serial, and a
                         // compositor refuses a popup that grabs without
                         // one: a picture's menu is opened without the grab.
@@ -479,7 +491,9 @@ fn meeting_row(model: &AppModel, one: &tomoshibi_protocol::api::Arrangement) -> 
     let when = gtk::Label::new(Some(&if one.started {
         t("Under way")
     } else {
-        words::instant(&one.at).map(words::said).unwrap_or_else(|| one.at.clone())
+        words::instant(&one.at)
+            .map(words::said)
+            .unwrap_or_else(|| one.at.clone())
     }));
     when.set_xalign(0.0);
     when.set_ellipsize(gtk::pango::EllipsizeMode::End);
@@ -666,7 +680,9 @@ fn menu_item(title: &str, symbol: &str) -> gtk::Button {
 pub fn ask_to_sign_out(context: &Context) {
     let dialog = adw::AlertDialog::new(
         Some(&t("Sign out of Tomoshibi?")),
-        Some(&t("To come back, you will sign in again with your name and passphrase.")),
+        Some(&t(
+            "To come back, you will sign in again with your name and passphrase.",
+        )),
     );
     dialog.add_response("cancel", &t("Cancel"));
     dialog.add_response("sign-out", &t("Sign out"));

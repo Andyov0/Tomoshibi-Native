@@ -19,10 +19,7 @@ use crate::{
 
 /// The offer, in a revealer that opens and closes it.
 pub fn offer(model: &AppModel) -> gtk::Revealer {
-    let title = gtk::Label::builder()
-        .wrap(true)
-        .xalign(0.0)
-        .build();
+    let title = gtk::Label::builder().wrap(true).xalign(0.0).build();
     title.add_css_class("tmsb-strong");
     let detail = gtk::Label::builder().wrap(true).xalign(0.0).build();
     detail.add_css_class("tmsb-muted");
@@ -68,7 +65,15 @@ pub fn offer(model: &AppModel) -> gtk::Revealer {
             cancel.downgrade(),
         );
         move |model: &AppModel| {
-            let (Some(revealer), Some(title), Some(detail), Some(bar), Some(later), Some(update), Some(cancel)) = (
+            let (
+                Some(revealer),
+                Some(title),
+                Some(detail),
+                Some(bar),
+                Some(later),
+                Some(update),
+                Some(cancel),
+            ) = (
                 revealer.upgrade(),
                 title.upgrade(),
                 detail.upgrade(),
@@ -76,7 +81,8 @@ pub fn offer(model: &AppModel) -> gtk::Revealer {
                 later.upgrade(),
                 update.upgrade(),
                 cancel.upgrade(),
-            ) else {
+            )
+            else {
                 return;
             };
             let shown = updates::shown(model);

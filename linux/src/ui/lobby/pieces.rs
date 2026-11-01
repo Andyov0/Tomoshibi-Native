@@ -176,7 +176,11 @@ pub fn device_switches(model: &AppModel, size: i32) -> gtk::Box {
                 glyph_size,
             )));
             set_class(&microphone, "off", !on);
-            let said = if on { t("Mute microphone") } else { t("Unmute microphone") };
+            let said = if on {
+                t("Mute microphone")
+            } else {
+                t("Unmute microphone")
+            };
             microphone.set_tooltip_text(Some(&said));
             microphone.update_property(&[gtk::accessible::Property::Label(&said)]);
             let on = model.start_with_camera();
@@ -189,7 +193,11 @@ pub fn device_switches(model: &AppModel, size: i32) -> gtk::Box {
                 glyph_size,
             )));
             set_class(&camera, "off", !on);
-            let said = if on { t("Turn camera off") } else { t("Turn camera on") };
+            let said = if on {
+                t("Turn camera off")
+            } else {
+                t("Turn camera on")
+            };
             camera.set_tooltip_text(Some(&said));
             camera.update_property(&[gtk::accessible::Property::Label(&said)]);
         }
@@ -256,13 +264,12 @@ pub fn initial_colour(name: &str) -> usize {
 /// `child` in a revealer that fades it in and out over the settling time,
 /// which GTK skips when animations are off.
 pub fn fading(child: &impl IsA<gtk::Widget>, shown: bool) -> gtk::Revealer {
-    let revealer = gtk::Revealer::builder()
+    gtk::Revealer::builder()
         .transition_type(gtk::RevealerTransitionType::Crossfade)
         .transition_duration(motion::SETTLE_MS)
         .reveal_child(shown)
         .child(child)
-        .build();
-    revealer
+        .build()
 }
 
 /// `child` in a revealer that opens downward and fades, for something that
@@ -297,7 +304,11 @@ pub fn heading(text: &str, mono: bool) -> gtk::Label {
         .lines(2)
         .ellipsize(gtk::pango::EllipsizeMode::End)
         .build();
-    label.add_css_class(if mono { "tmsb-room-heading" } else { "tmsb-heading" });
+    label.add_css_class(if mono {
+        "tmsb-room-heading"
+    } else {
+        "tmsb-heading"
+    });
     label
 }
 
@@ -360,9 +371,12 @@ pub fn with_toast(model: &AppModel, content: &impl IsA<gtk::Widget>) -> gtk::Ove
             close.downgrade(),
         );
         move |model: &AppModel| {
-            let (Some(revealer), Some(words), Some(symbol), Some(close)) =
-                (revealer.upgrade(), words.upgrade(), symbol.upgrade(), close.upgrade())
-            else {
+            let (Some(revealer), Some(words), Some(symbol), Some(close)) = (
+                revealer.upgrade(),
+                words.upgrade(),
+                symbol.upgrade(),
+                close.upgrade(),
+            ) else {
                 return;
             };
             match model.problem() {
@@ -432,9 +446,12 @@ pub fn notice_card(model: &AppModel) -> gtk::Revealer {
             shown_id.clone(),
         );
         move |model: &AppModel| {
-            let (Some(revealer), Some(words), Some(symbol), Some(card)) =
-                (revealer.upgrade(), words.upgrade(), symbol.upgrade(), card.upgrade())
-            else {
+            let (Some(revealer), Some(words), Some(symbol), Some(card)) = (
+                revealer.upgrade(),
+                words.upgrade(),
+                symbol.upgrade(),
+                card.upgrade(),
+            ) else {
                 return;
             };
             match remote::notice(model) {
@@ -496,7 +513,10 @@ pub fn menu_row(title: &str, detail: Option<&str>, checked: bool) -> gtk::Button
 pub fn menu_popover(width: i32) -> (gtk::Popover, gtk::Box) {
     let column = gtk::Box::new(gtk::Orientation::Vertical, 2);
     column.set_width_request(width);
-    let popover = gtk::Popover::builder().child(&column).has_arrow(false).build();
+    let popover = gtk::Popover::builder()
+        .child(&column)
+        .has_arrow(false)
+        .build();
     popover.add_css_class("tmsb-menu");
     (popover, column)
 }
@@ -522,7 +542,11 @@ pub fn language_button(model: &AppModel) -> gtk::MenuButton {
     button.update_property(&[gtk::accessible::Property::Label(&t("Language"))]);
     let (popover, column) = menu_popover(230);
     let system = Language::detect(i18n::system_languages().iter().map(String::as_str));
-    let follow = menu_row(&t("Same as the system"), Some(system.display_name()), !i18n::chosen());
+    let follow = menu_row(
+        &t("Same as the system"),
+        Some(system.display_name()),
+        !i18n::chosen(),
+    );
     column.append(&follow);
     column.append(&menu_rule());
     let weak = model.downgrade();
@@ -637,7 +661,8 @@ pub fn server_menu(model: &AppModel) -> gtk::MenuButton {
                         model.relay_choice().as_deref() == Some(&relay.name),
                     );
                     row.set_sensitive(!relay.maintenance);
-                    let (weak, pop, name) = (model.downgrade(), popover.downgrade(), relay.name.clone());
+                    let (weak, pop, name) =
+                        (model.downgrade(), popover.downgrade(), relay.name.clone());
                     row.connect_clicked(move |_| {
                         if let Some(model) = weak.upgrade() {
                             model.set_relay_choice(Some(name.clone()));
@@ -678,7 +703,10 @@ pub fn seal_control(model: &AppModel, on: bool) -> (gtk::Box, Rc<std::cell::Cell
     let title = gtk::Label::new(None);
     title.set_xalign(0.0);
     title.set_hexpand(true);
-    let switch = gtk::Switch::builder().active(on).valign(gtk::Align::Center).build();
+    let switch = gtk::Switch::builder()
+        .active(on)
+        .valign(gtk::Align::Center)
+        .build();
     switch.update_property(&[gtk::accessible::Property::Label(&t("Seal this call"))]);
     switch.set_widget_name("lobby.seal");
     let head = gtk::Box::new(gtk::Orientation::Horizontal, 10);
@@ -720,9 +748,12 @@ pub fn seal_control(model: &AppModel, on: bool) -> (gtk::Box, Rc<std::cell::Cell
             word.downgrade(),
         );
         move || {
-            let (Some(symbol_box), Some(title), Some(switch), Some(word)) =
-                (symbol_box.upgrade(), title.upgrade(), switch.upgrade(), word.upgrade())
-            else {
+            let (Some(symbol_box), Some(title), Some(switch), Some(word)) = (
+                symbol_box.upgrade(),
+                title.upgrade(),
+                switch.upgrade(),
+                word.upgrade(),
+            ) else {
                 return;
             };
             let sealed = switch.is_active() && !word.text().is_empty();
@@ -733,7 +764,11 @@ pub fn seal_control(model: &AppModel, on: bool) -> (gtk::Box, Rc<std::cell::Cell
             set_class(&symbol, "tmsb-tally-text", sealed);
             set_class(&symbol, "tmsb-muted", !sealed);
             symbol_box.append(&symbol);
-            title.set_label(&if sealed { t("This call is sealed") } else { t("Seal this call") });
+            title.set_label(&if sealed {
+                t("This call is sealed")
+            } else {
+                t("Seal this call")
+            });
             set_class(&title, "tmsb-tally-text", sealed);
             set_class(&title, "tmsb-strong", sealed);
         }
@@ -788,7 +823,11 @@ pub fn copy(text: &str) {
 /// A round button that copies a link, and says so for a moment.
 pub fn copy_button(link: &str, size: i32) -> gtk::Button {
     let glyph_size = (size as f32 * 0.42) as i32;
-    let button = round_button(&icon("edit-copy-symbolic", glyph_size), size, &t("Copy link"));
+    let button = round_button(
+        &icon("edit-copy-symbolic", glyph_size),
+        size,
+        &t("Copy link"),
+    );
     let link = link.to_owned();
     button.connect_clicked(move |button| {
         copy(&link);

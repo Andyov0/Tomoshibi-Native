@@ -23,7 +23,9 @@ pub fn page(context: &Context) -> adw::PreferencesPage {
         &t("What starts on when you join, and which devices."),
     );
 
-    let joining = adw::PreferencesGroup::builder().title(t("When you join")).build();
+    let joining = adw::PreferencesGroup::builder()
+        .title(t("When you join"))
+        .build();
     let microphone = adw::SwitchRow::builder()
         .title(t("Start with the microphone on"))
         .active(model.start_with_microphone())
@@ -47,7 +49,9 @@ pub fn page(context: &Context) -> adw::PreferencesPage {
     });
     let original = adw::SwitchRow::builder()
         .title(t("Original sound"))
-        .subtitle(t("No noise suppression or automatic volume. For headphones and music."))
+        .subtitle(t(
+            "No noise suppression or automatic volume. For headphones and music.",
+        ))
         .active(model.original_sound())
         .build();
     let weak = model.downgrade();
@@ -62,7 +66,12 @@ pub fn page(context: &Context) -> adw::PreferencesPage {
     page.add(&joining);
 
     let devices = adw::PreferencesGroup::builder().title(t("Devices")).build();
-    devices.add(&device_row(context, DeviceSlot::Camera, DeviceKind::Camera, &t("Camera")));
+    devices.add(&device_row(
+        context,
+        DeviceSlot::Camera,
+        DeviceKind::Camera,
+        &t("Camera"),
+    ));
     if remote::allows(model, remote::feature::BACKGROUND_BLUR) {
         let blur = adw::SwitchRow::builder()
             .title(t("Blur my background"))
@@ -82,7 +91,12 @@ pub fn page(context: &Context) -> adw::PreferencesPage {
         DeviceKind::Microphone,
         &t("Microphone"),
     ));
-    devices.add(&device_row(context, DeviceSlot::Speakers, DeviceKind::Speaker, &t("Speakers")));
+    devices.add(&device_row(
+        context,
+        DeviceSlot::Speakers,
+        DeviceKind::Speaker,
+        &t("Speakers"),
+    ));
     let forget = gtk::Button::with_label(&t("Forget"));
     forget.add_css_class("flat");
     let forget_row = adw::ActionRow::builder()
@@ -91,7 +105,11 @@ pub fn page(context: &Context) -> adw::PreferencesPage {
     forget_row.add_css_class("property");
     forget.set_valign(gtk::Align::Center);
     forget_row.add_suffix(&forget);
-    let any_chosen = |model: &AppModel| DeviceSlot::ALL.iter().any(|slot| model.device_choice(*slot).is_some());
+    let any_chosen = |model: &AppModel| {
+        DeviceSlot::ALL
+            .iter()
+            .any(|slot| model.device_choice(*slot).is_some())
+    };
     forget_row.set_visible(any_chosen(model));
     let weak = model.downgrade();
     forget.connect_clicked(move |_| {

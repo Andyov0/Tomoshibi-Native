@@ -234,7 +234,11 @@ pub fn prejoin(context: &Context) -> gtk::Widget {
         // Somebody on an invitation has a name to choose and nothing else
         // to answer: the link is what lets them in, and a passphrase field
         // beside it reads as something they forgot.
-        identity.append(&identity_box(model, model.arrived_invited(), join_now.clone()));
+        identity.append(&identity_box(
+            model,
+            model.arrived_invited(),
+            join_now.clone(),
+        ));
         let line = pieces::note(&model.identity_line());
         identity.append(&line);
         if let Some(window) = model.link_window() {
@@ -276,7 +280,8 @@ pub fn prejoin(context: &Context) -> gtk::Widget {
         }
     });
     let update = {
-        let (join, knock, knock_slot) = (join.downgrade(), knock.downgrade(), knock_slot.downgrade());
+        let (join, knock, knock_slot) =
+            (join.downgrade(), knock.downgrade(), knock_slot.downgrade());
         move |model: &AppModel| {
             let (Some(join), Some(knock), Some(knock_slot)) =
                 (join.upgrade(), knock.upgrade(), knock_slot.upgrade())
@@ -292,7 +297,9 @@ pub fn prejoin(context: &Context) -> gtk::Widget {
     update(model);
     let page = card_screen(context, 560, &content);
     model.subscribe_while(&page, move |model, change| {
-        if matches!(change, Change::Busy | Change::Problem | Change::Account) || change == app::CHANGED {
+        if matches!(change, Change::Busy | Change::Problem | Change::Account)
+            || change == app::CHANGED
+        {
             update(model);
         }
     });
@@ -388,7 +395,9 @@ pub fn waiting(context: &Context) -> gtk::Widget {
             let waiting = model.waiting();
             match waiting.gone {
                 Some(Gone::Cancelled) => {
-                    state.append(&pieces::note(&t("That invitation is no longer good. Ask for another.")));
+                    state.append(&pieces::note(&t(
+                        "That invitation is no longer good. Ask for another.",
+                    )));
                     return;
                 }
                 Some(Gone::Ended) => {
@@ -439,10 +448,15 @@ pub fn waiting(context: &Context) -> gtk::Widget {
                     }));
                 }
                 None if waiting.unreachable => {
-                    state.append(&pieces::note(&t("Could not reach the meeting. Trying again.")));
+                    state.append(&pieces::note(&t(
+                        "Could not reach the meeting. Trying again.",
+                    )));
                 }
                 None => {
-                    let spinner = gtk::Spinner::builder().spinning(true).halign(gtk::Align::Center).build();
+                    let spinner = gtk::Spinner::builder()
+                        .spinning(true)
+                        .halign(gtk::Align::Center)
+                        .build();
                     spinner.set_size_request(16, 16);
                     state.append(&spinner);
                 }

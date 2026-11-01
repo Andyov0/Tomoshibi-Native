@@ -86,7 +86,9 @@ pub fn explain_passphrase(fault: &ProtocolError) -> String {
         Some("not_yours") => t("That is not your current passphrase."),
         Some("passphrase_too_short") => t("At least eight characters."),
         Some("passphrase_unchanged") => t("That is the passphrase you already have."),
-        Some("passphrase_in_use") => t("Somebody else already uses that passphrase. Choose another."),
+        Some("passphrase_in_use") => {
+            t("Somebody else already uses that passphrase. Choose another.")
+        }
         _ => t("That could not be changed. Try again."),
     }
 }
@@ -294,8 +296,14 @@ mod tests {
         let wall = Wall::at(1_793_527_200 + 30 * 60, 8 * 3600);
         assert_eq!((wall.hour, wall.minute), (18, 30));
         assert_eq!(said_on(&wall, Language::En), "Nov 1, 2026, 6:30 PM GMT+8");
-        assert_eq!(said_on(&wall, Language::ZhHans), "2026年11月1日 18:30 GMT+8");
-        assert_eq!(said_on(&wall, Language::ZhHant), "2026年11月1日 下午6:30 GMT+8");
+        assert_eq!(
+            said_on(&wall, Language::ZhHans),
+            "2026年11月1日 18:30 GMT+8"
+        );
+        assert_eq!(
+            said_on(&wall, Language::ZhHant),
+            "2026年11月1日 下午6:30 GMT+8"
+        );
         assert_eq!(said_on(&wall, Language::Ja), "2026/11/01 18:30 GMT+8");
         assert_eq!(zone(0), "UTC");
         assert_eq!(zone(-(3 * 3600 + 30 * 60)), "GMT-3:30");
@@ -334,7 +342,10 @@ mod tests {
             explain_join(&refused("not_in_scope"), "team@acme"),
             "Only members of acme can join team@acme."
         );
-        assert_eq!(explain_join(&refused("odd"), "team"), "Could not join team.");
+        assert_eq!(
+            explain_join(&refused("odd"), "team"),
+            "Could not join team."
+        );
         assert!(can_knock(
             Some("team is by invitation. Ask the organiser for a link."),
             "team"

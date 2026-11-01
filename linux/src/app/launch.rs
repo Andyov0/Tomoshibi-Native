@@ -197,7 +197,10 @@ mod tests {
 
     #[test]
     fn device_switches_are_on_or_off_and_nothing_else() {
-        let launch = launched(&[("TOMOSHIBI_MICROPHONE", "off"), ("TOMOSHIBI_CAMERA", "maybe")]);
+        let launch = launched(&[
+            ("TOMOSHIBI_MICROPHONE", "off"),
+            ("TOMOSHIBI_CAMERA", "maybe"),
+        ]);
         assert_eq!(launch.microphone, Some(false));
         assert_eq!(launch.camera, None);
     }

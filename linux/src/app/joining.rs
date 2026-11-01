@@ -9,8 +9,8 @@
 
 use tomoshibi_protocol::{
     api::{
-        host_not_coming_after_ms, knock_ask_every_ms, knock_give_up_after_ms,
-        meeting_ask_every_ms, Arrangement, DoorState, InviteInfo, Joining, Opening,
+        host_not_coming_after_ms, knock_ask_every_ms, knock_give_up_after_ms, meeting_ask_every_ms,
+        Arrangement, DoorState, InviteInfo, Joining, Opening,
     },
     identity::{looks_generated, normalise_room_name},
     relays::RelayList,
@@ -267,11 +267,18 @@ impl AppModel {
     pub fn room_link(&self) -> Option<String> {
         let room = self.room();
         let info = self.info()?;
-        if info.joined_by != Joining::Anyone || room.is_empty() || !words::scope_of(&room).is_empty() {
+        if info.joined_by != Joining::Anyone
+            || room.is_empty()
+            || !words::scope_of(&room).is_empty()
+        {
             return None;
         }
         let base = self.deployment()?.base_url();
-        let base = if base.ends_with('/') { base } else { format!("{base}/") };
+        let base = if base.ends_with('/') {
+            base
+        } else {
+            format!("{base}/")
+        };
         Some(format!("{base}#/{room}"))
     }
 
@@ -280,14 +287,21 @@ impl AppModel {
     /// does once there is.
     pub fn identity_line(&self) -> String {
         if let Some(invited) = self.invited_name() {
-            return t_with("You were invited to this room as {name}.", &[("name", &invited)]);
+            return t_with(
+                "You were invited to this room as {name}.",
+                &[("name", &invited)],
+            );
         }
         if self.arrived_invited() {
             return t("You were invited to this room. Choose a name and go in.");
         }
         if !self.passphrase().is_empty() {
             let name = self.joining_name();
-            let name = if name.is_empty() { "?".to_owned() } else { name };
+            let name = if name.is_empty() {
+                "?".to_owned()
+            } else {
+                name
+            };
             return t_with("Only you can join as {name}", &[("name", &name)]);
         }
         t("Add a passphrase to keep your name, and to run the room you open.")
@@ -305,7 +319,10 @@ impl AppModel {
                 "This link works from {from} until {until}.",
                 &[("from", &words::said(from)), ("until", &words::said(until))],
             ),
-            None => t_with("This link works until {until}.", &[("until", &words::said(until))]),
+            None => t_with(
+                "This link works until {until}.",
+                &[("until", &words::said(until))],
+            ),
         })
     }
 
@@ -783,7 +800,10 @@ impl AppModel {
                     model.set_waiting(|waiting| waiting.asking = false);
                     return;
                 }
-                if let Some(one) = said.as_ref().filter(|one| one.started && one.invite.is_some()) {
+                if let Some(one) = said
+                    .as_ref()
+                    .filter(|one| one.started && one.invite.is_some())
+                {
                     model.inner.state.borrow_mut().invite = one.invite.clone();
                     model.set_waiting(|waiting| waiting.asking = false);
                     model.join_now(None).await;
@@ -830,7 +850,11 @@ impl AppModel {
         let model = self.clone();
         glib::spawn_future_local(async move {
             let room = model.room();
-            let ticket = match deployment.clone().knock(room.clone(), model.joining_name()).await {
+            let ticket = match deployment
+                .clone()
+                .knock(room.clone(), model.joining_name())
+                .await
+            {
                 Ok(ticket) => ticket,
                 Err(fault) => {
                     log(&format!("the knock was not sent: {fault}"));

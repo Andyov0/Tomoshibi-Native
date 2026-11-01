@@ -62,7 +62,11 @@ pub fn start(model: &AppModel) {
             log(&format!(
                 "network path: online={} route={}",
                 path.online,
-                if path.route.is_empty() { "none" } else { "default" }
+                if path.route.is_empty() {
+                    "none"
+                } else {
+                    "default"
+                }
             ));
             call.path_seen(path);
         }
@@ -122,7 +126,10 @@ pub fn start(model: &AppModel) {
                 }
             },
         );
-        model.kept::<NetworkWatch>().sleep.replace(Some(subscription));
+        model
+            .kept::<NetworkWatch>()
+            .sleep
+            .replace(Some(subscription));
     });
 }
 
@@ -132,8 +139,8 @@ fn call_of(model: &AppModel) -> Option<Arc<Call>> {
 
 /// The path as the monitor and the kernel's routing table say it now.
 pub fn path_of(monitor: &gio::NetworkMonitor) -> NetworkPath {
-    let online = monitor.is_network_available()
-        && monitor.connectivity() != gio::NetworkConnectivity::Local;
+    let online =
+        monitor.is_network_available() && monitor.connectivity() != gio::NetworkConnectivity::Local;
     let route = [
         std::fs::read_to_string("/proc/net/route")
             .ok()
@@ -202,7 +209,8 @@ mod tests {
 
     #[test]
     fn the_default_route_is_the_lowest_metric_one() {
-        let table = "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n\
+        let table =
+            "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\n\
 wlan0\t00000000\t0101A8C0\t0003\t0\t0\t600\t00000000\t0\t0\t0\n\
 eth0\t00000000\t0100000A\t0003\t0\t0\t100\t00000000\t0\t0\t0\n\
 eth0\t0000000A\t00000000\t0001\t0\t0\t100\t00FFFFFF\t0\t0\t0\n";

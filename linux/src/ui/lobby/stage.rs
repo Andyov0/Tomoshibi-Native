@@ -88,8 +88,12 @@ pub fn stage(context: &Context, placement: Placement) -> Stage {
                 attached.set(Some(camera.add_preview(view.sink())));
                 return;
             }
-            let (weak, view, attached, media) =
-                (model.downgrade(), view.downgrade(), attached.clone(), media.clone());
+            let (weak, view, attached, media) = (
+                model.downgrade(),
+                view.downgrade(),
+                attached.clone(),
+                media.clone(),
+            );
             glib::spawn_future_local(async move {
                 let Some(model) = weak.upgrade() else {
                     return;
@@ -123,7 +127,9 @@ pub fn stage(context: &Context, placement: Placement) -> Stage {
                         }
                     }
                     Err(fault) => {
-                        log(&format!("the camera's preview could not be opened: {fault}"));
+                        log(&format!(
+                            "the camera's preview could not be opened: {fault}"
+                        ));
                         model.mention(t("Can't use your camera"));
                     }
                 }

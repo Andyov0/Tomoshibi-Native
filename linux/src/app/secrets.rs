@@ -273,7 +273,8 @@ mod ffi {
     pub fn lookup(key: &str) -> Result<Option<String>, String> {
         with_key(key, |schema, table, error| {
             // SAFETY: the arguments are valid for the call (with_key).
-            let found = unsafe { secret_password_lookupv_sync(schema, table, ptr::null_mut(), error) };
+            let found =
+                unsafe { secret_password_lookupv_sync(schema, table, ptr::null_mut(), error) };
             if found.is_null() {
                 return None;
             }

@@ -76,7 +76,12 @@ impl Answer {
         // built again for nothing a moment after it first showed.
         let phrases = Language::ALL
             .into_iter()
-            .map(|language| (language, remote_phrases(config.clone(), language.code().into())))
+            .map(|language| {
+                (
+                    language,
+                    remote_phrases(config.clone(), language.code().into()),
+                )
+            })
             .filter(|(_, phrases)| !phrases.is_empty())
             .collect();
         let notice = config.notice.clone().map(|notice| Notice {
@@ -224,7 +229,9 @@ pub fn ask(model: &AppModel) {
         model.kept::<RemoteState>().asking.set(false);
         match heard {
             Ok(config) => apply(&model, Answer::of(config), true),
-            Err(fault) => log(&format!("the deployment's word to the apps was not heard: {fault}")),
+            Err(fault) => log(&format!(
+                "the deployment's word to the apps was not heard: {fault}"
+            )),
         }
     });
 }
@@ -240,9 +247,17 @@ fn apply(model: &AppModel, answer: Answer, heard: bool) {
     if heard {
         log(&format!(
             "the deployment's word to the apps: revision {}, {} off, {}",
-            if answer.revision.is_empty() { "none" } else { &answer.revision },
+            if answer.revision.is_empty() {
+                "none"
+            } else {
+                &answer.revision
+            },
             answer.off.len(),
-            if answer.notice.is_some() { "a notice" } else { "no notice" },
+            if answer.notice.is_some() {
+                "a notice"
+            } else {
+                "no notice"
+            },
         ));
     }
     i18n::set_laid_over(answer.phrases.clone());
@@ -299,7 +314,10 @@ mod tests {
         answer.params.insert("update_check_hours".into(), 0.001);
         assert_eq!(answer.update_interval(), Some(Duration::from_secs(600)));
         answer.params.insert("update_check_hours".into(), 12.0);
-        assert_eq!(answer.update_interval(), Some(Duration::from_secs(12 * 3600)));
+        assert_eq!(
+            answer.update_interval(),
+            Some(Duration::from_secs(12 * 3600))
+        );
         answer.params.insert("update_check_hours".into(), -1.0);
         assert_eq!(answer.update_interval(), None);
     }
@@ -314,9 +332,16 @@ mod tests {
         assert!(!answer.allows(feature::MUSIC));
         assert!(answer.allows(feature::WATCH_TOGETHER));
         assert_eq!(answer.phrases[&Language::Ja]["Sign in"], "入る");
-        assert!(!answer.phrases.contains_key(&Language::ZhHans), "nothing laid over there");
+        assert!(
+            !answer.phrases.contains_key(&Language::ZhHans),
+            "nothing laid over there"
+        );
         let notice = answer.notice.expect("a notice");
         assert_eq!(notice.text[&Language::Ja], "九時に停止します。");
-        assert_eq!(notice.text[&Language::ZhHans], "Down at nine.", "English stands in");
+        assert_eq!(
+            notice.text[&Language::ZhHans],
+            "Down at nine.",
+            "English stands in"
+        );
     }
 }

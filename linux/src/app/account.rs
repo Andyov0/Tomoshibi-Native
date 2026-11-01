@@ -19,7 +19,9 @@ impl AppModel {
             // The core empties its own jar whether or not the deployment
             // heard, so that a session is never left authorising anything.
             if let Err(fault) = deployment.clone().sign_out().await {
-                log(&format!("the deployment did not hear the sign-out: {fault}"));
+                log(&format!(
+                    "the deployment did not hear the sign-out: {fault}"
+                ));
             }
             model
                 .secrets()
@@ -64,7 +66,11 @@ impl AppModel {
         Some(format!(
             "{}/{path}{}",
             base.trim_end_matches('/'),
-            if version > 0 { format!("?{version}") } else { String::new() }
+            if version > 0 {
+                format!("?{version}")
+            } else {
+                String::new()
+            }
         ))
     }
 
@@ -82,7 +88,9 @@ impl AppModel {
     /// Account.tsx `Picture`: the picture as a data URL, already scaled;
     /// the sentence to say where it did not take.
     pub async fn set_picture(&self, data_url: String) -> Result<(), String> {
-        let deployment = self.deployment().ok_or_else(|| t("That picture could not be used."))?;
+        let deployment = self
+            .deployment()
+            .ok_or_else(|| t("That picture could not be used."))?;
         match deployment.set_avatar(data_url).await {
             Ok(account) => {
                 self.account_changed(account, true);
@@ -96,7 +104,9 @@ impl AppModel {
     }
 
     pub async fn remove_picture(&self) -> Result<(), String> {
-        let deployment = self.deployment().ok_or_else(|| t("That picture could not be used."))?;
+        let deployment = self
+            .deployment()
+            .ok_or_else(|| t("That picture could not be used."))?;
         match deployment.remove_avatar().await {
             Ok(account) => {
                 self.account_changed(account, true);

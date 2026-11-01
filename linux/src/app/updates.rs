@@ -50,7 +50,9 @@ pub enum Step {
         total: u64,
     },
     /// Downloaded and being put in place; the app starts again after.
-    Installing { build: AppBuild },
+    Installing {
+        build: AppBuild,
+    },
 }
 
 /// What a check somebody asked for found, for the settings to say.
@@ -221,7 +223,10 @@ async fn look(model: &AppModel, asked: bool) -> Option<bool> {
     let deployment = model.deployment()?;
     match update::check(deployment).await {
         Ok(UpdateCheck::UpToDate) => {
-            if matches!(&*model.kept::<UpdateState>().step.borrow(), Step::Offered { .. }) {
+            if matches!(
+                &*model.kept::<UpdateState>().step.borrow(),
+                Step::Offered { .. }
+            ) {
                 set(model, Step::None);
             }
             Some(false)
@@ -233,10 +238,13 @@ async fn look(model: &AppModel, asked: bool) -> Option<bool> {
             );
             if !busy {
                 log(&format!("a newer build is offered: {}", build.version));
-                set(model, Step::Offered {
-                    build,
-                    problem: None,
-                });
+                set(
+                    model,
+                    Step::Offered {
+                        build,
+                        problem: None,
+                    },
+                );
             }
             Some(true)
         }
@@ -258,16 +266,22 @@ pub fn pose_offer(model: &AppModel) {
         version: "0.1.8".into(),
         size: 98_600_000,
         sha256: String::new(),
-        notes: [("en".to_owned(), "Calls start faster on a slow network.".to_owned())]
-            .into_iter()
-            .collect(),
+        notes: [(
+            "en".to_owned(),
+            "Calls start faster on a slow network.".to_owned(),
+        )]
+        .into_iter()
+        .collect(),
         file_name: String::new(),
         signature: String::new(),
     };
-    set(model, Step::Offered {
-        build,
-        problem: None,
-    });
+    set(
+        model,
+        Step::Offered {
+            build,
+            problem: None,
+        },
+    );
 }
 
 /// "Later": this version is put away until the app is next started.
@@ -312,11 +326,14 @@ pub fn accept(model: &AppModel) {
         .installer
         .replace(Some(installer.clone()));
     let total = build.size;
-    set(model, Step::Downloading {
-        build: build.clone(),
-        received: 0,
-        total,
-    });
+    set(
+        model,
+        Step::Downloading {
+            build: build.clone(),
+            received: 0,
+            total,
+        },
+    );
     let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
     let weak = model.downgrade();
     glib::spawn_future_local(async move {
@@ -358,23 +375,33 @@ pub fn accept(model: &AppModel) {
                     }
                     Err(fault) => {
                         log(&format!("the new build could not be started: {fault}"));
-                        set(&model, Step::Offered {
-                            build: self::build(&model).unwrap_or_else(|| installer.build().clone()),
-                            problem: Some(t("The update could not be installed.")),
-                        });
+                        set(
+                            &model,
+                            Step::Offered {
+                                build: self::build(&model)
+                                    .unwrap_or_else(|| installer.build().clone()),
+                                problem: Some(t("The update could not be installed.")),
+                            },
+                        );
                     }
                 }
             }
-            Err(UpdateError::Cancelled) => set(&model, Step::Offered {
-                build,
-                problem: None,
-            }),
+            Err(UpdateError::Cancelled) => set(
+                &model,
+                Step::Offered {
+                    build,
+                    problem: None,
+                },
+            ),
             Err(fault) => {
                 log(&format!("the update did not arrive: {fault}"));
-                set(&model, Step::Offered {
-                    build,
-                    problem: Some(t("The update could not be installed.")),
-                });
+                set(
+                    &model,
+                    Step::Offered {
+                        build,
+                        problem: Some(t("The update could not be installed.")),
+                    },
+                );
             }
         }
     });

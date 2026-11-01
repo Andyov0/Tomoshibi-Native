@@ -127,7 +127,8 @@ mod tests {
 
     #[test]
     fn an_invitation_is_its_origin_room_and_token() {
-        let link = OpenedLink::parse("https://Meet.Example.com/?invite=abc%2Bd#/team-sync").unwrap();
+        let link =
+            OpenedLink::parse("https://Meet.Example.com/?invite=abc%2Bd#/team-sync").unwrap();
         assert_eq!(link.origin, "https://meet.example.com");
         assert_eq!(link.room, "team-sync");
         assert_eq!(link.invite.as_deref(), Some("abc+d"));

@@ -325,7 +325,12 @@ impl AppModel {
             }),
         };
         // TOMOSHIBI_MUTE: the microphone starts off for this run.
-        if model.launch().mute.as_deref().is_some_and(|mute| mute != "speakers") {
+        if model
+            .launch()
+            .mute
+            .as_deref()
+            .is_some_and(|mute| mute != "speakers")
+        {
             model.inner.state.borrow_mut().start_microphone = false;
         }
         // The camera seen before a call is let go of once nothing before a
@@ -660,7 +665,9 @@ impl AppModel {
                     self.sign_in_now(name.clone(), passphrase.trim().to_owned())
                         .await
                 }
-                Err(fault) => log(&format!("TOMOSHIBI_SIGNIN's file could not be read: {fault}")),
+                Err(fault) => log(&format!(
+                    "TOMOSHIBI_SIGNIN's file could not be read: {fault}"
+                )),
             }
         }
         if let Some(room) = launch.autojoin.clone() {

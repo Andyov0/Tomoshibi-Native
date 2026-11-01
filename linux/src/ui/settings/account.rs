@@ -57,7 +57,9 @@ pub fn page(context: &Context) -> adw::PreferencesPage {
     name.add_css_class("tmsb-profile-name");
     names.append(&name);
     let said = gtk::Label::builder()
-        .label(t("Shown beside your name in a call. Scaled down before it is sent."))
+        .label(t(
+            "Shown beside your name in a call. Scaled down before it is sent.",
+        ))
         .wrap(true)
         .xalign(0.0)
         .build();
@@ -69,7 +71,12 @@ pub fn page(context: &Context) -> adw::PreferencesPage {
     let remove = gtk::Button::with_label(&t("Remove"));
     let sign_out = gtk::Button::with_label(&t("Sign out"));
     sign_out.add_css_class("destructive-action");
-    remove.set_sensitive(account.avatar.as_deref().is_some_and(|avatar| !avatar.is_empty()));
+    remove.set_sensitive(
+        account
+            .avatar
+            .as_deref()
+            .is_some_and(|avatar| !avatar.is_empty()),
+    );
     let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
     buttons.append(&choose);
     buttons.append(&remove);
@@ -111,7 +118,11 @@ pub fn page(context: &Context) -> adw::PreferencesPage {
         .title(t("What you can use"))
         .description(t("Set by whoever runs this deployment."))
         .build();
-    let held: Vec<&str> = PERMISSIONS.iter().copied().filter(|one| model.holds(one)).collect();
+    let held: Vec<&str> = PERMISSIONS
+        .iter()
+        .copied()
+        .filter(|one| model.holds(one))
+        .collect();
     // Emby is left off what was withheld: it is given one at a time and
     // spends the deployment's money, and a list of it to everybody without
     // it would be an advertisement for asking (Account.tsx `Abilities`).
@@ -201,8 +212,12 @@ fn passphrase_group(model: &AppModel) -> adw::PreferencesGroup {
             "Your passphrase is not stored here and cannot be sent to you. If you lose it, an administrator sets a new one.",
         ))
         .build();
-    let current = adw::PasswordEntryRow::builder().title(t("Current passphrase")).build();
-    let next = adw::PasswordEntryRow::builder().title(t("New passphrase")).build();
+    let current = adw::PasswordEntryRow::builder()
+        .title(t("Current passphrase"))
+        .build();
+    let next = adw::PasswordEntryRow::builder()
+        .title(t("New passphrase"))
+        .build();
     let change = kit::primary_button(&t("Change it"));
     change.set_height_request(36);
     change.add_css_class("tmsb-compact");
@@ -223,8 +238,11 @@ fn passphrase_group(model: &AppModel) -> adw::PreferencesGroup {
     let ready = {
         let (current, next, change) = (current.downgrade(), next.downgrade(), change.downgrade());
         move || {
-            if let (Some(current), Some(next), Some(change)) = (current.upgrade(), next.upgrade(), change.upgrade()) {
-                change.set_sensitive(!current.text().is_empty() && next.text().chars().count() >= 8);
+            if let (Some(current), Some(next), Some(change)) =
+                (current.upgrade(), next.upgrade(), change.upgrade())
+            {
+                change
+                    .set_sensitive(!current.text().is_empty() && next.text().chars().count() >= 8);
             }
         }
     };
@@ -233,8 +251,12 @@ fn passphrase_group(model: &AppModel) -> adw::PreferencesGroup {
         current.connect_changed(move |_| ready());
     }
     next.connect_changed(move |_| ready());
-    let (weak, current_weak, next_weak, said_weak) =
-        (model.downgrade(), current.downgrade(), next.downgrade(), said.downgrade());
+    let (weak, current_weak, next_weak, said_weak) = (
+        model.downgrade(),
+        current.downgrade(),
+        next.downgrade(),
+        said.downgrade(),
+    );
     change.connect_clicked(move |button| {
         let (Some(model), Some(current), Some(next)) =
             (weak.upgrade(), current_weak.upgrade(), next_weak.upgrade())
@@ -243,7 +265,12 @@ fn passphrase_group(model: &AppModel) -> adw::PreferencesGroup {
         };
         button.set_sensitive(false);
         let (current_text, next_text) = (current.text().to_string(), next.text().to_string());
-        let (said, button, current, next) = (said_weak.clone(), button.downgrade(), current.downgrade(), next.downgrade());
+        let (said, button, current, next) = (
+            said_weak.clone(),
+            button.downgrade(),
+            current.downgrade(),
+            next.downgrade(),
+        );
         glib::spawn_future_local(async move {
             let result = model.change_passphrase(current_text, next_text).await;
             if let Some(said) = said.upgrade() {
@@ -291,12 +318,19 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
         .title(t("Their name, if the link is for one person"))
         .build();
     let scope_list = gtk::StringList::new(&scopes.iter().map(String::as_str).collect::<Vec<_>>());
-    let scope = adw::ComboRow::builder().title(t("Scope")).model(&scope_list).build();
+    let scope = adw::ComboRow::builder()
+        .title(t("Scope"))
+        .model(&scope_list)
+        .build();
     let hours = ["", "1", "24", "168"];
     // The first, no end, is the empty end the description speaks of.
     let until_words = ["—".to_owned(), t("1 hour"), t("24 hours"), t("1 week")];
-    let until_list = gtk::StringList::new(&until_words.iter().map(String::as_str).collect::<Vec<_>>());
-    let until = adw::ComboRow::builder().title(t("Works until")).model(&until_list).build();
+    let until_list =
+        gtk::StringList::new(&until_words.iter().map(String::as_str).collect::<Vec<_>>());
+    let until = adw::ComboRow::builder()
+        .title(t("Works until"))
+        .model(&until_list)
+        .build();
     group.add(&room);
     group.add(&scope);
     group.add(&name);
@@ -306,7 +340,11 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
     make.add_css_class("tmsb-compact");
     let stop = gtk::Button::with_label(&t("Stop every link to this room working"));
     stop.add_css_class("flat");
-    let said = gtk::Label::builder().wrap(true).xalign(0.0).selectable(true).build();
+    let said = gtk::Label::builder()
+        .wrap(true)
+        .xalign(0.0)
+        .selectable(true)
+        .build();
     said.add_css_class("caption");
     said.set_visible(false);
     let foot = gtk::Box::new(gtk::Orientation::Horizontal, 10);
@@ -333,13 +371,21 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
         }
     };
     {
-        let (weak, target, name, until, said) =
-            (model.downgrade(), target.clone(), name.downgrade(), until.downgrade(), said.downgrade());
+        let (weak, target, name, until, said) = (
+            model.downgrade(),
+            target.clone(),
+            name.downgrade(),
+            until.downgrade(),
+            said.downgrade(),
+        );
         make.connect_clicked(move |button| {
             let (Some(model), Some(room)) = (weak.upgrade(), target()) else {
                 return;
             };
-            let who = name.upgrade().map(|name| name.text().to_string()).unwrap_or_default();
+            let who = name
+                .upgrade()
+                .map(|name| name.text().to_string())
+                .unwrap_or_default();
             let until_at = until
                 .upgrade()
                 .and_then(|until| hours.get(until.selected() as usize).copied())
@@ -360,12 +406,18 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
                     Ok(made) => {
                         pieces::copy(&made.link);
                         let mut line = match made.until.as_deref().and_then(words::instant) {
-                            Some(until) => t_with("This link works until {until}.", &[("until", &words::said(until))]),
+                            Some(until) => t_with(
+                                "This link works until {until}.",
+                                &[("until", &words::said(until))],
+                            ),
                             None => t("This link works until somebody stops it."),
                         };
                         if let Some(name) = made.name.filter(|name| !name.is_empty()) {
                             line.push(' ');
-                            line.push_str(&t_with("Whoever uses it joins as {name}.", &[("name", &name)]));
+                            line.push_str(&t_with(
+                                "Whoever uses it joins as {name}.",
+                                &[("name", &name)],
+                            ));
                         }
                         said.set_label(&format!("{line}\n{}", made.link));
                         said.remove_css_class("error");
@@ -421,25 +473,29 @@ fn choose_picture(context: &Context) {
         .build();
     let window = context.window();
     let weak = context.model.downgrade();
-    dialog.open(window.as_ref(), gtk::gio::Cancellable::NONE, move |chosen| {
-        let (Ok(file), Some(model)) = (chosen, weak.upgrade()) else {
-            return;
-        };
-        let Some(path) = file.path() else {
-            return;
-        };
-        let data_url = gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(&path, 256, 256, true)
-            .ok()
-            .and_then(|pixbuf| pixbuf.save_to_bufferv("jpeg", &[("quality", "82")]).ok())
-            .map(|bytes| format!("data:image/jpeg;base64,{}", glib::base64_encode(&bytes)));
-        let Some(data_url) = data_url else {
-            model.mention(t("That picture could not be used."));
-            return;
-        };
-        glib::spawn_future_local(async move {
-            if let Err(said) = model.set_picture(data_url).await {
-                model.mention(said);
-            }
-        });
-    });
+    dialog.open(
+        window.as_ref(),
+        gtk::gio::Cancellable::NONE,
+        move |chosen| {
+            let (Ok(file), Some(model)) = (chosen, weak.upgrade()) else {
+                return;
+            };
+            let Some(path) = file.path() else {
+                return;
+            };
+            let data_url = gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(&path, 256, 256, true)
+                .ok()
+                .and_then(|pixbuf| pixbuf.save_to_bufferv("jpeg", &[("quality", "82")]).ok())
+                .map(|bytes| format!("data:image/jpeg;base64,{}", glib::base64_encode(&bytes)));
+            let Some(data_url) = data_url else {
+                model.mention(t("That picture could not be used."));
+                return;
+            };
+            glib::spawn_future_local(async move {
+                if let Err(said) = model.set_picture(data_url).await {
+                    model.mention(said);
+                }
+            });
+        },
+    );
 }

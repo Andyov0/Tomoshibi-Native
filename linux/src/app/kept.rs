@@ -74,7 +74,11 @@ pub enum DeviceSlot {
 }
 
 impl DeviceSlot {
-    pub const ALL: [DeviceSlot; 3] = [DeviceSlot::Microphone, DeviceSlot::Camera, DeviceSlot::Speakers];
+    pub const ALL: [DeviceSlot; 3] = [
+        DeviceSlot::Microphone,
+        DeviceSlot::Camera,
+        DeviceSlot::Speakers,
+    ];
 
     pub fn key(self) -> &'static str {
         match self {
@@ -325,7 +329,10 @@ mod tests {
         DeviceMemory::remember_choice(&preferences, DeviceSlot::Camera, None);
         assert_eq!(preferences.string("meet-live.device-choice"), None);
         DeviceMemory::remember_choice(&preferences, DeviceSlot::Speakers, Some(&"x".repeat(300)));
-        assert_eq!(DeviceMemory::choice(&preferences, DeviceSlot::Speakers), None);
+        assert_eq!(
+            DeviceMemory::choice(&preferences, DeviceSlot::Speakers),
+            None
+        );
     }
 
     #[test]

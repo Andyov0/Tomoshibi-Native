@@ -166,7 +166,9 @@ fn form(context: &Context, draft: &Rc<Draft>) -> gtk::Box {
     room.set_widget_name("schedule.room");
     room.update_property(&[gtk::accessible::Property::Label(&t("Room name"))]);
     let hint = gtk::Label::builder()
-        .label(t("Name it yourself, or leave it blank for one nobody has used."))
+        .label(t(
+            "Name it yourself, or leave it blank for one nobody has used.",
+        ))
         .wrap(true)
         .xalign(0.0)
         .build();
@@ -199,11 +201,19 @@ fn form(context: &Context, draft: &Rc<Draft>) -> gtk::Box {
     clock.append(&minute);
     let time_row = labelled_row(&t("Time"), "alarm-symbolic", &clock);
 
-    let server_row = labelled_row(&t("Server"), "network-server-symbolic", &pieces::server_menu(model));
+    let server_row = labelled_row(
+        &t("Server"),
+        "network-server-symbolic",
+        &pieces::server_menu(model),
+    );
     let server_slot = pieces::unfolding(&server_row, model.offers_relay_choice());
 
     let verdict_symbol = icon("alarm-symbolic", 12);
-    let verdict = gtk::Label::builder().wrap(true).xalign(0.0).hexpand(true).build();
+    let verdict = gtk::Label::builder()
+        .wrap(true)
+        .xalign(0.0)
+        .hexpand(true)
+        .build();
     verdict.add_css_class("tmsb-small");
     let verdict_row = gtk::Box::new(gtk::Orientation::Horizontal, 7);
     verdict_row.append(&verdict_symbol);
@@ -234,9 +244,11 @@ fn form(context: &Context, draft: &Rc<Draft>) -> gtk::Box {
             arranging.clone(),
         );
         move || {
-            let (Some(verdict), Some(symbol), Some(arrange)) =
-                (verdict.upgrade(), verdict_symbol.upgrade(), arrange.upgrade())
-            else {
+            let (Some(verdict), Some(symbol), Some(arrange)) = (
+                verdict.upgrade(),
+                verdict_symbol.upgrade(),
+                arrange.upgrade(),
+            ) else {
                 return;
             };
             let now = words::now();
@@ -295,7 +307,10 @@ fn form(context: &Context, draft: &Rc<Draft>) -> gtk::Box {
         let (draft, say, hour) = (draft.clone(), say.clone(), hour.downgrade());
         minute.connect_selected_notify(move |minute| {
             let hour = hour.upgrade().map(|h| h.selected()).unwrap_or(0);
-            draft.form.borrow_mut().choose_time(hour, minute.selected() * 15);
+            draft
+                .form
+                .borrow_mut()
+                .choose_time(hour, minute.selected() * 15);
             say();
         });
     }
@@ -314,8 +329,13 @@ fn form(context: &Context, draft: &Rc<Draft>) -> gtk::Box {
         });
     }
     {
-        let (weak, draft, arranging, say, room) =
-            (model.downgrade(), draft.clone(), arranging.clone(), say.clone(), room.downgrade());
+        let (weak, draft, arranging, say, room) = (
+            model.downgrade(),
+            draft.clone(),
+            arranging.clone(),
+            say.clone(),
+            room.downgrade(),
+        );
         arrange.connect_clicked(move |_| {
             let Some(model) = weak.upgrade() else {
                 return;
@@ -357,7 +377,8 @@ fn form(context: &Context, draft: &Rc<Draft>) -> gtk::Box {
                         if let Some(link) = model.meeting_link(&made) {
                             pieces::copy(&link);
                             draft.copied.replace(Some(made.id.clone()));
-                            let (weak, draft, id) = (model.downgrade(), draft.clone(), made.id.clone());
+                            let (weak, draft, id) =
+                                (model.downgrade(), draft.clone(), made.id.clone());
                             glib::timeout_add_seconds_local_once(2, move || {
                                 if draft.copied.borrow().as_deref() == Some(id.as_str()) {
                                     draft.copied.replace(None);
@@ -407,7 +428,10 @@ fn fill_list(context: &Context, model: &AppModel, list: &gtk::Box) {
     let state = model.lobby();
     match state.status.get() {
         Status::SignedOut => {
-            list.append(&notice(&t("Your session has expired. Sign in again."), None));
+            list.append(&notice(
+                &t("Your session has expired. Sign in again."),
+                None,
+            ));
             return;
         }
         Status::Failed => {
@@ -428,7 +452,10 @@ fn fill_list(context: &Context, model: &AppModel, list: &gtk::Box) {
     let upcoming = model.upcoming();
     if upcoming.is_empty() {
         if state.status.get() == Status::Loading {
-            let spinner = gtk::Spinner::builder().spinning(true).halign(gtk::Align::Center).build();
+            let spinner = gtk::Spinner::builder()
+                .spinning(true)
+                .halign(gtk::Align::Center)
+                .build();
             spinner.set_size_request(16, 16);
             spinner.set_margin_top(24);
             list.append(&spinner);
@@ -448,7 +475,12 @@ fn fill_list(context: &Context, model: &AppModel, list: &gtk::Box) {
     }
     let copied = model.kept::<Draft>().copied.borrow().clone();
     for one in &upcoming {
-        list.append(&meeting_card(context, model, one, copied.as_deref() == Some(&one.id)));
+        list.append(&meeting_card(
+            context,
+            model,
+            one,
+            copied.as_deref() == Some(&one.id),
+        ));
     }
 }
 
@@ -458,7 +490,12 @@ fn notice(said: &str, action: Option<&gtk::Button>) -> gtk::Box {
     let symbol = icon("dialog-warning-symbolic", 16);
     symbol.add_css_class("tmsb-muted");
     card.append(&symbol);
-    let words = gtk::Label::builder().label(said).wrap(true).xalign(0.0).hexpand(true).build();
+    let words = gtk::Label::builder()
+        .label(said)
+        .wrap(true)
+        .xalign(0.0)
+        .hexpand(true)
+        .build();
     card.append(&words);
     if let Some(action) = action {
         card.append(action);
@@ -496,9 +533,20 @@ fn meeting_card(context: &Context, model: &AppModel, one: &Arrangement, copied: 
     card.append(&column);
     if let Some(link) = model.meeting_link(one) {
         let copy = pieces::round_button(
-            &icon(if copied { "object-select-symbolic" } else { "edit-copy-symbolic" }, 13),
+            &icon(
+                if copied {
+                    "object-select-symbolic"
+                } else {
+                    "edit-copy-symbolic"
+                },
+                13,
+            ),
             32,
-            &if copied { t("Link copied") } else { t("Copy link") },
+            &if copied {
+                t("Link copied")
+            } else {
+                t("Copy link")
+            },
         );
         set_class(&copy, "tmsb-tally-text", copied);
         let link_copy = link.clone();
@@ -508,7 +556,11 @@ fn meeting_card(context: &Context, model: &AppModel, one: &Arrangement, copied: 
             button.add_css_class("tmsb-tally-text");
         });
         card.append(&copy);
-        let calendar = pieces::round_button(&icon("x-office-calendar-symbolic", 13), 32, &t("Add to calendar"));
+        let calendar = pieces::round_button(
+            &icon("x-office-calendar-symbolic", 13),
+            32,
+            &t("Add to calendar"),
+        );
         let (weak, one_kept, ctx) = (model.downgrade(), one.clone(), context.clone());
         calendar.connect_clicked(move |_| {
             if let Some(model) = weak.upgrade() {
@@ -518,7 +570,8 @@ fn meeting_card(context: &Context, model: &AppModel, one: &Arrangement, copied: 
         card.append(&calendar);
     }
     if one.mine {
-        let cancel = pieces::round_button(&icon("window-close-symbolic", 12), 32, &t("Cancel meeting"));
+        let cancel =
+            pieces::round_button(&icon("window-close-symbolic", 12), 32, &t("Cancel meeting"));
         let (weak, id) = (model.downgrade(), one.id.clone());
         cancel.connect_clicked(move |button| {
             button.set_sensitive(false);
@@ -547,17 +600,21 @@ fn save_calendar(context: &Context, model: &AppModel, one: &Arrangement) {
         .build();
     let window = context.window();
     let weak = model.downgrade();
-    dialog.save(window.as_ref(), gtk::gio::Cancellable::NONE, move |chosen| {
-        let Ok(file) = chosen else {
-            return;
-        };
-        let written = file
-            .path()
-            .map(|path| std::fs::write(path, text.as_bytes()));
-        if !matches!(written, Some(Ok(()))) {
-            if let Some(model) = weak.upgrade() {
-                model.mention(t("Something went wrong. Try again."));
+    dialog.save(
+        window.as_ref(),
+        gtk::gio::Cancellable::NONE,
+        move |chosen| {
+            let Ok(file) = chosen else {
+                return;
+            };
+            let written = file
+                .path()
+                .map(|path| std::fs::write(path, text.as_bytes()));
+            if !matches!(written, Some(Ok(()))) {
+                if let Some(model) = weak.upgrade() {
+                    model.mention(t("Something went wrong. Try again."));
+                }
             }
-        }
-    });
+        },
+    );
 }

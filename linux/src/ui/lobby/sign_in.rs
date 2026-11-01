@@ -221,13 +221,11 @@ pub fn page(context: &Context) -> gtk::Widget {
     let passphrase_kept = passphrase.downgrade();
     model.subscribe_while(&page, move |model, change| match change {
         Change::Busy | Change::Info => update(model),
-        Change::Problem => {
-            // A refused passphrase is cleared, as SignIn.cs clears it, so
-            // that the next attempt is typed rather than resent.
-            if model.problem().is_some() && model.account().is_none() {
-                if let Some(passphrase) = passphrase_kept.upgrade() {
-                    passphrase.set_text("");
-                }
+        // A refused passphrase is cleared, as SignIn.cs clears it, so that
+        // the next attempt is typed rather than resent.
+        Change::Problem if model.problem().is_some() && model.account().is_none() => {
+            if let Some(passphrase) = passphrase_kept.upgrade() {
+                passphrase.set_text("");
             }
         }
         _ => {}

@@ -80,7 +80,11 @@ pub fn load_recents(preferences: &Preferences) -> Vec<Recent> {
                 return None;
             }
             let at_ms = item.get("at").and_then(Value::as_i64).unwrap_or(0);
-            Some(Recent { room, server, at_ms })
+            Some(Recent {
+                room,
+                server,
+                at_ms,
+            })
         })
         .collect()
 }
@@ -170,13 +174,13 @@ impl AppModel {
                     lobby.arrangements.replace(found);
                     lobby.status.set(Status::Ready);
                 }
-                Err(fault) => lobby.status.set(
-                    if words::code(&fault) == Some("not_signed_in") {
+                Err(fault) => lobby
+                    .status
+                    .set(if words::code(&fault) == Some("not_signed_in") {
                         Status::SignedOut
                     } else {
                         Status::Failed
-                    },
-                ),
+                    }),
             }
             model.announce(CHANGED);
         });
@@ -184,7 +188,12 @@ impl AppModel {
 
     /// Arranges a meeting for `at` (seconds since 1970); the sentence why
     /// not where it was refused.
-    pub async fn arrange(&self, room: String, at: i64, relay: Option<String>) -> Result<Arrangement, String> {
+    pub async fn arrange(
+        &self,
+        room: String,
+        at: i64,
+        relay: Option<String>,
+    ) -> Result<Arrangement, String> {
         let Some(deployment) = self.deployment() else {
             return Err(t("Something went wrong. Try again."));
         };
@@ -231,7 +240,13 @@ impl AppModel {
     pub fn calendar_text(&self, one: &Arrangement) -> Option<String> {
         let link = self.meeting_link(one)?;
         let start = words::instant(&one.at)?;
-        Some(calendar_text(&one.id, &one.room, &link, start, words::now()))
+        Some(calendar_text(
+            &one.id,
+            &one.room,
+            &link,
+            start,
+            words::now(),
+        ))
     }
 
     /// The rooms joined on the deployment showing now, latest first.
@@ -247,7 +262,7 @@ impl AppModel {
             .filter(|recent| recent.server == here)
             .cloned()
             .collect();
-        recents.sort_by(|a, b| b.at_ms.cmp(&a.at_ms));
+        recents.sort_by_key(|recent| std::cmp::Reverse(recent.at_ms));
         recents
     }
 
@@ -299,7 +314,10 @@ impl AppModel {
                     .replace(ranked.into_iter().map(|(name, _)| name).collect());
             }
             lobby.measured.replace(Some(
-                timings.into_iter().map(|one| (one.name, one.millis)).collect(),
+                timings
+                    .into_iter()
+                    .map(|one| (one.name, one.millis))
+                    .collect(),
             ));
             lobby.measuring.set(false);
             model.announce(CHANGED);
@@ -317,7 +335,9 @@ impl AppModel {
             .relays
             .iter()
             .filter(|relay| !relay.admin_only && !relay.maintenance)
-            .filter_map(|relay| Some((relay.name.clone(), (*measured.as_ref()?.get(&relay.name)?)?)))
+            .filter_map(|relay| {
+                Some((relay.name.clone(), (*measured.as_ref()?.get(&relay.name)?)?))
+            })
             .min_by(|a, b| a.1.total_cmp(&b.1))
     }
 
@@ -423,16 +443,26 @@ mod tests {
         save_recents(&preferences, &recents);
         assert_eq!(
             preferences.string(RECENTS_KEY).as_deref(),
-            Some(r#"[{"room":"a","server":"http://h/","at":3},{"room":"b","server":"http://h/","at":2}]"#)
+            Some(
+                r#"[{"room":"a","server":"http://h/","at":3},{"room":"b","server":"http://h/","at":2}]"#
+            )
         );
         assert_eq!(load_recents(&preferences), recents);
-        let many = (0..30).fold(Vec::new(), |list, n| remembered(&list, &format!("r{n}"), "s", n));
+        let many = (0..30).fold(Vec::new(), |list, n| {
+            remembered(&list, &format!("r{n}"), "s", n)
+        });
         assert_eq!(many.len(), RECENTS_KEPT);
     }
 
     #[test]
     fn a_meeting_is_a_calendar_file() {
-        let text = calendar_text("m1", "team, weekly", "https://x/?meeting=t#/team", 1_793_527_200, 1_793_491_200);
+        let text = calendar_text(
+            "m1",
+            "team, weekly",
+            "https://x/?meeting=t#/team",
+            1_793_527_200,
+            1_793_491_200,
+        );
         assert!(text.contains("DTSTART:20261101T100000Z\r\n"));
         assert!(text.contains("SUMMARY:team\\, weekly\r\n"));
         assert!(text.ends_with("END:VCALENDAR\r\n"));

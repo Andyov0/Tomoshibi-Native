@@ -43,9 +43,7 @@ pub fn present(context: &Context, mode: Mode) {
     let model = &context.model;
     model.clear_problem();
     let mode = Rc::new(RefCell::new(mode));
-    let dialog = adw::Dialog::builder()
-        .content_width(WIDTH)
-        .build();
+    let dialog = adw::Dialog::builder().content_width(WIDTH).build();
     dialog.add_css_class("tmsb-sheet");
     dialog.set_widget_name("lobby.sheet");
 
@@ -180,8 +178,12 @@ pub fn present(context: &Context, mode: Mode) {
         }
     };
     let make_choice = {
-        let (choice_slot, mode, follow_mode, room) =
-            (choice_slot.downgrade(), mode.clone(), follow_mode.clone(), room.downgrade());
+        let (choice_slot, mode, follow_mode, room) = (
+            choice_slot.downgrade(),
+            mode.clone(),
+            follow_mode.clone(),
+            room.downgrade(),
+        );
         move || {
             let Some(slot) = choice_slot.upgrade() else {
                 return;
@@ -195,8 +197,15 @@ pub fn present(context: &Context, mode: Mode) {
                 &[t("Start new meeting"), t("Join a meeting")],
                 if starting { 0 } else { 1 },
                 move |chosen| {
-                    let typed = room.upgrade().map(|room| room.text().to_string()).unwrap_or_default();
-                    mode.replace(if chosen == 0 { Mode::Start } else { Mode::Join(typed) });
+                    let typed = room
+                        .upgrade()
+                        .map(|room| room.text().to_string())
+                        .unwrap_or_default();
+                    mode.replace(if chosen == 0 {
+                        Mode::Start
+                    } else {
+                        Mode::Join(typed)
+                    });
                     follow_mode();
                 },
             );
@@ -221,7 +230,15 @@ pub fn present(context: &Context, mode: Mode) {
             mode.clone(),
         );
         move |model: &AppModel| {
-            let (Some(go), Some(knock_slot), Some(knock), Some(problem), Some(problem_slot), Some(room), Some(server_slot)) = (
+            let (
+                Some(go),
+                Some(knock_slot),
+                Some(knock),
+                Some(problem),
+                Some(problem_slot),
+                Some(room),
+                Some(server_slot),
+            ) = (
                 go.upgrade(),
                 knock_slot.upgrade(),
                 knock.upgrade(),
@@ -229,7 +246,8 @@ pub fn present(context: &Context, mode: Mode) {
                 problem_slot.upgrade(),
                 room.upgrade(),
                 server_slot.upgrade(),
-            ) else {
+            )
+            else {
                 return;
             };
             let starting = matches!(*mode.borrow(), Mode::Start);
@@ -238,7 +256,9 @@ pub fn present(context: &Context, mode: Mode) {
             // And while any join is out, a called-off one included: a second
             // beside it would go in as the same participant.
             go.set_sensitive(
-                !working.get() && !model.busy() && (starting || named || pasted_link(&typed).is_some()),
+                !working.get()
+                    && !model.busy()
+                    && (starting || named || pasted_link(&typed).is_some()),
             );
             match model.problem() {
                 Some(said) => {
@@ -373,19 +393,17 @@ pub fn present(context: &Context, mode: Mode) {
 
     // The call came, or the screen went elsewhere: the sheet goes.
     let dialog_weak = dialog.downgrade();
-    model.subscribe_while(&dialog, move |model, change| {
-        match change {
-            Change::Screen if model.screen() != Screen::Lobby => {
-                if let Some(dialog) = dialog_weak.upgrade() {
-                    dialog.force_close();
-                }
+    model.subscribe_while(&dialog, move |model, change| match change {
+        Change::Screen if model.screen() != Screen::Lobby => {
+            if let Some(dialog) = dialog_weak.upgrade() {
+                dialog.force_close();
             }
-            Change::Busy | Change::Problem => update(model),
-            other if other == crate::app::CHANGED || other == crate::app::lobby::CHANGED => {
-                update(model)
-            }
-            _ => {}
         }
+        Change::Busy | Change::Problem => update(model),
+        other if other == crate::app::CHANGED || other == crate::app::lobby::CHANGED => {
+            update(model)
+        }
+        _ => {}
     });
     let weak = model.downgrade();
     dialog.connect_closed(move |_| {
@@ -398,7 +416,8 @@ pub fn present(context: &Context, mode: Mode) {
 
     // A room from the recent list, settled into the choice it is.
     if let Mode::Again(name) = mode.borrow().clone() {
-        let (mode, make_choice, follow_mode) = (mode.clone(), make_choice.clone(), follow_mode.clone());
+        let (mode, make_choice, follow_mode) =
+            (mode.clone(), make_choice.clone(), follow_mode.clone());
         if let Some(deployment) = model.deployment() {
             glib::spawn_future_local(async move {
                 let live = deployment.room_live(name.clone()).await.ok().flatten();
@@ -407,7 +426,10 @@ pub fn present(context: &Context, mode: Mode) {
                     return;
                 }
                 if let Some(live) = live {
-                    log(&format!("{name} is {}", if live { "live" } else { "not live" }));
+                    log(&format!(
+                        "{name} is {}",
+                        if live { "live" } else { "not live" }
+                    ));
                     mode.replace(if live { Mode::Join(name) } else { Mode::Start });
                     make_choice();
                     follow_mode();
@@ -455,8 +477,11 @@ pub fn scoped_room_field(
         });
     }
     let previous = Rc::new(RefCell::new(entry.text().to_string()));
-    let (warning, warning_slot, popover_weak) =
-        (warning.downgrade(), warning_slot.downgrade(), popover.downgrade());
+    let (warning, warning_slot, popover_weak) = (
+        warning.downgrade(),
+        warning_slot.downgrade(),
+        popover.downgrade(),
+    );
     entry.connect_changed(move |entry| {
         let text = entry.text().to_string();
         let old = previous.replace(text.clone());
@@ -483,7 +508,8 @@ pub fn scoped_room_field(
                 }
                 for scope in &matches {
                     let row = pieces::menu_row(scope, None, false);
-                    let (entry_weak, scope, pop) = (entry.downgrade(), scope.clone(), popover.downgrade());
+                    let (entry_weak, scope, pop) =
+                        (entry.downgrade(), scope.clone(), popover.downgrade());
                     row.connect_clicked(move |_| {
                         if let Some(entry) = entry_weak.upgrade() {
                             let text = entry.text().to_string();
@@ -505,9 +531,9 @@ pub fn scoped_room_field(
                 popover.popup();
             }
         }
-        let outside = typed_scope
-            .as_ref()
-            .filter(|typed| !typed.is_empty() && !admin && !scopes.contains(typed) && matches.is_empty());
+        let outside = typed_scope.as_ref().filter(|typed| {
+            !typed.is_empty() && !admin && !scopes.contains(typed) && matches.is_empty()
+        });
         if let (Some(warning), Some(slot)) = (warning.upgrade(), warning_slot.upgrade()) {
             match outside {
                 Some(scope) => {

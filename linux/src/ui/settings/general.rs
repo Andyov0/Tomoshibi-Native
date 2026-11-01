@@ -23,10 +23,20 @@ pub fn page(context: &Context) -> adw::PreferencesPage {
 
     // ---- the language ---------------------------------------------------
 
-    let language = adw::PreferencesGroup::builder().title(t("Language")).build();
+    let language = adw::PreferencesGroup::builder()
+        .title(t("Language"))
+        .build();
     let system = Language::detect(i18n::system_languages().iter().map(String::as_str));
-    let mut names = vec![format!("{} ({})", t("Same as the system"), system.display_name())];
-    names.extend(Language::ALL.iter().map(|language| language.display_name().to_owned()));
+    let mut names = vec![format!(
+        "{} ({})",
+        t("Same as the system"),
+        system.display_name()
+    )];
+    names.extend(
+        Language::ALL
+            .iter()
+            .map(|language| language.display_name().to_owned()),
+    );
     let list = gtk::StringList::new(&names.iter().map(String::as_str).collect::<Vec<_>>());
     let combo = adw::ComboRow::builder()
         .title(t("Language"))
@@ -46,7 +56,9 @@ pub fn page(context: &Context) -> adw::PreferencesPage {
     let weak = model.downgrade();
     combo.connect_selected_notify(move |combo| {
         let selected = combo.selected() as usize;
-        let choice = selected.checked_sub(1).and_then(|index| Language::ALL.get(index).copied());
+        let choice = selected
+            .checked_sub(1)
+            .and_then(|index| Language::ALL.get(index).copied());
         // Changed after this row's own signal has returned: the language
         // change words the dialog again, this row with it.
         let weak = weak.clone();
@@ -65,7 +77,9 @@ pub fn page(context: &Context) -> adw::PreferencesPage {
 
     // ---- the accent -------------------------------------------------------
 
-    let accent = adw::PreferencesGroup::builder().title(t("Accent colour")).build();
+    let accent = adw::PreferencesGroup::builder()
+        .title(t("Accent colour"))
+        .build();
     let swatches = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     swatches.set_margin_top(12);
     swatches.set_margin_bottom(12);
@@ -111,7 +125,9 @@ pub fn page(context: &Context) -> adw::PreferencesPage {
 
     // ---- the call's furniture ------------------------------------------------
 
-    let call = adw::PreferencesGroup::builder().title(t("Controls")).build();
+    let call = adw::PreferencesGroup::builder()
+        .title(t("Controls"))
+        .build();
     let badge = choice_row(
         model,
         &t("Connection badge"),
@@ -147,7 +163,12 @@ fn choice_row(
     key: &'static str,
     options: &[(&'static str, String)],
 ) -> adw::ComboRow {
-    let list = gtk::StringList::new(&options.iter().map(|(_, words)| words.as_str()).collect::<Vec<_>>());
+    let list = gtk::StringList::new(
+        &options
+            .iter()
+            .map(|(_, words)| words.as_str())
+            .collect::<Vec<_>>(),
+    );
     let combo = adw::ComboRow::builder().title(title).model(&list).build();
     let kept = model.preferences().string(key);
     let selected = options
@@ -181,12 +202,22 @@ fn swatch(accent: Accent) -> gtk::Button {
         let size = width.min(height) as f64;
         let colour = accent.color(theme::system_scheme());
         let chosen = theme::accent() == accent;
-        let radius = if chosen { size / 2.0 - 5.0 } else { size / 2.0 - 1.0 };
+        let radius = if chosen {
+            size / 2.0 - 5.0
+        } else {
+            size / 2.0 - 1.0
+        };
         cr.arc(size / 2.0, size / 2.0, radius, 0.0, std::f64::consts::TAU);
         cr.set_source_rgb(colour.red as f64, colour.green as f64, colour.blue as f64);
         let _ = cr.fill();
         if chosen {
-            cr.arc(size / 2.0, size / 2.0, size / 2.0 - 1.5, 0.0, std::f64::consts::TAU);
+            cr.arc(
+                size / 2.0,
+                size / 2.0,
+                size / 2.0 - 1.5,
+                0.0,
+                std::f64::consts::TAU,
+            );
             cr.set_line_width(2.0);
             let _ = cr.stroke();
         }

@@ -124,7 +124,11 @@ pub fn drawn(art: &Art, stroke: &Stroke, t: f64) -> f64 {
 pub fn opacity(art: &Art, portrait: &Portrait, t: f64) -> f64 {
     let tau = t - art.gap;
     if portrait.fade <= 0.0 {
-        return if tau < portrait.writing() + portrait.hold { 1.0 } else { 0.0 };
+        return if tau < portrait.writing() + portrait.hold {
+            1.0
+        } else {
+            0.0
+        };
     }
     1.0 - smoothstep((tau - portrait.writing() - portrait.hold) / portrait.fade)
 }
@@ -140,7 +144,7 @@ pub fn still_for(art: &Art, index: usize, t: f64) -> Option<f64> {
     }
     let held_from = art.gap + writing;
     let held_until = held_from + portrait.hold;
-    (t >= held_from && t < held_until).then(|| held_until - t)
+    (t >= held_from && t < held_until).then_some(held_until - t)
 }
 
 fn parse(text: &str) -> Option<Art> {
@@ -238,7 +242,9 @@ pub fn place(placement: Placement, canvas: (f32, f32), width: f32, height: f32) 
     match placement {
         Placement::Card => {
             let inset = 12.0;
-            let scale = (height / canvas.1).min((width - 2.0 * inset) / canvas.0).max(0.0);
+            let scale = (height / canvas.1)
+                .min((width - 2.0 * inset) / canvas.0)
+                .max(0.0);
             let x = (width - canvas.0 * scale) / 2.0;
             let y = height - canvas.1 * scale;
             (x, y, scale)
@@ -337,11 +343,16 @@ impl Portraits {
         let portraits: Portraits = glib::Object::new();
         portraits.imp().placement.set(placement);
         if let Some(art) = art() {
-            if let Some(index) = first.and_then(|name| art.portraits.iter().position(|p| p.name == name)) {
+            if let Some(index) =
+                first.and_then(|name| art.portraits.iter().position(|p| p.name == name))
+            {
                 portraits.imp().index.set(index);
             }
             if let Some(at) = at {
-                portraits.imp().t.set(at.clamp(0.0, art.turn(portraits.imp().index.get())));
+                portraits
+                    .imp()
+                    .t
+                    .set(at.clamp(0.0, art.turn(portraits.imp().index.get())));
                 portraits.imp().fixed.set(true);
             } else if !animations() {
                 portraits.imp().index.set(0);
@@ -368,7 +379,11 @@ impl Portraits {
     /// The animal on now, by name.
     pub fn current(&self) -> Option<String> {
         let art = art()?;
-        Some(art.portraits[self.imp().index.get() % art.portraits.len()].name.clone())
+        Some(
+            art.portraits[self.imp().index.get() % art.portraits.len()]
+                .name
+                .clone(),
+        )
     }
 
     fn play(&self) {
@@ -526,12 +541,19 @@ mod tests {
     fn the_file_is_read_whole() {
         let art = art().expect("portraits.json reads");
         let names: Vec<&str> = art.portraits.iter().map(|p| p.name.as_str()).collect();
-        assert_eq!(names, ["cat", "rabbit", "bear", "hamster", "penguin", "chick"]);
+        assert_eq!(
+            names,
+            ["cat", "rabbit", "bear", "hamster", "penguin", "chick"]
+        );
         assert_eq!(art.canvas, (100.0, 100.0));
         assert!((art.line_width - 2.4).abs() < 1e-6);
         for portrait in &art.portraits {
             for stroke in &portrait.strokes {
-                assert!(stroke.length > 0.0, "{} has a stroke of no length", portrait.name);
+                assert!(
+                    stroke.length > 0.0,
+                    "{} has a stroke of no length",
+                    portrait.name
+                );
             }
         }
         // The cat's eyes are one stroke of two pieces, the pen going
