@@ -69,6 +69,35 @@ tokio = { version = "1", default-features = false, features = ["sync"] }
 
 # --- media/ (audio, camera, screen) adds its crates below this line ---
 
+# media/audio: PulseAudio's client library, which PipeWire's pipewire-pulse
+# serves as well, so one client covers both kinds of system: the threaded
+# main loop for the device lists and their changes, the simple API for the
+# two streams, each on a thread of its own that blocks on the device.
+libpulse-binding = "2.28"
+libpulse-simple-binding = "2.28"
+# The core's own vendored libwebrtc (the [patch] above resolves it to
+# core/vendor/libwebrtc, which the core links already), for WebRTC's audio
+# processing: the echo canceller, the noise suppressor and the gain control
+# a browser runs on its microphone, which a synthetic audio device never
+# runs, and which Linux has no system equivalent of to lean on. Written as
+# render/ writes it, which uses the same crate for libyuv.
+libwebrtc = { version = "0.3.52", default-features = false }
+
+# media/camera: the camera portal and the PipeWire stream it opens, on the
+# same ashpd and pipewire as media/screen (whose lines say why async-io and
+# why 0.10: one pipewire-sys per binary, and zbus on tokio would need a
+# tokio runtime entered wherever any ashpd future is polled); V4L2 where
+# there is no portal; MJPEG decoding, for the cameras that send nothing else
+# at 720p; and the background blur's person segmenter, MediaPipe's selfie
+# model as ONNX (windows/Blur), in ONNX Runtime, linked statically from the
+# prebuilt library ort downloads at build time, so that the AppImage carries
+# no runtime beside the binary.
+ashpd = { version = "0.13", default-features = false, features = ["async-io", "camera"] }
+pipewire = "0.10"
+v4l = "0.14"
+zune-jpeg = "0.5"
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "download-binaries", "tls-rustls", "api-17"] }
+
 # --- render/ adds its crates below this line ---
 
 # --- update/ adds its crates below this line ---
