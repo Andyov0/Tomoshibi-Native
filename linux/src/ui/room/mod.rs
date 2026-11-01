@@ -278,6 +278,8 @@ pub struct Host {
     pub relays: Option<Vec<Relay>>,
     /// The list of relays to move to is open.
     pub choosing_relay: bool,
+    /// How many the door's notice says are waiting: none when it is not up.
+    pub door_said: usize,
 }
 
 impl Host {
@@ -1158,6 +1160,7 @@ pub(crate) fn toggle_panel(model: &AppModel, panel: Panel) {
         refresh_standing(model);
         load_relays(model);
     }
+    say_who_is_waiting(model);
     changed(model);
 }
 
@@ -1394,6 +1397,7 @@ fn refresh_standing(model: &AppModel) {
             }
             host.standing = Some(said);
             drop(host);
+            say_who_is_waiting(&model);
             changed(&model);
         }
     });
@@ -1410,6 +1414,58 @@ pub(crate) fn dismiss_key(model: &AppModel, key: &str) {
         .toasts
         .retain(|(_, toast)| toast.key.as_deref() != Some(key));
     changed(model);
+}
+
+/// Somebody waiting to be let in, said where the host will see it, and
+/// taken back the moment the door is empty (notices.ts `atTheDoor`; the
+/// Mac's HostFeature `sayWhoIsWaiting`). It stands down while the host's
+/// panel is open, which lists the same people under the same two answers:
+/// left up, it sat beside the panel saying what the panel said, and where
+/// the panel was wider than the notices were placed for, under it. Said
+/// again when the panel closes on somebody still outside, and again
+/// whenever the count changes, so that it never says two when one is left.
+fn say_who_is_waiting(model: &AppModel) {
+    let room = model.kept::<RoomState>();
+    let panel_open = room.view.borrow().panel == Some(Panel::Host);
+    let count = {
+        let host = room.host.borrow();
+        if panel_open || !host.yours() {
+            0
+        } else {
+            host.waiting.len()
+        }
+    };
+    {
+        let mut host = room.host.borrow_mut();
+        if host.door_said == count {
+            return;
+        }
+        host.door_said = count;
+    }
+    if count == 0 {
+        dismiss_key(model, DOOR);
+        return;
+    }
+    announce(
+        model,
+        Toast {
+            kind: ToastKind::Signal,
+            key: Some(DOOR.into()),
+            lasts_ms: None,
+            closable: true,
+            // The Mac's and Windows' words for one, from the catalogue
+            // (notices.ts `atTheDoor`): "1 person" read as a count with
+            // nothing to count.
+            ..Toast::said(if count == 1 {
+                t("Somebody is waiting to be let in")
+            } else {
+                t_with(
+                    "{count} people are waiting to be let in",
+                    &[("count", &count)],
+                )
+            })
+        },
+    );
 }
 
 /// Looks at the door every four seconds while this participant may open
@@ -1452,35 +1508,8 @@ fn watch_the_door(model: &AppModel) {
             };
             if let Some(model) = weak.upgrade() {
                 let room = model.kept::<RoomState>();
-                let before = room.host.borrow().waiting.len();
-                let now = said.len();
                 room.host.borrow_mut().waiting = said;
-                if now > before && room.view.borrow().panel != Some(Panel::Host) {
-                    announce(
-                        &model,
-                        Toast {
-                            kind: ToastKind::Signal,
-                            key: Some(DOOR.into()),
-                            lasts_ms: None,
-                            closable: true,
-                            // The Mac's and Windows' words for one, from the
-                            // catalogue (notices.ts `atTheDoor`): "1 person"
-                            // read as a count with nothing to count.
-                            ..Toast::said(if now == 1 {
-                                t("Somebody is waiting to be let in")
-                            } else {
-                                t_with(
-                                    "{count} people are waiting to be let in",
-                                    &[("count", &now)],
-                                )
-                            })
-                        },
-                    );
-                } else if now == 0 && before > 0 {
-                    // Nobody outside any more: the notice is taken back
-                    // rather than left saying somebody is.
-                    dismiss_key(&model, DOOR);
-                }
+                say_who_is_waiting(&model);
                 changed(&model);
             }
         });
