@@ -30,8 +30,22 @@
 # TOMOSHIBI_HOST and TOMOSHIBI_UPDATE_KEY from the environment of whoever runs
 # this, and is refused without them; deployment.local is never read here.
 #
+# One build at a time per target volume: cargo locks the build directory for
+# the whole build, so a second checkout's build waits ("Blocking waiting for
+# file lock") rather than running beside it. That is chosen, not suffered:
+# the VM has 20 GiB for everybody and about 20 GB of disk left, and one
+# target directory per checkout would compile every crate again in each and
+# hold a copy of everything per checkout. A checkout that must not wait can
+# be given a volume of its own with TOMOSHIBI_TARGET_VOLUME (the first build
+# in it compiles everything).
+#
 # Environment:
 #   TOMOSHIBI_DOCKER_CONTEXT   docker context (default linux-build)
+#   TOMOSHIBI_BUILD_JOBS       cargo's parallel jobs (default 4): several
+#                              checkouts build on one VM, and rustc and the
+#                              linker at twelve jobs each ran it out of memory
+#   TOMOSHIBI_TARGET_VOLUME    the target volume (default
+#                              tomoshibi-linux-target-<arch>, shared)
 #   TOMOSHIBI_HOST, TOMOSHIBI_UPDATE_KEY   release builds only
 set -euo pipefail
 
@@ -67,7 +81,9 @@ case $what in
   *) echo "build.sh: unknown <what>: $what" >&2; exit 64 ;;
 esac
 
-env_args=(-e CARGO_TARGET_DIR=/target -e CARGO_TERM_COLOR=${CARGO_TERM_COLOR:-auto})
+target_volume=${TOMOSHIBI_TARGET_VOLUME:-tomoshibi-linux-target-$arch}
+env_args=(-e CARGO_TARGET_DIR=/target -e CARGO_TERM_COLOR=${CARGO_TERM_COLOR:-auto}
+  -e "CARGO_BUILD_JOBS=${TOMOSHIBI_BUILD_JOBS:-4}")
 if [ "$profile" = release ] || [ "$profile" = local ]; then
   if [ -z "${TOMOSHIBI_HOST:-}" ] || [ "${TOMOSHIBI_HOST}" = meet.example.com ]; then
     if [ "$profile" = release ]; then
@@ -95,7 +111,9 @@ case $what in
       && file -b /target/out/$name/$out_dir/tomoshibi"
     ;;
   test) script="cargo test $extra" ;;
-  core-test) script="cd $work/core && cargo test --workspace $extra" ;;
+  # The core's own workspace keeps its own profiles, so the dependencies'
+  # line tables only (linux/Cargo.toml says why) are given on the line.
+  core-test) script="cd $work/core && cargo --config 'profile.dev.package.\"*\".debug=\"line-tables-only\"' test --workspace $extra" ;;
   check) script="cargo check --all-targets $extra" ;;
   clippy) script="cargo clippy --all-targets $extra" ;;
   fmt) script="cargo fmt --check $extra" ;;
@@ -124,7 +142,7 @@ exec "${docker[@]}" run --rm ${tty[@]+"${tty[@]}"} \
   -v "$checkout:$work" \
   -v tomoshibi-linux-cargo-registry:/opt/cargo/registry \
   -v tomoshibi-linux-cargo-git:/opt/cargo/git \
-  -v "tomoshibi-linux-target-$arch:/target" \
+  -v "$target_volume:/target" \
   "${env_args[@]}" \
   -w "$work/linux" \
   "tomoshibi-linux-build:$arch" \

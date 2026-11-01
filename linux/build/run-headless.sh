@@ -23,6 +23,10 @@
 #   --seconds N       give up after this long (default 40)
 #   --env NAME=VALUE  more of the app's environment; may be repeated
 #
+# The build it runs is build.sh's copy for this checkout,
+# /target/out/<checkout>/<profile>/tomoshibi in the architecture's target
+# volume (TOMOSHIBI_TARGET_VOLUME, as build.sh takes it).
+#
 # The container joins tomoshibi-linux-net, where server.sh's deployments
 # are; give --base "$(linux/build/server.sh url <port>)". Exits non-zero if
 # the screen never came, a picture is missing, or the handover failed.
@@ -89,7 +93,7 @@ exec "${docker[@]}" run --rm \
   --platform "$platform" \
   --network "$network" \
   -v "$checkout:/work/$name:ro" \
-  -v "tomoshibi-linux-target-$arch:/target:ro" \
+  -v "${TOMOSHIBI_TARGET_VOLUME:-tomoshibi-linux-target-$arch}:/target:ro" \
   -v "$out:/out" \
   -e "APP=/target/out/$name/$profile/tomoshibi" \
   -e "LABEL=$label" -e "WIDTH=$width" -e "HEIGHT=$height" \

@@ -71,6 +71,16 @@ serde_json = "1"
 
 [dev-dependencies]
 
+# Every dependency, the core and the vendored LiveKit among them, keeps line
+# tables only: enough for a backtrace to name the file and line, without the
+# full type and variable information. Each binary that links the core
+# carries the prebuilt WebRTC, and with full debug information every test
+# binary was about 300 MB and one architecture's target directory 36 GB,
+# on a build machine several builds share. The app's own crate keeps full
+# debug information, for a debugger in the code being written.
+[profile.dev.package."*"]
+debug = "line-tables-only"
+
 # The core's [profile.local] (release with debug assertions on, for measuring
 # against a local deployment), repeated because profiles too are read only at
 # the workspace root.
