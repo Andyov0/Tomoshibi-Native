@@ -73,10 +73,30 @@ fn shares_into_a_call() {
         "TOMOSHIBI_BASE must be a local deployment"
     );
     crate::app::client::tell();
-    let context = glib::MainContext::new();
-    context
-        .with_thread_default(|| context.block_on(run(base)))
-        .expect("the test's main context");
+    // The default context, where GTK's own events are dispatched too: a
+    // window's export for the portal (TOMOSHIBI_TEST_WINDOW) is answered
+    // through it.
+    glib::MainContext::default().block_on(run(base));
+}
+
+/// TOMOSHIBI_TEST_WINDOW: a GTK application with a window up, as the app
+/// has, so that the share names it to the portal as the picker's parent.
+fn window() -> Option<gtk::ApplicationWindow> {
+    use gtk::prelude::*;
+    env("TOMOSHIBI_TEST_WINDOW")?;
+    gtk::init().expect("GTK");
+    let application = gtk::Application::builder()
+        .application_id("app.tomoshibi.ScreenShareTest")
+        .build();
+    application
+        .register(None::<&gio::Cancellable>)
+        .expect("registered");
+    application.set_default();
+    let window = gtk::ApplicationWindow::new(&application);
+    window.set_title(Some("screen share test"));
+    window.set_default_size(320, 200);
+    window.present();
+    Some(window)
 }
 
 async fn run(base: String) {
@@ -149,6 +169,21 @@ async fn run(base: String) {
     });
 
     let tone = env("TOMOSHIBI_TEST_OWN_TONE").map(|_| OwnTone::start(1000.0));
+    let window = window();
+    if window.is_some() {
+        // Mapped and focused before the share asks for it.
+        glib::timeout_future(Duration::from_secs(2)).await;
+        let active = window.as_ref().is_some_and(|window| {
+            use gtk::prelude::*;
+            window
+                .application()
+                .and_then(|a| a.active_window())
+                .is_some()
+        });
+        log(&format!(
+            "a window is up, the application's active one: {active}"
+        ));
+    }
 
     let screens = Screens::new(Source::from_environment());
     let choice = ShareChoice {
@@ -194,6 +229,7 @@ async fn run(base: String) {
     }
     call.leave().await;
     follow.abort();
+    drop(window);
     log("left the call");
 }
 
