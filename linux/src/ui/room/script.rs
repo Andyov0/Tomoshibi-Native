@@ -3,7 +3,8 @@
 //! semicolons, each counted from the moment the call is joined.
 //!
 //! The actions are the presses a person would make, made through the same
-//! functions the buttons call: `panel=<messages|sound|devices|host|none>`,
+//! functions the buttons call:
+//! `panel=<messages|sound|devices|host|music|watch|none>`,
 //! `popover=<reactions|leave|share|more|signal|none>`, `say=<text>`,
 //! `hand=<up|down>`, `react=<0-5>`, `mic=<on|off>`, `camera=<on|off>`,
 //! `share=<on|off>`, `pin=<me|first|none>`, `fill=<on|off>`, `page=<+1|-1>`,
@@ -25,7 +26,13 @@
 //! server's word that the meeting, or this participant, is moving, and the
 //! call closing under it 400 ms later, through `follow` as the core says
 //! both), `again` (the ending's "Join again") and `close` (the host's
-//! "End for everybody"); and two that only look:
+//! "End for everybody"); the share menu's `share-quality=<setting>` and
+//! `share-fps=<rate>`; the song desk's `music=<step>` (music/mod.rs
+//! `script`) and watching together's `watch=<step>` (watch/mod.rs
+//! `script`); `stage=<screen|camera>`, the stage's own buttons; and
+//! `controls=<side|always|idle|detailed|signal|hidden|hover|menu|focus|tab>`,
+//! where the bar stands, what the signal says, and the pointer and the
+//! keyboard on the pictures; and two that only look:
 //! `shot=<name>`, GTK's own picture of the window and its widget tree beside
 //! the run's main snapshot, and `report`, every tile and what it shows,
 //! written to the log. A headless run (linux/build/run-headless.sh) keeps

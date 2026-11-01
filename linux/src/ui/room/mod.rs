@@ -674,6 +674,12 @@ pub async fn leave(model: &AppModel, media: &dyn Media) {
     let call = room.call.borrow_mut().take();
     if let Some(call) = call {
         model.end_call(Ending::Left);
+        // A show this participant runs is closed, and the word that it
+        // closed sent, before the call goes: sent after, it never arrived.
+        // Here rather than at the leave button alone, where it was first:
+        // closing the window or the session ending the app left the others
+        // watching a show nobody held.
+        watch::leaving(model).await;
         stop_sharing_now(model).await;
         let_go_of_devices(model);
         call.leave().await;

@@ -740,10 +740,6 @@ impl Page {
                     let weak = model.downgrade();
                     glib::spawn_future_local(async move {
                         if let Some(model) = weak.upgrade() {
-                            // A show this participant runs is closed, and
-                            // the word that it closed sent, before the call
-                            // goes: sent after, it never arrived.
-                            watch::leaving(&model).await;
                             let media = super::media_of(&model);
                             let quiet = crate::media::Quiet;
                             let media: &dyn Media = match media.as_deref() {
