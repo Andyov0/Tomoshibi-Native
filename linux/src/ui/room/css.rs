@@ -230,7 +230,7 @@ button.tmsb-close:active { background-color: alpha(@tmsb_call_wash, 0.16); }
 .tmsb-panel .tmsb-muted, .tmsb-room .tmsb-muted { color: @tmsb_call_muted; }
 .tmsb-panel-section { font-size: 11px; font-weight: 600; color: @tmsb_call_muted; }
 .tmsb-panel scale trough { background-color: alpha(@tmsb_call_wash, 0.14); min-height: 4px; border-radius: 999px; }
-.tmsb-panel scale highlight { background-color: @tmsb_call_tally; border-radius: 999px; }
+.tmsb-panel scale highlight { background-color: @tmsb_call_fg; border-radius: 999px; }
 .tmsb-panel scale slider { background-color: @tmsb_call_fg; min-width: 14px; min-height: 14px; border-radius: 999px; box-shadow: none; border: none; }
 .tmsb-panel-row { min-height: 36px; }
 button.tmsb-panel-button {
