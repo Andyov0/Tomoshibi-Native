@@ -7,7 +7,9 @@
 //! `popover=<reactions|leave|share|more|signal|none>`, `say=<text>`,
 //! `hand=<up|down>`, `react=<0-5>`, `mic=<on|off>`, `camera=<on|off>`,
 //! `share=<on|off>`, `pin=<me|first|none>`, `fill=<on|off>`, `page=<+1|-1>`,
-//! `volume=<0-100>` (the first person's), `leave`, and two that only look:
+//! `volume=<0-100>` (the first person's), `leave`, the host's `invite`,
+//! `silence`, `remove` and `make-host` (the first person), and two that
+//! only look:
 //! `shot=<name>`, GTK's own picture of the window and its widget tree beside
 //! the run's main snapshot, and `report`, every tile and what it shows,
 //! written to the log. A headless run (linux/build/run-headless.sh) keeps
@@ -124,6 +126,21 @@ fn act(model: &AppModel, action: &str) {
                         blocked: false,
                     },
                 );
+            }
+        }
+        "invite" => super::invite(model),
+        "silence" | "remove" | "make-host" => {
+            let first = room
+                .talk
+                .borrow()
+                .as_ref()
+                .and_then(|talk| talk.people.first().map(|person| person.id.clone()));
+            if let Some(first) = first {
+                match verb {
+                    "silence" => super::silence(model, &first),
+                    "remove" => super::turn_out(model, &first),
+                    _ => super::hand_over(model, &first),
+                }
             }
         }
         "report" => report(model),

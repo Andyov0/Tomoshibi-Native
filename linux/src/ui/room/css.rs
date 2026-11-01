@@ -105,6 +105,8 @@ button.tmsb-stage-button:active { background-color: rgba(0, 0, 0, 0.8); transfor
   border-radius: 999px; min-width: 52px; min-height: 52px; -gtk-icon-size: 22px;
 }
 .tmsb-share-said { font-size: 14px; font-weight: 600; }
+.compact .tmsb-share-mark { min-width: 34px; min-height: 34px; -gtk-icon-size: 14px; }
+.compact .tmsb-share-said { font-size: 11px; }
 
 /* A reaction rising off a picture (Reacting.tsx). */
 .tmsb-float { font-size: 30px; }
@@ -317,6 +319,13 @@ button.tmsb-alone-button {
 }
 button.tmsb-alone-button:hover { background-color: alpha(@tmsb_call_wash, 0.10); }
 .tmsb-alone-rule { background-color: alpha(@tmsb_call_wash, 0.12); min-width: 1px; min-height: 16px; }
+
+/* Who has one's share open. */
+.tmsb-watchers {
+  background-color: @tmsb_call_surface; border-radius: 14px; padding: 8px 12px; font-size: 12.5px;
+  box-shadow: inset 0 0 0 1px alpha(@tmsb_call_wash, 0.10);
+}
+.tmsb-watchers image { color: @tmsb_call_muted; }
 
 /* The pager's arrows beside the pictures. */
 button.tmsb-pager {

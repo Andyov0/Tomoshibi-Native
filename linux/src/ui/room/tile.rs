@@ -481,6 +481,7 @@ impl Tile {
         self.share_face.show(marks.my_share);
         self.avatar.set_visible(!marks.my_share);
         self.share_stop.set_visible(!marks.compact);
+        toggle(self.share_face.upcast_ref(), "compact", marks.compact);
         toggle(root.upcast_ref(), "mine-shared", marks.my_share);
         self.small_hand_motion
             .show(marks.hand && marks.hand_beside_name);

@@ -182,6 +182,8 @@ pub struct View {
     pub pop: Option<Pop>,
     /// The alone-in-the-room capsule, once closed, stays closed.
     pub alone_dismissed: bool,
+    /// The `watching` attribute as this participant last wrote it.
+    pub watching_written: String,
     pub copied: bool,
     /// What is in the messages box, kept with the call so that closing the
     /// panel half way through a sentence does not lose it.
@@ -1044,6 +1046,82 @@ pub(crate) fn set_hand(model: &AppModel, up: bool) {
 /// picture at once: data does not come back to whoever sent it (hands.ts
 /// `react`). The topic and payload are the protocol crate's, which refuses
 /// anything but the six a browser would show.
+/// Says whose share is on this participant's stage (watching.ts
+/// `useWatching`): the owner of somebody else's screen on the stage, or
+/// nothing, written only when it changes, so that whoever is sharing can see
+/// who has it open (their watchers card). A share in the strip does not
+/// count: nobody has opened it.
+pub(crate) fn write_watching(model: &AppModel) {
+    let room = model.kept::<RoomState>();
+    let Some(call) = call_of(model) else {
+        return;
+    };
+    let stage = {
+        let view = room.view.borrow();
+        view.pin.pinned().map(|id| {
+            let local = id == talk::ME || id == talk::MY_SHARE;
+            let (owner, kind) = id.rsplit_once('/').unwrap_or((id, ""));
+            hands::StagePicture {
+                owner: if local {
+                    call.local_identity()
+                } else {
+                    owner.to_owned()
+                },
+                screen: kind == "screen",
+                local,
+            }
+        })
+    };
+    let sharer = hands::watched_sharer(stage);
+    let current = room.view.borrow().watching_written.clone();
+    let Some(value) = hands::watching_to_write(Some(current), sharer) else {
+        return;
+    };
+    room.view.borrow_mut().watching_written = value.clone();
+    let weak = model.downgrade();
+    glib::spawn_future_local(async move {
+        let written = call
+            .set_attributes(HashMap::from([(hands::WATCHING.to_owned(), value)]))
+            .await;
+        if let Err(fault) = written {
+            log(&format!("the watching attribute was not written: {fault}"));
+            // Written again at the next change, from what it says now.
+            if let Some(model) = weak.upgrade() {
+                model.kept::<RoomState>().view.borrow_mut().watching_written = String::from("?");
+            }
+        }
+    });
+}
+
+/// Who has this participant's shared screen open (watching.ts
+/// `useWatchers`), by name.
+pub(crate) fn watchers(model: &AppModel) -> Option<Vec<String>> {
+    let room = model.kept::<RoomState>();
+    if room.local.share.borrow().is_none() {
+        return None;
+    }
+    let talk = room.talk.borrow();
+    let talk = talk.as_ref()?;
+    let roster: Vec<hands::RosterMember> = talk
+        .people
+        .iter()
+        .map(|person| hands::RosterMember {
+            identity: person.id.clone(),
+            attributes: person.attributes.clone(),
+        })
+        .collect();
+    Some(
+        hands::watchers(talk.local_identity.clone(), true, roster)
+            .into_iter()
+            .map(|identity| {
+                talk.person(&identity)
+                    .map(|person| person.label())
+                    .unwrap_or(identity)
+            })
+            .collect(),
+    )
+}
+
 pub(crate) fn react(model: &AppModel, what: &str) {
     let Some(call) = call_of(model) else {
         return;

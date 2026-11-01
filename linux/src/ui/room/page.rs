@@ -100,6 +100,8 @@ pub struct Page {
     notice_motion: Motion,
     notice: gtk::Label,
     problem_motion: Motion,
+    watchers_motion: Motion,
+    watchers: gtk::Label,
     problem: gtk::Label,
     alone_motion: Motion,
     alone_button: gtk::Button,
@@ -137,6 +139,51 @@ fn glyph_button(shape: glyph::Shape, size: i32, label: &str) -> gtk::Button {
     button.add_css_class("tmsb-bar-button");
     set_label(&button, label);
     button
+}
+
+/// A button of the bar that comes and goes with what it offers (sharing
+/// where it can be done, running the room once the deployment says so, the
+/// panels behind "More" in a narrow window): wrapped so that it slides in
+/// and out and the capsule grows and shrinks with it, rather than either
+/// jumping (the Mac animates the bar's own width for the same reason).
+fn coming(widget: &impl IsA<gtk::Widget>) -> gtk::Revealer {
+    let revealer = gtk::Revealer::builder()
+        .transition_type(gtk::RevealerTransitionType::SlideRight)
+        .transition_duration(crate::theme::motion::SETTLE_MS)
+        .reveal_child(true)
+        .child(widget)
+        .build();
+    // Gone once it has slid away, so that the bar's spacing does not keep
+    // a gap for it.
+    revealer.connect_child_revealed_notify(|revealer| {
+        if !revealer.reveals_child() && !revealer.is_child_revealed() {
+            revealer.set_visible(false);
+        }
+    });
+    revealer
+}
+
+/// Brings in, or takes away, a widget [`coming`] wrapped.
+fn come_or_go(widget: &impl IsA<gtk::Widget>, on: bool) {
+    let Some(revealer) = widget
+        .as_ref()
+        .ancestor(gtk::Revealer::static_type())
+        .and_then(|found| found.downcast::<gtk::Revealer>().ok())
+    else {
+        widget.as_ref().set_visible(on);
+        return;
+    };
+    if revealer.reveals_child() == on && revealer.is_visible() == on {
+        return;
+    }
+    if on {
+        revealer.set_visible(true);
+    }
+    revealer.set_reveal_child(on);
+    // Without animations the notify above may not come.
+    if !on && !adw::is_animations_enabled(&revealer) {
+        revealer.set_visible(false);
+    }
 }
 
 fn set_label(widget: &impl IsA<gtk::Widget>, label: &str) {
@@ -245,6 +292,26 @@ impl Page {
         let problem = gtk::Label::builder().wrap(true).build();
         problem.add_css_class("tmsb-notice");
         problem.add_css_class("danger");
+        // Who has one's own share open, at the top right below the window's
+        // buttons (Room.tsx: top-16 right-3; the Mac's WatchersCard).
+        let watchers = gtk::Label::builder()
+            .xalign(0.0)
+            .wrap(true)
+            .max_width_chars(28)
+            .build();
+        let watchers_card = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        watchers_card.add_css_class("tmsb-watchers");
+        let eye = gtk::Image::from_icon_name("view-reveal-symbolic");
+        eye.set_valign(gtk::Align::Start);
+        watchers_card.append(&eye);
+        watchers_card.append(&watchers);
+        let watchers_motion = Motion::hidden(&watchers_card, Away::TOP);
+        watchers_motion.set_halign(gtk::Align::End);
+        watchers_motion.set_valign(gtk::Align::Start);
+        watchers_motion.set_margin_top(56);
+        watchers_motion.set_margin_end(14);
+        watchers_motion.set_widget_name("room.watchers");
+        root.add_overlay(&watchers_motion);
         let problem_motion = Motion::hidden(&problem, Away::TOP);
         problem_motion.set_halign(gtk::Align::Center);
         problem_motion.set_valign(gtk::Align::Start);
@@ -398,6 +465,8 @@ impl Page {
             notice_motion,
             notice,
             problem_motion,
+            watchers_motion,
+            watchers,
             problem,
             alone_motion,
             alone_button,
@@ -488,14 +557,14 @@ impl Page {
         // The order is the web's and every app's (UI-SYNC decision 6).
         island.append(&microphone);
         island.append(&camera);
-        island.append(&share);
+        island.append(&coming(&share));
         island.append(&hand_pair);
         island.append(&messages_holder);
-        island.append(&sound);
-        island.append(&host_holder);
-        island.append(&devices);
-        island.append(&more);
-        island.append(&rule);
+        island.append(&coming(&sound));
+        island.append(&coming(&host_holder));
+        island.append(&coming(&devices));
+        island.append(&coming(&more));
+        island.append(&coming(&rule));
         island.append(&leave);
         Bar {
             island,
@@ -1136,6 +1205,14 @@ impl Page {
         if let Some(timer) = self.idle_timer.take() {
             timer.remove();
         }
+        self.arm_idle();
+        if was_idle {
+            self.refresh();
+        }
+    }
+
+    /// Counts the room's stillness from now.
+    fn arm_idle(self: &Rc<Self>) {
         let page = Rc::downgrade(self);
         let timer = glib::timeout_add_local_once(
             std::time::Duration::from_millis(IDLE_AFTER_MS),
@@ -1148,9 +1225,6 @@ impl Page {
             },
         );
         self.idle_timer.replace(Some(timer));
-        if was_idle {
-            self.refresh();
-        }
     }
 
     /// Every tile and what it shows, one a line, for a test to read: the
@@ -1281,6 +1355,7 @@ impl Page {
                 });
             }
             self.place_tiles(&pictures);
+            super::write_watching(&model);
         }
 
         self.refresh_bar(compact);
@@ -1549,7 +1624,7 @@ impl Page {
         }
     }
 
-    fn refresh_bar(&self, compact: bool) {
+    fn refresh_bar(self: &Rc<Self>, compact: bool) {
         let model = &self.model;
         let room = model.kept::<RoomState>();
         let view = room.view.borrow();
@@ -1592,7 +1667,7 @@ impl Page {
             },
         );
         class(&bar.camera, "off", !camera);
-        bar.share.set_visible(can_share);
+        come_or_go(&bar.share, can_share);
         class(&bar.share, "lit", sharing);
         class(&bar.share, "held", view.pop == Some(Pop::Share));
         set_label(
@@ -1635,12 +1710,12 @@ impl Page {
                 t("Show sound")
             },
         );
-        bar.sound.set_visible(!compact);
+        come_or_go(&bar.sound, !compact);
         class(&bar.devices, "held", view.panel == Some(Panel::Devices));
         set_label(&bar.devices, &t("Devices"));
-        bar.devices.set_visible(!compact);
+        come_or_go(&bar.devices, !compact);
         let hosting = host.yours() || view.panel == Some(Panel::Host);
-        bar.host.set_visible(hosting && !compact);
+        come_or_go(&bar.host, hosting && !compact);
         class(&bar.host, "held", view.panel == Some(Panel::Host));
         set_label(&bar.host, &t("Running this room"));
         let knocking = host.waiting.len();
@@ -1649,10 +1724,10 @@ impl Page {
         }
         bar.host_count_motion
             .show(knocking > 0 && view.panel != Some(Panel::Host));
-        bar.more.set_visible(compact);
+        come_or_go(&bar.more, compact);
         class(&bar.more, "held", view.pop == Some(Pop::More));
         set_label(&bar.more, &t("More controls"));
-        bar.rule.set_visible(!compact);
+        come_or_go(&bar.rule, !compact);
         class(&bar.leave, "held", view.pop == Some(Pop::Leave));
         set_label(&bar.leave, &t("Leave"));
         bar.island.set_sensitive(room.call.borrow().is_some());
@@ -1663,6 +1738,13 @@ impl Page {
             || model.preferences().string(theme::CONTROLS_KEY).as_deref() == Some("idle");
         let shown = !hides || !view.idle || view.pop.is_some();
         self.bar_motion.show(shown);
+        // Stillness is counted from the moment the controls may step aside
+        // (the stage filled), not only from the pointer's last move: filled
+        // from a key or a script, with the pointer still, they stayed.
+        if hides && !view.idle && self.idle_timer.borrow().is_none() {
+            drop(view);
+            self.arm_idle();
+        }
     }
 
     fn refresh_chrome(&self, compact: bool) {
@@ -1763,17 +1845,32 @@ impl Page {
         }
         self.panel_motion
             .set_from(if narrow { Away::FOOT } else { Away::SIDE });
-        if open != self.panel_shown.get() {
+        let was = self.panel_shown.get();
+        if open != was {
             self.panel_shown.set(open);
-            if let Some(panel) = open {
-                if let Some(old) = self.panel_holder.first_child() {
-                    self.panel_holder.remove(&old);
+            match (was, open) {
+                // One panel for another: the first goes, then the second
+                // comes, as the Mac's panels change (`.id(panel)`), rather
+                // than its contents being swapped under the pointer.
+                (Some(_), Some(panel)) if self.panel_motion.is_shown() => {
+                    let page = Rc::downgrade(self);
+                    self.panel_motion.leave(move || {
+                        let Some(page) = page.upgrade() else { return };
+                        // Only if it is still the one wanted when the first
+                        // has gone.
+                        if page.panel_shown.get() == Some(panel) {
+                            page.fill_panel(panel);
+                            page.panel_motion.show(true);
+                            page.refresh();
+                        }
+                    });
                 }
-                let view = panels::build(model, panel);
-                self.panel_holder.append(&view.widget);
-                self.panel_view.replace(Some(view));
+                (_, Some(panel)) => {
+                    self.fill_panel(panel);
+                    self.panel_motion.show(true);
+                }
+                (_, None) => self.panel_motion.show(false),
             }
-            self.panel_motion.show(open.is_some());
         }
         if let Some(view) = self.panel_view.borrow().as_ref() {
             if open.is_some() {
@@ -1787,6 +1884,15 @@ impl Page {
         } else {
             16
         });
+    }
+
+    fn fill_panel(&self, panel: Panel) {
+        if let Some(old) = self.panel_holder.first_child() {
+            self.panel_holder.remove(&old);
+        }
+        let view = panels::build(&self.model, panel);
+        self.panel_holder.append(&view.widget);
+        self.panel_view.replace(Some(view));
     }
 
     fn refresh_pops(&self) {
@@ -1806,6 +1912,23 @@ impl Page {
 
     fn refresh_notices(&self) {
         let model = &self.model;
+        // Who has one's share open; beside an open panel rather than under
+        // it.
+        let watching = super::watchers(model);
+        if let Some(names) = watching.as_ref() {
+            self.watchers.set_label(&if names.is_empty() {
+                t("Nobody has this open yet.")
+            } else {
+                format!("{}\n{}", t("Watching"), names.join(", "))
+            });
+        }
+        let panel_open = model.kept::<RoomState>().view.borrow().panel.is_some();
+        self.watchers_motion.set_margin_end(if panel_open {
+            self.panel_motion.width_request() + 12 + 8
+        } else {
+            14
+        });
+        self.watchers_motion.show(watching.is_some());
         let room = model.kept::<RoomState>();
         let view = room.view.borrow();
 
