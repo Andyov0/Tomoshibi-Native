@@ -475,7 +475,12 @@ glib::wrapper! {
 impl Menu {
     /// A menu `width` wide hanging from `anchor`. Its rows go in
     /// [`column`](Self::column).
-    pub fn new(anchor: &impl IsA<gtk::Widget>, width: i32, side: MenuSide, align: MenuAlign) -> Menu {
+    pub fn new(
+        anchor: &impl IsA<gtk::Widget>,
+        width: i32,
+        side: MenuSide,
+        align: MenuAlign,
+    ) -> Menu {
         let menu: Menu = glib::Object::new();
         let imp = menu.imp();
         imp.column.set_width_request(width);
@@ -496,7 +501,10 @@ impl Menu {
         anchor.as_ref().connect_destroy(move |_| {
             if let Some(menu) = weak.upgrade() {
                 menu.stop_listening();
-                if let Some(layer) = menu.parent().and_then(|p| p.downcast::<gtk::Overlay>().ok()) {
+                if let Some(layer) = menu
+                    .parent()
+                    .and_then(|p| p.downcast::<gtk::Overlay>().ok())
+                {
                     layer.remove_overlay(&menu);
                 }
             }
@@ -552,7 +560,10 @@ impl Menu {
             return;
         };
         if self.parent().as_ref() != Some(layer.upcast_ref()) {
-            if let Some(old) = self.parent().and_then(|p| p.downcast::<gtk::Overlay>().ok()) {
+            if let Some(old) = self
+                .parent()
+                .and_then(|p| p.downcast::<gtk::Overlay>().ok())
+            {
                 old.remove_overlay(self);
             }
             layer.add_overlay(self);
@@ -640,7 +651,13 @@ impl Menu {
         self.animate_then(to, duration_ms, easing, || {});
     }
 
-    fn animate_then(&self, to: f64, duration_ms: u32, easing: adw::Easing, then: impl FnOnce() + 'static) {
+    fn animate_then(
+        &self,
+        to: f64,
+        duration_ms: u32,
+        easing: adw::Easing,
+        then: impl FnOnce() + 'static,
+    ) {
         let imp = self.imp();
         // Paused rather than skipped, as Arrival's: a close interrupted by
         // an open goes on from where it had got to.
@@ -677,7 +694,10 @@ impl Menu {
     /// anchor while it is open (an anchor in a list that scrolls).
     fn listen(&self, anchor: &gtk::Widget) {
         let imp = self.imp();
-        if let Some(window) = anchor.root().and_then(|root| root.downcast::<gtk::Window>().ok()) {
+        if let Some(window) = anchor
+            .root()
+            .and_then(|root| root.downcast::<gtk::Window>().ok())
+        {
             let keys = gtk::EventControllerKey::new();
             keys.set_propagation_phase(gtk::PropagationPhase::Capture);
             let weak = self.downgrade();
@@ -703,7 +723,8 @@ impl Menu {
             let imp = menu.imp();
             let (Some(anchor), Some(layer)) = (
                 imp.anchor.upgrade(),
-                menu.parent().and_then(|p| p.downcast::<gtk::Overlay>().ok()),
+                menu.parent()
+                    .and_then(|p| p.downcast::<gtk::Overlay>().ok()),
             ) else {
                 return glib::ControlFlow::Continue;
             };
@@ -765,7 +786,10 @@ impl Menu {
             MenuAlign::Start | MenuAlign::Fill => anchor.x(),
             MenuAlign::End => anchor.x() + anchor.width() - width as f32,
         };
-        let x = (x.round() as i32).clamp(MENU_MARGIN, (whole_width - width - MENU_MARGIN).max(MENU_MARGIN));
+        let x = (x.round() as i32).clamp(
+            MENU_MARGIN,
+            (whole_width - width - MENU_MARGIN).max(MENU_MARGIN),
+        );
         let y = if above {
             (anchor.y() - MENU_GAP).round() as i32 - height
         } else {
@@ -810,7 +834,12 @@ pub fn menu_layer(child: &impl IsA<gtk::Widget>) -> gtk::Overlay {
             }
             // A press on the anchor is the anchor's: it closes the menu
             // by toggling it.
-            if menu.imp().anchor.upgrade().is_some_and(|anchor| inside(&anchor)) {
+            if menu
+                .imp()
+                .anchor
+                .upgrade()
+                .is_some_and(|anchor| inside(&anchor))
+            {
                 continue;
             }
             menu.popdown();
@@ -873,7 +902,11 @@ pub fn fade_visible(widget: &impl IsA<gtk::Widget>, shown: bool) {
         .widget(widget)
         .value_from(widget.opacity())
         .value_to(if shown { 1.0 } else { 0.0 })
-        .duration(if shown { motion::SETTLE_MS } else { motion::LEAVE_MS })
+        .duration(if shown {
+            motion::SETTLE_MS
+        } else {
+            motion::LEAVE_MS
+        })
         .easing(if shown {
             settle()
         } else {

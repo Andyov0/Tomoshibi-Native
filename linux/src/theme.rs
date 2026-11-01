@@ -673,7 +673,10 @@ mod tests {
     #[test]
     fn a_menu_stands_off_the_sidebar_by_night() {
         let css = stylesheet(Scheme::Dark, Accent::Amber);
-        assert!(css.contains(&format!("@define-color tmsb_menu {};", DARK.surface_high.css())));
+        assert!(css.contains(&format!(
+            "@define-color tmsb_menu {};",
+            DARK.surface_high.css()
+        )));
         assert_ne!(DARK.surface_high.css(), DARK.surface.css());
     }
 

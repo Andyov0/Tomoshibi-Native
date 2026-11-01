@@ -150,18 +150,19 @@ pub fn month(
             on.downgrade(),
         );
         Rc::new(move |by: i32| {
-            let (Some(pages), Some(title), Some(back), Some(on)) =
-                (pages.upgrade(), title.upgrade(), back.upgrade(), on.upgrade())
-            else {
+            let (Some(pages), Some(title), Some(back), Some(on)) = (
+                pages.upgrade(),
+                title.upgrade(),
+                back.upgrade(),
+                on.upgrade(),
+            ) else {
                 return;
             };
             let (year, month) = state.shown.get();
             let (year, month) = step_month(year, month, by);
             state.shown.set((year, month));
             title.set_label(&words::month_title(year, month, language));
-            back.set_sensitive(
-                (year, month) > (state.earliest.year, state.earliest.month),
-            );
+            back.set_sensitive((year, month) > (state.earliest.year, state.earliest.month));
             on.set_sensitive((year, month) < (state.latest.year, state.latest.month));
             let grid = days(&state, year, month, words::first_weekday(language));
             let name = format!("{year}-{month}");

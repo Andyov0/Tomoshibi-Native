@@ -156,7 +156,10 @@ fn identity_box(model: &AppModel, name_only: bool, submit: Rc<dyn Fn()>) -> gtk:
         });
         let submit_passphrase = submit.clone();
         passphrase.connect_activate(move |_| submit_passphrase());
-        fields.append(&pieces::identity_field(&pieces::passphrase_symbol(), &passphrase));
+        fields.append(&pieces::identity_field(
+            &pieces::passphrase_symbol(),
+            &passphrase,
+        ));
     }
     name.connect_activate(move |_| submit());
     fields

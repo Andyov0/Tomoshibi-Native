@@ -61,7 +61,10 @@ pub fn offer(model: &AppModel) -> gtk::Revealer {
         .build();
     buttons.add_named(&offered, Some("offered"));
     buttons.add_named(&downloading, Some("downloading"));
-    buttons.add_named(&gtk::Box::new(gtk::Orientation::Horizontal, 0), Some("none"));
+    buttons.add_named(
+        &gtk::Box::new(gtk::Orientation::Horizontal, 0),
+        Some("none"),
+    );
     let detail_slot = super::pieces::unfolding(&detail, false);
     let why_slot = super::pieces::unfolding(&why, false);
     let bar_slot = super::pieces::unfolding(&bar, false);

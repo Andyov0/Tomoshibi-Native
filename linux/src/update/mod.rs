@@ -117,20 +117,17 @@ pub fn trusted_image(
         else {
             return false;
         };
-        kind.starts_with("fuse")
-            && Path::new(&unescape_mount(point)) == appdir
-            && {
-                let source = unescape_mount(source);
-                source == name || Path::new(&source) == image
-            }
+        kind.starts_with("fuse") && Path::new(&unescape_mount(point)) == appdir && {
+            let source = unescape_mount(source);
+            source == name || Path::new(&source) == image
+        }
     });
     let unpacked = appdir
         .file_name()
         .and_then(|name| name.to_str())
         .is_some_and(|name| name.starts_with("appimage_extracted_"))
         && parent.is_some_and(|parent| {
-            parent == image
-                || std::fs::canonicalize(image).is_ok_and(|image| image == parent)
+            parent == image || std::fs::canonicalize(image).is_ok_and(|image| image == parent)
         });
     mounted || unpacked
 }
@@ -297,7 +294,13 @@ mod tests {
         let extracted = Path::new("/tmp/appimage_extracted_0123456789abcdef0123456789abcdef");
         let inside = extracted.join("usr/bin/tomoshibi");
         assert!(trusted_image(image, extracted, &inside, "", Some(image)));
-        assert!(!trusted_image(image, extracted, &inside, "", Some(Path::new("/usr/bin/bash"))));
+        assert!(!trusted_image(
+            image,
+            extracted,
+            &inside,
+            "",
+            Some(Path::new("/usr/bin/bash"))
+        ));
         // A path with a space, as /proc/mounts escapes it.
         let spaced = Path::new("/tmp/.mount_Tomosh X");
         let mounts = "Tomoshibi.AppImage /tmp/.mount_Tomosh\\040X fuse.Tomoshibi.AppImage ro 0 0\n";
@@ -313,7 +316,10 @@ mod tests {
     #[test]
     fn a_mount_s_path_is_read_back_whole() {
         assert_eq!(unescape_mount("/tmp/a\\040b\\134c"), "/tmp/a b\\c");
-        assert_eq!(unescape_mount("/home/\u{5c71}\u{7530}/x"), "/home/\u{5c71}\u{7530}/x");
+        assert_eq!(
+            unescape_mount("/home/\u{5c71}\u{7530}/x"),
+            "/home/\u{5c71}\u{7530}/x"
+        );
         assert_eq!(unescape_mount("/end\\04"), "/end\\04");
     }
 

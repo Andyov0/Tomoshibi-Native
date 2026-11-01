@@ -306,7 +306,8 @@ pub fn avatar(model: &AppModel, name: &str, size: i32) -> gtk::Overlay {
                 };
                 // Decoded off the main thread, at twice the size drawn for a
                 // sharp picture on a doubled display.
-                let decoded = gtk::gio::spawn_blocking(move || decode_picture(&bytes, size * 2)).await;
+                let decoded =
+                    gtk::gio::spawn_blocking(move || decode_picture(&bytes, size * 2)).await;
                 let Ok(Some(texture)) = decoded.map(|pixels| pixels.map(|p| p.texture())) else {
                     return;
                 };
@@ -460,6 +461,10 @@ pub fn unfolding(child: &impl IsA<gtk::Widget>, shown: bool) -> gtk::Revealer {
 /// changed where it is, and the rest stay as they are. The lobby's lists
 /// were emptied and built again on every change, so every row vanished and
 /// reappeared at once whenever one of them changed.
+/// A row a list is to show: its key, what it looks like, and how to build
+/// it ([`KeptRows::show`]).
+pub type WantedRow = (String, String, Box<dyn Fn() -> gtk::Widget>);
+
 #[derive(Default)]
 pub struct KeptRows {
     rows: RefCell<Vec<KeptRow>>,
@@ -477,7 +482,7 @@ impl KeptRows {
     /// Makes `list` show `wanted` in order: each a key (what the row is),
     /// what it looks like now (a row whose looks change is built again in
     /// place), and how to build it.
-    pub fn show(&self, list: &gtk::ListBox, wanted: Vec<(String, String, Box<dyn Fn() -> gtk::Widget>)>) {
+    pub fn show(&self, list: &gtk::ListBox, wanted: Vec<WantedRow>) {
         let mut rows = self.rows.borrow_mut();
         // What goes.
         for kept in rows.iter() {
@@ -488,8 +493,8 @@ impl KeptRows {
         }
         // What comes back, stays or arrives, in order among the rows that
         // are not leaving.
-        let mut place = 0;
-        for (key, looks, build) in wanted {
+        for (place, (key, looks, build)) in wanted.into_iter().enumerate() {
+            let place = place as i32;
             let found = rows.iter().position(|kept| kept.key == key);
             match found {
                 Some(index) => {
@@ -538,7 +543,6 @@ impl KeptRows {
                     });
                 }
             }
-            place += 1;
         }
         // Forget the rows that have been removed.
         rows.retain(|kept| kept.row.parent().is_some());
@@ -905,8 +909,8 @@ pub fn server_menu(model: &AppModel) -> gtk::Button {
     fill_words(model);
     // The rows, by relay (None for Automatic), and what they were built
     // for: the same relays are changed in place.
-    let rows: Rc<RefCell<(String, Vec<(Option<String>, gtk::Button)>)>> =
-        Rc::new(RefCell::new((String::new(), Vec::new())));
+    type Rows = (String, Vec<(Option<String>, gtk::Button)>);
+    let rows: Rc<RefCell<Rows>> = Rc::new(RefCell::new((String::new(), Vec::new())));
     let fill_menu = {
         let (column, menu) = (column.downgrade(), menu.downgrade());
         move |model: &AppModel| {
@@ -931,7 +935,12 @@ pub fn server_menu(model: &AppModel) -> gtk::Button {
                     let names: Vec<String> = relays
                         .iter()
                         .map(|relay| {
-                            format!("{}:{}:{}", relay.name, model.relay_label(&relay.name), relay.maintenance)
+                            format!(
+                                "{}:{}:{}",
+                                relay.name,
+                                model.relay_label(&relay.name),
+                                relay.maintenance
+                            )
                         })
                         .collect();
                     format!("{region}[{}]", names.join(","))
@@ -944,7 +953,9 @@ pub fn server_menu(model: &AppModel) -> gtk::Button {
                 if kept.0 == built_for && !kept.1.is_empty() {
                     for (relay, row) in &kept.1 {
                         match relay {
-                            None => set_menu_row(row, automatic_detail.as_deref(), chosen.is_none()),
+                            None => {
+                                set_menu_row(row, automatic_detail.as_deref(), chosen.is_none())
+                            }
                             Some(name) => set_menu_row(
                                 row,
                                 detail_of(name).as_deref(),
@@ -959,7 +970,11 @@ pub fn server_menu(model: &AppModel) -> gtk::Button {
                 column.remove(&child);
             }
             let mut built = Vec::new();
-            let automatic = menu_row(&t("Automatic"), automatic_detail.as_deref(), chosen.is_none());
+            let automatic = menu_row(
+                &t("Automatic"),
+                automatic_detail.as_deref(),
+                chosen.is_none(),
+            );
             let (weak, pop) = (model.downgrade(), menu.downgrade());
             automatic.connect_clicked(move |_| {
                 if let Some(model) = weak.upgrade() {

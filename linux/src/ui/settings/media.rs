@@ -284,23 +284,29 @@ fn device_check(context: &Context) -> gtk::Widget {
     }
     // Another device picked on this page is the one checked.
     let weak = Rc::downgrade(&check);
-    context.model.subscribe_while(&overlay, move |model, change| {
-        if change != app::CHANGED {
-            return;
-        }
-        let Some(check) = weak.upgrade() else {
-            return;
-        };
-        let wanted = (
-            model.device_choice(DeviceSlot::Camera),
-            model.device_choice(DeviceSlot::Microphone),
-        );
-        let running = check.state.borrow().as_ref().map(|state| state.chosen.clone());
-        if running.is_some_and(|running| running != wanted) {
-            check.stop();
-            check.start();
-        }
-    });
+    context
+        .model
+        .subscribe_while(&overlay, move |model, change| {
+            if change != app::CHANGED {
+                return;
+            }
+            let Some(check) = weak.upgrade() else {
+                return;
+            };
+            let wanted = (
+                model.device_choice(DeviceSlot::Camera),
+                model.device_choice(DeviceSlot::Microphone),
+            );
+            let running = check
+                .state
+                .borrow()
+                .as_ref()
+                .map(|state| state.chosen.clone());
+            if running.is_some_and(|running| running != wanted) {
+                check.stop();
+                check.start();
+            }
+        });
     overlay.upcast()
 }
 
@@ -371,7 +377,9 @@ impl Check {
                     }
                     Ok(camera) => camera.close(),
                     Err(fault) => {
-                        crate::app::log(&format!("settings: the camera could not be opened: {fault}"));
+                        crate::app::log(&format!(
+                            "settings: the camera could not be opened: {fault}"
+                        ));
                         check.camera_running(None);
                     }
                 }
@@ -394,16 +402,16 @@ impl Check {
             match opened {
                 Ok(microphone) if check.generation.get() == generation => {
                     let weak = Rc::downgrade(&check);
-                    let ticking = glib::timeout_add_local(
-                        std::time::Duration::from_millis(50),
-                        move || match weak.upgrade() {
-                            Some(check) => {
-                                check.tick();
-                                glib::ControlFlow::Continue
+                    let ticking =
+                        glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
+                            match weak.upgrade() {
+                                Some(check) => {
+                                    check.tick();
+                                    glib::ControlFlow::Continue
+                                }
+                                None => glib::ControlFlow::Break,
                             }
-                            None => glib::ControlFlow::Break,
-                        },
-                    );
+                        });
                     if let Some(state) = check.state.borrow_mut().as_mut() {
                         state.microphone = Some(microphone);
                         state.ticking = Some(ticking);
@@ -439,7 +447,12 @@ impl Check {
             .state
             .borrow()
             .as_ref()
-            .and_then(|state| state.microphone.as_ref().map(|microphone| microphone.level()))
+            .and_then(|state| {
+                state
+                    .microphone
+                    .as_ref()
+                    .map(|microphone| microphone.level())
+            })
             .unwrap_or(0.0) as f64;
         let shown = heard.clamp(0.0, 1.0);
         let level = self.level.get();

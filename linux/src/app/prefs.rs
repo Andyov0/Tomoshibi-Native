@@ -226,8 +226,7 @@ mod tests {
 
     #[test]
     fn changes_made_together_are_written_once_a_moment_later() {
-        let dir =
-            std::env::temp_dir().join(format!("tomoshibi-prefs-wait-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("tomoshibi-prefs-wait-{}", std::process::id()));
         let path = dir.join("preferences.json");
         let _ = std::fs::remove_dir_all(&dir);
         let context = glib::MainContext::new();

@@ -496,7 +496,13 @@ fn works_from() -> (adw::ExpanderRow, Rc<dyn Fn() -> Option<i64>>) {
                 return None;
             }
             let (day, hour, minute) = chosen.get();
-            Some(schedule::instant(day, hour, minute, &LocalZone, words::now()))
+            Some(schedule::instant(
+                day,
+                hour,
+                minute,
+                &LocalZone,
+                words::now(),
+            ))
         }) as Rc<dyn Fn() -> Option<i64>>
     };
     let say = {
@@ -613,7 +619,9 @@ fn choose_picture(context: &Context) {
                 let data_url = gtk::gio::spawn_blocking(move || {
                     gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(&path, 256, 256, true)
                         .ok()
-                        .and_then(|pixbuf| pixbuf.save_to_bufferv("jpeg", &[("quality", "82")]).ok())
+                        .and_then(|pixbuf| {
+                            pixbuf.save_to_bufferv("jpeg", &[("quality", "82")]).ok()
+                        })
                         .map(|bytes| {
                             format!("data:image/jpeg;base64,{}", glib::base64_encode(&bytes))
                         })

@@ -245,9 +245,7 @@ pub fn hand_links_over(image: &Path, links: &str) -> io::Result<()> {
     let mut command = Command::new(image);
     command.stdin(Stdio::null()).process_group(0);
     as_the_host(&mut command);
-    command
-        .env(OPEN_LINKS, links)
-        .env(LINKS_HANDED, "1");
+    command.env(OPEN_LINKS, links).env(LINKS_HANDED, "1");
     // This start's activation (the desktop's leave to raise the window it
     // opens, which as_the_host drops as this start's alone) is handed on
     // with the links: the start that shows the window is the next one, and
@@ -375,10 +373,7 @@ mod tests {
 
     #[test]
     fn the_renderer_the_app_chose_is_not_handed_on() {
-        let chosen = environment(&[
-            ("GSK_RENDERER", "cairo"),
-            ("TOMOSHIBI_CHOSE_RENDERER", "1"),
-        ]);
+        let chosen = environment(&[("GSK_RENDERER", "cairo"), ("TOMOSHIBI_CHOSE_RENDERER", "1")]);
         assert_eq!(change(&chosen, "GSK_RENDERER"), Some(&None));
         // One the person set is theirs, and stays.
         let theirs = environment(&[("GSK_RENDERER", "vulkan")]);
@@ -465,10 +460,7 @@ mod tests {
         let dir = scratch("inherited");
         let image = Dir(&dir).image();
         let listed = dir.join("descriptors");
-        script(
-            &image,
-            &format!("ls /proc/$$/fd > '{}'", listed.display()),
-        );
+        script(&image, &format!("ls /proc/$$/fd > '{}'", listed.display()));
         // A descriptor as the AppImage runtime hands one over: not marked
         // close-on-exec.
         let mut ends = [0 as libc::c_int; 2];
@@ -534,7 +526,10 @@ mod tests {
         script(&image, "exit 3");
         script(
             &old,
-            &format!("echo \"$TOMOSHIBI_UPDATE_DID_NOT_START\" > '{}'", again.display()),
+            &format!(
+                "echo \"$TOMOSHIBI_UPDATE_DID_NOT_START\" > '{}'",
+                again.display()
+            ),
         );
 
         let mut app = stand_in(&dir);

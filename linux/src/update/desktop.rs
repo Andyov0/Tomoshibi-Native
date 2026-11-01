@@ -168,7 +168,6 @@ pub fn integrate(image: &Path, places: &Places) -> io::Result<()> {
 }
 
 fn write_integration(text: &str, places: &Places) -> io::Result<()> {
-
     // The icons first, so that a menu that notices the entry at once finds
     // its icon.
     let hicolor = places.hicolor();
@@ -323,8 +322,8 @@ fn unescape(value: &str) -> String {
 /// or it opens a field code.
 fn exec_argument(path: &str) -> String {
     const RESERVED: &[char] = &[
-        ' ', '\t', '\n', '"', '\'', '\\', '>', '<', '~', '|', '&', ';', '$', '*', '?', '#',
-        '(', ')', '`',
+        ' ', '\t', '\n', '"', '\'', '\\', '>', '<', '~', '|', '&', ';', '$', '*', '?', '#', '(',
+        ')', '`',
     ];
     if !path.contains(RESERVED) {
         return path.replace('%', "%%");
@@ -574,13 +573,19 @@ mod tests {
         assert!(text.contains("\nTryExec=/home/ann/My Apps/Tomoshibi \"new\" $1%.AppImage\n"));
         // A path that needs no quotes has none, for xdg-open's generic
         // opener, which cannot read them.
-        let plain = entry_for(Path::new("/home/ann/Applications/Tomoshibi-0.1.7-x86_64.AppImage")).unwrap();
+        let plain = entry_for(Path::new(
+            "/home/ann/Applications/Tomoshibi-0.1.7-x86_64.AppImage",
+        ))
+        .unwrap();
         assert!(
             plain.contains("\nExec=/home/ann/Applications/Tomoshibi-0.1.7-x86_64.AppImage %U\n"),
             "{plain}"
         );
         let percent = entry_for(Path::new("/opt/100%/Tomoshibi.AppImage")).unwrap();
-        assert!(percent.contains("\nExec=/opt/100%%/Tomoshibi.AppImage %U\n"), "{percent}");
+        assert!(
+            percent.contains("\nExec=/opt/100%%/Tomoshibi.AppImage %U\n"),
+            "{percent}"
+        );
         assert!(text.contains("\nMimeType=x-scheme-handler/tomoshibi;\n"));
         assert!(text.contains(&format!("\nIcon={APP_ID}\n")));
         assert!(

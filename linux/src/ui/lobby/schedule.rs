@@ -190,7 +190,8 @@ fn form(context: &Context, draft: &Rc<Draft>) -> gtk::Box {
             day: wall.day,
         }
     };
-    let say_later: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+    type Say = Option<Rc<dyn Fn()>>;
+    let say_later: Rc<RefCell<Say>> = Rc::new(RefCell::new(None));
     let calendar = {
         let (draft, say_later) = (draft.clone(), say_later.clone());
         super::calendar::month(
@@ -308,8 +309,7 @@ fn form(context: &Context, draft: &Rc<Draft>) -> gtk::Box {
         });
     }
     {
-        let say = say.clone();
-        say_later.replace(Some(Rc::new(move || say())));
+        say_later.replace(Some(Rc::new(say.clone())));
     }
     {
         let (draft, say, minute) = (draft.clone(), say.clone(), minute.downgrade());

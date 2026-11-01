@@ -365,10 +365,11 @@ pub fn page(context: &Context) -> gtk::Widget {
                         let looks = format!("{}|{}|{}", one.room, one.at, one.started);
                         let key = one_key(&one.id, &one.room);
                         let (weak, one) = (model.downgrade(), one.clone());
-                        let build: Box<dyn Fn() -> gtk::Widget> = Box::new(move || match weak.upgrade() {
-                            Some(model) => meeting_row(&model, &one),
-                            None => gtk::Box::new(gtk::Orientation::Vertical, 0).upcast(),
-                        });
+                        let build: Box<dyn Fn() -> gtk::Widget> =
+                            Box::new(move || match weak.upgrade() {
+                                Some(model) => meeting_row(&model, &one),
+                                None => gtk::Box::new(gtk::Orientation::Vertical, 0).upcast(),
+                            });
                         (key, looks, build)
                     })
                     .collect();
@@ -384,7 +385,8 @@ pub fn page(context: &Context) -> gtk::Widget {
                         let looks = words::lately(one.at_ms / 1000);
                         let key = one.room.clone();
                         let (ctx, one) = (ctx.clone(), one.clone());
-                        let build: Box<dyn Fn() -> gtk::Widget> = Box::new(move || recent_row(&ctx, &one));
+                        let build: Box<dyn Fn() -> gtk::Widget> =
+                            Box::new(move || recent_row(&ctx, &one));
                         (key, looks, build)
                     })
                     .collect();
@@ -485,11 +487,17 @@ pub fn open_from_debug(context: &Context, anchor: &impl IsA<gtk::Widget>, signin
                     }
                     dialog.close();
                     let model = ctx.model.downgrade();
-                    glib::timeout_add_local_once(std::time::Duration::from_millis(4000), move || {
-                        if let Some(model) = model.upgrade() {
-                            log(&format!("after the sheet closed: {}", model.screen().name()));
-                        }
-                    });
+                    glib::timeout_add_local_once(
+                        std::time::Duration::from_millis(4000),
+                        move || {
+                            if let Some(model) = model.upgrade() {
+                                log(&format!(
+                                    "after the sheet closed: {}",
+                                    model.screen().name()
+                                ));
+                            }
+                        },
+                    );
                 });
             }
             "join" => sheet::present(&ctx, sheet::Mode::Join(String::new())),
@@ -736,7 +744,8 @@ fn account_button(context: &Context, name: &str) -> gtk::Button {
     button.set_tooltip_text(Some(&t("Settings")));
     button.add_css_class("tmsb-account");
     button.set_widget_name("lobby.account");
-    let (menu, column) = pieces::menu_for(&button, 262, kit::MenuSide::Above, kit::MenuAlign::Start);
+    let (menu, column) =
+        pieces::menu_for(&button, 262, kit::MenuSide::Above, kit::MenuAlign::Start);
     let settings_row = menu_item(&t("Settings"), "emblem-system-symbolic");
     let sign_out_row = menu_item(&t("Sign out"), "system-log-out-symbolic");
     sign_out_row.add_css_class("tmsb-destructive");

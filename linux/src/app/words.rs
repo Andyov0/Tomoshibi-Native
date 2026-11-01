@@ -369,7 +369,10 @@ mod tests {
     #[test]
     fn a_calendar_speaks_the_app_s_language() {
         assert_eq!(month_title(2026, 11, Language::En), "November 2026");
-        assert_eq!(month_title(2026, 11, Language::Ja), "2026\u{5e74}11\u{6708}");
+        assert_eq!(
+            month_title(2026, 11, Language::Ja),
+            "2026\u{5e74}11\u{6708}"
+        );
         assert_eq!(weekday_letters(Language::En)[0], "S");
         // Japanese: Sunday first, the days named.
         assert_eq!(weekday_letters(Language::Ja)[1], "\u{6708}");

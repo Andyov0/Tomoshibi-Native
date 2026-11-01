@@ -132,7 +132,9 @@ fn main() -> glib::ExitCode {
     if links.is_empty() {
         application.run()
     } else {
-        let mut arguments = vec![std::env::args().next().unwrap_or_else(|| "tomoshibi".into())];
+        let mut arguments = vec![std::env::args()
+            .next()
+            .unwrap_or_else(|| "tomoshibi".into())];
         arguments.extend(links);
         application.run_with_args(&arguments)
     }
@@ -256,7 +258,11 @@ fn debug_switches(
                 if now > until {
                     return;
                 }
-                let since = if last.get() > 0 { (now - last.get()) / 1000 } else { 0 };
+                let since = if last.get() > 0 {
+                    (now - last.get()) / 1000
+                } else {
+                    0
+                };
                 last.set(now);
                 log(&format!(
                     "frame {} painted at {} ms, {since} ms after the last",

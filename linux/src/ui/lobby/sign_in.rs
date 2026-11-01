@@ -50,7 +50,10 @@ pub fn page(context: &Context) -> gtk::Widget {
     fields.add_css_class("tmsb-fields");
     fields.append(&pieces::identity_field(&pieces::name_symbol(), &name));
     fields.append(&gtk::Separator::new(gtk::Orientation::Horizontal));
-    fields.append(&pieces::identity_field(&pieces::passphrase_symbol(), &passphrase));
+    fields.append(&pieces::identity_field(
+        &pieces::passphrase_symbol(),
+        &passphrase,
+    ));
 
     let go = kit::primary_button(&t("Sign in"));
     go.set_widget_name("signin.go");
