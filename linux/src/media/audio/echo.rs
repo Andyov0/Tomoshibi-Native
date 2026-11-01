@@ -115,6 +115,18 @@ const STEP: f64 = 10.0;
 const JUMP: f64 = 480.0;
 /// The correlation a measure needs to be believed.
 const BELIEVED: f32 = 0.3;
+/// The least the reverse stream is put ahead of its echo (10 ms), and the
+/// most (120 ms), whatever else moves it.
+const LEAST_MARGIN: f64 = 480.0;
+const MOST_MARGIN: f64 = 5760.0;
+/// What the reverse stream keeps behind the newest the speakers were
+/// given, when its place is first chosen: 10 ms.
+const HEADROOM: f64 = 480.0;
+/// Frames looked back over (a second) for whether the speakers keep coming
+/// short of where the reverse stream is read, and how many of them must
+/// for the margin to be brought in.
+const SHORT_SPAN: u32 = 100;
+const SHORT_TOO_OFTEN: u32 = 30;
 
 /// What the speakers played, mono, as the playback wrote it.
 struct History {
@@ -155,7 +167,6 @@ pub struct Processor {
     echo: Arc<Echo>,
     scratch: Vec<i16>,
     align: Align,
-    margin: f64,
 }
 
 /// Where the reverse stream is read from, and the measure of where it
@@ -166,8 +177,17 @@ struct Align {
     /// Where the reverse stream is read from: the speakers' sample at
     /// `captured + feed` goes with the microphone's at `captured`.
     feed: Option<f64>,
-    /// Where it should be, from the last measure believed.
+    /// Where the echo is, from the last measure believed: the offset, with
+    /// no margin.
     target: Option<f64>,
+    /// How far ahead of its echo the reverse stream is read: [`MARGIN`] at
+    /// first, then wherever keeps the reverse stream still (see `believe`).
+    margin: f64,
+    /// Of the frames since the last look, how many found the speakers short
+    /// of where the reverse stream is read, and by how much at most.
+    span_frames: u32,
+    short_frames: u32,
+    short_most: f64,
     /// The measures believed lately: where in the microphone each window's
     /// middle was, and the offset found there. The drift between them is
     /// what moves the reverse stream from one frame to the next, so that it
@@ -232,11 +252,14 @@ impl Processor {
             processing,
             echo,
             scratch: vec![0; FRAME],
-            margin: MARGIN,
             align: Align {
                 captured: 0,
                 feed: None,
                 target: None,
+                margin: MARGIN,
+                span_frames: 0,
+                short_frames: 0,
+                short_most: 0.0,
                 measures: VecDeque::with_capacity(KEPT_MEASURES + 1),
                 suspect: None,
                 astray: 0,
@@ -271,7 +294,7 @@ impl Processor {
         if self.processing.echo_cancellation {
             self.listen(frame);
             self.reverse(delay_ms);
-            let _ = self.apm.set_stream_delay_ms((self.margin / 48.0) as i32);
+            let _ = self.apm.set_stream_delay_ms((self.align.margin / 48.0) as i32);
         }
         let _ = self.apm.process_stream(frame, RATE as i32, 1);
         self.align.captured += FRAME as u64;
@@ -305,7 +328,7 @@ impl Processor {
             _ => None,
         };
         if let Some(measure) = answered.flatten() {
-            align.believe(measure, self.margin);
+            align.believe(measure);
         }
         if !align.frames.is_multiple_of(MEASURE_EVERY) || align.slow.len() < WINDOW {
             return;
@@ -335,7 +358,7 @@ impl Processor {
             }
             None => {
                 if let Some(measure) = measure(&job) {
-                    align.believe(measure, self.margin);
+                    align.believe(measure);
                 }
             }
         }
@@ -352,16 +375,21 @@ impl Processor {
             return;
         }
         // Until a measure: the newest the speakers have, less the two
-        // streams' latencies, is what this frame of the microphone hears.
-        let margin = self.margin;
+        // streams' latencies, is what this frame of the microphone hears;
+        // the margin no more than those latencies leave behind the newest.
+        if align.feed.is_none() {
+            let room = f64::from(delay_ms.clamp(0, 500)) * 48.0 - HEADROOM;
+            align.margin = MARGIN.min(room).clamp(LEAST_MARGIN, MOST_MARGIN);
+        }
+        let margin = align.margin;
         let guess = || {
             written - f64::from(delay_ms.clamp(0, 500)) * 48.0 - FRAME as f64 - captured + margin
         };
         let from = align.feed.unwrap_or_else(guess);
         let wanted = align
             .predict(captured + FRAME as f64)
-            .map(|offset| offset + margin)
             .or(align.target)
+            .map(|offset| offset + margin)
             .unwrap_or(from);
         let mut to = if (wanted - from).abs() > JUMP {
             wanted
@@ -373,25 +401,56 @@ impl Processor {
         } else {
             from
         };
-        // Never past what the speakers have been given, nor further back
-        // than the history holds.
+        // Never further back than the history holds.
         let newest = written - 2.0;
         let oldest = written - (HISTORY - 2 * FRAME) as f64;
-        let end = captured + FRAME as f64 + to;
-        if end > newest {
-            to -= end - newest;
-            from = from.min(to);
-        }
         if captured + from < oldest {
             from = oldest - captured;
             to = to.max(from);
+        }
+        // Where the speakers have not been given this much yet, what they
+        // have not been given is silence to the canceller, and the reverse
+        // stream stays where it is. It was pulled back to what they had
+        // instead, and kept there, gliding forward again over the next
+        // tenth of a second: the playback writes in bursts and the
+        // microphone reads in bursts, and through a 40 ms loopback, with the
+        // reverse stream 60 ms ahead of its echo and 23 ms behind the
+        // newest, a burst arriving late now and then moved it 2.6 ms and
+        // back, and the canceller, which had held the echo, lost it for a
+        // second (a voice back at -8 dBFS). Only where the speakers keep
+        // coming short (a system whose buffers are smaller than the margin
+        // allows for) is the margin brought in, once, by what was missing.
+        let short = captured + FRAME as f64 + to - newest;
+        align.span_frames += 1;
+        if short > 0.0 {
+            align.short_frames += 1;
+            align.short_most = align.short_most.max(short);
+        }
+        if align.span_frames >= SHORT_SPAN {
+            if align.short_frames >= SHORT_TOO_OFTEN && align.margin > LEAST_MARGIN {
+                let fewer = (align.short_most + FRAME as f64).min(align.margin - LEAST_MARGIN);
+                align.margin -= fewer;
+                align.note(format_args!(
+                    "the speakers came short in {} frames of {}: the margin is now {:.1} ms",
+                    align.short_frames,
+                    align.span_frames,
+                    align.margin / 48.0
+                ));
+            }
+            align.span_frames = 0;
+            align.short_frames = 0;
+            align.short_most = 0.0;
         }
         align.feed = Some(to);
         let start = captured + from;
         let span = FRAME as f64 + (to - from);
         for (index, slot) in self.scratch.iter_mut().enumerate() {
             let position = start + span * index as f64 / FRAME as f64;
-            *slot = history.at(position).round().clamp(-32768.0, 32767.0) as i16;
+            *slot = if position > newest {
+                0
+            } else {
+                history.at(position).round().clamp(-32768.0, 32767.0) as i16
+            };
         }
         drop(history);
         let _ = self
@@ -401,20 +460,33 @@ impl Processor {
 }
 
 impl Align {
-    fn believe(&mut self, measure: Measure, margin: f64) {
-        self.last = Some(measure);
+    /// A line in the debug log, where TOMOSHIBI_DEBUG_ECHO_LOG asks for it.
+    fn note(&self, said: std::fmt::Arguments) {
         if cfg!(debug_assertions) && std::env::var_os("TOMOSHIBI_DEBUG_ECHO_LOG").is_some() {
-            crate::app::log(&format!(
-                "echo: measured {:.2} ms behind at {:.0}, offset {:.1}, correlation {:.2}; feeding at {:?}",
-                measure.delay_ms, measure.at, measure.offset, measure.correlation, self.feed
-            ));
+            crate::app::log(&format!("echo: {said}"));
         }
+    }
+
+    fn believe(&mut self, measure: Measure) {
+        self.last = Some(measure);
+        self.note(format_args!(
+            "measured {:.2} ms behind at {:.0}, offset {:.1}, correlation {:.2}; feeding at {:?}",
+            measure.delay_ms, measure.at, measure.offset, measure.correlation, self.feed
+        ));
         if measure.correlation < BELIEVED
             || (cfg!(debug_assertions) && std::env::var_os("TOMOSHIBI_DEBUG_ECHO_FIXED").is_some())
         {
             return;
         }
         self.believed += 1;
+        // The first measure puts the reverse stream where the echo is, the
+        // margin ahead of it, as far as the speakers' newest allows: on a
+        // system whose buffers are short, a margin of 60 ms would be read
+        // from samples the speakers have not been given yet.
+        if self.measures.is_empty() && self.target.is_none() {
+            let room = measure.delay_ms * 48.0 - HEADROOM;
+            self.margin = MARGIN.min(room).clamp(LEAST_MARGIN, MOST_MARGIN);
+        }
         // A measure far from where the drift says it would be is either the
         // voice fooling the measure (a pitch period off, which through a
         // resampling loopback came every few seconds) or the path having
@@ -428,32 +500,59 @@ impl Align {
         // rather than the reverse stream staying where nothing is.
         if let Some(expected) = self.predict(measure.at) {
             if (expected - measure.offset).abs() > 240.0 {
-                match self.suspect.take() {
+                let moved = match self.suspect.take() {
                     Some((at, offset)) if (offset - measure.offset).abs() < 96.0 => {
                         self.measures.clear();
                         self.measures.push_back((at, offset));
-                        self.astray = 0;
+                        true
                     }
                     _ if self.astray >= 3 && measure.correlation >= 0.6 => {
                         self.measures.clear();
-                        self.astray = 0;
+                        true
                     }
-                    _ => {
-                        self.suspect = Some((measure.at, measure.offset));
-                        self.astray += 1;
-                        return;
-                    }
+                    _ => false,
+                };
+                if !moved {
+                    self.suspect = Some((measure.at, measure.offset));
+                    self.astray += 1;
+                    return;
                 }
+                self.astray = 0;
+                self.moved(measure);
             } else {
                 self.suspect = None;
                 self.astray = 0;
             }
         }
-        self.target = Some(measure.offset + margin);
+        self.target = Some(measure.offset);
         self.measures.push_back((measure.at, measure.offset));
         while self.measures.len() > KEPT_MEASURES {
             self.measures.pop_front();
         }
+    }
+
+    /// The path moved, by a few milliseconds most often: PulseAudio's
+    /// loopback, holding its latency, now and then drops or adds a chunk
+    /// and the echo arrives that much sooner or later from then on.
+    ///
+    /// The reverse stream stays where it is, and what is ahead of the echo
+    /// by is what changes, within [`LEAST_MARGIN`] and [`MOST_MARGIN`]. It
+    /// was moved to the new place instead, the margin ahead of the echo as
+    /// before; but by the time two measures agree on a move (a second) the
+    /// canceller has found the echo at its new delay itself, and moving the
+    /// reverse stream then moved it a second time: through a 40 ms
+    /// loopback the echo came back for a second as the path moved (-16
+    /// dBFS) and again, louder, as the reverse stream followed it (-5).
+    fn moved(&mut self, measure: Measure) {
+        let Some(feed) = self.feed else { return };
+        let margin = (feed - measure.offset).clamp(LEAST_MARGIN, MOST_MARGIN);
+        self.note(format_args!(
+            "the path moved: offset {:.1}, the margin {:.1} ms from {:.1} ms",
+            measure.offset,
+            margin / 48.0,
+            self.margin / 48.0
+        ));
+        self.margin = margin;
     }
 
     /// The offset at the microphone's sample `at`: the line through the
@@ -929,6 +1028,128 @@ mod tests {
             followed_db > fixed_db + 10.0 && followed_db > 40.0,
             "followed {followed_db:.1} dB, fixed {fixed_db:.1} dB"
         );
+    }
+
+    /// Runs speech through an echo `delay(block)` samples late, the
+    /// speakers given their frames as `given(block)` says (how many frames
+    /// to write before that block's microphone frame), and hands back where
+    /// the reverse stream was read from at every frame, and the margin at
+    /// the end.
+    fn run_path(
+        seconds: usize,
+        delay: impl Fn(usize) -> usize,
+        given: impl Fn(usize) -> usize,
+    ) -> (Vec<Option<f64>>, f64, f64, f64) {
+        let echo = Echo::new();
+        let mut processor = echo.processor_here(
+            Processing {
+                echo_cancellation: true,
+                noise_suppression: false,
+                gain_control: false,
+            },
+            true,
+        );
+        let played = speech((seconds * 100 + 16) * FRAME, 5);
+        let mut written_frames = 0usize;
+        let mut feeds = Vec::new();
+        let (mut raw_late, mut left_late) = (0.0, 0.0);
+        for block in 0..seconds * 100 {
+            for _ in 0..given(block) {
+                let speakers = &played[written_frames * FRAME..(written_frames + 1) * FRAME];
+                let stereo: Vec<i16> = speakers.iter().flat_map(|&s| [s, s]).collect();
+                echo.render(&stereo);
+                written_frames += 1;
+            }
+            let lag = delay(block);
+            let mut mic: Vec<i16> = (0..FRAME)
+                .map(|i| {
+                    let n = block * FRAME + i;
+                    if n >= lag {
+                        played[n - lag] / 3
+                    } else {
+                        0
+                    }
+                })
+                .collect();
+            let raw = energy(&mic);
+            processor.capture(&mut mic, 60);
+            if block >= (seconds - 3) * 100 {
+                raw_late += raw;
+                left_late += energy(&mic);
+            }
+            feeds.push(processor.align.feed);
+        }
+        let margin = processor.align.margin;
+        (feeds, margin, raw_late, left_late)
+    }
+
+    /// The path moving once, by 6.2 ms later, as PulseAudio's loopback
+    /// moves it when it drops a chunk to hold its latency: the reverse
+    /// stream stays where it was and the margin takes the move, so that the
+    /// canceller, which finds the echo at its new delay itself, is not made
+    /// to find it a second time. Broken (the reverse stream moved to the
+    /// new place, as it was), it moves by the 296 samples.
+    #[test]
+    fn a_path_that_moves_leaves_the_reverse_stream_where_it_was() {
+        let before = 80 * 48;
+        let moved_at = 1200;
+        let (feeds, margin, raw, left) = run_path(
+            20,
+            |block| if block < moved_at { before } else { before + 296 },
+            |block| if block == 0 { 2 } else { 1 },
+        );
+        let settled = feeds[moved_at - 10].expect("fed");
+        let wandered = feeds[moved_at..]
+            .iter()
+            .map(|feed| (feed.expect("fed") - settled).abs())
+            .fold(0.0, f64::max);
+        assert!(
+            wandered < 40.0,
+            "the reverse stream moved {wandered:.0} samples after the path did"
+        );
+        assert!(
+            (margin - (MARGIN + 296.0)).abs() < 40.0,
+            "the margin is {margin:.0}, not the move's {}",
+            MARGIN + 296.0
+        );
+        let taken = 10.0 * (raw / left.max(1.0)).log10();
+        assert!(taken > 25.0, "only {taken:.1} dB taken out after the move");
+    }
+
+    /// The speakers' frames arriving late now and then (the playback held
+    /// up for 30 ms, then writing what it owed at once): the reverse stream
+    /// stays where it is, and what it has not been given yet is silence to
+    /// the canceller. Broken (pulled back to what the speakers had, as it
+    /// was), it moves by what was missing and glides back after.
+    #[test]
+    fn speakers_late_now_and_then_do_not_move_the_reverse_stream() {
+        let held = |block: usize| block % 200 == 150;
+        let (feeds, _, raw, left) = run_path(
+            12,
+            |_| 75 * 48,
+            move |block| {
+                if block == 0 {
+                    2
+                } else if held(block) || held(block.wrapping_sub(1)) || held(block.wrapping_sub(2)) {
+                    0
+                } else if held(block.wrapping_sub(3)) {
+                    4
+                } else {
+                    1
+                }
+            },
+        );
+        let settled = feeds[340].expect("fed");
+        let wandered = feeds[340..]
+            .iter()
+            .map(|feed| (feed.expect("fed") - settled).abs())
+            .fold(0.0, f64::max);
+        assert!(
+            wandered < 40.0,
+            "the reverse stream moved {wandered:.0} samples as the speakers came late"
+        );
+        let taken = 10.0 * (raw / left.max(1.0)).log10();
+        assert!(taken > 25.0, "only {taken:.1} dB taken out");
     }
 
     #[test]
