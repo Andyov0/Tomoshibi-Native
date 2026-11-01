@@ -439,6 +439,14 @@ pub fn open_from_debug(context: &Context, anchor: &impl IsA<gtk::Widget>, signin
     let Some(part) = model.launch().lobby.clone() else {
         return;
     };
+    // `<menu>-close` opens it and closes it a second later, for a picture
+    // of it leaving. Read before anything is decided by the name: the
+    // sign-in's test below compared "language-close" with "language" and
+    // never opened it there.
+    let (part, closes) = match part.strip_suffix("-close") {
+        Some(menu) => (menu.to_owned(), true),
+        None => (part, false),
+    };
     // The sign-in has the language and nothing else of these.
     if signing_in != (part == "language") {
         return;
@@ -450,12 +458,6 @@ pub fn open_from_debug(context: &Context, anchor: &impl IsA<gtk::Widget>, signin
     let anchor = anchor.as_ref().downgrade();
     // A menu once the screen has arrived, so that a picture of its own
     // arrival is not taken over the screen's; the rest as before.
-    // `<menu>-close` opens it and closes it a second later, for a picture
-    // of it leaving.
-    let (part, closes) = match part.strip_suffix("-close") {
-        Some(menu) => (menu.to_owned(), true),
-        None => (part, false),
-    };
     let after = if matches!(part.as_str(), "account" | "language" | "server") {
         1500
     } else {
