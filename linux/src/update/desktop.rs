@@ -309,13 +309,26 @@ fn unescape(value: &str) -> String {
     read
 }
 
-/// The image as the program of an `Exec` line: in double quotes, with the
-/// four characters the quoting rule reserves escaped and a percent sign
-/// doubled (it opens a field code otherwise), and then written as a string
-/// value, which doubles every backslash again. A path with a space or a
-/// quote in it (an image in "~/My Apps") runs as itself rather than as the
-/// first word of it.
+/// The image as the program of an `Exec` line. A path with any of the
+/// characters the specification reserves (a space, a quote, a dollar and
+/// the rest) is written in double quotes, with the four characters the
+/// quoting rule reserves escaped, and then as a string value, which doubles
+/// every backslash again: an image in "~/My Apps" runs as itself rather
+/// than as the first word of it. Any other path is written as it is, since
+/// xdg-open's generic opener (the one it uses under sway, Hyprland, i3 or
+/// a bare compositor) cannot read a quoted program: xdg-utils 1.1.3 ran an
+/// empty command and 1.2.1 found no way to open the link, so an invitation
+/// clicked in a browser there never reached the app, while the same entry
+/// unquoted was handed over by both. A percent sign is doubled either way,
+/// or it opens a field code.
 fn exec_argument(path: &str) -> String {
+    const RESERVED: &[char] = &[
+        ' ', '\t', '\n', '"', '\'', '\\', '>', '<', '~', '|', '&', ';', '$', '*', '?', '#',
+        '(', ')', '`',
+    ];
+    if !path.contains(RESERVED) {
+        return path.replace('%', "%%");
+    }
     let mut quoted = String::from("\"");
     for c in path.chars() {
         match c {
@@ -559,6 +572,15 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("\nTryExec=/home/ann/My Apps/Tomoshibi \"new\" $1%.AppImage\n"));
+        // A path that needs no quotes has none, for xdg-open's generic
+        // opener, which cannot read them.
+        let plain = entry_for(Path::new("/home/ann/Applications/Tomoshibi-0.1.7-x86_64.AppImage")).unwrap();
+        assert!(
+            plain.contains("\nExec=/home/ann/Applications/Tomoshibi-0.1.7-x86_64.AppImage %U\n"),
+            "{plain}"
+        );
+        let percent = entry_for(Path::new("/opt/100%/Tomoshibi.AppImage")).unwrap();
+        assert!(percent.contains("\nExec=/opt/100%%/Tomoshibi.AppImage %U\n"), "{percent}");
         assert!(text.contains("\nMimeType=x-scheme-handler/tomoshibi;\n"));
         assert!(text.contains(&format!("\nIcon={APP_ID}\n")));
         assert!(
