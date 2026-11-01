@@ -34,6 +34,17 @@ fn main() -> glib::ExitCode {
         .build();
     let running: Rc<RefCell<Option<Running>>> = Rc::new(RefCell::new(None));
 
+    // The preferences' last changes, which wait a moment before they are
+    // written (app/prefs.rs), are written as the app quits.
+    application.connect_shutdown({
+        let running = running.clone();
+        move |_| {
+            if let Some(running) = running.borrow().as_ref() {
+                running.model.preferences().flush();
+            }
+        }
+    });
+
     application.connect_startup(|_| {
         // Day and night follow the system; nothing in the app overrides it,
         // and the call draws itself dark in either (theme.rs).

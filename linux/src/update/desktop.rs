@@ -91,16 +91,56 @@ impl Places {
     }
 }
 
-/// [`integrate`] for the running image; an error where the app is not
-/// running from one, since an entry must name a file that stays where it is.
-pub fn integrate_desktop() -> io::Result<()> {
+/// [`integrate`] for the running image, off the main thread; an error
+/// where the app is not running from one, since an entry must name a file
+/// that stays where it is.
+pub async fn integrate_desktop() -> io::Result<()> {
     let image = super::running_image().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::NotFound,
             "the app is not running from an AppImage",
         )
     })?;
-    integrate(&image, &Places::standard())
+    integrate_in_background(&image, &Places::standard()).await
+}
+
+/// [`integrate`], with the files written and the menus' caches made on a
+/// thread of its own: the two cache tools are programs that are waited
+/// for, and waiting for them on the main thread held the window still,
+/// at a press of Add and at every start from an image the entry did not
+/// name, which happens before the window is first shown. The entry's words
+/// are worked out here, on the main thread, where the phrases are.
+pub async fn integrate_in_background(image: &Path, places: &Places) -> io::Result<()> {
+    let job = Integration::prepare(image, places)?;
+    gio::spawn_blocking(move || job.write())
+        .await
+        .unwrap_or_else(|_| Err(io::Error::other("the desktop entry's writer stopped")))
+}
+
+/// Everything [`integrate`] writes, once its words are known; written on
+/// any thread.
+pub struct Integration {
+    places: Places,
+    entry: String,
+}
+
+impl Integration {
+    pub fn prepare(image: &Path, places: &Places) -> io::Result<Integration> {
+        let entry = entry_for(image).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "the image's path cannot be written into a desktop entry",
+            )
+        })?;
+        Ok(Integration {
+            places: places.clone(),
+            entry,
+        })
+    }
+
+    pub fn write(self) -> io::Result<()> {
+        write_integration(&self.entry, &self.places)
+    }
 }
 
 /// The image the installed entry names, where there is an entry of this
@@ -121,14 +161,13 @@ pub fn integrated() -> bool {
     }
 }
 
-/// Writes the entry for `image`, the icons, and the default handler.
+/// Writes the entry for `image`, the icons, and the default handler, here
+/// and now (the tests'; the app uses [`integrate_in_background`]).
 pub fn integrate(image: &Path, places: &Places) -> io::Result<()> {
-    let text = entry_for(image).ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "the image's path cannot be written into a desktop entry",
-        )
-    })?;
+    Integration::prepare(image, places)?.write()
+}
+
+fn write_integration(text: &str, places: &Places) -> io::Result<()> {
 
     // The icons first, so that a menu that notices the entry at once finds
     // its icon.
@@ -361,14 +400,14 @@ pub fn at_start(model: &AppModel, window: &adw::ApplicationWindow) {
     }
     let places = Places::standard();
     if switch.as_deref() == Some("add") {
-        say_integrated(integrate(&image, &places), &image);
+        integrate_and_say(image, places);
         return;
     }
     match integrated_image(&places) {
         Some(named) if named == image => {}
         Some(_) => {
             log("update: the desktop entry named another image; writing it for this one");
-            say_integrated(integrate(&image, &places), &image);
+            integrate_and_say(image, places);
         }
         None => {
             let answered = model.preferences().string(KEPT).is_some();
@@ -377,6 +416,15 @@ pub fn at_start(model: &AppModel, window: &adw::ApplicationWindow) {
             }
         }
     }
+}
+
+/// Writes the entry for `image` without holding the window, and says how
+/// it went.
+fn integrate_and_say(image: PathBuf, places: Places) {
+    glib::spawn_future_local(async move {
+        let result = integrate_in_background(&image, &places).await;
+        say_integrated(result, &image);
+    });
 }
 
 fn say_integrated(result: io::Result<()>, image: &Path) {
@@ -476,12 +524,15 @@ fn ask(model: &AppModel, window: &adw::ApplicationWindow, image: PathBuf) {
             return;
         };
         if response == "add" {
-            let result = integrate(&image, &Places::standard());
-            let added = result.is_ok();
-            say_integrated(result, &image);
-            if added {
-                model.preferences().set(KEPT, "added");
-            }
+            let image = image.clone();
+            glib::spawn_future_local(async move {
+                let result = integrate_in_background(&image, &Places::standard()).await;
+                let added = result.is_ok();
+                say_integrated(result, &image);
+                if added {
+                    model.preferences().set(KEPT, "added");
+                }
+            });
         } else {
             log("update: not added to the desktop's apps; not asked again");
             model.preferences().set(KEPT, "declined");

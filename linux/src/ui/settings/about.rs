@@ -5,6 +5,7 @@
 //! words are the licence's name, not translated, as on the web.
 
 use adw::prelude::*;
+use gtk::glib;
 
 use super::new_page;
 use crate::{
@@ -107,22 +108,32 @@ fn desktop_row(model: &AppModel) -> Option<adw::ActionRow> {
         let Some(model) = weak.upgrade() else {
             return;
         };
-        match crate::update::desktop::integrate_desktop() {
-            Ok(()) => {
-                crate::app::log("settings: added to the desktop's apps");
-                model
-                    .preferences()
-                    .set(crate::update::desktop::KEPT, "added");
-                button.set_icon_name("object-select-symbolic");
-                button.set_sensitive(false);
+        // Written off the main thread (desktop.rs says why); the button
+        // waits meanwhile.
+        button.set_sensitive(false);
+        let button = button.downgrade();
+        glib::spawn_future_local(async move {
+            let result = crate::update::desktop::integrate_desktop().await;
+            let Some(button) = button.upgrade() else {
+                return;
+            };
+            match result {
+                Ok(()) => {
+                    crate::app::log("settings: added to the desktop's apps");
+                    model
+                        .preferences()
+                        .set(crate::update::desktop::KEPT, "added");
+                    button.set_icon_name("object-select-symbolic");
+                }
+                Err(fault) => {
+                    crate::app::log(&format!(
+                        "settings: the desktop entry could not be written: {fault}"
+                    ));
+                    button.set_sensitive(true);
+                    model.mention(t("That could not be done. Try again."));
+                }
             }
-            Err(fault) => {
-                crate::app::log(&format!(
-                    "settings: the desktop entry could not be written: {fault}"
-                ));
-                model.mention(t("That could not be done. Try again."));
-            }
-        }
+        });
     });
     Some(row)
 }
@@ -153,7 +164,7 @@ fn update_row(model: &AppModel) -> adw::ActionRow {
             let (Some(row), Some(button)) = (row.upgrade(), button.upgrade()) else {
                 return;
             };
-            row.set_visible(updates::speaks(model));
+            kit::fade_visible(&row, updates::speaks(model));
             let step = updates::step(model);
             let label = updates::version_label;
             let (said, action) = match step {
@@ -202,10 +213,10 @@ fn update_row(model: &AppModel) -> adw::ActionRow {
             match action {
                 Some(words) => {
                     button.set_label(&words);
-                    button.set_visible(true);
+                    kit::fade_visible(&button, true);
                     button.set_sensitive(updates::said(model) != Some(Said::Checking));
                 }
-                None => button.set_visible(false),
+                None => kit::fade_visible(&button, false),
             }
         }
     };

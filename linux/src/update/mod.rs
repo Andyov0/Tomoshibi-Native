@@ -138,7 +138,14 @@ impl Installer {
     pub async fn run(&self, progress: Arc<dyn UpdateProgress>) -> Result<(), UpdateError> {
         self.can_write().map_err(|fault| storage(&fault))?;
         self.download.clone().run(progress).await?;
-        self.beside.put_in_place().map_err(|fault| storage(&fault))
+        // On a thread of its own: putting it in place waits for some fifty
+        // megabytes to reach the disk (place.rs syncs the file before its
+        // name), which held the window still on the main thread.
+        let beside = self.beside.clone();
+        gio::spawn_blocking(move || beside.put_in_place())
+            .await
+            .unwrap_or_else(|_| Err(io::Error::other("the update's writer stopped")))
+            .map_err(|fault| storage(&fault))
     }
 
     /// Calls the download off; `run` returns `UpdateError::Cancelled` soon

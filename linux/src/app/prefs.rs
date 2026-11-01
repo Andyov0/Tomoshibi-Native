@@ -12,15 +12,33 @@ use std::{
     cell::RefCell,
     collections::BTreeMap,
     path::{Path, PathBuf},
+    rc::Rc,
+    time::Duration,
 };
 
-/// The preferences file, read once and written whole on every change.
+/// How long after the last change the file is written: the changes in
+/// between are written together. The name field changed the preferences
+/// at every key pressed, and the whole file was written each time.
+const WRITE_AFTER: Duration = Duration::from_millis(400);
+
+/// The preferences file, read once and written whole a moment after
+/// changes, as one write for all the changes made in that moment; and at
+/// once when the app quits ([`flush`](Self::flush), and when it is dropped).
 pub struct Preferences {
+    inner: Rc<Inner>,
+}
+
+struct Inner {
     path: Option<PathBuf>,
     values: RefCell<BTreeMap<String, String>>,
     /// Whether changes are written; a rehearsal's are not, since what they
     /// would write over is the owner's (launch.rs).
     keeps: bool,
+    /// Whether a write waits for [`WRITE_AFTER`]; the tests' preferences
+    /// are written at once unless they ask.
+    waits: bool,
+    /// The write that is waiting.
+    pending: RefCell<Option<glib::JoinHandle<()>>>,
 }
 
 impl Preferences {
@@ -29,7 +47,7 @@ impl Preferences {
         let path = glib::user_config_dir()
             .join("tomoshibi")
             .join("preferences.json");
-        Self::at(Some(path), keeps)
+        Self::at(Some(path), keeps).waiting()
     }
 
     /// Preferences held in memory alone, for tests.
@@ -40,14 +58,28 @@ impl Preferences {
     pub fn at(path: Option<PathBuf>, keeps: bool) -> Preferences {
         let values = path.as_deref().map(read).unwrap_or_default();
         Preferences {
-            path,
-            values: RefCell::new(values),
-            keeps,
+            inner: Rc::new(Inner {
+                path,
+                values: RefCell::new(values),
+                keeps,
+                waits: false,
+                pending: RefCell::new(None),
+            }),
         }
     }
 
+    /// The same preferences, written a moment after changes rather than at
+    /// once: the wait runs on the main context of the thread that made the
+    /// change (the app's main loop).
+    pub fn waiting(mut self) -> Preferences {
+        if let Some(inner) = Rc::get_mut(&mut self.inner) {
+            inner.waits = true;
+        }
+        self
+    }
+
     pub fn string(&self, key: &str) -> Option<String> {
-        self.values.borrow().get(key).cloned()
+        self.inner.values.borrow().get(key).cloned()
     }
 
     pub fn bool(&self, key: &str) -> Option<bool> {
@@ -59,10 +91,12 @@ impl Preferences {
     }
 
     pub fn set(&self, key: &str, value: impl Into<String>) {
-        self.values
-            .borrow_mut()
-            .insert(key.to_owned(), value.into());
-        self.write();
+        let value = value.into();
+        let changed = self.inner.values.borrow().get(key) != Some(&value);
+        if changed {
+            self.inner.values.borrow_mut().insert(key.to_owned(), value);
+            self.changed();
+        }
     }
 
     pub fn set_bool(&self, key: &str, value: bool) {
@@ -70,11 +104,46 @@ impl Preferences {
     }
 
     pub fn remove(&self, key: &str) {
-        if self.values.borrow_mut().remove(key).is_some() {
-            self.write();
+        if self.inner.values.borrow_mut().remove(key).is_some() {
+            self.changed();
         }
     }
 
+    /// Writes what is waiting to be written, now.
+    pub fn flush(&self) {
+        if let Some(waiting) = self.inner.pending.take() {
+            waiting.abort();
+            self.inner.write();
+        }
+    }
+
+    fn changed(&self) {
+        let inner = &self.inner;
+        if inner.path.is_none() || !inner.keeps {
+            return;
+        }
+        if !inner.waits {
+            inner.write();
+            return;
+        }
+        // One write waits at a time, and writes whatever the values are
+        // when it runs.
+        if inner.pending.borrow().is_some() {
+            return;
+        }
+        let weak = Rc::downgrade(&self.inner);
+        let waiting = glib::MainContext::ref_thread_default().spawn_local(async move {
+            glib::timeout_future(WRITE_AFTER).await;
+            if let Some(inner) = weak.upgrade() {
+                inner.pending.take();
+                inner.write();
+            }
+        });
+        inner.pending.replace(Some(waiting));
+    }
+}
+
+impl Inner {
     fn write(&self) {
         let (Some(path), true) = (&self.path, self.keeps) else {
             return;
@@ -95,6 +164,15 @@ impl Preferences {
         })();
         if let Err(fault) = result {
             eprintln!("tomoshibi: the preferences could not be written: {fault}");
+        }
+    }
+}
+
+impl Drop for Inner {
+    fn drop(&mut self) {
+        if let Some(waiting) = self.pending.take() {
+            waiting.abort();
+            self.write();
         }
     }
 }
@@ -143,6 +221,44 @@ mod tests {
                 .as_deref(),
             Some("Ann")
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn changes_made_together_are_written_once_a_moment_later() {
+        let dir =
+            std::env::temp_dir().join(format!("tomoshibi-prefs-wait-{}", std::process::id()));
+        let path = dir.join("preferences.json");
+        let _ = std::fs::remove_dir_all(&dir);
+        let context = glib::MainContext::new();
+        context
+            .with_thread_default(|| {
+                let kept = Preferences::at(Some(path.clone()), true).waiting();
+                for typed in ["A", "An", "Ann"] {
+                    kept.set("meet-live.name", typed);
+                }
+                assert!(!path.exists(), "written at a key press");
+                let until = std::time::Instant::now() + std::time::Duration::from_secs(5);
+                while !path.exists() && std::time::Instant::now() < until {
+                    context.iteration(true);
+                }
+                assert_eq!(
+                    Preferences::at(Some(path.clone()), true)
+                        .string("meet-live.name")
+                        .as_deref(),
+                    Some("Ann")
+                );
+                // A change waiting when the preferences go is written then.
+                kept.set("meet-live.name", "Bea");
+                drop(kept);
+                assert_eq!(
+                    Preferences::at(Some(path.clone()), true)
+                        .string("meet-live.name")
+                        .as_deref(),
+                    Some("Bea")
+                );
+            })
+            .expect("the test's own context");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
