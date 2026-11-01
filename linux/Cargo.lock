@@ -3699,6 +3699,7 @@ dependencies = [
  "glib",
  "gtk4",
  "libadwaita",
+ "libc",
  "pipewire",
  "serde",
  "serde_json",

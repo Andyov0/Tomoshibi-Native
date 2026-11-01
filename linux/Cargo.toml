@@ -78,10 +78,12 @@ tokio = { version = "1", default-features = false, features = ["sync"] }
 # (each claims `links = "pipewire-0.3"`), so every module that uses PipeWire
 # keeps to this one, and ashpd's own `pipewire` feature, which wants 0.9, is
 # left off. 0.10 rather than 0.9 because 0.9 brings a second nix beside the
-# core's. futures-util for following the portal's Closed signal, a stream.
+# core's. futures-util for following the portal's Closed signal, a stream;
+# libc to open libpipewire for WebRTC's PipeWire stubs (screen/linkage.rs).
 ashpd = { version = "0.13", default-features = false, features = ["async-io", "screencast", "gtk4"] }
 pipewire = "0.10"
 futures-util = { version = "0.3", default-features = false }
+libc = "0.2"
 
 # --- render/ adds its crates below this line ---
 

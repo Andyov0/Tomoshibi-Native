@@ -165,7 +165,9 @@ fn run(
     asked: pw::channel::Receiver<Ask>,
     started: &mpsc::Sender<Result<(), String>>,
 ) -> Result<(), String> {
-    pw::init();
+    if !super::init_pipewire() {
+        return Err("no PipeWire library".into());
+    }
     let mainloop = pw::main_loop::MainLoopRc::new(None).map_err(|e| format!("main loop: {e}"))?;
     let context =
         pw::context::ContextRc::new(&mainloop, None).map_err(|e| format!("context: {e}"))?;

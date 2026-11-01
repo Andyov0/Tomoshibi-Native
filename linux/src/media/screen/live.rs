@@ -221,7 +221,7 @@ fn play(hz: f64, stop: &AtomicBool) {
     use pipewire as pw;
     use pw::spa;
 
-    pw::init();
+    assert!(super::init_pipewire(), "PipeWire");
     let mainloop = pw::main_loop::MainLoopRc::new(None).expect("main loop");
     let context = pw::context::ContextRc::new(&mainloop, None).expect("context");
     let core = context.connect_rc(None).expect("PipeWire");

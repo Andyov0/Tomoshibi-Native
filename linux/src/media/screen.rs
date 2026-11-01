@@ -19,8 +19,8 @@
 //!    without it, as Windows's does, and says so (`sends_sound`).
 //! 6. The end: the person stopping it here (`stop`), or from the system
 //!    (the compositor closes the portal's session, GNOME's Stop button) or
-//!    the stream going away (the shared window closed), which take the
-//!    tracks down and call `on_ended` once.
+//!    the shared screen or window going away (its PipeWire node removed),
+//!    which take the tracks down and call `on_ended` once.
 //!
 //! A change of size, rate or sound while sharing (`change`) publishes the
 //! picture again at the new setting and takes the old one down once the
@@ -35,8 +35,11 @@
 //!
 //! The media module's `Media` hands its screen part to [`Screens`]:
 //! `share_screen` is [`Screens::share`] and `can_share_screen` is
-//! [`Screens::can_share`].
+//! [`Screens::can_share`]. Every module that uses PipeWire calls
+//! [`init_pipewire`] first, in place of `pipewire::init()` (linkage.rs says
+//! why: without it the first PipeWire call crashes the app).
 
+mod linkage;
 mod pixels;
 mod portal;
 mod pump;
@@ -60,6 +63,7 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 use tomoshibi_core::call::{AudioInput, Call, VideoInput, VideoKind};
 use tomoshibi_protocol::share::SoundKind;
 
+pub use linkage::init_pipewire;
 pub use pixels::{fit, fitted};
 
 use self::{
