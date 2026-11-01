@@ -109,6 +109,17 @@ linuxdeploy --appdir "$app" \
   --exclude-library 'libwayland-egl.so*' \
   --exclude-library 'libwayland-server.so*'
 
+# One library on that list is copied in all the same: libgpg-error, which
+# the libgcrypt copied in needs and which a plain Debian 13 no longer has
+# (its apt checks signatures with sqv rather than gpgv, and nothing else in
+# a base system pulls it in): the image did not start there without it
+# ("libgpg-error.so.0: cannot open shared object file"). linuxdeploy skips
+# a library on its list even when it is named, so it is copied here; it
+# needs nothing but the C library.
+cp -L "$lib/libgpg-error.so.0" "$app/usr/lib/libgpg-error.so.0"
+mkdir -p "$app/usr/share/doc/libgpg-error0"
+cp /usr/share/doc/libgpg-error0/copyright "$app/usr/share/doc/libgpg-error0/"
+
 gtk4-update-icon-cache -q -t -f "$app/usr/share/icons/Adwaita"
 gtk4-update-icon-cache -q -t -f "$app/usr/share/icons/hicolor"
 

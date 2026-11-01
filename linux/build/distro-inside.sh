@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# The inside of distro-check.sh, on a session bus of its own
+# (dbus-run-session). Everything it starts is its own child and stops with
+# the container.
+#
+# With UPDATE_TO set (update-check.sh), the run goes on after the first
+# window: the app, told by TOMOSHIBI_DEBUG_UPDATE=install to take the
+# update its deployment offers, downloads it, puts it in its own place and
+# starts it; this waits for the new version to say it has started and has
+# removed the image it replaced, takes the new window's picture, and checks
+# that the image in place is, byte for byte, the build offered.
+set -euo pipefail
+
+export XDG_RUNTIME_DIR=/tmp/runtime
+mkdir -p -m 700 "$XDG_RUNTIME_DIR"
+export GTK_A11Y=none NO_AT_BRIDGE=1
+log=/out/$LABEL
+rm -f "$log".*
+
+say() { echo "$*" | tee -a "$log.check.txt"; }
+
+. /etc/os-release
+say "system: $PRETTY_NAME, $(uname -m), $(ldd --version 2>&1 | head -1)"
+
+# Nothing of GTK 4 or libadwaita on the system: what draws the window is
+# what the image brought.
+found=$( { ldconfig -p | grep -E 'libgtk-4\.so|libadwaita-1\.so' || true; find / -xdev \( -name 'libgtk-4.so*' -o -name 'libadwaita-1.so*' \) 2>/dev/null || true; } )
+if [ -n "$found" ]; then
+  say "the system has GTK 4 or libadwaita of its own:"; say "$found"; exit 1
+fi
+say "the system has no GTK 4 and no libadwaita"
+
+weston --backend=headless --renderer=pixman --shell=kiosk --debug --idle-time=0 \
+  --width="$WIDTH" --height="$HEIGHT" --socket=wayland-1 >"$log.weston.log" 2>&1 &
+weston_pid=$!
+for _ in $(seq 1 100); do [ -S "$XDG_RUNTIME_DIR/wayland-1" ] && break; sleep 0.1; done
+[ -S "$XDG_RUNTIME_DIR/wayland-1" ] || { say "weston did not start; see $LABEL.weston.log"; exit 1; }
+export WAYLAND_DISPLAY=wayland-1
+
+# Where somebody keeps an AppImage they downloaded, and where one that
+# replaces itself can.
+mkdir -p "$HOME/Applications"
+app_image=$HOME/Applications/$(basename "$IMAGE")
+cp "$IMAGE" "$app_image"
+chmod 755 "$app_image"
+say "image: $(basename "$IMAGE"), $(stat -c %s "$app_image") bytes, sha256 $(sha256sum "$app_image" | cut -d' ' -f1)"
+
+# Every library the image's programs and libraries ask for that neither the
+# image nor the system has. A plain Debian 13 had no libgpg-error, which
+# linuxdeploy leaves to the system, and the app did not start there.
+missing=$(
+  cd /tmp && rm -rf squashfs-root && "$app_image" --appimage-extract >/dev/null 2>&1 \
+    && cd squashfs-root \
+    && for file in usr/bin/tomoshibi usr/lib/*.so*; do LD_LIBRARY_PATH=$PWD/usr/lib ldd "$file" 2>/dev/null | grep 'not found' || true; done | sort -u
+)
+rm -rf /tmp/squashfs-root
+if [ -n "$missing" ]; then say "libraries neither the image nor the system has:"; say "$missing"; exit 1; fi
+say "every library the image asks for is in it or on the system"
+
+export APPIMAGE_EXTRACT_AND_RUN=1
+export TOMOSHIBI_DEBUG_LOG=$log.app.log TOMOSHIBI_DEBUG_SNAPSHOT=$log.gtk.png
+"$app_image" >"$log.stderr" 2>&1 &
+app_pid=$!
+
+# What the app starts again after an update is not this shell's child; it
+# stops with the container, as everything in it does.
+finish() {
+  kill "$app_pid" 2>/dev/null || true
+  kill "$weston_pid" 2>/dev/null || true
+}
+trap finish EXIT
+
+shot() {
+  sleep 0.3
+  ( cd /tmp && rm -f wayland-screenshot*.png && weston-screenshooter >/dev/null 2>&1 \
+      && mv wayland-screenshot*.png "$1" ) || say "weston-screenshooter failed; the GTK picture alone is there"
+}
+
+deadline=$(( $(date +%s) + SECONDS_LEFT ))
+until grep -q "snapshot written" "$log.app.log" 2>/dev/null; do
+  if ! kill -0 "$app_pid" 2>/dev/null; then say "the app exited early; see $LABEL.stderr"; tail -20 "$log.stderr"; exit 1; fi
+  if [ "$(date +%s)" -ge "$deadline" ]; then say "the window never settled; see $LABEL.app.log"; exit 1; fi
+  sleep 0.25
+done
+shot "$log.weston.png"
+# The same switch writes the next start's snapshot over this one.
+[ -z "${UPDATE_TO:-}" ] || cp "$log.gtk.png" "$log.before.gtk.png"
+say "first window: $(grep -m1 '^showing ' "$log.app.log" || true); $(grep -m1 '^Tomoshibi ' "$log.app.log" || true)"
+
+if [ -z "${UPDATE_TO:-}" ]; then
+  exit 0
+fi
+
+# The update: the new version says it started, then that it removed the
+# image it replaced (update/mod.rs at_start).
+deadline=$(( $(date +%s) + SECONDS_LEFT ))
+until grep -q "removed the image this one replaced" "$log.app.log" 2>/dev/null; do
+  if [ "$(date +%s)" -ge "$deadline" ]; then say "the new version never said it had started; see $LABEL.app.log"; exit 1; fi
+  sleep 0.25
+done
+say "update: $(grep -c '^Tomoshibi ' "$log.app.log") starts in the log:"
+grep '^Tomoshibi \|^update: \|removed the image' "$log.app.log" | tee -a "$log.check.txt"
+
+have=$(sha256sum "$app_image" | cut -d' ' -f1)
+if [ "$have" != "$UPDATE_TO" ]; then say "the image in place is $have, not the build offered ($UPDATE_TO)"; exit 1; fi
+say "the image in place is the build offered: sha256 $have"
+if [ -e "$app_image.old" ]; then say "the replaced image is still there"; exit 1; fi
+say "the replaced image is gone; the folder holds: $(ls -A "$HOME/Applications" | tr '\n' ' ')"
+[ -x "$app_image" ] || { say "the new image is not executable"; exit 1; }
+
+# The new window, once it has drawn: its own snapshot is written over the
+# first one's by the same switch, so wait for a second "snapshot written".
+until [ "$(grep -c 'snapshot written' "$log.app.log")" -ge 2 ]; do
+  if [ "$(date +%s)" -ge "$deadline" ]; then say "the new window never settled"; exit 1; fi
+  sleep 0.25
+done
+shot "$log.after.weston.png"
+cp "$log.gtk.png" "$log.after.gtk.png"
+say "update done"
