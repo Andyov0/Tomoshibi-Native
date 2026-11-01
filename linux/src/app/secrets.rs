@@ -59,6 +59,13 @@ pub trait Secrets {
         let found = self.read(key);
         Box::pin(std::future::ready(found))
     }
+    /// Waits, for at most `within`, until every write already made has
+    /// reached the store; false when they have not. For the app's last
+    /// moment: a write still queued when the process ends is lost.
+    fn settle(&self, within: std::time::Duration) -> bool {
+        let _ = within;
+        true
+    }
 }
 
 /// Secrets for this run alone.
@@ -138,6 +145,8 @@ enum Pending {
 enum Job {
     /// Make the pending write for this key, if it is still there.
     Flush(String),
+    /// Say so: every job queued before this one has been done.
+    Done(mpsc::Sender<()>),
     Lookup(
         String,
         Box<dyn FnOnce(Result<Option<String>, String>) + Send>,
@@ -187,6 +196,9 @@ impl Shared {
                         Pending::Clear => self.failed("forget a secret", fault),
                     }
                 }
+            }
+            Job::Done(said) => {
+                let _ = said.send(());
             }
             Job::Lookup(key, answer) => {
                 if self.failed.load(Ordering::SeqCst) {
@@ -341,6 +353,25 @@ impl Secrets for SecretService {
             let mut known = known.borrow_mut();
             known.entry(key).or_insert(found).clone()
         })
+    }
+
+    /// The writes are handed to the worker and the call returns, so the
+    /// app could end with a passphrase, a session or a proof still queued:
+    /// closed straight after signing in, or ended by the session's SIGTERM,
+    /// the next start asked somebody to sign in again, and a keyring that
+    /// was locked, its unlock prompt standing, lost the write every time.
+    /// So the last moment waits for the queue, but not for ever: a prompt
+    /// nobody answers must not keep the process alive.
+    fn settle(&self, within: std::time::Duration) -> bool {
+        // No worker: nothing was ever queued.
+        if self.jobs.get().is_none() || self.failed() {
+            return true;
+        }
+        let (said, heard) = mpsc::channel();
+        if !self.send(Job::Done(said)) {
+            return true;
+        }
+        heard.recv_timeout(within).is_ok()
     }
 }
 
@@ -673,6 +704,36 @@ mod tests {
             Some("kept account:http://a/")
         );
         assert_eq!(*held.lookups.lock().unwrap(), 1);
+    }
+
+    #[test]
+    fn the_last_moment_waits_for_the_writes_but_not_for_ever() {
+        let held = Arc::new(Held::default());
+        let store = SecretService::with_backend(Box::new(Fake(held.clone())));
+        // Nothing queued: nothing to wait for.
+        assert!(store.settle(std::time::Duration::from_millis(10)));
+        store.write("account:http://a/", "cookie");
+        // A keyring that does not answer (locked, its prompt standing):
+        // given up on after the time allowed, not waited for.
+        let started = std::time::Instant::now();
+        assert!(!store.settle(std::time::Duration::from_millis(200)));
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+        // Answered in time: the write is in the store when settle returns.
+        let letting = held.clone();
+        let opener = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            letting.let_go();
+        });
+        assert!(store.settle(std::time::Duration::from_secs(10)));
+        assert_eq!(
+            held.stored
+                .lock()
+                .unwrap()
+                .last()
+                .map(|(_, value)| value.clone()),
+            Some("cookie".to_owned())
+        );
+        opener.join().unwrap();
     }
 
     #[test]

@@ -66,12 +66,21 @@ fn main() -> glib::ExitCode {
     let running: Rc<RefCell<Option<Running>>> = Rc::new(RefCell::new(None));
 
     // The preferences' last changes, which wait a moment before they are
-    // written (app/prefs.rs), are written as the app quits.
+    // written (app/prefs.rs), are written as the app quits, and the secret
+    // store's writes, which its worker makes (app/secrets.rs), are waited
+    // for, for a while.
     application.connect_shutdown({
         let running = running.clone();
         move |_| {
             if let Some(running) = running.borrow().as_ref() {
                 running.model.preferences().flush();
+                if !running
+                    .model
+                    .secrets()
+                    .settle(std::time::Duration::from_secs(10))
+                {
+                    log("the secret store had not taken every write when the app quit");
+                }
             }
         }
     });
