@@ -8,7 +8,13 @@
 //! `hand=<up|down>`, `react=<0-5>`, `mic=<on|off>`, `camera=<on|off>`,
 //! `share=<on|off>`, `pin=<me|first|none>`, `fill=<on|off>`, `page=<+1|-1>`,
 //! `volume=<0-100>` (the first person's), `leave`, the host's `invite`,
-//! `silence`, `remove` and `make-host` (the first person), and two that
+//! `silence`, `remove` and `make-host` (the first person); three that stand
+//! in for the network rather than a person: `blink=<ms>`, the first person
+//! said to have left and, that many milliseconds later (60 when not said),
+//! to have joined again, as the core says it of everybody when its own
+//! connection is made again; `network=<offline|online>`, the path the system
+//! would report (`Call::path_seen`, nothing on it, or the path standing
+//! now); and `woke`, the machine back from sleep (`Call::woke`); and two that
 //! only look:
 //! `shot=<name>`, GTK's own picture of the window and its widget tree beside
 //! the run's main snapshot, and `report`, every tile and what it shows,
@@ -143,6 +149,25 @@ fn act(model: &AppModel, action: &str) {
                 }
             }
         }
+        "blink" => blink(model, value.parse().unwrap_or(60)),
+        "network" => {
+            if let Some(call) = super::call_of(model) {
+                let path = if value == "offline" {
+                    tomoshibi_protocol::network::NetworkPath {
+                        online: false,
+                        route: String::new(),
+                    }
+                } else {
+                    crate::app::network::path_of(&gio::NetworkMonitor::default())
+                };
+                call.path_seen(path);
+            }
+        }
+        "woke" => {
+            if let Some(call) = super::call_of(model) {
+                call.woke();
+            }
+        }
         "report" => report(model),
         "leave" => {
             let weak = model.downgrade();
@@ -155,6 +180,46 @@ fn act(model: &AppModel, action: &str) {
         "shot" => shot(model, value),
         other => log(&format!("room script: no such action {other:?}")),
     }
+}
+
+/// The first person leaves and joins again `after` milliseconds later, told
+/// to the room the way the core tells it of a reconnect: the same events,
+/// through the same `follow`.
+fn blink(model: &AppModel, after: u64) {
+    let room = model.kept::<RoomState>();
+    let Some(call) = super::call_of(model) else {
+        return;
+    };
+    let first = room.talk.borrow().as_ref().and_then(|talk| {
+        talk.people
+            .first()
+            .map(|person| tomoshibi_core::call::ParticipantInfo {
+                identity: person.id.clone(),
+                name: person.name.clone(),
+                attributes: person.attributes.clone(),
+                tracks: person.tracks.values().cloned().collect(),
+            })
+    });
+    let Some(first) = first else {
+        return;
+    };
+    super::follow(
+        model,
+        &call,
+        tomoshibi_core::call::CallEvent::ParticipantLeft {
+            identity: first.identity.clone(),
+        },
+    );
+    let weak = model.downgrade();
+    glib::timeout_add_local_once(Duration::from_millis(after), move || {
+        if let Some(model) = weak.upgrade() {
+            super::follow(
+                &model,
+                &call,
+                tomoshibi_core::call::CallEvent::ParticipantJoined { participant: first },
+            );
+        }
+    });
 }
 
 fn report(model: &AppModel) {
@@ -211,30 +276,71 @@ fn shot(model: &AppModel, name: &str) {
 
 /// GTK's picture of the window once it is laid out: a widget waiting for
 /// its allocation draws nothing into a WidgetPaintable, and a call whose
-/// tiles are moving or whose reactions are rising is often waiting for one,
-/// so the picture is asked for again a frame later until it comes.
+/// tiles are moving or whose reactions are rising is often waiting for one.
+///
+/// Taken just after a paint of the window's frame clock, when every
+/// widget's render node is fresh, as the run's main snapshot is
+/// (ui/window.rs `render_after_paint`), and asked for again at the next
+/// paint when that one drew nothing: asked again on a 50 ms timer instead,
+/// it landed between paints twenty times running while the pictures were
+/// redrawing, and said "nothing was drawn" for a call that was on screen.
 fn render_when_laid_out(window: adw::ApplicationWindow, path: String, tries: u32) {
+    let Some(clock) = window.frame_clock() else {
+        if !render_now(&window, &path) {
+            log(&format!("room script: nothing was drawn for {path}"));
+        }
+        return;
+    };
+    let left = std::rc::Rc::new(std::cell::Cell::new(tries));
+    let handler: std::rc::Rc<std::cell::Cell<Option<glib::SignalHandlerId>>> =
+        std::rc::Rc::default();
+    let id = clock.connect_after_paint({
+        let (window, handler, left) = (window.downgrade(), handler.clone(), left.clone());
+        move |clock| {
+            let Some(window) = window.upgrade() else {
+                if let Some(id) = handler.take() {
+                    clock.disconnect(id);
+                }
+                return;
+            };
+            let done = render_now(&window, &path);
+            let tries = left.get();
+            if done || tries == 0 {
+                if !done {
+                    log(&format!("room script: nothing was drawn for {path}"));
+                }
+                if let Some(id) = handler.take() {
+                    clock.disconnect(id);
+                }
+                return;
+            }
+            left.set(tries - 1);
+            // Another paint is asked for, or a still window would never
+            // give one.
+            window.queue_draw();
+        }
+    });
+    handler.set(Some(id));
+    window.queue_draw();
+}
+
+/// The window drawn into a PNG at `path` now; false when nothing was drawn.
+fn render_now(window: &adw::ApplicationWindow, path: &str) -> bool {
     let (width, height) = (window.width(), window.height());
-    let paintable = gtk::WidgetPaintable::new(Some(&window));
+    let paintable = gtk::WidgetPaintable::new(Some(window));
     let snapshot = gtk::Snapshot::new();
     paintable.snapshot(&snapshot, width as f64, height as f64);
     let drawn = snapshot
         .to_node()
         .and_then(|node| Some((node, window.renderer()?)));
     let Some((node, renderer)) = drawn else {
-        if tries == 0 {
-            log(&format!("room script: nothing was drawn for {path}"));
-            return;
-        }
-        glib::timeout_add_local_once(Duration::from_millis(50), move || {
-            render_when_laid_out(window, path, tries - 1);
-        });
-        return;
+        return false;
     };
-    match renderer.render_texture(&node, None).save_to_png(&path) {
+    match renderer.render_texture(&node, None).save_to_png(path) {
         Ok(()) => log(&format!("room script: picture written to {path}")),
         Err(fault) => log(&format!("room script: picture failed: {fault}")),
     }
+    true
 }
 
 /// Every widget showing with its place, classes and words, as the window's
