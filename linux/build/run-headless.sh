@@ -87,7 +87,10 @@ app_env=(
 [ -n "$show" ] && app_env+=(-e "TOMOSHIBI_SHOW=$show")
 [ -n "$language" ] && app_env+=(-e "TOMOSHIBI_LANGUAGE=$language")
 
-rm -f "$out/$label".*
+# The last run's pictures of this label are removed inside the container
+# (headless-inside.sh), not here: removed on the Mac, the VM's view of the
+# shared directory still held them, and creating the same names from the
+# container failed with "No such file or directory", every second run.
 exec "${docker[@]}" run --rm \
   --name "tmsb-headless-$name-$arch-$$" \
   --platform "$platform" \

@@ -9,6 +9,7 @@ mkdir -p -m 700 "$XDG_RUNTIME_DIR"
 # No accessibility bus in a container; without this every start warns.
 export GTK_A11Y=none NO_AT_BRIDGE=1
 log=/out/$LABEL
+rm -f "$log".*
 
 # The kiosk shell gives the one window the whole output, so the
 # compositor's picture is the window and nothing else. --debug is what lets
