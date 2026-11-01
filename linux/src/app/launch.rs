@@ -60,6 +60,27 @@ pub struct Launch {
     /// `TOMOSHIBI_DEBUG_QUIT_AFTER`: seconds after which the app leaves any
     /// call and quits.
     pub quit_after_seconds: Option<u32>,
+    /// `TOMOSHIBI_MICROPHONE` and `TOMOSHIBI_CAMERA` (`on` or `off`): whether
+    /// the microphone and the camera start on, for this run. An autojoin
+    /// with neither given goes in with both off, as the skeleton's did.
+    pub microphone: Option<bool>,
+    pub camera: Option<bool>,
+    /// `TOMOSHIBI_PREPARE`: a room to open the pre-join on once the
+    /// deployment has answered (Launch.cs `Prepare`).
+    pub prepare: Option<String>,
+    /// `TOMOSHIBI_OPEN`: a link opened once the deployment has answered, as
+    /// if the system had handed it over.
+    pub open: Option<String>,
+    /// `TOMOSHIBI_DEBUG_LOBBY`: a part of the screens before a call to open
+    /// at start, for pictures (the Mac's LobbyDebug): `start`, `join`,
+    /// `again`, `scheduled`, `servers`, `account`, `language`, `settings`,
+    /// `settings/<page>`, `knock`, `notice`.
+    pub lobby: Option<String>,
+    /// `TOMOSHIBI_DEBUG_PORTRAIT`: the animal the lobby opens on, by name,
+    /// and `TOMOSHIBI_DEBUG_PORTRAIT_AT`: the seconds into its turn it
+    /// stands still at, for a picture of one moment of the drawing.
+    pub portrait: Option<String>,
+    pub portrait_at: Option<f64>,
 }
 
 impl Launch {
@@ -104,6 +125,13 @@ impl Launch {
                 .and_then(|value| value.parse().ok()),
             quit_after_seconds: get("TOMOSHIBI_DEBUG_QUIT_AFTER")
                 .and_then(|value| value.parse().ok()),
+            microphone: get("TOMOSHIBI_MICROPHONE").and_then(|value| switch(&value)),
+            camera: get("TOMOSHIBI_CAMERA").and_then(|value| switch(&value)),
+            prepare: get("TOMOSHIBI_PREPARE"),
+            open: get("TOMOSHIBI_OPEN"),
+            lobby: get("TOMOSHIBI_DEBUG_LOBBY"),
+            portrait: get("TOMOSHIBI_DEBUG_PORTRAIT"),
+            portrait_at: get("TOMOSHIBI_DEBUG_PORTRAIT_AT").and_then(|value| value.parse().ok()),
         }
     }
 
@@ -121,6 +149,15 @@ impl Launch {
         self.base
             .clone()
             .unwrap_or_else(tomoshibi_protocol::api::home_deployment)
+    }
+}
+
+/// `on` or `off`, as the other apps' switches are written.
+fn switch(value: &str) -> Option<bool> {
+    match value.to_ascii_lowercase().as_str() {
+        "on" | "1" | "true" | "yes" => Some(true),
+        "off" | "0" | "false" | "no" => Some(false),
+        _ => None,
     }
 }
 
@@ -156,6 +193,13 @@ mod tests {
             launch.deployment_base(),
             tomoshibi_protocol::api::home_deployment()
         );
+    }
+
+    #[test]
+    fn device_switches_are_on_or_off_and_nothing_else() {
+        let launch = launched(&[("TOMOSHIBI_MICROPHONE", "off"), ("TOMOSHIBI_CAMERA", "maybe")]);
+        assert_eq!(launch.microphone, Some(false));
+        assert_eq!(launch.camera, None);
     }
 
     #[test]
