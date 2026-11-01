@@ -393,11 +393,15 @@ pub fn present(context: &Context, mode: Mode) {
     }
     close.connect_clicked(move |_| cancel_all());
 
-    // The call came, or the screen went elsewhere: the sheet goes.
+    // The call came, or the screen went elsewhere: the sheet goes, and what
+    // brought it there is not called off.
+    let arrived = Rc::new(std::cell::Cell::new(false));
     let dialog_weak = dialog.downgrade();
+    let arrived_now = arrived.clone();
     model.subscribe_while(&dialog, move |model, change| match change {
         Change::Screen if model.screen() != Screen::Lobby => {
             if let Some(dialog) = dialog_weak.upgrade() {
+                arrived_now.set(true);
                 dialog.force_close();
             }
         }
@@ -407,12 +411,24 @@ pub fn present(context: &Context, mode: Mode) {
         }
         _ => {}
     });
-    let weak = model.downgrade();
+    // Escape and a press outside close the sheet as Cancel does, and call
+    // off what it set going the same way. They closed it and nothing else:
+    // the dropped handle did not stop the task, and somebody who pressed
+    // Escape to take back a Join was put in the pre-join or the call a
+    // moment later.
+    let (weak, going_now) = (model.downgrade(), going.clone());
     dialog.connect_closed(move |_| {
-        if let Some(model) = weak.upgrade() {
-            if !model.problem_stays() {
-                model.clear_problem();
+        let Some(model) = weak.upgrade() else {
+            return;
+        };
+        if !arrived.get() {
+            if let Some(handle) = going_now.take() {
+                handle.abort();
             }
+            model.cancel_join();
+        }
+        if !model.problem_stays() {
+            model.clear_problem();
         }
     });
 
