@@ -461,8 +461,14 @@ button.tmsb-primary:active { background-color: mix(@tmsb_tally, @tmsb_fg, 0.16);
    ground: by night it was darker than the Cancel beside it and could
    hardly be seen. The plate is the one drawn, at its full colour. */
 button.tmsb-primary:disabled { background-color: @tmsb_surface_high; color: @tmsb_muted; filter: none; }
+/* The secondary button's plate is the raised grey, the web's surface-hi
+   (index.css), with its hover and press moved toward the foreground from
+   there. It was the surface washed 6 per cent toward the wash: by night a
+   step above the ground, but by day the surface is white, and the plate
+   came to 240 over the sheet's 242, 242, 247, where Cancel could hardly
+   be seen and was paler than the disabled Join beside it. */
 button.tmsb-plain {
-  background-color: mix(@tmsb_surface, @tmsb_wash, 0.06);
+  background-color: @tmsb_surface_high;
   color: @tmsb_fg;
   border: none;
   border-radius: 999px;
@@ -471,8 +477,8 @@ button.tmsb-plain {
   box-shadow: none;
   transition: background-color 200ms cubic-bezier(0.2, 0.9, 0.3, 1), transform 120ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
-button.tmsb-plain:hover { background-color: mix(@tmsb_surface, @tmsb_fg, 0.10); }
-button.tmsb-plain:active { background-color: mix(@tmsb_surface, @tmsb_fg, 0.16); transform: scale(0.95); }
+button.tmsb-plain:hover { background-color: mix(@tmsb_surface_high, @tmsb_fg, 0.10); }
+button.tmsb-plain:active { background-color: mix(@tmsb_surface_high, @tmsb_fg, 0.16); transform: scale(0.95); }
 button.tmsb-plain:disabled { opacity: 0.4; filter: none; }
 .tmsb-divider { background-color: @tmsb_border; min-height: 1px; }
 .tmsb-small { font-size: 11px; }
@@ -668,6 +674,22 @@ mod tests {
             let body = &css[at..at + css[at..].find('}').unwrap()];
             assert!(body.contains("filter: none"), "{rule} keeps the filter");
         }
+    }
+
+    #[test]
+    fn a_secondary_button_stands_off_the_day_ground() {
+        // By day Cancel's plate was the white surface washed 6 per cent, 240
+        // on the sheet's 242: there, but not to be seen.
+        let css = stylesheet(Scheme::Light, Accent::Amber);
+        let rule = "button.tmsb-plain {";
+        let at = css.find(rule).unwrap_or_else(|| panic!("no rule {rule}"));
+        let body = &css[at..at + css[at..].find('}').unwrap()];
+        assert!(
+            body.contains("background-color: @tmsb_surface_high;"),
+            "{body}"
+        );
+        let level = |shade: Shade| (shade.red + shade.green + shade.blue) * 255.0 / 3.0;
+        assert!(level(LIGHT.background) - level(LIGHT.surface_high) >= 10.0);
     }
 
     #[test]
