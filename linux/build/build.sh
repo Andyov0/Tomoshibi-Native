@@ -5,6 +5,9 @@
 #
 #   arch   aarch64 | x86_64   (x86_64 runs under emulation on an arm64 host)
 #   what   debug | release | local     cargo build with that profile
+#          release-proof               cargo build --release for
+#                                      meet.example.com with no update key
+#                                      (below)
 #          test                        cargo test of the Linux package
 #          core-test                   cargo test of the core's workspace
 #          check | clippy              cargo check / clippy of the Linux package
@@ -30,6 +33,16 @@
 # TOMOSHIBI_HOST and TOMOSHIBI_UPDATE_KEY from the environment of whoever runs
 # this, and is refused without them; deployment.local is never read here.
 #
+# release-proof is the release profile built the way a debug build is, for
+# meet.example.com and with no update key: the release configuration (no
+# debug assertions, every #[cfg(not(debug_assertions))] path, the optimiser,
+# the link) proven to build on both architectures by somebody who holds no
+# deployment's host or key, as an integration does. The core allows it for
+# the example host only (core/protocol/build.rs). It is copied to
+# /target/out/<checkout>/release-proof/, never to release/, and is nothing
+# to give out: it reaches no deployment, and check-core.sh, which
+# appimage.sh runs on a release, refuses a core built for meet.example.com.
+#
 # One build at a time per target volume: cargo locks the build directory for
 # the whole build, so a second checkout's build waits ("Blocking waiting for
 # file lock") rather than running beside it. That is chosen, not suffered:
@@ -51,7 +64,7 @@
 #                              a key of the tests' own (default none)
 set -euo pipefail
 
-arch=${1:?"usage: build.sh <aarch64|x86_64> <debug|release|local|test|core-test|check|clippy|fmt|fmt-fix|shell> [cargo args]"}
+arch=${1:?"usage: build.sh <aarch64|x86_64> <debug|release|release-proof|local|test|core-test|check|clippy|fmt|fmt-fix|shell> [cargo args]"}
 what=${2:-debug}
 shift $(( $# >= 2 ? 2 : $# ))
 
@@ -78,7 +91,7 @@ extra=""
 if [ $# -gt 0 ]; then extra=$(printf '%q ' "$@"); fi
 
 case $what in
-  debug|release|local) profile=$what ;;
+  debug|release|release-proof|local) profile=$what ;;
   test|core-test|check|clippy|fmt|fmt-fix|shell) profile=debug ;;
   *) echo "build.sh: unknown <what>: $what" >&2; exit 64 ;;
 esac
@@ -86,7 +99,10 @@ esac
 target_volume=${TOMOSHIBI_TARGET_VOLUME:-tomoshibi-linux-target-$arch}
 env_args=(-e CARGO_TARGET_DIR=/target -e CARGO_TERM_COLOR=${CARGO_TERM_COLOR:-auto}
   -e "CARGO_BUILD_JOBS=${TOMOSHIBI_BUILD_JOBS:-4}")
-if [ "$profile" = release ] || [ "$profile" = local ]; then
+if [ "$profile" = release-proof ]; then
+  # Whatever the caller's environment says, as for a test build.
+  env_args+=(-e TOMOSHIBI_HOST=meet.example.com -e TOMOSHIBI_UPDATE_KEY=none)
+elif [ "$profile" = release ] || [ "$profile" = local ]; then
   if [ -z "${TOMOSHIBI_HOST:-}" ] || [ "${TOMOSHIBI_HOST}" = meet.example.com ]; then
     if [ "$profile" = release ]; then
       echo "build.sh: a release build needs TOMOSHIBI_HOST and TOMOSHIBI_UPDATE_KEY in the environment" >&2
@@ -106,8 +122,9 @@ else
 fi
 
 case $what in
-  debug|release|local)
+  debug|release|release-proof|local)
     cargo_profile=$profile; [ "$profile" = debug ] && cargo_profile=dev
+    [ "$profile" = release-proof ] && cargo_profile=release
     out_dir=$profile
     script="cargo build --profile $cargo_profile $extra --message-format=json-render-diagnostics > /tmp/messages.json \
       && exe=\$(jq -r 'select(.reason==\"compiler-artifact\" and .executable!=null and .target.name==\"tomoshibi\") | .executable' /tmp/messages.json | tail -1) \
@@ -134,7 +151,7 @@ esac
 # copies from. Tests rely on cargo's lock alone, so that a long test run
 # does not hold up everybody's builds.
 case $what in
-  debug|release|local) script="flock /target/.tomoshibi-build.lock bash -c $(printf '%q' "set -euo pipefail; $script")" ;;
+  debug|release|release-proof|local) script="flock /target/.tomoshibi-build.lock bash -c $(printf '%q' "set -euo pipefail; $script")" ;;
 esac
 # No git inside: a worktree's .git file names the host's path to the
 # repository, which is not mounted, and any git command run in the checkout
