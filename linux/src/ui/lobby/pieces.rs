@@ -765,8 +765,13 @@ pub fn menu_row(title: &str, detail: Option<&str>, checked: bool) -> gtk::Button
     let check = icon("object-select-symbolic", 14);
     check.add_css_class("tmsb-tally-text");
     row.append(&check);
-    let button = gtk::Button::builder().child(&row).build();
+    // Read out as one of a menu's choices, the chosen one checked.
+    let button = gtk::Button::builder()
+        .child(&row)
+        .accessible_role(gtk::AccessibleRole::MenuItemRadio)
+        .build();
     button.add_css_class("tmsb-menu-row");
+    button.update_property(&[gtk::accessible::Property::Label(title)]);
     set_menu_row(&button, detail, checked);
     button
 }

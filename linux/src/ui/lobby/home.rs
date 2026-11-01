@@ -769,7 +769,10 @@ fn menu_item(title: &str, symbol: &str) -> gtk::Button {
     label.set_xalign(0.0);
     label.set_hexpand(true);
     row.append(&label);
-    let button = gtk::Button::builder().child(&row).build();
+    let button = gtk::Button::builder()
+        .child(&row)
+        .accessible_role(gtk::AccessibleRole::MenuItem)
+        .build();
     button.add_css_class("tmsb-menu-row");
     button
 }
