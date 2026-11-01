@@ -153,7 +153,7 @@ mod tests {
         assert_eq!(decode("a+b%20c"), "a+b c");
         assert_eq!(decode("100%"), "100%");
         assert_eq!(decode("%zz"), "%zz");
-        assert_eq!(decode("%E4%BC%9A"), "会");
+        assert_eq!(decode("%E4%BC%9A"), "\u{4f1a}");
     }
 
     #[test]

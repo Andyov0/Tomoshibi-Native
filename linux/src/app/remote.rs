@@ -325,19 +325,22 @@ mod tests {
     #[test]
     fn a_kept_answer_is_read_back_whole() {
         let kept = r#"{"revision":"r7","off":["music"],"params":{"update_check_hours":24},
-            "phrases":{"Sign in":{"ja":"入る"}},
-            "notice":{"id":"n1","level":"warning","text":{"en":"Down at nine.","ja":"九時に停止します。"}}}"#;
+            "phrases":{"Sign in":{"ja":"laid over in Japanese"}},
+            "notice":{"id":"n1","level":"warning","text":{"en":"Down at nine.","ja":"Down at nine, in Japanese."}}}"#;
         let answer = Answer::of(parse_remote_config(kept.into()).expect("readable"));
         assert_eq!(answer.revision, "r7");
         assert!(!answer.allows(feature::MUSIC));
         assert!(answer.allows(feature::WATCH_TOGETHER));
-        assert_eq!(answer.phrases[&Language::Ja]["Sign in"], "入る");
+        assert_eq!(
+            answer.phrases[&Language::Ja]["Sign in"],
+            "laid over in Japanese"
+        );
         assert!(
             !answer.phrases.contains_key(&Language::ZhHans),
             "nothing laid over there"
         );
         let notice = answer.notice.expect("a notice");
-        assert_eq!(notice.text[&Language::Ja], "九時に停止します。");
+        assert_eq!(notice.text[&Language::Ja], "Down at nine, in Japanese.");
         assert_eq!(
             notice.text[&Language::ZhHans],
             "Down at nine.",

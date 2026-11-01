@@ -175,6 +175,16 @@ impl Wall {
 
 use super::schedule::Zone as _;
 
+/// The marks Chinese and Japanese write a date with (year, month, day), and
+/// the halves of the day traditional Chinese puts before the hour, as Intl
+/// writes them; escaped, so that the source stays ASCII as the repository
+/// asks of everything that is not a phrase table.
+const YEAR: &str = "\u{5e74}";
+const MONTH: &str = "\u{6708}";
+const DAY: &str = "\u{65e5}";
+const MORNING: &str = "\u{4e0a}\u{5348}";
+const AFTERNOON: &str = "\u{4e0b}\u{5348}";
+
 const MONTHS: [&str; 12] = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
@@ -211,7 +221,7 @@ fn time_of_day(wall: &Wall, language: Language) -> String {
                 0 => 12,
                 other => other,
             };
-            let half = if wall.hour < 12 { "上午" } else { "下午" };
+            let half = if wall.hour < 12 { MORNING } else { AFTERNOON };
             format!("{half}{hour}:{:02}", wall.minute)
         }
         Language::ZhHans | Language::Ja => format!("{:02}:{:02}", wall.hour, wall.minute),
@@ -228,7 +238,7 @@ fn date(wall: &Wall, language: Language) -> String {
             wall.year
         ),
         Language::ZhHans | Language::ZhHant => {
-            format!("{}年{}月{}日", wall.year, wall.month, wall.day)
+            format!("{}{YEAR}{}{MONTH}{}{DAY}", wall.year, wall.month, wall.day)
         }
         Language::Ja => format!("{}/{:02}/{:02}", wall.year, wall.month, wall.day),
     }
@@ -264,7 +274,7 @@ pub fn lately_on(wall: &Wall, today: &Wall, language: Language) -> String {
             MONTHS[(wall.month as usize).saturating_sub(1) % 12],
             wall.day
         ),
-        _ => format!("{}月{}日", wall.month, wall.day),
+        _ => format!("{}{MONTH}{}{DAY}", wall.month, wall.day),
     }
 }
 
@@ -298,11 +308,11 @@ mod tests {
         assert_eq!(said_on(&wall, Language::En), "Nov 1, 2026, 6:30 PM GMT+8");
         assert_eq!(
             said_on(&wall, Language::ZhHans),
-            "2026年11月1日 18:30 GMT+8"
+            format!("2026{YEAR}11{MONTH}1{DAY} 18:30 GMT+8")
         );
         assert_eq!(
             said_on(&wall, Language::ZhHant),
-            "2026年11月1日 下午6:30 GMT+8"
+            format!("2026{YEAR}11{MONTH}1{DAY} {AFTERNOON}6:30 GMT+8")
         );
         assert_eq!(said_on(&wall, Language::Ja), "2026/11/01 18:30 GMT+8");
         assert_eq!(zone(0), "UTC");
@@ -325,7 +335,10 @@ mod tests {
         let yesterday = Wall::at(1_793_527_200 - 86_400, 0);
         assert_eq!(lately_on(&earlier, &today, Language::ZhHans), "09:00");
         assert_eq!(lately_on(&yesterday, &today, Language::En), "Oct 31");
-        assert_eq!(lately_on(&yesterday, &today, Language::Ja), "10月31日");
+        assert_eq!(
+            lately_on(&yesterday, &today, Language::Ja),
+            format!("10{MONTH}31{DAY}")
+        );
     }
 
     #[test]
