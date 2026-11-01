@@ -80,6 +80,9 @@ pub(crate) fn clock() -> u64 {
 /// what the server said, or one of the two ways it can say nothing. Told
 /// apart because "could not be read, try again" sent somebody retrying a
 /// video that no retry would play.
+// Unboxed although one side is much the larger, as the core's own
+// ResolvedLink is: a few of these are kept per call.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq)]
 pub enum Info {
     Known(ResolvedVideo),
@@ -898,21 +901,6 @@ impl Engine {
             .borrow_mut()
             .infos
             .insert(ticket.to_owned(), found.clone());
-        found
-    }
-
-    /// What a ticket plays, asked again, for a player whose relay stopped
-    /// partway through (watch-api.ts `askAgain`). Only "the server will not
-    /// relay it" replaces what was known.
-    pub async fn ask_again(&self, ticket: &str) -> Info {
-        let found = self.fetch_info(ticket).await;
-        if found == Info::Unavailable {
-            self.shared
-                .borrow_mut()
-                .infos
-                .insert(ticket.to_owned(), Info::Unavailable);
-            self.refresh(clock());
-        }
         found
     }
 

@@ -969,7 +969,8 @@ mod tests {
     /// case added there is added here.
     #[test]
     fn a_camera_fills_or_is_shown_whole_by_the_two_shapes() {
-        let cases: [((f32, f32), (f32, f32), bool); 13] = [
+        type Case = ((f32, f32), (f32, f32), bool);
+        let cases: [Case; 13] = [
             ((640.0, 480.0), (300.0, 400.0), false),
             ((640.0, 480.0), (1856.0, 2160.0), false),
             ((720.0, 960.0), (1856.0, 2160.0), true),

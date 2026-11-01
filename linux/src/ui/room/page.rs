@@ -1434,6 +1434,22 @@ impl Page {
                 tile.speaking(),
                 marks.muted,
             ));
+            let (buttons, switch) = tile.controls_shown();
+            out.push_str(&format!(
+                "tile {id} stage buttons {buttons}, their other picture {switch}, share card {}\n",
+                marks.share_card
+            ));
+        }
+        if let Some(view) = self.watch_view.borrow().as_ref() {
+            let spot = self.stage.spot(watch::STAGE_ID).unwrap_or_default();
+            out.push_str(&format!(
+                "watch at {:.0},{:.0} {:.0}x{:.0}: frames drawn {}\n",
+                spot.x,
+                spot.y,
+                spot.width,
+                spot.height,
+                view.frames_drawn()
+            ));
         }
         out
     }

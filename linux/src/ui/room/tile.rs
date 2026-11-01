@@ -262,6 +262,9 @@ fn show_mark(revealer: &gtk::Revealer, on: bool) {
     }
 }
 
+/// What opens a picture's menu, at a point in the tile.
+type MenuAt = Rc<dyn Fn(f64, f64)>;
+
 /// One picture's frame and what is on it.
 pub struct Tile {
     pub id: String,
@@ -303,7 +306,7 @@ pub struct Tile {
     on_switch: RefCell<Option<Rc<dyn Fn()>>>,
     on_stop: RefCell<Option<Rc<dyn Fn()>>>,
     on_press: RefCell<Option<Rc<dyn Fn()>>>,
-    on_menu: RefCell<Option<Rc<dyn Fn(f64, f64)>>>,
+    on_menu: RefCell<Option<MenuAt>>,
     floats: Cell<usize>,
 }
 
