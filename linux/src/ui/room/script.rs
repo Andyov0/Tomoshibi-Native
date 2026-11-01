@@ -24,7 +24,8 @@
 //! deployment would list them), `move=<relay>` and `place=<relay>` (the
 //! server's word that the meeting, or this participant, is moving, and the
 //! call closing under it 400 ms later, through `follow` as the core says
-//! both), and `again` (the ending's "Join again"); and two that only look:
+//! both), `again` (the ending's "Join again") and `close` (the host's
+//! "End for everybody"); and two that only look:
 //! `shot=<name>`, GTK's own picture of the window and its widget tree beside
 //! the run's main snapshot, and `report`, every tile and what it shows,
 //! written to the log. A headless run (linux/build/run-headless.sh) keeps
@@ -303,6 +304,7 @@ fn act(model: &AppModel, action: &str) {
             });
         }
         "again" => model.join_again(),
+        "close" => super::end_for_everybody(model),
         "report" => report(model),
         "leave" => {
             let weak = model.downgrade();
@@ -372,9 +374,10 @@ fn report(model: &AppModel) {
         .map(|(_, toast)| toast.title.clone())
         .collect();
     log(&format!(
-        "room report: screen {}, notices {toasts:?}, moving {:?}",
+        "room report: screen {}, notices {toasts:?}, moving {:?}, sharing {}",
         model.screen().name(),
-        room.moving.borrow().as_ref().map(|(to, _)| to.clone())
+        room.moving.borrow().as_ref().map(|(to, _)| to.clone()),
+        room.local.share.borrow().is_some()
     ));
     let talk = room.talk.borrow();
     if let Some(talk) = talk.as_ref() {
