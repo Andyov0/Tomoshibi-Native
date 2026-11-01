@@ -81,6 +81,11 @@ pub fn host_environment(
     changes
 }
 
+/// Set by the relaunch's shell for the version it put back after the new
+/// one failed to start, so that the version put back can say why the
+/// update it offers again did not take.
+pub const DID_NOT_START: &str = "TOMOSHIBI_UPDATE_DID_NOT_START";
+
 /// Set beside GSK_RENDERER where main.rs chose the renderer.
 pub const RENDERER_CHOSEN: &str = "TOMOSHIBI_CHOSE_RENDERER";
 
@@ -169,7 +174,7 @@ while [ "$watched" -lt 150 ]; do
     status=$?
     if [ "$status" -ne 0 ] && [ -e "$old" ]; then
       echo "tomoshibi: the new version did not start (exit $status); putting back the one it replaced" >&2
-      mv -f "$old" "$image" && exec "$image"
+      mv -f "$old" "$image" && TOMOSHIBI_UPDATE_DID_NOT_START=1 exec "$image"
     fi
     [ -e "$old" ] || forget_unpacked
     exit "$status"
@@ -527,7 +532,10 @@ mod tests {
         let old = Beside::new(&image).old();
         let again = dir.join("old-started");
         script(&image, "exit 3");
-        script(&old, &format!("touch '{}'", again.display()));
+        script(
+            &old,
+            &format!("echo \"$TOMOSHIBI_UPDATE_DID_NOT_START\" > '{}'", again.display()),
+        );
 
         let mut app = stand_in(&dir);
         relaunch_after(app.id(), &image, None).unwrap();
@@ -539,6 +547,11 @@ mod tests {
             "the old build was not started again"
         );
         assert!(!old.exists(), "put back, not copied");
+        assert_eq!(
+            fs::read_to_string(&again).unwrap().trim(),
+            "1",
+            "the version put back is not told the update did not start"
+        );
         assert!(fs::read_to_string(&image).unwrap().contains("old-started"));
         let _ = fs::remove_dir_all(&dir);
     }

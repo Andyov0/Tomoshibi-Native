@@ -113,6 +113,7 @@ impl Default for Updates {
             state: RefCell::new(State {
                 step: Step::None,
                 said: None,
+                rolled_back: false,
                 later: HashSet::new(),
                 allowed: true,
                 every: EVERY,
@@ -128,6 +129,9 @@ impl Default for Updates {
 struct State {
     step: Step,
     said: Option<Said>,
+    /// This run is the version an update was rolled back to (relaunch.rs):
+    /// the update it offers again did not start on this machine.
+    rolled_back: bool,
     /// Versions put away with "Later" until the next start.
     later: HashSet<String>,
     allowed: bool,
@@ -484,11 +488,18 @@ async fn check(model: &AppModel, asked: bool) -> bool {
             // A download under way of the same build goes on; of an older
             // one, it goes on too, and the next look offers the newer.
             if !busy {
+                // Offered again after it failed to start here: said, so
+                // that the offer is not taken for one nobody has tried.
+                let problem = updates(model)
+                    .state
+                    .borrow()
+                    .rolled_back
+                    .then(|| t("This update does not run on this device."));
                 set(
                     model,
                     Step::Offered {
                         build: build.clone(),
-                        problem: None,
+                        problem,
                     },
                 );
                 debug_install(model);
@@ -540,6 +551,13 @@ pub fn pose(model: &AppModel, build: AppBuild) {
 fn debug_install(model: &AppModel) {
     #[cfg(debug_assertions)]
     if std::env::var("TOMOSHIBI_DEBUG_UPDATE").as_deref() == Ok("install") {
+        // Not the build that has just failed to start here: the switch is
+        // inherited by the version put back, which installed it again,
+        // round and round.
+        if updates(model).state.borrow().rolled_back {
+            log("update: not installing again what did not start here");
+            return;
+        }
         log("update: installing, as TOMOSHIBI_DEBUG_UPDATE asked");
         install(model);
     }
@@ -671,6 +689,13 @@ fn download(model: &AppModel, build: AppBuild, received: u64, total: u64) {
             }
         }
     });
+}
+
+/// This run is the version an update was rolled back to, because the new
+/// one did not start (main.rs reads the relaunch's mark).
+pub fn rolled_back(model: &AppModel) {
+    log("update: the new version did not start here; this is the one it replaced, put back");
+    updates(model).state.borrow_mut().rolled_back = true;
 }
 
 /// Starts the new build once this one has gone, and closes this one.

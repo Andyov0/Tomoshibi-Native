@@ -34,6 +34,9 @@ fn main() -> glib::ExitCode {
     let handed = std::env::var_os(update::relaunch::LINKS_HANDED).is_some();
     std::env::remove_var(update::relaunch::OPEN_LINKS);
     std::env::remove_var(update::relaunch::LINKS_HANDED);
+    // Put back by an update that did not start here (update/relaunch.rs).
+    let rolled_back = std::env::var_os(update::relaunch::DID_NOT_START).is_some();
+    std::env::remove_var(update::relaunch::DID_NOT_START);
     let links: Vec<String> = links
         .lines()
         .filter(|line| !line.is_empty())
@@ -83,7 +86,7 @@ fn main() -> glib::ExitCode {
     application.connect_activate({
         let (running, launch) = (running.clone(), launch.clone());
         move |application| {
-            start(application, &running, &launch);
+            start(application, &running, &launch, rolled_back);
             if let Some(running) = running.borrow().as_ref() {
                 running.window.present();
             }
@@ -94,7 +97,7 @@ fn main() -> glib::ExitCode {
     application.connect_open({
         let (running, launch) = (running.clone(), launch.clone());
         move |application, files, _| {
-            start(application, &running, &launch);
+            start(application, &running, &launch, rolled_back);
             let Some(running) = running
                 .borrow()
                 .as_ref()
@@ -177,7 +180,12 @@ fn choose_renderer() {
 
 /// Builds the model and the window the first time the application is asked
 /// to show anything, and asks the deployment what it is.
-fn start(application: &adw::Application, running: &Rc<RefCell<Option<Running>>>, launch: &Launch) {
+fn start(
+    application: &adw::Application,
+    running: &Rc<RefCell<Option<Running>>>,
+    launch: &Launch,
+    rolled_back: bool,
+) {
     if running.borrow().is_some() {
         return;
     }
@@ -200,6 +208,9 @@ fn start(application: &adw::Application, running: &Rc<RefCell<Option<Running>>>,
     let window = ui::window::open(application, &model, media.clone());
     debug_switches(application, &window, &model, media);
     // The image this one replaced, the next build, the desktop entry.
+    if rolled_back {
+        update::offer::rolled_back(&model);
+    }
     update::at_start(&model, &window);
     log(&format!(
         "Tomoshibi {} for Linux, core {}, {}",
