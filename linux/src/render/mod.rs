@@ -545,7 +545,11 @@ mod tests {
         }
         assert_eq!(slot.arrived(), 2);
         let taken = slot.take().unwrap();
-        assert_eq!(pixel(&taken.texture, 0, 0)[0], 255, "the newer, white frame");
+        assert_eq!(
+            pixel(&taken.texture, 0, 0)[0],
+            255,
+            "the newer, white frame"
+        );
         assert!(slot.take().is_none(), "taken once");
     }
 
