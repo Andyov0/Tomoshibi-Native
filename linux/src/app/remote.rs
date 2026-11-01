@@ -71,9 +71,13 @@ pub struct Answer {
 
 impl Answer {
     pub fn of(config: RemoteConfig) -> Answer {
+        // Only the languages something is laid over in: an empty table for
+        // the others read to the phrases as a change, and every screen was
+        // built again for nothing a moment after it first showed.
         let phrases = Language::ALL
             .into_iter()
             .map(|language| (language, remote_phrases(config.clone(), language.code().into())))
+            .filter(|(_, phrases)| !phrases.is_empty())
             .collect();
         let notice = config.notice.clone().map(|notice| Notice {
             id: notice.id.clone(),
@@ -310,7 +314,7 @@ mod tests {
         assert!(!answer.allows(feature::MUSIC));
         assert!(answer.allows(feature::WATCH_TOGETHER));
         assert_eq!(answer.phrases[&Language::Ja]["Sign in"], "入る");
-        assert!(answer.phrases[&Language::ZhHans].get("Sign in").is_none());
+        assert!(!answer.phrases.contains_key(&Language::ZhHans), "nothing laid over there");
         let notice = answer.notice.expect("a notice");
         assert_eq!(notice.text[&Language::Ja], "九時に停止します。");
         assert_eq!(notice.text[&Language::ZhHans], "Down at nine.", "English stands in");

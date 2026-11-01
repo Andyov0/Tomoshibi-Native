@@ -387,6 +387,74 @@ mod tests {
         assert_eq!(substitute("a { b {} c", &[]), "a { b {} c");
     }
 
+    /// The phrases this app's code asks for: every literal given to `t` or
+    /// `t_with` in src/, outside the tests.
+    fn phrases_asked_for() -> Vec<(String, String)> {
+        fn walk(dir: &std::path::Path, found: &mut Vec<std::path::PathBuf>) {
+            for entry in std::fs::read_dir(dir).expect("src is readable").flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    walk(&path, found);
+                } else if path.extension().is_some_and(|ext| ext == "rs") {
+                    found.push(path);
+                }
+            }
+        }
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut files = Vec::new();
+        walk(&root, &mut files);
+        let mut asked = Vec::new();
+        for file in files {
+            let text = std::fs::read_to_string(&file).expect("a source file");
+            let code = text.split("#[cfg(test)]").next().unwrap_or_default();
+            for opener in ["t(\"", "t_with(\""] {
+                let mut rest = code;
+                while let Some(at) = rest.find(opener) {
+                    let before = rest[..at].chars().last();
+                    rest = &rest[at + opener.len()..];
+                    // `t(` as a word of its own, not the end of `print(`.
+                    if before.is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                        continue;
+                    }
+                    let mut phrase = String::new();
+                    let mut chars = rest.chars();
+                    while let Some(c) = chars.next() {
+                        match c {
+                            '\\' => {
+                                if let Some(next) = chars.next() {
+                                    phrase.push(next);
+                                }
+                            }
+                            '"' => break,
+                            c => phrase.push(c),
+                        }
+                    }
+                    asked.push((phrase, file.display().to_string()));
+                }
+            }
+        }
+        asked
+    }
+
+    #[test]
+    fn every_phrase_asked_for_is_in_all_four_languages() {
+        // As LocalizationCatalogTests does for the Swift sources: a phrase
+        // misspelt, or added here and not to native.json, would be shown in
+        // English to everybody else.
+        let asked = phrases_asked_for();
+        assert!(asked.len() > 100, "the scan found only {} phrases", asked.len());
+        let missing: Vec<String> = asked
+            .iter()
+            .filter(|(phrase, _)| {
+                [Language::ZhHans, Language::ZhHant, Language::Ja]
+                    .iter()
+                    .any(|language| !tables()[language].contains_key(phrase))
+            })
+            .map(|(phrase, file)| format!("{phrase:?} in {file}"))
+            .collect();
+        assert!(missing.is_empty(), "phrases not in the catalogue: {missing:#?}");
+    }
+
     #[test]
     fn laid_over_phrases_win_in_their_language_only() {
         start(Some("ja"));

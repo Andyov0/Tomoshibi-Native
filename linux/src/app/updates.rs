@@ -337,7 +337,7 @@ pub fn accept(model: &AppModel) {
                         log(&format!("the new build could not be started: {fault}"));
                         set(&model, Step::Offered {
                             build: self::build(&model).unwrap_or_else(|| installer.build().clone()),
-                            problem: Some(t("The update could not be installed. Try again.")),
+                            problem: Some(t("The update could not be installed.")),
                         });
                     }
                 }
@@ -350,7 +350,7 @@ pub fn accept(model: &AppModel) {
                 log(&format!("the update did not arrive: {fault}"));
                 set(&model, Step::Offered {
                     build,
-                    problem: Some(t("The update could not be installed. Try again.")),
+                    problem: Some(t("The update could not be installed.")),
                 });
             }
         }
