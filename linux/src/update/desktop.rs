@@ -460,6 +460,14 @@ fn ask(model: &AppModel, window: &adw::ApplicationWindow, image: PathBuf) {
     dialog.add_response("later", &i18n::t("Not now"));
     dialog.add_response("add", &i18n::t("Add"));
     dialog.set_response_appearance("add", adw::ResponseAppearance::Suggested);
+    // libadwaita draws the suggested response in its own blue, which is no
+    // colour of the app's; the app's accent as text instead (theme.rs
+    // tmsb_tally_text, the shade of it that reads on the dialog's ground).
+    crate::theme::add_module_css(
+        "update",
+        "dialog.alert.tmsb-update .response-area button.suggested { color: @tmsb_tally_text; }",
+    );
+    dialog.add_css_class("tmsb-update");
     dialog.set_default_response(Some("add"));
     dialog.set_close_response("later");
     let model = model.downgrade();

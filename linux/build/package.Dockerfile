@@ -29,7 +29,13 @@
 # GTK part itself.
 #
 # The two AppImages are extracted here, at build time, so that a container
-# with no FUSE (every container) runs them as plain programs.
+# with no FUSE (every container) runs them as plain programs. Before that, the
+# AppImage magic (the bytes "AI" and the type, 2, at offset 8 of the ELF
+# header's padding) is zeroed in these downloaded copies: the build VM runs
+# x86_64 code with Rosetta, whose binfmt entry matches the whole ELF
+# identification, padding included, and an x86_64 AppImage with its magic
+# there was "Exec format error" in the x86_64 image. A machine that runs
+# x86_64 code itself ignores the padding, and the runtime does not read it.
 ARG BUILD_IMAGE
 FROM ${BUILD_IMAGE}
 
@@ -64,6 +70,9 @@ RUN set -eu; \
     curl -fsSL -o runtime "https://github.com/AppImage/type2-runtime/releases/download/$RUNTIME/runtime-$ARCH"; \
     printf '%s  %s\n' "$ld" linuxdeploy.AppImage "$at" appimagetool.AppImage "$rt" runtime | sha256sum -c -; \
     chmod +x linuxdeploy.AppImage appimagetool.AppImage; \
+    for tool in linuxdeploy.AppImage appimagetool.AppImage; do \
+      printf '\000\000\000' | dd of="$tool" bs=1 seek=8 conv=notrunc status=none; \
+    done; \
     ./linuxdeploy.AppImage --appimage-extract >/dev/null && mv squashfs-root linuxdeploy; \
     ./appimagetool.AppImage --appimage-extract >/dev/null && mv squashfs-root appimagetool; \
     rm linuxdeploy.AppImage appimagetool.AppImage; \

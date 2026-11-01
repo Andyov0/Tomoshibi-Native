@@ -47,6 +47,14 @@ app_image=$HOME/Applications/$(basename "$IMAGE")
 cp "$IMAGE" "$app_image"
 chmod 755 "$app_image"
 say "image: $(basename "$IMAGE"), $(stat -c %s "$app_image") bytes, sha256 $(sha256sum "$app_image" | cut -d' ' -f1)"
+if [ "${EMULATED:-0}" = 1 ]; then
+  # Run through Rosetta, whose binfmt entry does not match an ELF header
+  # with the AppImage magic in its padding (package.Dockerfile): zeroed in
+  # this copy, which changes nothing the runtime reads.
+  printf '\000\000\000' | dd of="$app_image" bs=1 seek=8 conv=notrunc status=none
+  say "emulated: the AppImage magic is zeroed in this copy, for Rosetta's binfmt"
+fi
+started_sha=$(sha256sum "$app_image" | cut -d' ' -f1)
 
 # Every library the image's programs and libraries ask for that neither the
 # image nor the system has. A plain Debian 13 had no libgpg-error, which
@@ -109,8 +117,8 @@ fi
 
 # An update that must be refused: the app says the build is not signed by
 # its key, downloads nothing, and goes on as it was.
-case $UPDATE_TO in
-  refused:*)
+case ${UPDATE_TO:-} in
+  refused)
     until grep -q 'update: the check failed' "$log.app.log" 2>/dev/null; do
       if [ "$(date +%s)" -ge "$deadline" ]; then say "the app never said the check failed; see $LABEL.app.log"; exit 1; fi
       sleep 0.25
@@ -121,7 +129,7 @@ case $UPDATE_TO in
     if grep -q 'update: downloading\|update: closing' "$log.app.log"; then say "the app went on with a build it should have refused"; exit 1; fi
     kill -0 "$app_pid" 2>/dev/null || { say "the app is not running any more"; exit 1; }
     have=$(sha256sum "$app_image" | cut -d' ' -f1)
-    [ "$have" = "${UPDATE_TO#refused:}" ] || { say "the image changed: $have"; exit 1; }
+    [ "$have" = "$started_sha" ] || { say "the image changed: $have"; exit 1; }
     leftovers=$(ls -A "$HOME/Applications" | grep -v "^$(basename "$app_image")\$" || true)
     [ -z "$leftovers" ] || { say "something was left beside the image: $leftovers"; exit 1; }
     shot "$log.weston.png"

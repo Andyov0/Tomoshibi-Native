@@ -8,6 +8,12 @@
 #
 #   --old     the image to start, a test image (appimage.sh test) whose core
 #             holds updates to a key of the tests' own (TOMOSHIBI_TEST_UPDATE_KEY)
+#
+# For an architecture the VM runs through Rosetta (x86_64), the image the
+# shelf offers must have its AppImage magic zeroed before it is signed, as
+# distro-inside.sh zeroes it in the image it starts: the update is started by
+# the app itself, and Rosetta's binfmt entry does not match the magic
+# (package.Dockerfile).
 #   --shelf   the deployment's apps directory: apps.json, its linux-<arch>
 #             line signed with that key, and the newer image it names
 #   --server  a Linux build of the server for the VM's architecture, one that
@@ -114,8 +120,9 @@ echo "the deployment offers: $(printf '%s' "$answer" | jq -c '{platform, version
 
 case $expect in
   installed) to=$want ;;
-  # The image must still be the one started, byte for byte.
-  refused) to=refused:$( { shasum -a 256 "$old" 2>/dev/null || sha256sum "$old"; } | cut -d' ' -f1) ;;
+  # The image must still be the one started, byte for byte, which
+  # distro-inside.sh knows.
+  refused) to=refused ;;
   *) echo "update-check.sh: --expect is installed or refused" >&2; exit 64 ;;
 esac
 "$here/distro-check.sh" "$arch" "$distro" "$old" --out "$out" --label "$label" \

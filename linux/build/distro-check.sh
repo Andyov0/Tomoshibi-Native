@@ -77,6 +77,14 @@ if [ "$have" != "$wanted" ]; then
     --label "tomoshibi.distro=$wanted" -t "$tag" -f "$here/distro.Dockerfile" "$here" >&2
 fi
 
+# Whether the VM runs this architecture's code itself or through Rosetta
+# (x86_64 on the arm64 VM): distro-inside.sh then zeroes the AppImage magic
+# in its copy of the image, which Rosetta's binfmt entry does not match
+# (package.Dockerfile says more). A machine of the image's own architecture
+# never needs it.
+vm_arch=$("${docker[@]}" version --format '{{.Server.Arch}}' 2>/dev/null || echo unknown)
+case $vm_arch-$arch in arm64-aarch64|amd64-x86_64) emulated=0 ;; *) emulated=1 ;; esac
+
 label=${label:-$distro-$arch}
 mkdir -p "$out"
 out=$(cd "$out" && pwd)
@@ -92,7 +100,7 @@ exec "${docker[@]}" run --rm \
   -v "$out:/out" \
   -e "IMAGE=/images/$image_name" -e "LABEL=$label" \
   -e "WIDTH=$width" -e "HEIGHT=$height" -e "SECONDS_LEFT=$seconds" \
-  -e "TOMOSHIBI_BASE=$deployment" \
+  -e "TOMOSHIBI_BASE=$deployment" -e "EMULATED=$emulated" \
   ${extra_env[@]+"${extra_env[@]}"} \
   "$tag" \
   dbus-run-session -- bash /opt/distro-inside.sh
