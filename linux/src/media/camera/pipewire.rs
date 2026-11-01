@@ -334,6 +334,8 @@ struct Negotiated {
     feed: Arc<Feed>,
     ended: Option<Box<dyn FnOnce() + Send>>,
     streaming: bool,
+    /// Buffers that came with no data, for the log.
+    empty: u64,
 }
 
 /// The format a stream offers to take: raw in the layouts read here, or
@@ -410,6 +412,43 @@ fn format_param(subtype: MediaSubtype, wanted: Wanted) -> Result<Vec<u8>, String
     .map_err(|e| format!("{e:?}"))
 }
 
+/// The buffers a compressed stream is asked for: eight (from two to
+/// sixteen) of one block each, four megabytes by default, which holds a
+/// 1080p MJPEG frame several times over.
+fn buffers_param() -> Result<Vec<u8>, String> {
+    use spa::{
+        pod::{ChoiceValue, Object, Property, PropertyFlags, Value},
+        utils::{Choice, ChoiceEnum, ChoiceFlags},
+    };
+    let range = |default: i32, min: i32, max: i32| {
+        Value::Choice(ChoiceValue::Int(Choice(
+            ChoiceFlags::empty(),
+            ChoiceEnum::Range { default, min, max },
+        )))
+    };
+    let property = |key: u32, value: Value| Property {
+        key,
+        flags: PropertyFlags::empty(),
+        value,
+    };
+    let object = Object {
+        type_: SpaTypes::ObjectParamBuffers.as_raw(),
+        id: ParamType::Buffers.as_raw(),
+        properties: vec![
+            property(spa::sys::SPA_PARAM_BUFFERS_buffers, range(8, 2, 16)),
+            property(spa::sys::SPA_PARAM_BUFFERS_blocks, Value::Int(1)),
+            property(
+                spa::sys::SPA_PARAM_BUFFERS_size,
+                range(4 << 20, 64 << 10, 32 << 20),
+            ),
+            property(spa::sys::SPA_PARAM_BUFFERS_stride, Value::Int(0)),
+        ],
+    };
+    PodSerializer::serialize(std::io::Cursor::new(Vec::new()), &Value::Object(object))
+        .map(|(cursor, _)| cursor.into_inner())
+        .map_err(|e| format!("{e:?}"))
+}
+
 fn open(
     core: &pw::core::CoreRc,
     node: &Node,
@@ -437,25 +476,31 @@ fn open(
         feed,
         ended: Some(ended),
         streaming: false,
+        empty: 0,
     };
     let listener = stream
         .add_local_listener_with_user_data(negotiated)
-        .state_changed(|_, negotiated, _, new| match new {
-            pw::stream::StreamState::Streaming => negotiated.streaming = true,
-            pw::stream::StreamState::Error(fault) => {
-                log(&format!("camera: the PipeWire stream failed: {fault}"));
-                if let Some(ended) = negotiated.ended.take() {
-                    ended();
+        .state_changed(|_, negotiated, old, new| {
+            log(&format!(
+                "camera: the PipeWire stream went from {old:?} to {new:?}"
+            ));
+            match new {
+                pw::stream::StreamState::Streaming => negotiated.streaming = true,
+                pw::stream::StreamState::Error(fault) => {
+                    log(&format!("camera: the PipeWire stream failed: {fault}"));
+                    if let Some(ended) = negotiated.ended.take() {
+                        ended();
+                    }
                 }
-            }
-            pw::stream::StreamState::Unconnected if negotiated.streaming => {
-                if let Some(ended) = negotiated.ended.take() {
-                    ended();
+                pw::stream::StreamState::Unconnected if negotiated.streaming => {
+                    if let Some(ended) = negotiated.ended.take() {
+                        ended();
+                    }
                 }
+                _ => {}
             }
-            _ => {}
         })
-        .param_changed(|_, negotiated, id, param| {
+        .param_changed(|stream, negotiated, id, param| {
             let Some(param) = param else { return };
             if id != ParamType::Format.as_raw() {
                 return;
@@ -469,6 +514,25 @@ fn open(
             if subtype == MediaSubtype::Mjpg {
                 // The size is read from each JPEG.
                 negotiated.format = Some(PixelFormat::Mjpeg);
+                log("camera: PipeWire sends MJPEG");
+                // A compressed frame's size cannot be worked out from the
+                // format, so the buffers' is said here: a producer that
+                // derives it from the format alone (GStreamer's
+                // pipewiresink) otherwise sent nothing at all, the stream
+                // streaming and no buffer ever arriving.
+                match buffers_param() {
+                    Ok(bytes) => match Pod::from_bytes(&bytes) {
+                        Some(pod) => {
+                            if let Err(fault) = stream.update_params(&mut [pod]) {
+                                log(&format!(
+                                    "camera: the MJPEG buffers were not asked for: {fault}"
+                                ));
+                            }
+                        }
+                        None => log("camera: a bad buffers parameter"),
+                    },
+                    Err(fault) => log(&format!("camera: a bad buffers parameter: {fault}")),
+                }
                 return;
             }
             let mut info = VideoInfoRaw::new();
@@ -497,7 +561,17 @@ fn open(
             };
             let datas = buffer.datas_mut();
             let mut planes: Vec<(&[u8], u32)> = Vec::with_capacity(datas.len());
+            let mut seen = Vec::new();
             for data in datas.iter_mut() {
+                seen.push(format!(
+                    "type {:?} maxsize {} chunk {}+{} stride {} mapped {}",
+                    data.type_(),
+                    data.as_raw().maxsize,
+                    data.chunk().offset(),
+                    data.chunk().size(),
+                    data.chunk().stride(),
+                    !data.as_raw().data.is_null()
+                ));
                 let (offset, size, stride) = {
                     let chunk = data.chunk();
                     (
@@ -516,6 +590,13 @@ fn open(
                 planes.push((&bytes[offset..end], stride));
             }
             if planes.is_empty() {
+                negotiated.empty += 1;
+                if negotiated.empty == 1 || negotiated.empty.is_power_of_two() {
+                    log(&format!(
+                        "camera: a PipeWire buffer with nothing in it ({} so far): {seen:?}",
+                        negotiated.empty
+                    ));
+                }
                 return;
             }
             let raw = Raw {

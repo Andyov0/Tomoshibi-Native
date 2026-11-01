@@ -20,6 +20,9 @@
 //!   PROBE_BLUR=1                          with its background blurred
 //!   PROBE_ORIGINAL=1                      the voice as original sound
 //!   PROBE_SPEAKER=<sink>                  play to this sink
+//!   PROBE_SPEAKER_WHEN_PLUGGED=<sink>     play to this sink once it appears
+//!                                         (the devices panel's choice of a
+//!                                         headset plugged in during a call)
 //!   TOMOSHIBI_SOURCE, TOMOSHIBI_MUTE, TOMOSHIBI_DEBUG_NO_ECHO_CANCELLER,
 //!   TOMOSHIBI_DEBUG_LOG                   as for the app
 //!
@@ -101,6 +104,38 @@ async fn run() -> Result<(), String> {
                 if device.is_default { " (default)" } else { "" }
             ));
         }
+    }
+
+    // Every change of devices, as the devices panel would hear of it.
+    {
+        let media_weak = Rc::downgrade(&media);
+        let wanted = setting("PROBE_SPEAKER_WHEN_PLUGGED");
+        media.on_devices_changed(Box::new(move || {
+            let Some(media) = media_weak.upgrade() else {
+                return;
+            };
+            let speakers: Vec<String> = media
+                .devices(DeviceKind::Speaker)
+                .into_iter()
+                .map(|d| d.id)
+                .collect();
+            let microphones: Vec<String> = media
+                .devices(DeviceKind::Microphone)
+                .into_iter()
+                .map(|d| d.id)
+                .collect();
+            log(&format!(
+                "probe: devices changed: speakers {speakers:?}, microphones {microphones:?}"
+            ));
+            if let Some(wanted) = wanted.as_ref() {
+                if speakers.iter().any(|s| s == wanted) {
+                    log(&format!(
+                        "probe: playing to {wanted}, which was just plugged in"
+                    ));
+                    media.set_speaker(Some(wanted.clone()));
+                }
+            }
+        }));
     }
 
     let deployment = Deployment::new(base).map_err(|e| e.to_string())?;

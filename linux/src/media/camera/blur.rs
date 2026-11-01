@@ -500,9 +500,9 @@ impl Blur {
                 "blur: {:.1} ms a frame on the capture thread, {}",
                 self.spent.as_secs_f64() * 1000.0 / 150.0,
                 if found.is_some() {
-                    "a person found"
+                    "through the segmenter's mask"
                 } else {
-                    "nobody found yet"
+                    "the whole picture, no mask yet"
                 }
             ));
             self.spent = Duration::ZERO;
