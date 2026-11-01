@@ -13,7 +13,7 @@ use adw::prelude::*;
 use gtk::{gio, glib};
 use tomoshibi_linux::{
     app::{self, client, log, AppModel, Launch},
-    i18n, media, theme, ui, APP_ID,
+    i18n, media, theme, ui, update, APP_ID,
 };
 
 /// What the first instance holds once it has started.
@@ -111,6 +111,8 @@ fn start(application: &adw::Application, running: &Rc<RefCell<Option<Running>>>,
     let media = media::standard();
     let window = ui::window::open(application, &model, media.clone());
     debug_switches(application, &window, &model, media);
+    // The image this one replaced, the next build, the desktop entry.
+    update::at_start(&model, &window);
     log(&format!(
         "Tomoshibi {} for Linux, core {}, {}",
         client::version_label(),
