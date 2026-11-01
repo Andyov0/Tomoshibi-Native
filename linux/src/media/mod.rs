@@ -207,6 +207,9 @@ pub trait Media {
     fn set_speaker(&self, choice: Option<String>);
     /// One person's volume, from nought to one (the sound panel's sliders).
     fn set_volume(&self, identity: &str, level: f32);
+    fn set_kind_volume(&self, identity: &str, music: bool, level: f32) {
+        let _ = (identity, music, level);
+    }
     /// Silences everything played (`TOMOSHIBI_MUTE=speakers`, deafen).
     fn set_silent(&self, silent: bool);
 }

@@ -13,8 +13,9 @@
 //!   timed to each; if any of them does not answer, every relay is timed the
 //!   other way instead, so the readings stay comparable;
 //! - otherwise the signalling socket, `<url>/rtc`, is opened with no token, and
-//!   whatever comes back first (the upgrade, the refusal, or an error) is the
-//!   answer;
+//!   the relay's answer (the upgrade, or its refusal of the missing token) is
+//!   the reading; a connection refused, reset or never answered, or an answer
+//!   no relay gives, is a round missed;
 //! - each relay is timed in [`ROUNDS`] rounds, one after another, every relay
 //!   at once, each round given 1.5 s; a reading is the median of the rounds
 //!   that answered, and a relay that answered fewer than [`QUORUM`] has not
@@ -550,9 +551,14 @@ async fn over_udp_to(name: &str, target: SocketAddr) -> Option<Duration> {
 
 /// The relay's signalling socket, opened and timed in rounds, or nothing.
 ///
-/// Any answer counts: the upgrade accepted, the missing token refused, or the
-/// connection failing outright. That is what relays.ts does, taking `open`,
-/// `close` and `error` alike, because a refusal is a complete round trip. A
+/// The relay's answer counts: the upgrade accepted, or the missing token
+/// refused, which is a complete round trip ([`open`] says which answers are
+/// the relay's). The connection failing outright does not. relays.ts takes
+/// `open`, `close` and `error` alike, and a browser's socket to a port with
+/// nothing listening fires `error` at once, so a relay whose port was closed
+/// read as a round trip of a millisecond, was named the fastest, and a join
+/// that asked for it went nowhere; a server page showed it at 0 ms. Here that
+/// is a miss, and three of them are no reading. A
 /// relay without an address, or with one a browser would not open a socket to,
 /// has no reading, as the browser's constructor throwing gives none. Every
 /// round is a connection of its own (the prober keeps none), as each of the
@@ -585,8 +591,8 @@ async fn over_signalling(relay: &Relay) -> Option<Duration> {
         let (client, target) = (&client, target.clone());
         async move {
             let started = Instant::now();
-            tokio::time::timeout(PROBE_TIMEOUT, open(client, target)).await.ok()?;
-            Some(started.elapsed())
+            let answered = tokio::time::timeout(PROBE_TIMEOUT, open(client, target)).await.ok()?;
+            answered.then(|| started.elapsed())
         }
     })
     .await;
@@ -643,13 +649,23 @@ fn prober() -> Option<reqwest::Client> {
 }
 
 /// Sends the WebSocket opening handshake (RFC 6455, section 4.1) with no token
-/// and waits for whatever comes back.
+/// and waits for whatever comes back: true when the relay answered it.
+///
+/// A relay's answers are two: 101, the upgrade accepted, and a 4xx, the
+/// upgrade refused for the token it lacks (the media server's 401). Both are
+/// the relay, after the same round trip, and both count. Nothing else does:
+/// no answer at all (the connection refused, reset, or its TLS failing) is no
+/// relay on that port, and a 2xx, 3xx or 5xx is something else answering in
+/// its place, a web server that ignored the upgrade or a gateway whose relay
+/// behind it is down, through which no call could be held either. "Anything
+/// but 101 is a miss" was considered and is wrong: every working relay
+/// refuses this request, so every relay would have been a miss.
 ///
 /// The request is the upgrade a call begins with and nothing more. Should a
 /// relay ever accept it, the socket is closed with a close frame, as the
 /// browser's `socket.close()` does, and not left open on a relay this client
 /// may not use.
-async fn open(client: &reqwest::Client, target: url::Url) {
+async fn open(client: &reqwest::Client, target: url::Url) -> bool {
     use reqwest::header::{CONNECTION, SEC_WEBSOCKET_KEY, SEC_WEBSOCKET_VERSION, UPGRADE};
 
     let key = base64::engine::general_purpose::STANDARD.encode(rand::random::<[u8; 16]>());
@@ -663,9 +679,10 @@ async fn open(client: &reqwest::Client, target: url::Url) {
         .send()
         .await;
 
-    let Ok(response) = sent else { return };
-    if response.status() != reqwest::StatusCode::SWITCHING_PROTOCOLS {
-        return;
+    let Ok(response) = sent else { return false };
+    let status = response.status();
+    if status != reqwest::StatusCode::SWITCHING_PROTOCOLS {
+        return status.is_client_error();
     }
 
     tokio::spawn(tokio::time::timeout(PROBE_TIMEOUT, async move {
@@ -678,6 +695,8 @@ async fn open(client: &reqwest::Client, target: url::Url) {
         let _ = socket.write_all(&frame).await;
         let _ = socket.shutdown().await;
     }));
+
+    true
 }
 
 /// The STUN answer to one binding request to the server `probe` names: the
@@ -955,6 +974,76 @@ mod tests {
             maintenance: false,
             fallback: false,
             admin_only: false,
+        }
+    }
+
+    /// A local port that answers every connection with `status` and closes,
+    /// as a relay answers a token-less upgrade, and its address as a relay's.
+    async fn answering(status: &'static str) -> String {
+        use tokio::io::{AsyncReadExt as _, AsyncWriteExt as _};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            while let Ok((mut socket, _)) = listener.accept().await {
+                tokio::spawn(async move {
+                    let mut request = [0u8; 2048];
+                    let _ = socket.read(&mut request).await;
+                    let answer = format!("HTTP/1.1 {status}\r\ncontent-length: 0\r\nconnection: close\r\n\r\n");
+                    let _ = socket.write_all(answer.as_bytes()).await;
+                    let _ = socket.shutdown().await;
+                });
+            }
+        });
+        format!("ws://127.0.0.1:{port}")
+    }
+
+    /// A port nothing listens on: one bound and let go.
+    async fn refusing() -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
+        format!("ws://127.0.0.1:{port}")
+    }
+
+    fn at(url: String) -> Relay {
+        Relay { url: Some(url), ..named("here") }
+    }
+
+    // A port with nothing on it answered in a millisecond and was named the
+    // fastest relay: the refusal is no round trip, and three are no reading.
+    #[tokio::test]
+    async fn a_relay_whose_port_refuses_has_no_reading() {
+        let client = prober().unwrap();
+        let refused = at(refusing().await);
+        assert!(!open(&client, signalling(refused.url.as_deref().unwrap()).unwrap()).await);
+        assert_eq!(over_signalling(&refused).await, None);
+    }
+
+    // What every working relay says to a token-less upgrade, which has to stay
+    // a reading or nothing could ever be timed over the socket.
+    #[tokio::test]
+    async fn a_relay_refusing_the_missing_token_has_a_reading() {
+        let client = prober().unwrap();
+        let relay = at(answering("401 Unauthorized").await);
+        assert!(open(&client, signalling(relay.url.as_deref().unwrap()).unwrap()).await);
+        assert!(over_signalling(&relay).await.is_some());
+    }
+
+    #[tokio::test]
+    async fn only_the_relays_own_answers_count() {
+        let client = prober().unwrap();
+        for (status, counts) in [
+            ("400 Bad Request", true),
+            ("403 Forbidden", true),
+            ("200 OK", false),
+            ("302 Found", false),
+            ("502 Bad Gateway", false),
+            ("503 Service Unavailable", false),
+        ] {
+            let relay = at(answering(status).await);
+            let target = signalling(relay.url.as_deref().unwrap()).unwrap();
+            assert_eq!(open(&client, target).await, counts, "{status}");
         }
     }
 

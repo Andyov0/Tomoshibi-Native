@@ -1,12 +1,15 @@
 //! The panels beside the call: messages (ChatPanel.tsx), sound
-//! (SoundPanel.tsx, each person's volume), devices (DeviceMenu.tsx) and
-//! running the room (HostPanel.tsx, the door among it). Opaque, with their
-//! close button 32 drawn at the top right (UI sync); page.rs slides them in
-//! from the side, or up from the foot where they cover the call.
+//! (SoundPanel.tsx, each person's volume; sound_panel.rs), devices
+//! (DeviceMenu.tsx) and running the room (HostPanel.tsx, the door among it;
+//! host_panel.rs). Opaque, with their close button 32 drawn at the top right
+//! (UI sync); page.rs slides them in from the side, or up from the foot
+//! where they cover the call.
 //!
 //! Each is built once when it opens and brought up to date by its
 //! `refresh`, which reads the room's state like everything else on the
-//! call's screen.
+//! call's screen and changes only what changed: a row made again under the
+//! pointer loses the press, and one made again on every event of the call
+//! appears from nowhere each time.
 
 use std::{
     cell::{Cell, RefCell},
@@ -19,15 +22,11 @@ use tomoshibi_core::call::CallState;
 
 use super::{
     glyph::{self, Glyph},
-    page::menu_row,
+    motion::{Away, Motion},
     talk::{named, Line},
-    Hearing, Panel, RoomState,
+    Panel, RoomState,
 };
-use crate::{
-    app::AppModel,
-    i18n::{t, t_with},
-    media::DeviceKind,
-};
+use crate::{app::AppModel, i18n::t, media::DeviceKind};
 
 /// A panel and how it is brought up to date.
 pub struct PanelView {
@@ -38,14 +37,19 @@ pub struct PanelView {
 pub fn build(model: &AppModel, panel: Panel) -> PanelView {
     match panel {
         Panel::Messages => messages(model),
-        Panel::Sound => sound(model),
+        Panel::Sound => super::sound_panel::build(model),
         Panel::Devices => devices(model),
-        Panel::Host => host(model),
+        Panel::Host => super::host_panel::build(model),
     }
 }
 
 /// The heading, the close button, and the body beneath, scrolled.
-fn frame(model: &AppModel, panel: Panel, title: &str, close_label: &str) -> (gtk::Box, gtk::Box) {
+pub(super) fn frame(
+    model: &AppModel,
+    panel: Panel,
+    title: &str,
+    close_label: &str,
+) -> (gtk::Box, gtk::Box) {
     let outer = gtk::Box::new(gtk::Orientation::Vertical, 0);
     outer.set_vexpand(true);
     let head = gtk::Box::new(gtk::Orientation::Horizontal, 8);
@@ -93,7 +97,7 @@ fn frame(model: &AppModel, panel: Panel, title: &str, close_label: &str) -> (gtk
     (outer, body)
 }
 
-fn muted(text: &str) -> gtk::Label {
+pub(super) fn muted(text: &str) -> gtk::Label {
     let label = gtk::Label::builder()
         .label(text)
         .xalign(0.0)
@@ -103,7 +107,7 @@ fn muted(text: &str) -> gtk::Label {
     label
 }
 
-fn section(text: &str) -> gtk::Label {
+pub(super) fn section(text: &str) -> gtk::Label {
     let label = gtk::Label::builder()
         .label(text)
         .xalign(0.0)
@@ -113,13 +117,13 @@ fn section(text: &str) -> gtk::Label {
     label
 }
 
-fn clear(container: &gtk::Box) {
+pub(super) fn clear(container: &gtk::Box) {
     while let Some(child) = container.first_child() {
         container.remove(&child);
     }
 }
 
-fn pill(label: &str) -> gtk::Button {
+pub(super) fn pill(label: &str) -> gtk::Button {
     let button = gtk::Button::with_label(label);
     button.add_css_class("tmsb-panel-button");
     button
@@ -127,7 +131,15 @@ fn pill(label: &str) -> gtk::Button {
 
 // ---- messages ------------------------------------------------------------
 
+/// A link in a message, in the colour the web draws one (Linked.tsx:
+/// text-tally-ink, underlined).
+const MESSAGES_CSS: &str = r#"
+.tmsb-line-text link { color: @tmsb_call_tally; text-decoration-line: underline; }
+.tmsb-line-text link:hover { color: mix(@tmsb_call_tally, @tmsb_call_fg, 0.2); }
+"#;
+
 fn messages(model: &AppModel) -> PanelView {
+    crate::theme::add_module_css("room-messages", MESSAGES_CSS);
     let (outer, body) = frame(model, Panel::Messages, &t("Messages"), &t("Close messages"));
     let lines = gtk::Box::new(gtk::Orientation::Vertical, 10);
     lines.set_widget_name("messages.lines");
@@ -199,6 +211,9 @@ fn messages(model: &AppModel) -> PanelView {
     });
 
     let shown: Rc<RefCell<Vec<String>>> = Rc::default();
+    // What was there when the panel opened arrives with the panel; only
+    // what is said while it is open arrives on its own.
+    let opened = Rc::new(Cell::new(false));
     let scroller = body.parent().and_then(|viewport| viewport.parent());
     let refresh = {
         let (lines, empty, entry, send, say) = (
@@ -235,8 +250,18 @@ fn messages(model: &AppModel) -> PanelView {
                 was.clear();
             }
             let added = ids.len() > was.len();
+            let arriving = opened.replace(true);
             for line in &messages[was.len()..] {
-                lines.append(&line_widget(line));
+                let widget = line_widget(model, line);
+                if arriving {
+                    // A new message rises into the list rather than
+                    // appearing in it (Theme.arrive).
+                    let motion = Motion::hidden(&widget, Away::FOOT);
+                    lines.append(&motion);
+                    motion.show(true);
+                } else {
+                    lines.append(&widget);
+                }
             }
             *was = ids;
             empty.set_visible(messages.is_empty());
@@ -273,7 +298,7 @@ fn messages(model: &AppModel) -> PanelView {
     }
 }
 
-fn line_widget(line: &Line) -> gtk::Widget {
+fn line_widget(model: &AppModel, line: &Line) -> gtk::Widget {
     let row = gtk::Box::new(gtk::Orientation::Vertical, 2);
     if line.mine {
         row.add_css_class("tmsb-line-mine");
@@ -288,169 +313,25 @@ fn line_widget(line: &Line) -> gtk::Widget {
     bubble.add_css_class("tmsb-line-bubble");
     bubble.set_halign(gtk::Align::Start);
     let text = gtk::Label::builder()
-        .label(&line.text)
         .xalign(0.0)
         .wrap(true)
         .wrap_mode(gtk::pango::WrapMode::WordChar)
         .selectable(true)
         .max_width_chars(40)
         .build();
+    text.set_markup(&linked(&line.text));
     text.add_css_class("tmsb-line-text");
+    let weak = model.downgrade();
+    text.connect_activate_link(move |label, uri| {
+        if let Some(model) = weak.upgrade() {
+            open_link(&model, label, uri);
+        }
+        glib::Propagation::Stop
+    });
     bubble.append(&text);
     row.append(&name);
     row.append(&bubble);
     row.upcast()
-}
-
-// ---- sound -------------------------------------------------------------
-
-fn sound(model: &AppModel) -> PanelView {
-    let (outer, body) = frame(model, Panel::Sound, &t("Sound"), &t("Close sound"));
-    let rows = gtk::Box::new(gtk::Orientation::Vertical, 10);
-    let nobody = muted(&t("Nobody else is here."));
-    body.append(&nobody);
-    body.append(&rows);
-    let shown: Rc<RefCell<Vec<(String, String)>>> = Rc::default();
-    let sliders: Rc<RefCell<Vec<Slider>>> = Rc::default();
-    let refresh = {
-        let (rows, nobody) = (rows.downgrade(), nobody.downgrade());
-        move |model: &AppModel| {
-            let (Some(rows), Some(nobody)) = (rows.upgrade(), nobody.upgrade()) else {
-                return;
-            };
-            let room = model.kept::<RoomState>();
-            let people: Vec<(String, String)> = room
-                .talk
-                .borrow()
-                .as_ref()
-                .map(|talk| {
-                    talk.people
-                        .iter()
-                        .map(|person| (person.id.clone(), person.label()))
-                        .collect()
-                })
-                .unwrap_or_default();
-            nobody.set_visible(people.is_empty());
-            if *shown.borrow() != people {
-                clear(&rows);
-                sliders.borrow_mut().clear();
-                for (identity, name) in &people {
-                    let (row, scale, mute, quiet) = volume_row(model, identity, name);
-                    rows.append(&row);
-                    sliders
-                        .borrow_mut()
-                        .push((identity.clone(), scale, mute, quiet));
-                }
-                shown.replace(people);
-            }
-            let view = room.view.borrow();
-            for (identity, scale, mute, quiet) in sliders.borrow().iter() {
-                let hearing = view.hearing.get(identity).copied().unwrap_or_default();
-                let value = (hearing.level * 100.0).round() as f64;
-                if (scale.value() - value).abs() > 0.5 {
-                    quiet.set(true);
-                    scale.set_value(value);
-                    quiet.set(false);
-                }
-                mute.set_icon_name(if hearing.blocked || hearing.level <= 0.0 {
-                    "audio-volume-muted-symbolic"
-                } else {
-                    "audio-volume-high-symbolic"
-                });
-                if hearing.blocked {
-                    mute.add_css_class("held");
-                } else {
-                    mute.remove_css_class("held");
-                }
-                scale.set_sensitive(!hearing.blocked);
-            }
-        }
-    };
-    PanelView {
-        widget: outer.upcast(),
-        refresh: Box::new(refresh),
-    }
-}
-
-/// One person's slider: whose, the slider, the mute beside it, and the
-/// flag that keeps a value set from here from being taken as a press.
-type Slider = (String, gtk::Scale, gtk::Button, Rc<Cell<bool>>);
-
-fn volume_row(
-    model: &AppModel,
-    identity: &str,
-    name: &str,
-) -> (gtk::Box, gtk::Scale, gtk::Button, Rc<Cell<bool>>) {
-    let row = gtk::Box::new(gtk::Orientation::Vertical, 2);
-    row.add_css_class("tmsb-panel-row");
-    let label = gtk::Label::builder()
-        .label(name)
-        .xalign(0.0)
-        .ellipsize(gtk::pango::EllipsizeMode::End)
-        .build();
-    let line = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    let scale = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.0, 100.0, 1.0);
-    scale.set_hexpand(true);
-    scale.set_draw_value(false);
-    scale.set_value(100.0);
-    let said = t_with("{name}'s volume", &[("name", &name)]);
-    scale.update_property(&[gtk::accessible::Property::Label(&said)]);
-    scale.set_widget_name(&format!("volume:{identity}"));
-    let mute = gtk::Button::from_icon_name("audio-volume-high-symbolic");
-    mute.add_css_class("tmsb-close");
-    let mute_said = t_with("Mute {name}", &[("name", &name)]);
-    mute.set_tooltip_text(Some(&mute_said));
-    mute.update_property(&[gtk::accessible::Property::Label(&mute_said)]);
-    line.append(&scale);
-    line.append(&mute);
-    row.append(&label);
-    row.append(&line);
-    let quiet = Rc::new(Cell::new(false));
-    let (weak, who, hush) = (model.downgrade(), identity.to_owned(), quiet.clone());
-    scale.connect_value_changed(move |scale| {
-        if hush.get() {
-            return;
-        }
-        if let Some(model) = weak.upgrade() {
-            let blocked = model
-                .kept::<RoomState>()
-                .view
-                .borrow()
-                .hearing
-                .get(&who)
-                .is_some_and(|hearing| hearing.blocked);
-            super::set_hearing(
-                &model,
-                &who,
-                Hearing {
-                    level: (scale.value() / 100.0) as f32,
-                    blocked,
-                },
-            );
-        }
-    });
-    let (weak, who) = (model.downgrade(), identity.to_owned());
-    mute.connect_clicked(move |_| {
-        if let Some(model) = weak.upgrade() {
-            let now = model
-                .kept::<RoomState>()
-                .view
-                .borrow()
-                .hearing
-                .get(&who)
-                .copied()
-                .unwrap_or_default();
-            super::set_hearing(
-                &model,
-                &who,
-                Hearing {
-                    blocked: !now.blocked,
-                    ..now
-                },
-            );
-        }
-    });
-    (row, scale, mute, quiet)
 }
 
 // ---- devices -------------------------------------------------------------
@@ -571,215 +452,135 @@ fn choice_row(title: &str, ticked: bool) -> gtk::Button {
     button
 }
 
-// ---- running the room ----------------------------------------------------
+// ---- links in messages -----------------------------------------------------
 
-fn host(model: &AppModel) -> PanelView {
-    let (outer, body) = frame(model, Panel::Host, &t("Running this room"), &t("Close"));
-    let content = gtk::Box::new(gtk::Orientation::Vertical, 8);
-    body.append(&content);
-    let shown: RefCell<Option<String>> = RefCell::new(None);
-    let refresh = {
-        let content = content.downgrade();
-        move |model: &AppModel| {
-            let Some(content) = content.upgrade() else {
-                return;
-            };
-            let room = model.kept::<RoomState>();
-            let host = room.host.borrow();
-            let talk = room.talk.borrow();
-            // Made again only when something it shows changed.
-            let said = format!(
-                "{:?}{:?}{:?}{:?}{:?}{}{}",
-                host.standing
-                    .as_ref()
-                    .map(|standing| (standing.yours, standing.admin)),
-                host.waiting
-                    .iter()
-                    .map(|knocker| &knocker.id)
-                    .collect::<Vec<_>>(),
-                host.busy,
-                host.link,
-                talk.as_ref().map(|talk| talk
-                    .people
-                    .iter()
-                    .map(|person| (person.id.clone(), person.label(), person.microphone_off()))
-                    .collect::<Vec<_>>()),
-                host.ending,
-                crate::i18n::language().code(),
-            );
-            if shown.borrow().as_deref() == Some(said.as_str()) {
-                return;
-            }
-            shown.replace(Some(said));
-            clear(&content);
-            let Some(standing) = host.standing.as_ref() else {
-                content.append(&muted(&t("Measuring…")));
-                return;
-            };
-            if !standing.yours {
-                content.append(&muted(&t("Somebody else runs this room.")));
-                return;
-            }
-            let busy = host.busy.clone();
+/// The text as Pango markup with its addresses made links (Linked.tsx): only
+/// a complete URL over http or https, its trailing punctuation left out,
+/// since guessing at bare hosts turns "see chapter 3.e.g" into a link nobody
+/// meant, and a false link is worse than a missed one.
+pub(super) fn linked(text: &str) -> String {
+    let mut out = String::new();
+    let mut at = 0;
+    for (start, end) in links_in(text) {
+        out.push_str(&glib::markup_escape_text(&text[at..start]));
+        let address = glib::markup_escape_text(&text[start..end]);
+        out.push_str(&format!("<a href=\"{address}\">{address}</a>"));
+        at = end;
+    }
+    out.push_str(&glib::markup_escape_text(&text[at..]));
+    out
+}
 
-            // The door.
-            if !host.waiting.is_empty() {
-                content.append(&section(&t("Waiting to be let in")));
-                for knocker in &host.waiting {
-                    let row = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-                    row.add_css_class("tmsb-panel-row");
-                    let name = gtk::Label::builder()
-                        .label(&knocker.name)
-                        .xalign(0.0)
-                        .hexpand(true)
-                        .ellipsize(gtk::pango::EllipsizeMode::End)
-                        .build();
-                    let admit = pill(&t("Let in"));
-                    admit.add_css_class("primary");
-                    let refuse = pill(&t("Not now"));
-                    for (button, yes) in [(&admit, true), (&refuse, false)] {
-                        button.set_sensitive(busy.is_none());
-                        let (weak, id) = (model.downgrade(), knocker.id.clone());
-                        button.connect_clicked(move |_| {
-                            if let Some(model) = weak.upgrade() {
-                                super::answer_knock(&model, &id, yes);
-                            }
-                        });
-                    }
-                    row.append(&name);
-                    row.append(&refuse);
-                    row.append(&admit);
-                    content.append(&row);
-                }
-            }
+/// Where the links are, as byte ranges: Linked.tsx's
+/// `\bhttps?:\/\/[^\s<>()[\]{}]+[^\s<>()[\]{}.,;:!?'"]`, written out.
+fn links_in(text: &str) -> Vec<(usize, usize)> {
+    let stops = |c: char| c.is_whitespace() || "<>()[]{}".contains(c);
+    let trailing = |c: char| ".,;:!?'\"".contains(c);
+    let lower = text.to_ascii_lowercase();
+    let mut found = Vec::new();
+    let mut from = 0;
+    while from < text.len() {
+        let next = ["http://", "https://"]
+            .iter()
+            .filter_map(|scheme| {
+                lower[from..]
+                    .find(scheme)
+                    .map(|at| (from + at, scheme.len()))
+            })
+            .min();
+        let Some((start, scheme)) = next else { break };
+        // A word's start, as the expression's \b, which is ASCII's: not
+        // the middle of one.
+        let joined = text[..start]
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_');
+        let rest = &text[start + scheme..];
+        let run = rest.find(stops).unwrap_or(rest.len());
+        let mut end = start + scheme + run;
+        while end > start + scheme && text[..end].chars().next_back().is_some_and(trailing) {
+            end -= text[..end].chars().next_back().map_or(1, char::len_utf8);
+        }
+        // At least two characters after the scheme, as the expression
+        // wants one and then one that is not punctuation.
+        if !joined && text[start + scheme..end].chars().count() >= 2 {
+            found.push((start, end));
+            from = end;
+        } else {
+            from = start + scheme;
+        }
+    }
+    found
+}
 
-            // Invitations.
-            let invite = pill(&t("Invite somebody"));
-            invite.set_halign(gtk::Align::Start);
-            invite.set_sensitive(busy.is_none());
-            invite.set_widget_name("host.invite");
-            let weak = model.downgrade();
-            invite.connect_clicked(move |_| {
-                if let Some(model) = weak.upgrade() {
-                    super::invite(&model);
-                }
-            });
-            content.append(&invite);
-            if let Some(link) = host.link.as_ref() {
-                let shown_link = gtk::Label::builder()
-                    .label(link)
-                    .xalign(0.0)
-                    .wrap(true)
-                    .wrap_mode(gtk::pango::WrapMode::Char)
-                    .selectable(true)
-                    .build();
-                shown_link.add_css_class("tmsb-footnote");
-                content.append(&shown_link);
-                content.append(&muted(&t("It stops working after a day either way.")));
-            }
-            let revoke = pill(&t("Stop every link to this room working"));
-            revoke.set_halign(gtk::Align::Start);
-            revoke.set_sensitive(busy.is_none());
-            let weak = model.downgrade();
-            revoke.connect_clicked(move |_| {
-                if let Some(model) = weak.upgrade() {
-                    super::revoke(&model);
-                }
-            });
-            content.append(&revoke);
-
-            // The people.
-            let rule = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-            rule.add_css_class("tmsb-menu-rule");
-            content.append(&rule);
-            let people = talk
-                .as_ref()
-                .map(|talk| talk.people.clone())
-                .unwrap_or_default();
-            if people.is_empty() {
-                content.append(&muted(&t("Nobody else is here.")));
-            }
-            for person in people {
-                let row = gtk::Box::new(gtk::Orientation::Vertical, 4);
-                row.add_css_class("tmsb-panel-row");
-                let name = gtk::Label::builder()
-                    .label(person.label())
-                    .xalign(0.0)
-                    .ellipsize(gtk::pango::EllipsizeMode::End)
-                    .build();
-                row.append(&name);
-                let actions = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-                let mute = pill(&t("Mute"));
-                mute.set_sensitive(!person.microphone_off() && busy.is_none());
-                let remove = pill(&t("Remove from room"));
-                remove.add_css_class("danger");
-                remove.set_sensitive(busy.is_none());
-                let make_host = pill(&t("Make host"));
-                make_host.set_sensitive(busy.is_none());
-                for (button, act) in [
-                    (&mute, super::silence as fn(&AppModel, &str)),
-                    (&remove, super::turn_out),
-                    (&make_host, super::hand_over),
-                ] {
-                    let (weak, who) = (model.downgrade(), person.id.clone());
-                    button.connect_clicked(move |_| {
-                        if let Some(model) = weak.upgrade() {
-                            act(&model, &who);
-                        }
-                    });
-                    actions.append(button);
-                }
-                row.append(&actions);
-                content.append(&row);
-            }
-
-            // Closing it: asked once, since it cannot be undone.
-            let rule = gtk::Box::new(gtk::Orientation::Horizontal, 0);
-            rule.add_css_class("tmsb-menu-rule");
-            content.append(&rule);
-            if host.ending {
-                content.append(&muted(&t(
-                    "Everybody will be disconnected and told the room has closed. Links to it stop working.",
-                )));
-                let row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
-                let cancel = pill(&t("Cancel"));
-                let end = pill(&t("End this meeting"));
-                end.add_css_class("danger");
-                end.set_sensitive(busy.is_none());
-                let weak = model.downgrade();
-                cancel.connect_clicked(move |_| {
-                    if let Some(model) = weak.upgrade() {
-                        super::ask_to_end(&model, false);
-                    }
-                });
-                let weak = model.downgrade();
-                end.connect_clicked(move |_| {
-                    if let Some(model) = weak.upgrade() {
-                        super::end_for_everybody(&model);
-                    }
-                });
-                row.append(&cancel);
-                row.append(&end);
-                content.append(&row);
-            } else {
-                let (close, _) = menu_row(
-                    &t("Close the room"),
-                    None,
-                    Some("system-lock-screen-symbolic"),
-                );
-                close.add_css_class("danger");
-                let weak = model.downgrade();
-                close.connect_clicked(move |_| {
-                    if let Some(model) = weak.upgrade() {
-                        super::ask_to_end(&model, true);
-                    }
-                });
-                content.append(&close);
+/// Opens a link pressed in a message, in the person's browser, without
+/// leaving the call: through the desktop's own way of opening a link
+/// (gtk::UriLauncher, the portal where there is one, over the window), or,
+/// from an AppImage, through the model's, which starts the browser with the
+/// system's environment rather than the image's (AppModel::open_in_browser
+/// says what the image's did to a browser).
+fn open_link(model: &AppModel, label: &gtk::Label, uri: &str) {
+    if std::env::var_os("APPIMAGE").is_some() {
+        model.open_in_browser(uri);
+        return;
+    }
+    let window = label
+        .root()
+        .and_then(|root| root.downcast::<gtk::Window>().ok());
+    let (weak, address) = (model.downgrade(), uri.to_owned());
+    gtk::UriLauncher::new(uri).launch(window.as_ref(), gtk::gio::Cancellable::NONE, move |done| {
+        if let Err(fault) = done {
+            crate::app::log(&format!("a link could not be opened: {fault}"));
+            if let Some(model) = weak.upgrade() {
+                model.open_in_browser(&address);
             }
         }
-    };
-    PanelView {
-        widget: outer.upcast(),
-        refresh: Box::new(refresh),
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn links(text: &str) -> Vec<&str> {
+        links_in(text)
+            .into_iter()
+            .map(|(start, end)| &text[start..end])
+            .collect()
+    }
+
+    #[test]
+    fn only_whole_addresses_are_links_and_their_full_stop_is_not() {
+        assert_eq!(
+            links("see https://example.com/a?b=1. and http://x.org,"),
+            vec!["https://example.com/a?b=1", "http://x.org"]
+        );
+        assert_eq!(
+            links("(https://example.com/page)"),
+            vec!["https://example.com/page"]
+        );
+        assert!(links("example.com, e.g. chapter 3").is_empty());
+        assert!(links("xhttps://example.com").is_empty(), "inside a word");
+        assert_eq!(
+            links("éhttps://e.com"),
+            vec!["https://e.com"],
+            "\\b is ASCII's"
+        );
+        assert!(links("https://").is_empty());
+        assert_eq!(links("HTTPS://Example.com"), vec!["HTTPS://Example.com"]);
+        assert_eq!(
+            links("см. https://пример.рф/путь»"),
+            vec!["https://пример.рф/путь»"],
+            "only ASCII punctuation is left off the end, as the expression's class"
+        );
+    }
+
+    #[test]
+    fn the_markup_escapes_everything_but_the_link() {
+        assert_eq!(
+            linked("a<b> https://e.com/?a=1&b=2"),
+            "a&lt;b&gt; <a href=\"https://e.com/?a=1&amp;b=2\">https://e.com/?a=1&amp;b=2</a>"
+        );
+        assert_eq!(linked("no link & <tag>"), "no link &amp; &lt;tag&gt;");
     }
 }

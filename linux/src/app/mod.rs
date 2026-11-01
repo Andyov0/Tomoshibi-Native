@@ -674,7 +674,7 @@ impl AppModel {
         let base = self.launch().deployment_base();
         let deployment = Deployment::new(base)?;
         let key = secrets::session_key(&deployment.base_url());
-        if let Some(cookie) = self.secrets().read(&key) {
+        if let Some(cookie) = self.secrets().read_soon(&key).await {
             if deployment.restore_account_cookie(cookie).is_err() {
                 log("the kept session could not be restored");
             }
@@ -686,7 +686,8 @@ impl AppModel {
         let account = deployment.clone().me().await.unwrap_or(None);
         let passphrase = self
             .secrets()
-            .read(&secrets::passphrase_key(&deployment.base_url()))
+            .read_soon(&secrets::passphrase_key(&deployment.base_url()))
+            .await
             .unwrap_or_default();
         {
             let mut state = self.inner.state.borrow_mut();

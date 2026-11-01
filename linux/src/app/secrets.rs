@@ -10,6 +10,15 @@
 //! and a session cookie in it would be a session anybody on the machine
 //! could take.
 //!
+//! Never on the main thread. Every call into libsecret is a D-Bus round
+//! trip, and with the keyring locked it shows the desktop's unlock prompt
+//! and waits for somebody to answer it: made from the main thread, at start
+//! and at every key pressed in the guest's passphrase field, that froze the
+//! window (no redraw, "not responding") for as long as the prompt stood. So
+//! one worker thread of its own makes every call; writes return at once and
+//! a burst of writes to one key is one write of the last value; a read the
+//! app can wait for is [`Secrets::read_soon`], awaited on the main loop.
+//!
 //! A machine with no Secret Service at all (a bare compositor, a container,
 //! a desktop whose keyring is not running) still runs the app: what cannot
 //! be stored is held for this run only, and the next start asks somebody to
@@ -17,19 +26,39 @@
 //! who can do nothing about it from here.
 
 use std::{
-    cell::{Cell, RefCell},
+    cell::RefCell,
     collections::HashMap,
     ffi::{c_char, c_int, c_void, CStr, CString},
+    future::Future,
+    pin::Pin,
     ptr,
+    rc::Rc,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc, Arc, Mutex, OnceLock,
+    },
 };
 
 use super::log;
 
+/// What a read hands back, to await on the main loop.
+pub type Soon = Pin<Box<dyn Future<Output = Option<String>>>>;
+
 /// A store of small secrets by key. Called on the main thread.
 pub trait Secrets {
+    /// What is kept under `key`. May wait on the store: for a read made
+    /// while somebody waits for an answer anyway (a join being prepared).
     fn read(&self, key: &str) -> Option<String>;
+    /// Keeps `value` under `key`; returns at once.
     fn write(&self, key: &str, value: &str);
+    /// Forgets `key`; returns at once.
     fn remove(&self, key: &str);
+    /// [`read`](Self::read) without holding up the caller's thread: the
+    /// answer arrives when the store gives it.
+    fn read_soon(&self, key: &str) -> Soon {
+        let found = self.read(key);
+        Box::pin(std::future::ready(found))
+    }
 }
 
 /// Secrets for this run alone.
@@ -75,75 +104,251 @@ pub fn passphrase_key(base: &str) -> String {
     format!("passphrase:{base}")
 }
 
-/// The Secret Service, with this run's memory under it for when it cannot
-/// be reached: everything written is held here as well, so that a store
-/// that failed still reads back what was written in this run.
-#[derive(Default)]
-pub struct SecretService {
-    memory: InMemory,
-    /// Set once the service has failed, so that the log says it once and
-    /// the rest of the run does not wait on a bus that is not there.
-    failed: Cell<bool>,
+/// What the worker does with libsecret: the three calls, behind a trait so
+/// that a test can stand a slow or locked keyring in for it.
+pub trait Backend: Send + Sync + 'static {
+    fn lookup(&self, key: &str) -> Result<Option<String>, String>;
+    fn store(&self, key: &str, value: &str) -> Result<(), String>;
+    fn clear(&self, key: &str) -> Result<(), String>;
 }
 
-impl SecretService {
+/// libsecret itself.
+struct Libsecret;
+
+impl Backend for Libsecret {
+    fn lookup(&self, key: &str) -> Result<Option<String>, String> {
+        ffi::lookup(key)
+    }
+
+    fn store(&self, key: &str, value: &str) -> Result<(), String> {
+        ffi::store(key, value)
+    }
+
+    fn clear(&self, key: &str) -> Result<(), String> {
+        ffi::clear(key)
+    }
+}
+
+/// A write still to be made, the latest for its key.
+enum Pending {
+    Store(String),
+    Clear,
+}
+
+enum Job {
+    /// Make the pending write for this key, if it is still there.
+    Flush(String),
+    Lookup(
+        String,
+        Box<dyn FnOnce(Result<Option<String>, String>) + Send>,
+    ),
+}
+
+/// The worker's side: the writes waiting, the backend, and whether it has
+/// failed, all shared with the thread.
+struct Shared {
+    pending: Mutex<HashMap<String, Pending>>,
+    backend: Box<dyn Backend>,
+    /// Set once the service has failed, so that the log says it once and
+    /// the rest of the run does not wait on a bus that is not there.
+    failed: AtomicBool,
+}
+
+impl Shared {
     fn failed(&self, what: &str, fault: String) {
-        if !self.failed.replace(true) {
+        if !self.failed.swap(true, Ordering::SeqCst) {
             log(&format!(
                 "the Secret Service could not {what} ({fault}); secrets are kept for this run only"
             ));
+        }
+    }
+
+    fn run(&self, job: Job) {
+        match job {
+            Job::Flush(key) => {
+                let Some(write) = self
+                    .pending
+                    .lock()
+                    .ok()
+                    .and_then(|mut held| held.remove(&key))
+                else {
+                    return;
+                };
+                if self.failed.load(Ordering::SeqCst) {
+                    return;
+                }
+                let done = match &write {
+                    Pending::Store(value) => self.backend.store(&key, value),
+                    Pending::Clear => self.backend.clear(&key),
+                };
+                if let Err(fault) = done {
+                    match write {
+                        Pending::Store(_) => self.failed("keep a secret", fault),
+                        Pending::Clear => self.failed("forget a secret", fault),
+                    }
+                }
+            }
+            Job::Lookup(key, answer) => {
+                if self.failed.load(Ordering::SeqCst) {
+                    answer(Err("the Secret Service failed earlier".into()));
+                    return;
+                }
+                let found = self.backend.lookup(&key);
+                if let Err(fault) = &found {
+                    self.failed("be read", fault.clone());
+                }
+                answer(found);
+            }
+        }
+    }
+}
+
+/// The Secret Service, with what this run knows in front of it: everything
+/// written is known at once, so that a store that is slow, locked or gone
+/// still reads back what was written in this run, and a key once read is
+/// not asked for again.
+pub struct SecretService {
+    /// A value, or `None` for a key known to hold nothing; a key not here
+    /// has not been asked about yet.
+    known: Rc<RefCell<HashMap<String, Option<String>>>>,
+    shared: Arc<Shared>,
+    /// The worker, started at the first call that needs it.
+    jobs: OnceLock<mpsc::Sender<Job>>,
+}
+
+impl Default for SecretService {
+    fn default() -> Self {
+        SecretService::with_backend(Box::new(Libsecret))
+    }
+}
+
+impl SecretService {
+    pub fn with_backend(backend: Box<dyn Backend>) -> SecretService {
+        SecretService {
+            known: Rc::default(),
+            shared: Arc::new(Shared {
+                pending: Mutex::new(HashMap::new()),
+                backend,
+                failed: AtomicBool::new(false),
+            }),
+            jobs: OnceLock::new(),
+        }
+    }
+
+    fn failed(&self) -> bool {
+        self.shared.failed.load(Ordering::SeqCst)
+    }
+
+    /// Hands a job to the worker; false when there is no worker to hand it
+    /// to (the thread could not be started), which is a store that failed.
+    fn send(&self, job: Job) -> bool {
+        let jobs = self.jobs.get_or_init(|| {
+            let (sender, receiver) = mpsc::channel::<Job>();
+            let shared = self.shared.clone();
+            let started = std::thread::Builder::new()
+                .name("tomoshibi-secrets".into())
+                .spawn(move || {
+                    while let Ok(job) = receiver.recv() {
+                        shared.run(job);
+                    }
+                });
+            if let Err(fault) = started {
+                self.shared.failed("be reached", fault.to_string());
+            }
+            sender
+        });
+        jobs.send(job).is_ok()
+    }
+
+    /// Queues the latest write for `key`; one already waiting is replaced,
+    /// so that typing a passphrase is one write of what was typed last.
+    fn queue(&self, key: &str, write: Pending) {
+        if self.failed() {
+            return;
+        }
+        let waiting = match self.shared.pending.lock() {
+            Ok(mut held) => held.insert(key.to_owned(), write).is_some(),
+            Err(_) => return,
+        };
+        if !waiting {
+            self.send(Job::Flush(key.to_owned()));
         }
     }
 }
 
 impl Secrets for SecretService {
     fn read(&self, key: &str) -> Option<String> {
-        if let Some(held) = self.memory.read(key) {
-            return Some(held);
+        if let Some(known) = self.known.borrow().get(key) {
+            return known.clone();
         }
-        if self.failed.get() {
+        if self.failed() {
             return None;
         }
-        match ffi::lookup(key) {
-            Ok(found) => {
-                if let Some(found) = &found {
-                    self.memory.write(key, found);
-                }
+        let (sender, receiver) = mpsc::channel();
+        let asked = self.send(Job::Lookup(
+            key.to_owned(),
+            Box::new(move |found| {
+                let _ = sender.send(found);
+            }),
+        ));
+        if !asked {
+            return None;
+        }
+        match receiver.recv() {
+            Ok(Ok(found)) => {
+                self.known
+                    .borrow_mut()
+                    .insert(key.to_owned(), found.clone());
                 found
             }
-            Err(fault) => {
-                self.failed("be read", fault);
-                None
-            }
+            _ => None,
         }
     }
 
     fn write(&self, key: &str, value: &str) {
-        self.memory.write(key, value);
-        if self.failed.get() {
-            return;
-        }
-        if let Err(fault) = ffi::store(key, value) {
-            self.failed("keep a secret", fault);
-        }
+        self.known
+            .borrow_mut()
+            .insert(key.to_owned(), Some(value.to_owned()));
+        self.queue(key, Pending::Store(value.to_owned()));
     }
 
     fn remove(&self, key: &str) {
-        self.memory.remove(key);
-        if self.failed.get() {
-            return;
+        self.known.borrow_mut().insert(key.to_owned(), None);
+        self.queue(key, Pending::Clear);
+    }
+
+    fn read_soon(&self, key: &str) -> Soon {
+        if let Some(known) = self.known.borrow().get(key) {
+            return Box::pin(std::future::ready(known.clone()));
         }
-        if let Err(fault) = ffi::clear(key) {
-            self.failed("forget a secret", fault);
+        if self.failed() {
+            return Box::pin(std::future::ready(None));
         }
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let asked = self.send(Job::Lookup(
+            key.to_owned(),
+            Box::new(move |found| {
+                let _ = sender.send(found);
+            }),
+        ));
+        let (known, key) = (self.known.clone(), key.to_owned());
+        Box::pin(async move {
+            if !asked {
+                return None;
+            }
+            let found = receiver.await.ok()?.ok()?;
+            // Written meanwhile: what was written is newer than what was read.
+            let mut known = known.borrow_mut();
+            known.entry(key).or_insert(found).clone()
+        })
     }
 }
 
 /// libsecret's "password" calls, with one schema of our own and one
-/// attribute, the key. The synchronous calls: each is a D-Bus round trip of
-/// a millisecond or two, made at start and when somebody signs in or out,
-/// and the trait they serve is synchronous. A locked keyring shows the
-/// desktop's own unlock prompt, which is a separate process.
+/// attribute, the key. The synchronous calls, made only on the worker
+/// thread (above): each is a D-Bus round trip, and one into a locked keyring
+/// waits on the desktop's unlock prompt, a separate process, for as long as
+/// it stands.
 mod ffi {
     use super::*;
     use glib::ffi::{
@@ -356,11 +561,124 @@ mod ffi {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Condvar;
+
+    /// A keyring that holds every call until let go, and counts them.
+    #[derive(Default)]
+    struct Held {
+        open: Mutex<bool>,
+        opened: Condvar,
+        stored: Mutex<Vec<(String, String)>>,
+        lookups: Mutex<usize>,
+    }
+
+    impl Held {
+        fn wait(&self) {
+            let mut open = self.open.lock().unwrap();
+            while !*open {
+                open = self.opened.wait(open).unwrap();
+            }
+        }
+
+        fn let_go(&self) {
+            *self.open.lock().unwrap() = true;
+            self.opened.notify_all();
+        }
+    }
+
+    struct Fake(Arc<Held>);
+
+    impl Backend for Fake {
+        fn lookup(&self, key: &str) -> Result<Option<String>, String> {
+            self.0.wait();
+            *self.0.lookups.lock().unwrap() += 1;
+            Ok(Some(format!("kept {key}")))
+        }
+
+        fn store(&self, key: &str, value: &str) -> Result<(), String> {
+            self.0.wait();
+            self.0
+                .stored
+                .lock()
+                .unwrap()
+                .push((key.to_owned(), value.to_owned()));
+            Ok(())
+        }
+
+        fn clear(&self, _: &str) -> Result<(), String> {
+            self.0.wait();
+            Ok(())
+        }
+    }
+
+    fn settle(store: &SecretService) {
+        // A lookup queued behind the writes answers once they are made.
+        let (sender, receiver) = mpsc::channel();
+        store.send(Job::Lookup(
+            "settle".into(),
+            Box::new(move |_| {
+                let _ = sender.send(());
+            }),
+        ));
+        receiver.recv().unwrap();
+    }
+
+    #[test]
+    fn writes_return_at_once_and_a_burst_to_one_key_is_one_write() {
+        let held = Arc::new(Held::default());
+        let store = SecretService::with_backend(Box::new(Fake(held.clone())));
+        // Typed a key at a time into a locked keyring: nothing waits.
+        let started = std::time::Instant::now();
+        for typed in ["s", "se", "sec", "secr", "secre", "secret"] {
+            store.write("passphrase:http://a/", typed);
+        }
+        assert!(started.elapsed() < std::time::Duration::from_millis(500));
+        assert_eq!(
+            store.read("passphrase:http://a/").as_deref(),
+            Some("secret")
+        );
+        held.let_go();
+        settle(&store);
+        let stored = held.stored.lock().unwrap().clone();
+        assert!(
+            stored.len() <= 2,
+            "a write for every key pressed: {stored:?}"
+        );
+        assert_eq!(
+            stored.last().map(|(_, value)| value.as_str()),
+            Some("secret"),
+            "the last value typed is the one kept"
+        );
+    }
+
+    #[test]
+    fn a_read_the_app_waits_for_holds_nothing_up() {
+        let held = Arc::new(Held::default());
+        let store = SecretService::with_backend(Box::new(Fake(held.clone())));
+        let mut soon = store.read_soon("account:http://a/");
+        let context = glib::MainContext::new();
+        // Asked, and not answered while the keyring holds it: the caller
+        // carries on.
+        assert!(context.block_on(std::future::poll_fn(|cx| {
+            std::task::Poll::Ready(soon.as_mut().poll(cx).is_pending())
+        })));
+        held.let_go();
+        assert_eq!(
+            context.block_on(soon).as_deref(),
+            Some("kept account:http://a/")
+        );
+        // Known from then on: not asked for again.
+        assert_eq!(
+            store.read("account:http://a/").as_deref(),
+            Some("kept account:http://a/")
+        );
+        assert_eq!(*held.lookups.lock().unwrap(), 1);
+    }
 
     #[test]
     fn a_store_that_cannot_be_reached_still_holds_this_runs_secrets() {
         let store = SecretService::default();
-        store.failed.set(true);
+        store.shared.failed.store(true, Ordering::SeqCst);
         store.write("account:http://127.0.0.1:1/", "cookie");
         assert_eq!(
             store.read("account:http://127.0.0.1:1/").as_deref(),

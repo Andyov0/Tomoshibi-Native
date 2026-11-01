@@ -135,12 +135,20 @@ pub fn parse(json: &str) -> HashMap<Language, Table> {
         .collect()
 }
 
+type Listener = Box<dyn Fn(Language)>;
+
 struct State {
     language: Language,
     /// Whether the person chose a language rather than following the system.
     chosen: bool,
     laid_over: HashMap<Language, Table>,
-    listeners: Vec<Box<dyn Fn(Language)>>,
+    /// By the number [`on_change`] gave them, for [`on_change_while`] to
+    /// take one away again.
+    listeners: Vec<(u64, Listener)>,
+    next: u64,
+    /// Listeners taken away while [`tell`] had the list out, so that it is
+    /// not put back with them in it.
+    removed: Vec<u64>,
 }
 
 thread_local! {
@@ -151,6 +159,8 @@ thread_local! {
         chosen: false,
         laid_over: HashMap::new(),
         listeners: Vec::new(),
+        next: 1,
+        removed: Vec::new(),
     });
 }
 
@@ -226,23 +236,65 @@ pub fn set_laid_over(laid_over: HashMap<Language, Table>) {
 }
 
 /// Calls `listener` on the main thread whenever the language on screen, or
-/// what is laid over it, changes. For screens that are not rebuilt anyway.
-pub fn on_change(listener: impl Fn(Language) + 'static) {
-    STATE.with(|state| state.borrow_mut().listeners.push(Box::new(listener)));
+/// what is laid over it, changes, for the life of the app: for what lives
+/// that long (the window). Returns the number [`forget`] takes.
+pub fn on_change(listener: impl Fn(Language) + 'static) -> u64 {
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let id = state.next;
+        state.next += 1;
+        state.listeners.push((id, Box::new(listener)));
+        id
+    })
+}
+
+/// [`on_change`] for as long as `widget` lives: taken away when it is
+/// destroyed. Every call's screen and every ending added one for good, which
+/// did nothing once its screen had gone and was run again at every change of
+/// language for the rest of the app's life, one more for every call.
+pub fn on_change_while(
+    widget: &impl glib::prelude::IsA<gtk::Widget>,
+    listener: impl Fn(Language) + 'static,
+) {
+    use gtk::prelude::WidgetExt as _;
+    let id = on_change(listener);
+    widget.as_ref().connect_destroy(move |_| forget(id));
+}
+
+/// Takes away the listener [`on_change`] numbered `id`.
+pub fn forget(id: u64) {
+    STATE.with(|state| {
+        let mut state = state.borrow_mut();
+        let before = state.listeners.len();
+        state.listeners.retain(|(kept, _)| *kept != id);
+        if state.listeners.len() == before {
+            // Out with `tell`, or never there: either way not to come back.
+            state.removed.push(id);
+        }
+    });
+}
+
+/// How many listeners there are, for the tests.
+#[cfg(test)]
+fn listening() -> usize {
+    STATE.with(|state| state.borrow().listeners.len())
 }
 
 fn tell(language: Language) {
     // Taken out while they run, so that a listener may itself ask for a
-    // phrase or add a listener without the state being borrowed twice.
+    // phrase, add a listener or take one away (a screen destroyed by what
+    // another listener did) without the state being borrowed twice.
     let listeners = STATE.with(|state| std::mem::take(&mut state.borrow_mut().listeners));
-    for listener in &listeners {
+    for (_, listener) in &listeners {
         listener(language);
     }
     STATE.with(|state| {
         let mut state = state.borrow_mut();
         let added = std::mem::take(&mut state.listeners);
+        let removed = std::mem::take(&mut state.removed);
         state.listeners = listeners;
         state.listeners.extend(added);
+        state.listeners.retain(|(id, _)| !removed.contains(id));
     });
 }
 
@@ -460,6 +512,35 @@ mod tests {
             missing.is_empty(),
             "phrases not in the catalogue: {missing:#?}"
         );
+    }
+
+    #[test]
+    fn a_listener_taken_away_is_not_told_again() {
+        use std::{cell::Cell, rc::Rc};
+        start(Some("en"));
+        let told = Rc::new(Cell::new(0));
+        let before = listening();
+        let counted = told.clone();
+        let id = on_change(move |_| counted.set(counted.get() + 1));
+        assert_eq!(listening(), before + 1);
+        choose(Some(Language::Ja));
+        assert_eq!(told.get(), 1);
+        forget(id);
+        assert_eq!(listening(), before, "the list is back where it was");
+        choose(Some(Language::En));
+        assert_eq!(told.get(), 1, "not told after it was taken away");
+        // One taking itself away while the list is out with `tell`.
+        let slot: Rc<Cell<u64>> = Rc::default();
+        let (counted, own) = (told.clone(), slot.clone());
+        slot.set(on_change(move |_| {
+            counted.set(counted.get() + 1);
+            forget(own.get());
+        }));
+        choose(Some(Language::Ja));
+        assert_eq!(told.get(), 2);
+        choose(Some(Language::En));
+        assert_eq!(told.get(), 2, "gone once it had taken itself away");
+        assert_eq!(listening(), before);
     }
 
     #[test]

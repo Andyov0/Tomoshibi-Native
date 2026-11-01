@@ -25,31 +25,40 @@
 //! The parts: plan.rs (where pictures go, the web's rules), talk.rs (the
 //! call as the room knows it, from its events), stage.rs and tile.rs (the
 //! pictures), page.rs (the screen and everything on it), panels.rs (the
-//! panels beside the call), motion.rs and glyph.rs (how pieces come and go,
-//! and the symbols the icon theme lacks), and, in a debug build, fake.rs
-//! (devices that are not there) and script.rs (what a test asks the room to
-//! do and picture).
+//! panels beside the call; sound_panel.rs and host_panel.rs are two of
+//! them), signal.rs (the signal's figures), picture_menu.rs (what can be
+//! done to one picture), veil.rs (the meeting moving), ended.rs (the screen
+//! after the call), motion.rs and glyph.rs (how pieces come and go, and the
+//! symbols the icon theme lacks), and, in a debug build, fake.rs (devices
+//! that are not there) and script.rs (what a test asks the room to do and
+//! picture).
 
 mod css;
+mod ended;
 #[cfg(debug_assertions)]
 mod fake;
 mod glyph;
+mod host_panel;
 mod motion;
 mod page;
 mod panels;
+mod picture_menu;
 pub mod plan;
 #[cfg(debug_assertions)]
 mod script;
+mod signal;
+mod sound_panel;
 mod stage;
 pub mod talk;
 mod tile;
+mod veil;
 
 use std::{
     cell::{Cell, RefCell},
     collections::HashMap,
     rc::Rc,
     sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use adw::prelude::*;
@@ -58,8 +67,10 @@ use tomoshibi_core::call::{join_call, Call, CallError, CallEvent, CallObserver, 
 use tomoshibi_protocol::{
     api::{HostStanding, Joining, Knocker},
     hands,
-    identity::scope_of,
+    identity::{scope_of, signature_of},
+    relays::Relay,
     share::ShareQuality,
+    ProtocolError,
 };
 
 use super::Context;
@@ -68,7 +79,7 @@ use crate::{
     i18n::{t, t_with},
     media::{Camera, Media, MediaError, Microphone, ScreenShare, ShareChoice},
 };
-use talk::{Effect, Line, Talk, Toast, ToastKind};
+use talk::{Effect, LeaveDue, Line, Talk, Toast, ToastKind};
 
 /// What the room keeps in the model while a call is open
 /// (`AppModel::kept::<RoomState>()`), so that a screen built again finds
@@ -95,6 +106,11 @@ pub struct RoomState {
     /// The devices the call was joined with: the context's, or in a debug
     /// run the test ones (fake.rs).
     pub media: RefCell<Option<Rc<dyn Media>>>,
+    /// Where the server is moving the meeting, and since when, while that
+    /// is worth showing over the call (veil.rs): from the server's word that
+    /// it is moving until this app is back in the moved meeting, its rejoin
+    /// failed, or twenty seconds have passed, whichever comes first.
+    pub moving: RefCell<Option<(String, Instant)>>,
     /// The call's screen while it is shown. Held here, and only here: every
     /// closure on its widgets holds it weakly, so that the widgets do not
     /// keep it alive, and this lets it go when the window moves to another
@@ -152,6 +168,16 @@ impl Pop {
     }
 }
 
+/// The three things somebody can be heard through, each turned down on its
+/// own (hearing.ts `Sound`): their voice, their shared screen's sound, and
+/// the song desk's music.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Sound {
+    Voice,
+    Screen,
+    Music,
+}
+
 /// One person's sound as the listener set it (hearing.ts): a level from
 /// nought to one, and whether it is stopped altogether.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -191,7 +217,10 @@ pub struct View {
     pub sending: bool,
     /// The last message did not leave; its words are back in the box.
     pub chat_failed: bool,
+    /// Each person's voice, by identity.
     pub hearing: HashMap<String, Hearing>,
+    /// Each person's screen sound and music, by identity and which.
+    pub other_hearing: HashMap<(String, Sound), Hearing>,
     pub toasts: Vec<(u64, Toast)>,
     pub said: Vec<(u64, Line)>,
     /// The share's size setting in the share popover.
@@ -233,6 +262,11 @@ pub struct Host {
     pub link: Option<String>,
     /// "Close the room" asked once, waiting for the second press.
     pub ending: bool,
+    /// The relays the meeting could be moved to, asked for when the panel
+    /// is first opened (HostPanel.tsx `Elsewhere`).
+    pub relays: Option<Vec<Relay>>,
+    /// The list of relays to move to is open.
+    pub choosing_relay: bool,
 }
 
 impl Host {
@@ -240,6 +274,23 @@ impl Host {
         self.standing
             .as_ref()
             .is_some_and(|standing| standing.yours)
+    }
+
+    /// Where the meeting can be put: neither a machine under maintenance
+    /// nor, for anybody but an administrator, one held in reserve
+    /// (HostFeature `usableRelays`). The server refuses those regardless;
+    /// this is about not showing a door that will not open.
+    pub fn usable_relays(&self) -> Vec<Relay> {
+        let admin = self
+            .standing
+            .as_ref()
+            .is_some_and(|standing| standing.admin);
+        self.relays
+            .iter()
+            .flatten()
+            .filter(|relay| !relay.maintenance && (admin || !relay.admin_only))
+            .cloned()
+            .collect()
     }
 }
 
@@ -279,7 +330,7 @@ pub fn page(context: &Context, screen: Screen) -> gtk::Widget {
             start(&context.model, media);
             widget
         }
-        _ => page::ended(context),
+        _ => ended::page(context),
     }
 }
 
@@ -306,7 +357,16 @@ pub async fn join(
     entry: &CallEntry,
     observer: Arc<dyn CallObserver>,
 ) -> Result<Arc<Call>, CallError> {
-    join_call(entry.options(), observer).await
+    #[allow(unused_mut)]
+    let mut options = entry.options();
+    // TOMOSHIBI_DEBUG_JOIN_FAILS, in a debug run: the grant's media server
+    // replaced by a port nothing listens on, so that a test can see what a
+    // join the deployment granted and the media server refused looks like.
+    #[cfg(debug_assertions)]
+    if std::env::var_os("TOMOSHIBI_DEBUG_JOIN_FAILS").is_some() {
+        options.url = "ws://127.0.0.1:9".into();
+    }
+    join_call(options, observer).await
 }
 
 /// An observer for the core's threads, and the main thread's end of it:
@@ -367,6 +427,13 @@ fn media_of(model: &AppModel) -> Option<Rc<dyn Media>> {
 
 /// Joins the call entered, once, and follows it until it ends.
 fn start(model: &AppModel, media: Rc<dyn Media>) {
+    begin(model, media, false);
+}
+
+/// [`start`], or, `moved`, the same meeting joined again where the server
+/// moved it: what the person chose on the screen (the volumes, the panel
+/// open, the stage) is kept, as it is one meeting to them.
+fn begin(model: &AppModel, media: Rc<dyn Media>, moved: bool) {
     let room = model.kept::<RoomState>();
     let Some(entry) = model.call_entry() else {
         return;
@@ -377,8 +444,23 @@ fn start(model: &AppModel, media: Rc<dyn Media>) {
     room.joining.set(true);
     // A fresh call starts from nothing the last one left.
     room.talk.replace(None);
-    room.view.replace(View::default());
-    room.host.replace(Host::default());
+    if moved {
+        let mut view = room.view.borrow_mut();
+        view.pop = None;
+        view.toasts.clear();
+        view.sending = false;
+        view.watching_written = String::new();
+        drop(view);
+        let link = room.host.borrow().link.clone();
+        room.host.replace(Host {
+            link,
+            ..Host::default()
+        });
+    } else {
+        room.moving.replace(None);
+        room.view.replace(View::default());
+        room.host.replace(Host::default());
+    }
     room.local.microphone_on.set(false);
     room.local.camera_on.set(false);
     room.local.microphone_published.set(false);
@@ -394,8 +476,13 @@ fn start(model: &AppModel, media: Rc<dyn Media>) {
         let call = match joined {
             Ok(call) => call,
             Err(fault) => {
+                // A call that never began did not end: back to the join
+                // screen with why and its Join button, as the Mac does,
+                // rather than "Connection lost" for a connection that was
+                // never made.
                 log(&format!("the call could not be joined: {fault}"));
-                model.end_call(Ending::Lost(fault.to_string()));
+                room.moving.replace(None);
+                model.call_not_joined();
                 return;
             }
         };
@@ -425,6 +512,10 @@ fn start(model: &AppModel, media: Rc<dyn Media>) {
         }
         if let Some(talk) = room.talk.borrow_mut().as_mut() {
             talk.settled = true;
+        }
+        // Back in a meeting that moved: the veil over it goes.
+        if room.moving.take().is_some() {
+            log("back in the meeting where it moved");
         }
         devices_at_join(&model, &entry, &call);
         refresh_standing(&model);
@@ -473,6 +564,18 @@ fn make_invite(entry: &CallEntry) {
 /// One event of the call; false once the call is over.
 fn follow(model: &AppModel, call: &Arc<Call>, event: CallEvent) -> bool {
     let room = model.kept::<RoomState>();
+    // An event of a call that has been replaced (the meeting moved, and this
+    // app is in it again on another call) is about nothing on screen: its
+    // ending, told late, ended the call that replaced it (the Mac's AppModel
+    // `ended`, which asks the same).
+    let replaced = room
+        .call
+        .borrow()
+        .as_ref()
+        .is_some_and(|held| !Arc::ptr_eq(held, call));
+    if replaced {
+        return false;
+    }
     let effects = {
         let mut talk = room.talk.borrow_mut();
         let Some(talk) = talk.as_mut() else {
@@ -506,6 +609,8 @@ fn follow(model: &AppModel, call: &Arc<Call>, event: CallEvent) -> bool {
                 }
             }
             Effect::Standing => refresh_standing(model),
+            Effect::LeaveLater { identity } => leave_later(model, identity, talk::BACK_WITHIN_MS),
+            Effect::Moving { to } => moving(model, to),
             Effect::Hearing => {
                 let everybody: Vec<String> = room
                     .talk
@@ -519,13 +624,21 @@ fn follow(model: &AppModel, call: &Arc<Call>, event: CallEvent) -> bool {
             }
             Effect::Ended { reason } => {
                 log(&format!("the call ended: {reason}"));
+                let moved = room
+                    .talk
+                    .borrow()
+                    .as_ref()
+                    .and_then(|talk| talk.moved_to(&reason, now()));
                 // A leave from here has already said how it ended.
-                if room.call.borrow_mut().take().is_some() {
-                    let_go_of_devices(model);
-                    if let Some(media) = media_of(model) {
-                        media.detach_call();
+                let ended = room.call.borrow_mut().take();
+                if let Some(ended) = ended {
+                    match moved {
+                        Some(to) => rejoin_where_moved(model, ended, to),
+                        None => {
+                            end_devices(model);
+                            model.end_call(ending_of(&reason));
+                        }
                     }
-                    model.end_call(ending_of(&reason));
                 }
                 going_on = false;
             }
@@ -535,12 +648,21 @@ fn follow(model: &AppModel, call: &Arc<Call>, event: CallEvent) -> bool {
     going_on
 }
 
-/// Leaves the call, if there is one, and says so: the leave button, and a
-/// debug run's TOMOSHIBI_DEBUG_QUIT_AFTER before it quits.
+/// Leaves the call, if there is one, and says so: the leave button, the
+/// window closing, the session ending the app, and a debug run's
+/// TOMOSHIBI_DEBUG_QUIT_AFTER before it quits.
+///
+/// The ending is shown first and the call left behind it. Left the other
+/// way round, the leave's own disconnection reached the call's screen
+/// before the ending did: "Connection lost" at the top, the bar greyed and
+/// one's own picture gone to its initial, for the 0.3 to 1.7 seconds the
+/// leave took, every time anybody pressed leave. Awaited to the end all the
+/// same, so that whoever quits after it quits once the call is left.
 pub async fn leave(model: &AppModel, media: &dyn Media) {
     let room = model.kept::<RoomState>();
     let call = room.call.borrow_mut().take();
     if let Some(call) = call {
+        model.end_call(Ending::Left);
         stop_sharing_now(model).await;
         let_go_of_devices(model);
         call.leave().await;
@@ -550,8 +672,156 @@ pub async fn leave(model: &AppModel, media: &dyn Media) {
             Some(own) => own.detach_call(),
             None => media.detach_call(),
         }
-        model.end_call(Ending::Left);
     }
+}
+
+/// The devices this call uses, or none at all: for whoever leaves from
+/// outside the room (the window's keys, its closing).
+pub(crate) fn media_or_quiet(model: &AppModel) -> Rc<dyn Media> {
+    media_of(model).unwrap_or_else(|| Rc::new(crate::media::Quiet))
+}
+
+/// Everything the call held let go of, when it ended by itself (the host
+/// closing the room, being taken out, the connection lost): the
+/// microphone, the camera, the shared screen, and the sound. The share was
+/// left running: its portal session open, the desktop's sharing light on,
+/// its capture still feeding a call that had gone, and the next call's
+/// share refused because one was still held, until the app was restarted.
+fn end_devices(model: &AppModel) {
+    let_go_of_devices(model);
+    if let Some(media) = media_of(model) {
+        media.detach_call();
+    }
+    let weak = model.downgrade();
+    glib::spawn_future_local(async move {
+        if let Some(model) = weak.upgrade() {
+            stop_sharing_now(&model).await;
+        }
+    });
+}
+
+/// The microphone on or off, from the window's key: a press while one is
+/// still being carried out is the bar's own guard's to ignore.
+pub(crate) fn toggle_microphone(model: &AppModel) {
+    let on = model.kept::<RoomState>().local.microphone_on.get();
+    set_microphone(model, !on);
+}
+
+/// The camera on or off, from the window's key.
+pub(crate) fn toggle_camera(model: &AppModel) {
+    let on = model.kept::<RoomState>().local.camera_on.get();
+    set_camera(model, !on);
+}
+
+// ---- the meeting moving --------------------------------------------------
+
+/// How long the veil may stay up whatever became of the move (App.tsx: the
+/// overlay's twenty-second limit), so that nobody sits under "you will be
+/// back in a moment" for ever because a path that should have taken it
+/// down did not.
+const MOVING_SHOWN_FOR: Duration = Duration::from_secs(20);
+
+/// The server's word that the meeting is about to move: shown over the call
+/// at once, before the disconnection rather than after it (App.tsx `told`).
+fn moving(model: &AppModel, to: String) {
+    log(&format!(
+        "the server says the meeting is moving{}",
+        if to.is_empty() {
+            ""
+        } else {
+            " to another server"
+        }
+    ));
+    show_moving(model, to);
+}
+
+fn show_moving(model: &AppModel, to: String) {
+    let room = model.kept::<RoomState>();
+    let since = Instant::now();
+    room.moving.replace(Some((to, since)));
+    let weak = model.downgrade();
+    glib::timeout_add_local_once(MOVING_SHOWN_FOR, move || {
+        let Some(model) = weak.upgrade() else {
+            return;
+        };
+        let room = model.kept::<RoomState>();
+        let ours = room
+            .moving
+            .borrow()
+            .as_ref()
+            .is_some_and(|(_, at)| *at == since);
+        if ours {
+            room.moving.replace(None);
+            changed(&model);
+        }
+    });
+    changed(model);
+}
+
+/// The call ended because the meeting moved: back in at once, as the same
+/// person with the same passphrase, word and invitation, the server choosing
+/// where (App.tsx ~676, the Mac's AppModel `rejoin`), under the veil the
+/// whole time. A join that fails ends on the join screen with why, as one
+/// from the join screen does.
+fn rejoin_where_moved(model: &AppModel, ended: Arc<Call>, to: String) {
+    log("the meeting moved: joining it again");
+    show_moving(model, to);
+    // Nobody's pictures are kept from the call that ended: each was drawn
+    // from that call's track, and a person whose track kept its name across
+    // the move (somebody else's, when only this participant was placed
+    // elsewhere) kept a picture attached to the old call, frozen on its
+    // last frame. Under the veil they go, and come back from the new call.
+    if let Some(talk) = model.kept::<RoomState>().talk.borrow_mut().as_mut() {
+        talk.people.clear();
+        talk.leaving.clear();
+    }
+    let_go_of_devices(model);
+    if let Some(media) = media_of(model) {
+        media.detach_call();
+    }
+    let weak = model.downgrade();
+    glib::spawn_future_local(async move {
+        let Some(model) = weak.upgrade() else {
+            return;
+        };
+        stop_sharing_now(&model).await;
+        ended.leave().await;
+        if !model.rejoin_moved().await {
+            log("the moved meeting could not be joined again");
+            model.kept::<RoomState>().moving.replace(None);
+            changed(&model);
+            return;
+        }
+        // The call's screen never went, so it is not built again to start
+        // the call: the join is begun here.
+        let Some(media) = model.kept::<RoomState>().media.borrow().clone() else {
+            return;
+        };
+        begin(&model, media, true);
+        changed(&model);
+    });
+}
+
+/// Asks the talk again, after `after_ms`, whether somebody's leave is to be
+/// said (talk.rs `leave_due`).
+fn leave_later(model: &AppModel, identity: String, after_ms: u64) {
+    let weak = model.downgrade();
+    glib::timeout_add_local_once(Duration::from_millis(after_ms), move || {
+        let Some(model) = weak.upgrade() else {
+            return;
+        };
+        let due = model
+            .kept::<RoomState>()
+            .talk
+            .borrow_mut()
+            .as_mut()
+            .map(|talk| talk.leave_due(&identity, now()));
+        match due {
+            Some(LeaveDue::Say(toast)) => announce(&model, toast),
+            Some(LeaveDue::Wait(ms)) => leave_later(&model, identity, ms),
+            _ => {}
+        }
+    });
 }
 
 /// Closes the microphone and the camera, which the call opened or was
@@ -1242,7 +1512,12 @@ pub(crate) fn toggle_panel(model: &AppModel, panel: Panel) {
             Some(panel)
         };
         if view.panel != Some(Panel::Host) {
-            room.host.borrow_mut().ending = false;
+            // Closing it puts both questions away: opened again it was one
+            // press from ending the meeting, or from moving everybody (the
+            // Mac's HostFeature `panelOpen`).
+            let mut host = room.host.borrow_mut();
+            host.ending = false;
+            host.choosing_relay = false;
         }
         view.panel
     };
@@ -1251,6 +1526,7 @@ pub(crate) fn toggle_panel(model: &AppModel, panel: Panel) {
     }
     if open == Some(Panel::Host) {
         refresh_standing(model);
+        load_relays(model);
     }
     changed(model);
 }
@@ -1289,6 +1565,14 @@ pub(crate) fn press_picture(model: &AppModel, id: &str) {
         }
         view.pin.toggle(id);
     }
+    changed(model);
+}
+
+/// The picture menu's "Show {name} larger" and "Show everybody": the
+/// picture on to the stage or back off it, as a press does.
+pub(crate) fn toggle_stage(model: &AppModel, id: &str) {
+    let room = model.kept::<RoomState>();
+    room.view.borrow_mut().pin.toggle(id);
     changed(model);
 }
 
@@ -1367,34 +1651,61 @@ pub(crate) fn turn_page(model: &AppModel, by: i32) {
 
 // ---- hearing ------------------------------------------------------------
 
-/// A person's volume, from the sound panel.
-pub(crate) fn set_hearing(model: &AppModel, identity: &str, hearing: Hearing) {
-    model
-        .kept::<RoomState>()
-        .view
-        .borrow_mut()
-        .hearing
-        .insert(identity.to_owned(), hearing);
+impl View {
+    /// What the listener chose for one of somebody's sounds; full and on
+    /// where nothing was chosen.
+    pub fn hearing_of(&self, identity: &str, sound: Sound) -> Hearing {
+        match sound {
+            Sound::Voice => self.hearing.get(identity),
+            other => self.other_hearing.get(&(identity.to_owned(), other)),
+        }
+        .copied()
+        .unwrap_or_default()
+    }
+}
+
+/// A person's volume for one of their sounds, from the sound panel or a
+/// picture's menu.
+pub(crate) fn set_hearing(model: &AppModel, identity: &str, sound: Sound, hearing: Hearing) {
+    {
+        let room = model.kept::<RoomState>();
+        let mut view = room.view.borrow_mut();
+        match sound {
+            Sound::Voice => {
+                view.hearing.insert(identity.to_owned(), hearing);
+            }
+            other => {
+                view.other_hearing
+                    .insert((identity.to_owned(), other), hearing);
+            }
+        }
+    }
     apply_hearing(model, identity);
     changed(model);
 }
 
-/// Puts a person's chosen volume on what is playing of them: their voice
-/// through the devices, and their shared sound and music at the server too
-/// (`Call::set_hearing`, which also turns the lossless streams standing in
-/// for them), as hearing.ts does.
+/// Puts a person's chosen volumes on what is playing of them, each sound
+/// its own (hearing.ts `SOURCE`): their voice and their screen sound and
+/// music through the devices, and the screen sound and music at the server
+/// too (`Call::set_hearing`, which also turns the lossless streams standing
+/// in for them, the `music` argument saying which), as hearing.ts does. A
+/// screen's sound was turned with the voice's slider, so a film somebody
+/// shared could not be turned down without their voice going with it.
 fn apply_hearing(model: &AppModel, identity: &str) {
     let room = model.kept::<RoomState>();
-    let hearing = room
-        .view
-        .borrow()
-        .hearing
-        .get(identity)
-        .copied()
-        .unwrap_or_default();
-    let audible = if hearing.blocked { 0.0 } else { hearing.level };
+    let (voice, screen_hearing, music_hearing) = {
+        let view = room.view.borrow();
+        (
+            view.hearing_of(identity, Sound::Voice),
+            view.hearing_of(identity, Sound::Screen),
+            view.hearing_of(identity, Sound::Music),
+        )
+    };
+    let audible = |hearing: Hearing| if hearing.blocked { 0.0 } else { hearing.level };
     if let Some(media) = media_of(model) {
-        media.set_volume(identity, audible);
+        media.set_volume(identity, audible(voice));
+        media.set_kind_volume(identity, false, audible(screen_hearing));
+        media.set_kind_volume(identity, true, audible(music_hearing));
     }
     let Some(call) = call_of(model) else {
         return;
@@ -1411,12 +1722,15 @@ fn apply_hearing(model: &AppModel, identity: &str) {
     let Some((screen, music)) = shares_sound else {
         return;
     };
-    if hearing == Hearing::default() && !screen && !music {
+    if !screen && !music {
         return;
     }
     let identity = identity.to_owned();
     glib::spawn_future_local(async move {
-        for (has, is_music) in [(screen, false), (music, true)] {
+        for (has, is_music, hearing) in [
+            (screen, false, screen_hearing),
+            (music, true, music_hearing),
+        ] {
             if has {
                 call.clone()
                     .set_hearing(identity.clone(), is_music, hearing.level, hearing.blocked)
@@ -1455,10 +1769,27 @@ fn refresh_standing(model: &AppModel) {
     });
 }
 
+/// The key the door's notice is said under.
+const DOOR: &str = "door";
+
+/// Takes back whatever notice was said under `key`.
+pub(crate) fn dismiss_key(model: &AppModel, key: &str) {
+    let room = model.kept::<RoomState>();
+    room.view
+        .borrow_mut()
+        .toasts
+        .retain(|(_, toast)| toast.key.as_deref() != Some(key));
+    changed(model);
+}
+
 /// Looks at the door every four seconds while this participant may open
 /// it (AtTheDoor.tsx `LOOK_EVERY`).
 fn watch_the_door(model: &AppModel) {
     let weak = model.downgrade();
+    // For this call only: one joined again after a move starts its own, and
+    // this one, still waiting out its four seconds, would have gone on
+    // beside it, asking twice.
+    let watched = call_of(model);
     glib::timeout_add_local(Duration::from_secs(4), move || {
         let Some(model) = weak.upgrade() else {
             return glib::ControlFlow::Break;
@@ -1467,6 +1798,12 @@ fn watch_the_door(model: &AppModel) {
         let Some(call) = call_of(&model) else {
             return glib::ControlFlow::Break;
         };
+        if !watched
+            .as_ref()
+            .is_some_and(|watched| Arc::ptr_eq(watched, &call))
+        {
+            return glib::ControlFlow::Break;
+        }
         if !room.host.borrow().yours() {
             return glib::ControlFlow::Continue;
         }
@@ -1493,11 +1830,14 @@ fn watch_the_door(model: &AppModel) {
                         &model,
                         Toast {
                             kind: ToastKind::Signal,
-                            key: Some("door".into()),
+                            key: Some(DOOR.into()),
                             lasts_ms: None,
                             closable: true,
+                            // The Mac's and Windows' words for one, from the
+                            // catalogue (notices.ts `atTheDoor`): "1 person"
+                            // read as a count with nothing to count.
                             ..Toast::said(if now == 1 {
-                                t("1 person")
+                                t("Somebody is waiting to be let in")
                             } else {
                                 t_with(
                                     "{count} people are waiting to be let in",
@@ -1506,6 +1846,10 @@ fn watch_the_door(model: &AppModel) {
                             })
                         },
                     );
+                } else if now == 0 && before > 0 {
+                    // Nobody outside any more: the notice is taken back
+                    // rather than left saying somebody is.
+                    dismiss_key(&model, DOOR);
                 }
                 changed(&model);
             }
@@ -1538,11 +1882,104 @@ where
             Ok(None) => {}
             Err(fault) => {
                 log(&format!("a host action failed: {fault}"));
-                failed(&model, crate::app::explain(&fault));
+                failed(&model, explain_refusal(&fault));
             }
         }
         refresh_standing(&model);
         changed(&model);
+    });
+}
+
+/// The server sends a code and the app owns the sentence (HostPanel.tsx
+/// `explain`, the Mac's HostFeature): each written out, because each wants
+/// a different next move, where every refusal used to read "Something went
+/// wrong".
+pub(crate) fn explain_refusal(fault: &ProtocolError) -> String {
+    let ProtocolError::Refused { code, .. } = fault else {
+        return t("That could not be done. Try again.");
+    };
+    match code.as_str() {
+        "media_unreachable" => t("That server did not answer. The meeting has not been moved."),
+        "no_such_relay" => t("That server is no longer on this deployment."),
+        "relay_not_allowed" => t("That server is reserved, and this meeting may not be put on it."),
+        "no_such_person" => t("They have already left."),
+        "not_proven" => t(
+            "They joined without a passphrase, so they cannot run the room. Ask them to rejoin with one.",
+        ),
+        "not_yours" => t("You no longer run this room."),
+        "scoped_room" => t(
+            "Every member of this room's scope runs it, so there is nobody to hand it to.",
+        ),
+        "rate_limited" => t("Too many attempts. Try again in a moment."),
+        _ => t("That could not be done. Try again."),
+    }
+}
+
+/// Whether this room is held under a scope, where every member runs it and
+/// there is nobody to hand it to (HostPanel.tsx `scoped`).
+pub(crate) fn scoped(model: &AppModel) -> bool {
+    model
+        .call_entry()
+        .is_some_and(|entry| !scope_of(entry.grant.room).is_empty())
+}
+
+/// Somebody who joined without a passphrase, whom the room cannot be handed
+/// to (HostPanel.tsx `HandOver`, by the signature's prefix).
+pub(crate) fn is_guest(identity: &str) -> bool {
+    signature_of(identity.to_owned()).is_some_and(|mark| !mark.proven)
+}
+
+/// "Make host" pressed beside a guest: the reason, said where a phone's
+/// reader sees it too, rather than a press that does nothing.
+pub(crate) fn refuse_hand_over(model: &AppModel) {
+    failed(
+        model,
+        t("They joined without a passphrase, so they cannot run the room. Ask them to rejoin with one."),
+    );
+}
+
+/// The relays a meeting could be moved to, asked once, when the panel that
+/// offers them is first opened (HostPanel.tsx `Elsewhere`).
+pub(crate) fn load_relays(model: &AppModel) {
+    let Some(entry) = model.call_entry() else {
+        return;
+    };
+    if model.kept::<RoomState>().host.borrow().relays.is_some() {
+        return;
+    }
+    let weak = model.downgrade();
+    glib::spawn_future_local(async move {
+        let relays = entry
+            .deployment
+            .relays()
+            .await
+            .map(|list| list.relays)
+            .unwrap_or_default();
+        if let Some(model) = weak.upgrade() {
+            model.kept::<RoomState>().host.borrow_mut().relays = Some(relays);
+            changed(&model);
+        }
+    });
+}
+
+/// Opens or closes the list of relays to move the meeting to.
+pub(crate) fn choose_relay(model: &AppModel, open: bool) {
+    model.kept::<RoomState>().host.borrow_mut().choosing_relay = open;
+    changed(model);
+}
+
+/// Puts the meeting on another relay without ending it (rooms.rs
+/// `move_room`): the server tells the room it is moving and closes it, and
+/// everybody, this app included, comes straight back on the new one.
+pub(crate) fn move_meeting(model: &AppModel, relay: &str) {
+    let Some((deployment, room_name, bearer)) = host_parts(model) else {
+        return;
+    };
+    model.kept::<RoomState>().host.borrow_mut().choosing_relay = false;
+    let relay = relay.to_owned();
+    host_act(model, "move", async move {
+        deployment.move_room(room_name, bearer, relay).await?;
+        Ok(None)
     });
 }
 
@@ -1639,6 +2076,10 @@ pub(crate) fn turn_out(model: &AppModel, identity: &str) {
 }
 
 pub(crate) fn hand_over(model: &AppModel, identity: &str) {
+    if is_guest(identity) {
+        refuse_hand_over(model);
+        return;
+    }
     let Some((deployment, room_name, bearer)) = host_parts(model) else {
         return;
     };
@@ -1724,7 +2165,7 @@ pub(crate) fn copy_link(model: &AppModel) {
     }
 }
 
-fn copy(text: &str) {
+pub(crate) fn copy(text: &str) {
     if let Some(display) = gtk::gdk::Display::default() {
         display.clipboard().set_text(text);
     }
