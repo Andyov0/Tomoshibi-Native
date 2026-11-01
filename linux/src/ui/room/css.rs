@@ -287,7 +287,11 @@ button.tmsb-close:active { background-color: alpha(@tmsb_call_wash, 0.16); }
 .tmsb-panel-section { font-size: 11px; font-weight: 600; color: @tmsb_call_muted; }
 .tmsb-panel scale trough { background-color: alpha(@tmsb_call_wash, 0.14); min-height: 4px; border-radius: 999px; }
 .tmsb-panel scale highlight { background-color: @tmsb_call_fg; border-radius: 999px; }
-.tmsb-panel scale slider { background-color: @tmsb_call_fg; min-width: 14px; min-height: 14px; border-radius: 999px; box-shadow: none; border: none; }
+/* The knob 14 across over a trough 4 high: libadwaita's own knob is 20 with
+   a margin of -8 (4 left over), and the margin kept with a 14 knob left it
+   -2 wide and high, which GTK warned of twice for every slider drawn (38
+   lines in a call of six). -5 keeps the 4 over and the knob centred. */
+.tmsb-panel scale slider { background-color: @tmsb_call_fg; min-width: 14px; min-height: 14px; margin: -5px; border-radius: 999px; box-shadow: none; border: none; }
 .tmsb-panel-row { min-height: 36px; }
 button.tmsb-panel-button {
   min-height: 32px; padding: 0 12px; border: none; border-radius: 999px; box-shadow: none;
