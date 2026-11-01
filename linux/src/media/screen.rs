@@ -152,6 +152,137 @@ impl Screens {
             Ok(sharing)
         })
     }
+
+    /// Shares the computer's sound alone (the web's "Share only sound"):
+    /// every other application, as the screen's own sound is captured, sent
+    /// as `SoundKind::Listening` and, where `lossless`, as its lossless
+    /// stream too. There is no picker: the portal names no application, and
+    /// the capture leaves only this app out. Fails where there is no
+    /// PipeWire to capture from.
+    pub fn share_sound(
+        &self,
+        call: Arc<Call>,
+        lossless: bool,
+    ) -> Local<Result<Rc<dyn ScreenShare>, MediaError>> {
+        let source = self.source;
+        Box::pin(async move {
+            let listening: Rc<dyn ScreenShare> = listen(source, call, lossless).await?;
+            Ok(listening)
+        })
+    }
+}
+
+/// Sound shared on its own, as the room holds it.
+struct Listening {
+    me: Weak<Listening>,
+    running: RefCell<Option<(Hearing, Arc<AudioInput>)>>,
+    lossless: bool,
+    ended: RefCell<Option<Box<dyn Fn()>>>,
+    ended_by_itself: Cell<bool>,
+    follower: RefCell<Option<glib::JoinHandle<()>>>,
+}
+
+/// Starts sharing the computer's sound alone: the capture first, so that a
+/// computer whose sound cannot be captured publishes no silent track.
+async fn listen(
+    source: Source,
+    call: Arc<Call>,
+    lossless: bool,
+) -> Result<Rc<Listening>, MediaError> {
+    let (events, mut heard) = unbounded_channel::<Event>();
+    let hearing = Hearing::start(source, events)?;
+    let kind = SoundKind::Listening {
+        lossless_offered: lossless,
+    };
+    let input = match call.publish_audio(kind).await {
+        Ok(input) => input,
+        Err(fault) => {
+            join(vec![hearing.stop()]).await;
+            return Err(MediaError::Call(fault.to_string()));
+        }
+    };
+    hearing.feed(Some(input.clone()));
+    let listening = Rc::new_cyclic(|me| Listening {
+        me: me.clone(),
+        running: RefCell::new(Some((hearing, input))),
+        lossless,
+        ended: RefCell::new(None),
+        ended_by_itself: Cell::new(false),
+        follower: RefCell::new(None),
+    });
+    let me = listening.me.clone();
+    let follower = glib::spawn_future_local(async move {
+        while let Some(event) = heard.recv().await {
+            if let Event::SoundGone(why) | Event::Gone(why) = event {
+                let Some(listening) = me.upgrade() else {
+                    return;
+                };
+                log(&format!("the sound shared on its own stopped: {why}"));
+                let running = listening.running.borrow_mut().take();
+                if let Some(running) = running {
+                    stop_listening(running).await;
+                }
+                listening.ended_by_itself.set(true);
+                let ended = listening.ended.borrow_mut().take();
+                if let Some(ended) = ended {
+                    ended();
+                }
+                return;
+            }
+        }
+    });
+    listening.follower.replace(Some(follower));
+    log(&format!(
+        "sharing the computer's sound ({source:?}), lossless offered {lossless}"
+    ));
+    Ok(listening)
+}
+
+async fn stop_listening((hearing, input): (Hearing, Arc<AudioInput>)) {
+    let pushed = hearing.pushed();
+    join(vec![hearing.stop()]).await;
+    quietly("the sound", input.unpublish()).await;
+    log(&format!(
+        "the sound shared on its own is over: {pushed} pieces sent"
+    ));
+}
+
+impl ScreenShare for Listening {
+    fn stop(&self) -> Local<()> {
+        let running = self.running.borrow_mut().take();
+        if let Some(follower) = self.follower.borrow_mut().take() {
+            follower.abort();
+        }
+        Box::pin(async move {
+            if let Some(running) = running {
+                stop_listening(running).await;
+            }
+        })
+    }
+
+    fn on_ended(&self, ended: Box<dyn Fn()>) {
+        if self.ended_by_itself.get() {
+            ended();
+        } else {
+            self.ended.replace(Some(ended));
+        }
+    }
+
+    fn sends_sound(&self) -> bool {
+        self.running.borrow().is_some()
+    }
+
+    fn sends_lossless(&self) -> bool {
+        self.lossless && self.running.borrow().is_some()
+    }
+}
+
+impl Drop for Listening {
+    fn drop(&mut self) {
+        if let Some(running) = self.running.borrow_mut().take() {
+            glib::spawn_future_local(stop_listening(running));
+        }
+    }
 }
 
 /// Where the picture comes from in one share.

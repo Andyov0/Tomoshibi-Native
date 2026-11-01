@@ -72,9 +72,12 @@ enum Event {
     PipeWire,
     /// A /dev/video node came or went.
     Nodes,
-    /// A camera stopped by itself.
-    Ended(String),
+    /// A camera stopped by itself: the capture started under this token.
+    Ended { label: String, token: u64 },
 }
+
+/// Whom to tell that a camera stopped by itself, once.
+type EndedSlot = RefCell<Option<Box<dyn Fn()>>>;
 
 /// The camera half of the app's `Media`.
 pub struct Cameras {
@@ -89,6 +92,11 @@ pub struct Cameras {
     pipewire: RefCell<Option<Rc<pipewire::Session>>>,
     monitor: RefCell<Option<gio::FileMonitor>>,
     next_token: Cell<u64>,
+    /// The captures running, by token, and whom each tells when it stops by
+    /// itself. A capture stopped on purpose (closed, or changed for another)
+    /// is taken out first: closing a PipeWire stream reports it unconnected
+    /// like an unplugged camera does.
+    running: RefCell<std::collections::HashMap<u64, std::rc::Weak<EndedSlot>>>,
 }
 
 fn wanted() -> Wanted {
@@ -114,6 +122,7 @@ impl Cameras {
             pipewire: RefCell::new(None),
             monitor: RefCell::new(None),
             next_token: Cell::new(1),
+            running: RefCell::new(std::collections::HashMap::new()),
         });
         let weak = Rc::downgrade(&cameras);
         glib::spawn_future_local(async move {
@@ -131,7 +140,16 @@ impl Cameras {
                         cameras.v4l2.replace(v4l2::nodes());
                         (cameras.changed)();
                     }
-                    Event::Ended(label) => log(&format!("camera: {label} stopped by itself")),
+                    Event::Ended { label, token } => {
+                        log(&format!("camera: {label} stopped by itself"));
+                        let slot = cameras.running.borrow_mut().remove(&token);
+                        let ended = slot
+                            .and_then(|slot| slot.upgrade())
+                            .and_then(|slot| slot.borrow_mut().take());
+                        if let Some(ended) = ended {
+                            ended();
+                        }
+                    }
                 }
             }
         });
@@ -265,8 +283,8 @@ impl Cameras {
             let feed = Feed::new();
             let stop = Arc::new(AtomicBool::new(false));
             let (opened, open) = oneshot::channel();
-            let backend = match cameras.begin(choice, &feed, &stop, opened) {
-                Ok(backend) => backend,
+            let (backend, device, token) = match cameras.begin(choice, &feed, &stop, opened) {
+                Ok(begun) => begun,
                 Err(fault) => {
                     feed.close();
                     return Err(fault);
@@ -276,13 +294,26 @@ impl Cameras {
                 .await
                 .unwrap_or_else(|_| Err(MediaError::Failed("the camera's thread ended".into())));
             match result {
-                Ok(()) => Ok(Rc::new(Opened {
-                    feed,
-                    stop,
-                    backend,
-                    published: Rc::new(RefCell::new(None)),
-                    closed: Cell::new(false),
-                }) as Rc<dyn Camera>),
+                Ok(()) => {
+                    let ended: Rc<EndedSlot> = Rc::new(RefCell::new(None));
+                    cameras
+                        .running
+                        .borrow_mut()
+                        .insert(token, Rc::downgrade(&ended));
+                    Ok(Rc::new(Opened {
+                        cameras: cameras.clone(),
+                        feed,
+                        capture: Rc::new(RefCell::new(Capture {
+                            stop,
+                            backend,
+                            device,
+                            token,
+                        })),
+                        ended,
+                        published: Rc::new(RefCell::new(None)),
+                        closed: Rc::new(Cell::new(false)),
+                    }) as Rc<dyn Camera>)
+                }
                 Err(fault) => {
                     stop.store(true, Ordering::Relaxed);
                     if let Backend::PipeWire(session, token) = &backend {
@@ -296,17 +327,20 @@ impl Cameras {
     }
 
     /// Starts capturing the camera chosen into `feed`; `opened` is told
-    /// how the device's own open went.
+    /// how the device's own open went. The capture, the device it is (as
+    /// listed) and the token it reports its own end under.
     fn begin(
         &self,
         choice: Option<String>,
         feed: &Arc<Feed>,
         stop: &Arc<AtomicBool>,
         opened: oneshot::Sender<Result<(), MediaError>>,
-    ) -> Result<Backend, MediaError> {
+    ) -> Result<(Backend, String, u64), MediaError> {
+        let token = self.next_token.get();
+        self.next_token.set(token + 1);
         if let Some(picture) = self.options.test_picture.clone() {
             pattern::start(picture, feed.clone(), stop.clone(), opened);
-            return Ok(Backend::Thread);
+            return Ok((Backend::Thread, "test".into(), token));
         }
         let choice = choice.filter(|c| !c.is_empty());
         let events = self.events.clone();
@@ -318,15 +352,14 @@ impl Cameras {
                 .unwrap_or(&nodes[0])
                 .clone();
             let label = node.label.clone();
+            let device = format!("pipewire:{}", node.name);
             let ended = Box::new(move || {
-                let _ = events.send(Event::Ended(label));
+                let _ = events.send(Event::Ended { label, token });
             });
-            let token = self.next_token.get();
-            self.next_token.set(token + 1);
             if !session.open(token, node, wanted(), feed.clone(), opened, ended) {
                 return Err(MediaError::Failed("PipeWire's loop is gone".into()));
             }
-            return Ok(Backend::PipeWire(session, token));
+            return Ok((Backend::PipeWire(session, token), device, token));
         }
         let nodes = self.v4l2.borrow().clone();
         let node = choice
@@ -335,6 +368,7 @@ impl Cameras {
             .or_else(|| nodes.first().cloned())
             .ok_or(MediaError::NotFound)?;
         let label = node.label.clone();
+        let device = node.id.clone();
         v4l2::start(
             node,
             wanted(),
@@ -342,10 +376,10 @@ impl Cameras {
             stop.clone(),
             opened,
             move || {
-                let _ = events.send(Event::Ended(label));
+                let _ = events.send(Event::Ended { label, token });
             },
         );
-        Ok(Backend::Thread)
+        Ok((Backend::Thread, device, token))
     }
 }
 
@@ -428,13 +462,36 @@ enum Backend {
     PipeWire(Rc<pipewire::Session>, u64),
 }
 
-/// An open camera.
-struct Opened {
-    feed: Arc<Feed>,
+/// One device's capture into an open camera's feed.
+struct Capture {
     stop: Arc<AtomicBool>,
     backend: Backend,
+    /// The device, as listed.
+    device: String,
+    token: u64,
+}
+
+impl Capture {
+    /// Stops it on purpose: whoever waits for it to stop by itself is not
+    /// told.
+    fn stop(&self, cameras: &Cameras) {
+        cameras.running.borrow_mut().remove(&self.token);
+        self.stop.store(true, Ordering::Relaxed);
+        if let Backend::PipeWire(session, token) = &self.backend {
+            session.close(*token);
+        }
+    }
+}
+
+/// An open camera.
+struct Opened {
+    cameras: Rc<Cameras>,
+    feed: Arc<Feed>,
+    /// The device's capture now; another after `use_device`.
+    capture: Rc<RefCell<Capture>>,
+    ended: Rc<EndedSlot>,
     published: Rc<RefCell<Option<Arc<VideoInput>>>>,
-    closed: Cell<bool>,
+    closed: Rc<Cell<bool>>,
 }
 
 impl Opened {
@@ -442,10 +499,8 @@ impl Opened {
         if self.closed.replace(true) {
             return;
         }
-        self.stop.store(true, Ordering::Relaxed);
-        if let Backend::PipeWire(session, token) = &self.backend {
-            session.close(*token);
-        }
+        self.capture.borrow().stop(&self.cameras);
+        self.ended.borrow_mut().take();
         *self.feed.input.lock().unwrap_or_else(|p| p.into_inner()) = None;
         self.feed.close();
     }
@@ -517,6 +572,68 @@ impl Camera for Opened {
 
     fn set_blur(&self, on: bool) {
         self.feed.blur_wanted.store(on, Ordering::Relaxed);
+    }
+
+    fn device(&self) -> Option<String> {
+        Some(self.capture.borrow().device.clone())
+    }
+
+    fn on_ended(&self, ended: Box<dyn Fn()>) {
+        if !self.closed.get() {
+            self.ended.replace(Some(ended));
+        }
+    }
+
+    /// Another device into the same feed: the frames it sends go to the
+    /// same input and the same previews, and the old capture is stopped
+    /// only once the new one has opened, so the picture never stops for
+    /// those watching. A camera of another size is simply a picture of
+    /// another size from then on, which the encoder takes as a browser's
+    /// does after `switchActiveDevice`.
+    fn use_device(&self, choice: Option<String>) -> Local<Result<(), MediaError>> {
+        if self.closed.get() {
+            return Box::pin(async { Err(MediaError::NotFound) });
+        }
+        let cameras = self.cameras.clone();
+        let stop = Arc::new(AtomicBool::new(false));
+        let (opened, open) = oneshot::channel();
+        let (backend, device, token) = match cameras.begin(choice, &self.feed, &stop, opened) {
+            Ok(begun) => begun,
+            Err(fault) => return Box::pin(async move { Err(fault) }),
+        };
+        let fresh = Capture {
+            stop,
+            backend,
+            device,
+            token,
+        };
+        let (capture, closed, ended) = (
+            self.capture.clone(),
+            self.closed.clone(),
+            Rc::downgrade(&self.ended),
+        );
+        Box::pin(async move {
+            let result = open
+                .await
+                .unwrap_or_else(|_| Err(MediaError::Failed("the camera's thread ended".into())));
+            if let Err(fault) = result {
+                fresh.stop(&cameras);
+                return Err(fault);
+            }
+            // Closed while the new one was opening: it is nobody's.
+            if closed.get() {
+                fresh.stop(&cameras);
+                return Err(MediaError::NotFound);
+            }
+            cameras.running.borrow_mut().insert(fresh.token, ended);
+            let old = capture.replace(fresh);
+            old.stop(&cameras);
+            log(&format!(
+                "camera: now {}, into the same picture",
+                capture.borrow().device
+            ));
+            Ok(())
+        })
     }
 
     fn close(&self) {

@@ -461,8 +461,9 @@ fn run(
     )
     .map_err(|e| format!("stream: {e}"))?;
 
+    // The user data counts the frames sent, the lossless stream's clock.
     let _stream_listener = stream
-        .add_local_listener_with_user_data(())
+        .add_local_listener_with_user_data(0u64)
         .state_changed({
             let (linker, events) = (linker.clone(), events.clone());
             move |stream, _, old, new| {
@@ -483,7 +484,7 @@ fn run(
                 }
             }
         })
-        .process(move |stream, _| {
+        .process(move |stream, sent| {
             let Some(mut buffer) = stream.dequeue_buffer() else {
                 return;
             };
@@ -503,6 +504,19 @@ fn run(
             let input = sink.lock().unwrap_or_else(|e| e.into_inner()).clone();
             if let Some(input) = input {
                 input.push_pcm(pcm.to_vec());
+                // The same samples for the lossless stream, which does
+                // nothing for a sound not offered so (the screen's own, and
+                // sound shared on its own with the switch off): the web and
+                // the Mac send it beside sound shared on its own, and a
+                // capture that only ever pushed the Opus track left every
+                // listener with the lossy one. 16-bit samples are exact as
+                // floats; the time is where they start on the stream's own
+                // clock, which the sender checks for holes.
+                let floats = pcm_floats(pcm);
+                let frames = (floats.len() / 2) as u64;
+                let at = (*sent * 1_000_000 / 48_000) as i64;
+                *sent += frames;
+                input.push_lossless(floats, 2, 48_000, at);
                 chunks.fetch_add(1, Ordering::Relaxed);
             }
         })
@@ -625,6 +639,13 @@ fn bind_client(
         })
         .register();
     Some(Bound::Client(client, listener))
+}
+
+/// Little-endian 16-bit samples as floats from minus one to one.
+pub fn pcm_floats(pcm: &[u8]) -> Vec<f32> {
+    pcm.chunks_exact(2)
+        .map(|pair| f32::from(i16::from_le_bytes([pair[0], pair[1]])) / 32768.0)
+        .collect()
 }
 
 /// 16-bit stereo at 48 kHz, front left and right: what `AudioInput::push_pcm`

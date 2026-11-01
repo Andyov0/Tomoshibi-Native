@@ -172,6 +172,26 @@ impl Media for FakeMedia {
     fn set_silent(&self, silent: bool) {
         self.silent.set(silent);
     }
+
+    fn set_kind_volume(&self, identity: &str, music: bool, level: f32) {
+        log(&format!(
+            "{} volume of {identity} set to {level:.2}",
+            if music { "music" } else { "screen" }
+        ));
+    }
+
+    fn set_duck(&self, identity: &str, factor: f32) {
+        log(&format!("music of {identity} turned to {factor:.2}"));
+    }
+
+    /// A sound of this app's own, counted like a remote one.
+    fn local_sound(&self, name: &str) -> Option<Arc<dyn PcmSink>> {
+        Some(Arc::new(Counted {
+            sid: format!("local/{name}"),
+            identity: format!("local:{name}"),
+            bytes: AtomicU64::new(0),
+        }))
+    }
 }
 
 /// A speaker that counts.
@@ -214,15 +234,16 @@ impl Microphone for FakeMicrophone {
     fn publish(&self, call: Arc<Call>, original: bool) -> Local<Result<(), MediaError>> {
         let shared = self.shared.clone();
         Box::pin(async move {
-            let old = shared.input.lock().unwrap().take();
-            if let Some(old) = old {
-                let _ = old.unpublish().await;
-            }
+            // The new voice first, then the old one down, as the real
+            // microphone does (media/audio.rs).
             let input = call
                 .publish_audio(SoundKind::Voice { original })
                 .await
                 .map_err(|fault| MediaError::Call(fault.to_string()))?;
-            shared.input.lock().unwrap().replace(input);
+            let old = shared.input.lock().unwrap().replace(input);
+            if let Some(old) = old {
+                let _ = old.unpublish().await;
+            }
             if !shared.running.swap(true, Ordering::SeqCst) {
                 let shared = shared.clone();
                 std::thread::Builder::new()
@@ -253,6 +274,11 @@ impl Microphone for FakeMicrophone {
 
     fn close(&self) {
         self.shared.running.store(false, Ordering::SeqCst);
+    }
+
+    fn use_device(&self, choice: Option<String>) -> Local<Result<(), MediaError>> {
+        log(&format!("the test microphone now hears {choice:?}"));
+        Box::pin(async { Ok(()) })
     }
 }
 
@@ -372,6 +398,15 @@ impl Camera for FakeCamera {
     }
 
     fn set_blur(&self, _: bool) {}
+
+    fn use_device(&self, choice: Option<String>) -> Local<Result<(), MediaError>> {
+        log(&format!("the test camera now shows {choice:?}"));
+        Box::pin(async { Ok(()) })
+    }
+
+    fn device(&self) -> Option<String> {
+        Some("test-camera".into())
+    }
 
     fn close(&self) {
         self.shared.running.store(false, Ordering::SeqCst);

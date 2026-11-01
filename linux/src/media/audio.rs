@@ -39,13 +39,13 @@ use std::{
 };
 
 use tokio::sync::{mpsc, oneshot};
-use tomoshibi_core::call::{AudioInput, Call, LosslessSink, PcmSink};
+use tomoshibi_core::call::{AudioInput, Call, LosslessSink, MediaSource, PcmSink};
 use tomoshibi_protocol::share::{sound_profile, SoundKind};
 
 use self::{
     capture::From,
     echo::{Echo, Processing},
-    mixer::Mixer,
+    mixer::{Kind, Mixer},
     playback::Output,
 };
 use super::{Device, DeviceKind, Local, MediaError, Microphone};
@@ -193,13 +193,17 @@ impl Sound {
         // frequency and level in the browser, and the noise suppressor
         // takes a steady tone for noise.
         let raw = matches!(self.options.test_sound, Some(TestSound::Tone(_)));
+        let test = self.options.test_sound.is_some();
         let shared = capture::Shared::new(processing, false);
         let (opened, open) = oneshot::channel();
-        capture::start(shared.clone(), self.echo.clone(), from, opened);
+        let echo = self.echo.clone();
+        capture::start(shared.clone(), echo.clone(), from, opened);
         Box::pin(async move {
             match open.await {
                 Ok(Ok(())) => Ok(Rc::new(Mic {
-                    shared,
+                    shared: Rc::new(RefCell::new(shared)),
+                    echo,
+                    test,
                     raw,
                     published: Rc::new(RefCell::new(None)),
                     busy: Rc::new(Cell::new(false)),
@@ -240,9 +244,17 @@ impl Sound {
         }
     }
 
-    /// Plays a remote sound track, `identity`'s.
+    /// Plays a remote sound track, `identity`'s: a voice, a screen's sound
+    /// or music, as its publication says, for the listener's level of each.
     pub fn play(&self, call: &Arc<Call>, track_sid: &str, identity: &str) {
-        self.mixer.add(track_sid, identity);
+        let kind = call
+            .participants()
+            .iter()
+            .flat_map(|person| person.tracks.iter())
+            .find(|track| track.sid == track_sid)
+            .map(|track| kind_of(track.source, &track.name))
+            .unwrap_or(Kind::Voice);
+        self.mixer.add_kind(track_sid, identity, kind);
         self.playing
             .borrow_mut()
             .insert(track_sid.to_owned(), identity.to_owned());
@@ -273,6 +285,39 @@ impl Sound {
 
     pub fn set_volume(&self, identity: &str, level: f32) {
         self.mixer.set_level(identity, level);
+    }
+
+    pub fn set_kind_volume(&self, identity: &str, music: bool, level: f32) {
+        self.mixer.set_kind_level(identity, music, level);
+    }
+
+    pub fn set_duck(&self, identity: &str, factor: f32) {
+        self.mixer.set_duck(identity, factor);
+    }
+
+    pub fn voice_levels(&self) -> Vec<(String, f32)> {
+        self.mixer.voice_levels()
+    }
+
+    /// A sound this app plays itself, into the same mix as the call (the
+    /// song desk's music heard by whoever plays it; a video watched
+    /// together): so that the echo canceller hears it as it hears the call,
+    /// and the speakers chosen and the silence of a muted run apply to it.
+    /// Filed under the identity `local:<name>`, for its level; music when
+    /// `name` is "music". It plays until the sink is let go of.
+    pub fn local_sound(&self, name: &str) -> Arc<dyn PcmSink> {
+        let key = format!("local/{name}");
+        let kind = if name == "music" {
+            Kind::Music
+        } else {
+            Kind::Screen
+        };
+        self.mixer.add_kind(&key, &format!("local:{name}"), kind);
+        self.start_playback();
+        Arc::new(LocalToMixer {
+            mixer: self.mixer.clone(),
+            key,
+        })
     }
 
     pub fn set_silent(&self, silent: bool) {
@@ -330,6 +375,41 @@ impl PcmSink for PcmToMixer {
     }
 }
 
+/// What a remote sound is, from its publication (sound.ts `isMusic`,
+/// lossless.ts): the song desk's music is a track of no known source named
+/// "music" or "music-lossless"; sound shared on its own is a screen's sound.
+fn kind_of(source: MediaSource, name: &str) -> Kind {
+    match source {
+        MediaSource::ScreenShareAudio => Kind::Screen,
+        MediaSource::Unknown if name.starts_with("music") => Kind::Music,
+        _ => Kind::Voice,
+    }
+}
+
+/// A sound of this app's own into the mixer, from whichever thread makes it.
+struct LocalToMixer {
+    mixer: Arc<Mixer>,
+    key: String,
+}
+
+impl PcmSink for LocalToMixer {
+    fn on_pcm(&self, pcm: Vec<u8>, _sample_rate: u32, channels: u32) {
+        let samples: Vec<i16> = pcm
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|pair| i16::from_le_bytes(*pair))
+            .collect();
+        self.mixer.push(&self.key, &samples, channels as usize);
+    }
+}
+
+impl Drop for LocalToMixer {
+    fn drop(&mut self) {
+        self.mixer.remove(&self.key);
+    }
+}
+
 /// The call's lossless streams into the mixer, on the core's thread.
 struct LosslessToMixer(Arc<Mixer>);
 
@@ -356,7 +436,12 @@ type Published = Rc<RefCell<Option<(Arc<AudioInput>, bool)>>>;
 
 /// An open microphone.
 struct Mic {
-    shared: Arc<capture::Shared>,
+    /// The capture now; another when the device is changed
+    /// (`use_device`), the voice's input handed from the one to the other.
+    shared: Rc<RefCell<Arc<capture::Shared>>>,
+    echo: Arc<Echo>,
+    /// A test's sound in place of the device: there is nothing to change to.
+    test: bool,
     /// A generated tone, sent unprocessed whatever it is published as.
     raw: bool,
     published: Published,
@@ -371,9 +456,15 @@ impl Mic {
     }
 }
 
+impl Mic {
+    fn now(&self) -> Arc<capture::Shared> {
+        self.shared.borrow().clone()
+    }
+}
+
 impl Microphone for Mic {
     fn level(&self) -> f32 {
-        self.shared.level()
+        self.now().level()
     }
 
     fn publish(&self, call: Arc<Call>, original: bool) -> Local<Result<(), MediaError>> {
@@ -391,36 +482,42 @@ impl Microphone for Mic {
             self.raw,
         );
         Box::pin(async move {
-            // The other kind of voice first comes down: the room never sends
-            // two microphones (share.rs `voice_capture` says what each is).
-            let old = published.borrow_mut().take();
-            if let Some((input, _)) = old {
-                Mic::set_input(&shared, None);
-                if let Err(fault) = input.unpublish().await {
-                    log(&format!("sound: the voice did not unpublish: {fault}"));
-                }
-            }
+            // The new voice first, then the old one taken down: taken down
+            // first, the voice was gone for everybody until the new one was
+            // up, a silence as long as a publish takes. The web changes the
+            // track in place (sound.ts `applyOriginalSound`: restartTrack and
+            // the sender's bitrate), which the core has no call for: a
+            // published voice's bitrate is fixed when it is published. So for
+            // the moment between the two both are published, and only the new
+            // one is fed from the moment it is up, as on the Mac
+            // (CallModel.setOriginalSound).
             let kind = SoundKind::Voice { original };
             let result = call.publish_audio(kind).await;
             busy.set(false);
             let input = result.map_err(|fault| MediaError::Call(fault.to_string()))?;
-            input.set_muted(shared.muted.load(Ordering::Relaxed));
+            let capture = shared.borrow().clone();
+            input.set_muted(capture.muted.load(Ordering::Relaxed));
             if !raw {
-                *shared.processing.lock().unwrap_or_else(|p| p.into_inner()) =
+                *capture.processing.lock().unwrap_or_else(|p| p.into_inner()) =
                     Processing::of(&sound_profile(kind).capture);
             }
-            Mic::set_input(&shared, Some(input.clone()));
-            published.replace(Some((input, original)));
+            Mic::set_input(&capture, Some(input.clone()));
+            let old = published.replace(Some((input, original)));
             log(&format!(
                 "sound: the voice is published{}",
                 if original { " as original sound" } else { "" }
             ));
+            if let Some((old, _)) = old {
+                if let Err(fault) = old.unpublish().await {
+                    log(&format!("sound: the old voice did not unpublish: {fault}"));
+                }
+            }
             Ok(())
         })
     }
 
     fn unpublish(&self) -> Local<()> {
-        let shared = self.shared.clone();
+        let shared = self.now();
         let old = self.published.borrow_mut().take();
         Box::pin(async move {
             Mic::set_input(&shared, None);
@@ -433,26 +530,63 @@ impl Microphone for Mic {
     }
 
     fn set_muted(&self, muted: bool) {
-        self.shared.muted.store(muted, Ordering::Relaxed);
+        self.now().muted.store(muted, Ordering::Relaxed);
         if let Some((input, _)) = self.published.borrow().as_ref() {
             input.set_muted(muted);
         }
     }
 
     fn close(&self) {
-        self.shared.stop.store(true, Ordering::Relaxed);
+        let shared = self.now();
+        shared.stop.store(true, Ordering::Relaxed);
         let old = self.published.borrow_mut().take();
-        Mic::set_input(&self.shared, None);
+        Mic::set_input(&shared, None);
         if let Some((input, _)) = old {
             glib::spawn_future_local(async move {
                 let _ = input.unpublish().await;
             });
         }
     }
+
+    fn use_device(&self, choice: Option<String>) -> Local<Result<(), MediaError>> {
+        if self.test {
+            return Box::pin(async { Ok(()) });
+        }
+        let current = self.now();
+        let processing = *current.processing.lock().unwrap_or_else(|p| p.into_inner());
+        let fresh = capture::Shared::new(processing, current.muted.load(Ordering::Relaxed));
+        let (opened, open) = oneshot::channel();
+        capture::start(
+            fresh.clone(),
+            self.echo.clone(),
+            From::Device(choice.filter(|c| !c.is_empty())),
+            opened,
+        );
+        let shared = self.shared.clone();
+        Box::pin(async move {
+            match open.await {
+                Ok(Ok(())) => {}
+                Ok(Err(fault)) => {
+                    fresh.stop.store(true, Ordering::Relaxed);
+                    return Err(fault);
+                }
+                Err(_) => return Err(MediaError::Failed("the microphone's thread ended".into())),
+            }
+            // The voice's input moves from the old capture to the new one
+            // between two of their frames: at most ten milliseconds of the
+            // old device are not sent, and nothing is sent twice.
+            let old = shared.replace(fresh.clone());
+            let input = old.input.lock().unwrap_or_else(|p| p.into_inner()).take();
+            Mic::set_input(&fresh, input);
+            old.stop.store(true, Ordering::Relaxed);
+            log("sound: the voice now comes from another microphone");
+            Ok(())
+        })
+    }
 }
 
 impl Drop for Mic {
     fn drop(&mut self) {
-        self.shared.stop.store(true, Ordering::Relaxed);
+        self.now().stop.store(true, Ordering::Relaxed);
     }
 }
