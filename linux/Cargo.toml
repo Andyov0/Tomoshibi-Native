@@ -115,6 +115,14 @@ v4l = "0.14"
 zune-jpeg = "0.5"
 ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "download-binaries", "tls-rustls", "api-17"] }
 
+# ui/room/music: the song desk's music, fetched from the deployment's
+# library and decoded here, since the core plays nothing of a file. Pure
+# Rust, so that the AppImage carries no codec library beside the binary;
+# the formats the library hands out (FLAC for lossless and above, MP3 and
+# AAC in MP4 for the lossy tiers) and Ogg Vorbis and WAV for a file a test
+# stands in with.
+symphonia = { version = "0.5", default-features = false, features = ["flac", "mp3", "aac", "isomp4", "ogg", "vorbis", "wav", "pcm"] }
+
 # --- render/ adds its crates below this line ---
 # libyuv, through the vendored libwebrtc the core links already (the
 # [patch] above points it there): the I420 to BGRA conversion of every

@@ -163,6 +163,7 @@ fn act(model: &AppModel, action: &str) {
                 super::choose_share(model, quality, Some(fps));
             }
         }
+        "music" => super::music::script(model, value),
         "shot" => shot(model, value),
         other => log(&format!("room script: no such action {other:?}")),
     }

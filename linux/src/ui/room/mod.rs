@@ -37,6 +37,7 @@ mod fake;
 mod glyph;
 mod local;
 mod motion;
+mod music;
 mod page;
 mod panels;
 pub mod plan;
@@ -120,6 +121,7 @@ pub enum Panel {
     Sound,
     Devices,
     Host,
+    Music,
 }
 
 impl Panel {
@@ -129,6 +131,7 @@ impl Panel {
             "sound" => Some(Panel::Sound),
             "devices" => Some(Panel::Devices),
             "host" => Some(Panel::Host),
+            "music" => Some(Panel::Music),
             _ => None,
         }
     }
@@ -478,6 +481,7 @@ fn make_invite(entry: &CallEntry) {
 /// One event of the call; false once the call is over.
 fn follow(model: &AppModel, call: &Arc<Call>, event: CallEvent) -> bool {
     let room = model.kept::<RoomState>();
+    music::follow(model, call, &event);
     let effects = {
         let mut talk = room.talk.borrow_mut();
         let Some(talk) = talk.as_mut() else {
