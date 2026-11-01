@@ -20,6 +20,8 @@
 //! - `TOMOSHIBI_TEST_ROOM`: the room (default `screen-share`).
 //! - `TOMOSHIBI_TEST_SECONDS`: how long to share (default 40).
 //! - `TOMOSHIBI_TEST_FPS`: the share's rate (default 30).
+//! - `TOMOSHIBI_TEST_QUALITY`: the share's size setting, `1080`, `1440` or
+//!   `4k` (default automatic).
 //! - `TOMOSHIBI_TEST_CHANGE_AFTER`: seconds after which the share is changed
 //!   to 1080p at 15 fps without its sound, then back with its sound, to
 //!   check a change keeps the share on the browser's stage.
@@ -91,6 +93,12 @@ async fn run(base: String) {
         .and_then(|s| s.parse().ok())
         .unwrap_or(30);
     let change_after: Option<u64> = env("TOMOSHIBI_TEST_CHANGE_AFTER").and_then(|s| s.parse().ok());
+    let quality = match env("TOMOSHIBI_TEST_QUALITY").as_deref() {
+        Some("1080") => ShareQuality::P1080,
+        Some("1440") => ShareQuality::P1440,
+        Some("4k") => ShareQuality::P4k,
+        _ => ShareQuality::Auto,
+    };
 
     let name = "Linux share".to_owned();
     let grant = deployment
@@ -145,7 +153,7 @@ async fn run(base: String) {
     let screens = Screens::new(Source::from_environment());
     let choice = ShareChoice {
         fps,
-        quality: ShareQuality::Auto,
+        quality,
         with_sound: true,
     };
     let share = screens
