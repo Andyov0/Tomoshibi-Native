@@ -23851,6 +23851,36 @@
         }
       }
     },
+    "This computer's system is too old for Tomoshibi. It needs the GNU C library {needed} or newer (Ubuntu 24.04, Debian 13, Fedora 40 or later); this one has {found}." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This computer's system is too old for Tomoshibi. It needs the GNU C library {needed} or newer (Ubuntu 24.04, Debian 13, Fedora 40 or later); this one has {found}."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このコンピューターのシステムは Tomoshibi には古すぎます。GNU C ライブラリ {needed} 以降が必要です（Ubuntu 24.04、Debian 13、Fedora 40 以降）。このコンピューターは {found} です。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这台电脑的系统对 Tomoshibi 来说太旧了。它需要 GNU C 库 {needed} 或更新的版本（Ubuntu 24.04、Debian 13、Fedora 40 或更新）；这台电脑上是 {found}。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "這台電腦的系統對 Tomoshibi 來說太舊了。它需要 GNU C 函式庫 {needed} 或更新的版本（Ubuntu 24.04、Debian 13、Fedora 40 或更新）；這台電腦上是 {found}。"
+          }
+        }
+      }
+    },
     "This deployment cannot bring up relays from a script." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,
