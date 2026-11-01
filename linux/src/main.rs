@@ -23,6 +23,37 @@ struct Running {
 }
 
 fn main() -> glib::ExitCode {
+    choose_renderer();
+    // The links AppRun took off the command line (an invitation's token is
+    // as good as a key to the room, and a command line can be read by every
+    // user of the machine): a start from an image that has them on its
+    // runtime's line hands them to a fresh start of the image and ends, so
+    // that the runtime's line goes with it (update/relaunch.rs). Taken out
+    // of the environment either way, so that nothing this starts has them.
+    let links = std::env::var(update::relaunch::OPEN_LINKS).unwrap_or_default();
+    let handed = std::env::var_os(update::relaunch::LINKS_HANDED).is_some();
+    std::env::remove_var(update::relaunch::OPEN_LINKS);
+    std::env::remove_var(update::relaunch::LINKS_HANDED);
+    // Put back by an update that did not start here (update/relaunch.rs).
+    let rolled_back = std::env::var_os(update::relaunch::DID_NOT_START).is_some();
+    std::env::remove_var(update::relaunch::DID_NOT_START);
+    let links: Vec<String> = links
+        .lines()
+        .filter(|line| !line.is_empty())
+        .map(str::to_owned)
+        .collect();
+    if !links.is_empty() && !handed {
+        if let Some(image) = update::running_image() {
+            match update::relaunch::hand_links_over(&image, &links.join("\n")) {
+                Ok(()) => {
+                    log("handed the links to a start of the image without them on its line");
+                    return glib::ExitCode::SUCCESS;
+                }
+                Err(fault) => log(&format!("the links could not be handed on: {fault}")),
+            }
+        }
+    }
+
     // Said before the first Deployment is made, which reads it then
     // (core/protocol/src/api/agent.rs).
     client::tell();
@@ -34,6 +65,17 @@ fn main() -> glib::ExitCode {
         .build();
     let running: Rc<RefCell<Option<Running>>> = Rc::new(RefCell::new(None));
 
+    // The preferences' last changes, which wait a moment before they are
+    // written (app/prefs.rs), are written as the app quits.
+    application.connect_shutdown({
+        let running = running.clone();
+        move |_| {
+            if let Some(running) = running.borrow().as_ref() {
+                running.model.preferences().flush();
+            }
+        }
+    });
+
     application.connect_startup(|_| {
         // Day and night follow the system; nothing in the app overrides it,
         // and the call draws itself dark in either (theme.rs).
@@ -44,7 +86,7 @@ fn main() -> glib::ExitCode {
     application.connect_activate({
         let (running, launch) = (running.clone(), launch.clone());
         move |application| {
-            start(application, &running, &launch);
+            start(application, &running, &launch, rolled_back);
             if let Some(running) = running.borrow().as_ref() {
                 running.window.present();
             }
@@ -55,7 +97,7 @@ fn main() -> glib::ExitCode {
     application.connect_open({
         let (running, launch) = (running.clone(), launch.clone());
         move |application, files, _| {
-            start(application, &running, &launch);
+            start(application, &running, &launch, rolled_back);
             let Some(running) = running
                 .borrow()
                 .as_ref()
@@ -84,12 +126,68 @@ fn main() -> glib::ExitCode {
         }
     });
 
-    application.run()
+    // The links, as the application's own arguments: opened here, or
+    // handed over the session bus to the instance already running, as a
+    // second launch's are.
+    if links.is_empty() {
+        application.run()
+    } else {
+        let mut arguments = vec![std::env::args()
+            .next()
+            .unwrap_or_else(|| "tomoshibi".into())];
+        arguments.extend(links);
+        application.run_with_args(&arguments)
+    }
+}
+
+/// GTK's renderer, where nobody chose one: Cairo on a machine without a
+/// GPU, GTK's own choice otherwise.
+///
+/// Without a GPU (a virtual machine, a thin client) GTK's GL renderers run
+/// on Mesa's llvmpipe, which rasterises in software on the processor: a
+/// call of four drawn by the default renderer (ngl) took 2.4 cores in a
+/// debug build, 1.4 of them llvmpipe's, where Cairo drew the same call in
+/// 1.0 (GL: 2.2); and a
+/// window drawn in software by GL got a frame every 150 to 220 ms, so the
+/// start sheet's arrival, a timed animation, was seen in two frames (about
+/// 15 per cent, then all of it), where Cairo gave one every 26 ms. Mesa
+/// rasterises in software when there is no DRM render node to draw with
+/// (/dev/dri/renderD*), or when LIBGL_ALWAYS_SOFTWARE says so; NVIDIA's own
+/// driver draws GL without a render node where its DRM module is not
+/// loaded, so its control device counts as a GPU too. Set before
+/// anything else runs, since GTK reads it when the window is realised;
+/// marked, so that what the app starts (a browser, the next version) is
+/// handed the system's own choice (update/relaunch.rs).
+fn choose_renderer() {
+    if std::env::var_os("GSK_RENDERER").is_some() {
+        return;
+    }
+    let render_node = std::fs::read_dir("/dev/dri").is_ok_and(|folder| {
+        folder
+            .flatten()
+            .any(|entry| entry.file_name().to_string_lossy().starts_with("renderD"))
+    }) || std::path::Path::new("/dev/nvidiactl").exists();
+    let software = std::env::var("LIBGL_ALWAYS_SOFTWARE")
+        .is_ok_and(|value| !value.is_empty() && value != "0" && value != "false");
+    if !render_node || software {
+        std::env::set_var("GSK_RENDERER", "cairo");
+        std::env::set_var(update::relaunch::RENDERER_CHOSEN, "1");
+        log(if software {
+            "drawing with Cairo: GL would be drawn in software here (LIBGL_ALWAYS_SOFTWARE)"
+        } else {
+            "drawing with Cairo: there is no GPU to draw GL with (no render node)"
+        });
+    }
 }
 
 /// Builds the model and the window the first time the application is asked
 /// to show anything, and asks the deployment what it is.
-fn start(application: &adw::Application, running: &Rc<RefCell<Option<Running>>>, launch: &Launch) {
+fn start(
+    application: &adw::Application,
+    running: &Rc<RefCell<Option<Running>>>,
+    launch: &Launch,
+    rolled_back: bool,
+) {
     if running.borrow().is_some() {
         return;
     }
@@ -112,6 +210,9 @@ fn start(application: &adw::Application, running: &Rc<RefCell<Option<Running>>>,
     let window = ui::window::open(application, &model, media.clone());
     debug_switches(application, &window, &model, media);
     // The image this one replaced, the next build, the desktop entry.
+    if rolled_back {
+        update::offer::rolled_back(&model);
+    }
     update::at_start(&model, &window);
     log(&format!(
         "Tomoshibi {} for Linux, core {}, {}",
@@ -137,6 +238,39 @@ fn debug_switches(
 ) {
     if let Some(path) = model.launch().snapshot.clone() {
         ui::window::snapshot_when_settled(window, model, path);
+    }
+    // TOMOSHIBI_DEBUG_FRAMES=<seconds>: every frame the window paints for
+    // that long from the start, with how long since the one before, to see
+    // a transition starved of frames (a dialog's first frames, drawn in
+    // software).
+    if let Some(seconds) = std::env::var("TOMOSHIBI_DEBUG_FRAMES")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+    {
+        let until = glib::monotonic_time() + seconds as i64 * 1_000_000;
+        window.connect_realize(move |window| {
+            let Some(clock) = window.frame_clock() else {
+                return;
+            };
+            let last = std::cell::Cell::new(0i64);
+            clock.connect_after_paint(move |clock| {
+                let now = glib::monotonic_time();
+                if now > until {
+                    return;
+                }
+                let since = if last.get() > 0 {
+                    (now - last.get()) / 1000
+                } else {
+                    0
+                };
+                last.set(now);
+                log(&format!(
+                    "frame {} painted at {} ms, {since} ms after the last",
+                    clock.frame_counter(),
+                    now / 1000
+                ));
+            });
+        });
     }
     if let Some(seconds) = model.launch().quit_after_seconds {
         let (application, model) = (application.downgrade(), model.downgrade());

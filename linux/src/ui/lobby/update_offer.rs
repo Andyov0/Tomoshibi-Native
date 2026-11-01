@@ -40,19 +40,49 @@ pub fn offer(model: &AppModel) -> gtk::Revealer {
     let cancel = kit::plain_button(&t("Cancel"));
     cancel.set_height_request(30);
     cancel.add_css_class("tmsb-compact");
-    let buttons = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-    buttons.set_halign(gtk::Align::End);
-    buttons.append(&later);
-    buttons.append(&cancel);
-    buttons.append(&update);
+    // What can be pressed at each step, as pages that crossfade and change
+    // size smoothly from one to the next (the offer's Later and Update, the
+    // download's Cancel, nothing while it installs); the lines under the
+    // title and the progress unfold and fold. They were shown and hidden in
+    // one frame each.
+    let offered = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    offered.set_halign(gtk::Align::End);
+    offered.append(&later);
+    offered.append(&update);
+    let downloading = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+    downloading.set_halign(gtk::Align::End);
+    downloading.append(&cancel);
+    let buttons = gtk::Stack::builder()
+        .transition_type(gtk::StackTransitionType::Crossfade)
+        .transition_duration(motion::SETTLE_MS)
+        .interpolate_size(true)
+        .hhomogeneous(false)
+        .vhomogeneous(false)
+        .build();
+    buttons.add_named(&offered, Some("offered"));
+    buttons.add_named(&downloading, Some("downloading"));
+    buttons.add_named(
+        &gtk::Box::new(gtk::Orientation::Horizontal, 0),
+        Some("none"),
+    );
+    let detail_slot = super::pieces::unfolding(&detail, false);
+    let why_slot = super::pieces::unfolding(&why, false);
+    let bar_slot = super::pieces::unfolding(&bar, false);
 
-    let card = gtk::Box::new(gtk::Orientation::Vertical, 8);
+    let card = gtk::Box::new(gtk::Orientation::Vertical, 0);
     card.add_css_class("tmsb-offer");
     card.set_widget_name("lobby.update");
+    // The gaps are the lines' own, so that a folded line leaves none.
+    title.set_margin_bottom(2);
+    for line in [&detail, &why] {
+        line.set_margin_top(6);
+    }
+    bar.set_margin_top(8);
+    buttons.set_margin_top(8);
     card.append(&title);
-    card.append(&detail);
-    card.append(&why);
-    card.append(&bar);
+    card.append(&detail_slot);
+    card.append(&why_slot);
+    card.append(&bar_slot);
     card.append(&buttons);
     let revealer = gtk::Revealer::builder()
         .transition_type(gtk::RevealerTransitionType::SlideUp)
@@ -61,15 +91,17 @@ pub fn offer(model: &AppModel) -> gtk::Revealer {
         .build();
 
     let fill = {
-        let (revealer, title, detail, why, bar, later, update, cancel) = (
+        let (revealer, title, detail, why, bar, update, buttons, detail_slot, why_slot, bar_slot) = (
             revealer.downgrade(),
             title.downgrade(),
             detail.downgrade(),
             why.downgrade(),
             bar.downgrade(),
-            later.downgrade(),
             update.downgrade(),
-            cancel.downgrade(),
+            buttons.downgrade(),
+            detail_slot.downgrade(),
+            why_slot.downgrade(),
+            bar_slot.downgrade(),
         );
         move |model: &AppModel| {
             let (
@@ -78,18 +110,22 @@ pub fn offer(model: &AppModel) -> gtk::Revealer {
                 Some(detail),
                 Some(why),
                 Some(bar),
-                Some(later),
                 Some(update),
-                Some(cancel),
+                Some(buttons),
+                Some(detail_slot),
+                Some(why_slot),
+                Some(bar_slot),
             ) = (
                 revealer.upgrade(),
                 title.upgrade(),
                 detail.upgrade(),
                 why.upgrade(),
                 bar.upgrade(),
-                later.upgrade(),
                 update.upgrade(),
-                cancel.upgrade(),
+                buttons.upgrade(),
+                detail_slot.upgrade(),
+                why_slot.upgrade(),
+                bar_slot.upgrade(),
             )
             else {
                 return;
@@ -102,8 +138,12 @@ pub fn offer(model: &AppModel) -> gtk::Revealer {
             let step = updates::step(model);
             let label = updates::version_label;
             let not_installable = updates::why_not_installable();
-            why.set_visible(matches!(step, Step::Offered { .. }) && not_installable.is_some());
-            why.set_label(not_installable.as_deref().unwrap_or_default());
+            why_slot.set_reveal_child(
+                matches!(step, Step::Offered { .. }) && not_installable.is_some(),
+            );
+            if let Some(said) = not_installable.as_deref() {
+                why.set_label(said);
+            }
             update.set_label(&if not_installable.is_some() {
                 t("Download")
             } else {
@@ -123,13 +163,13 @@ pub fn offer(model: &AppModel) -> gtk::Revealer {
                         crate::i18n::language().code().into(),
                     );
                     let said = problem.clone().or(notes);
-                    detail.set_visible(said.is_some());
-                    detail.set_label(said.as_deref().unwrap_or_default());
+                    detail_slot.set_reveal_child(said.is_some());
+                    if let Some(said) = said.as_deref() {
+                        detail.set_label(said);
+                    }
                     set_class(&detail, "tmsb-danger-text", problem.is_some());
-                    bar.set_visible(false);
-                    later.set_visible(true);
-                    update.set_visible(true);
-                    cancel.set_visible(false);
+                    bar_slot.set_reveal_child(false);
+                    buttons.set_visible_child_name("offered");
                 }
                 Step::Downloading {
                     build,
@@ -140,7 +180,7 @@ pub fn offer(model: &AppModel) -> gtk::Revealer {
                         "Downloading Tomoshibi {version}",
                         &[("version", &label(&build))],
                     ));
-                    detail.set_visible(true);
+                    detail_slot.set_reveal_child(true);
                     detail.set_label(&t_with(
                         "{received} of {total}",
                         &[
@@ -149,28 +189,24 @@ pub fn offer(model: &AppModel) -> gtk::Revealer {
                         ],
                     ));
                     set_class(&detail, "tmsb-danger-text", false);
-                    bar.set_visible(true);
+                    bar_slot.set_reveal_child(true);
                     bar.set_fraction(if total > 0 {
                         received as f64 / total as f64
                     } else {
                         0.0
                     });
-                    later.set_visible(false);
-                    update.set_visible(false);
-                    cancel.set_visible(true);
+                    buttons.set_visible_child_name("downloading");
                 }
                 Step::Installing { build } => {
                     title.set_label(&t_with(
                         "Installing Tomoshibi {version}",
                         &[("version", &label(&build))],
                     ));
-                    detail.set_visible(true);
+                    detail_slot.set_reveal_child(true);
                     detail.set_label(&t("Tomoshibi will open again when it is done."));
                     set_class(&detail, "tmsb-danger-text", false);
-                    bar.set_visible(false);
-                    later.set_visible(false);
-                    update.set_visible(false);
-                    cancel.set_visible(false);
+                    bar_slot.set_reveal_child(false);
+                    buttons.set_visible_child_name("none");
                 }
             }
         }

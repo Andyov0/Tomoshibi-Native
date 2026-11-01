@@ -9,6 +9,7 @@
 //! deployment's grant to `AppModel::enter_call`, which shows the room.
 
 pub mod animals;
+pub mod calendar;
 pub mod doors;
 pub mod home;
 pub mod pieces;
@@ -26,6 +27,7 @@ use crate::{app::Screen, theme};
 /// knocking and waiting.
 pub fn page(context: &Context, screen: Screen) -> gtk::Widget {
     theme::add_module_css("lobby", CSS);
+    theme::add_module_css("lobby-calendar", calendar::CSS);
     match screen {
         Screen::SignIn => sign_in::page(context),
         Screen::Lobby => home::page(context),
@@ -43,8 +45,10 @@ const CSS: &str = r#"
 .tmsb-lobby .tmsb-main, .tmsb-stage-ground { background-color: @tmsb_bg; }
 .tmsb-stage-card { border-radius: 20px; border: 1px solid @tmsb_border; }
 .tmsb-stage-card .tmsb-stage-ground { background-color: @tmsb_surface; }
-.tmsb-greeting { font-size: 34px; font-weight: 700; }
-.tmsb-greeting-sub { font-size: 15px; color: alpha(@tmsb_fg, 0.78); }
+/* The Mac's shadow under the greeting (Lobby.swift: 0.45, radius 16, two
+   down), which keeps it legible over a busy or dark camera picture. */
+.tmsb-greeting { font-size: 34px; font-weight: 700; text-shadow: 0 2px 16px alpha(black, 0.45); }
+.tmsb-greeting-sub { font-size: 15px; color: alpha(@tmsb_fg, 0.78); text-shadow: 0 2px 16px alpha(black, 0.45); }
 .tmsb-section-heading { font-size: 26px; font-weight: 700; }
 .tmsb-heading { font-size: 24px; font-weight: 700; }
 .tmsb-room-heading { font-size: 20px; font-family: monospace; }
@@ -66,6 +70,7 @@ button.tmsb-row-button:hover { background-color: alpha(@tmsb_fg, 0.06); }
 button.tmsb-row-button:active { background-color: alpha(@tmsb_fg, 0.10); }
 
 .tmsb-initial { border-radius: 999px; color: #ffffff; font-weight: 600; }
+.tmsb-avatar-picture { border-radius: 999px; box-shadow: inset 0 0 0 1px alpha(@tmsb_wash, 0.12); }
 .tmsb-initial-0 { background-color: #5e5ce6; }
 .tmsb-initial-1 { background-color: #2e8b9a; }
 .tmsb-initial-2 { background-color: #9a5cc8; }
@@ -92,34 +97,43 @@ button.tmsb-switch.off { background-color: @tmsb_fg; color: @tmsb_bg; }
 button.tmsb-switch.off:hover { background-color: mix(@tmsb_fg, @tmsb_bg, 0.10); }
 button.tmsb-switch.off:active { background-color: mix(@tmsb_fg, @tmsb_bg, 0.16); }
 
-button.tmsb-round, menubutton.tmsb-round > button {
+button.tmsb-round {
   min-width: 0; min-height: 0; padding: 0;
   border-radius: 999px; border: none; box-shadow: none;
   background-color: mix(@tmsb_surface, @tmsb_wash, 0.06);
   color: @tmsb_fg;
   transition: background-color 200ms cubic-bezier(0.2, 0.9, 0.3, 1), transform 120ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
-menubutton.tmsb-round > button { min-width: 32px; min-height: 32px; }
-button.tmsb-round:hover, menubutton.tmsb-round > button:hover { background-color: mix(@tmsb_surface, @tmsb_fg, 0.10); }
-button.tmsb-round:active, menubutton.tmsb-round > button:active, menubutton.tmsb-round > button:checked { background-color: mix(@tmsb_surface, @tmsb_fg, 0.16); }
+button.tmsb-round:hover { background-color: mix(@tmsb_surface, @tmsb_fg, 0.10); }
+button.tmsb-round:active, button.tmsb-round.open { background-color: mix(@tmsb_surface, @tmsb_fg, 0.16); }
 button.tmsb-round:active { transform: scale(0.95); }
 button.tmsb-forget { background-color: alpha(@tmsb_fg, 0.07); color: @tmsb_muted; }
 
 button.tmsb-primary.tmsb-compact, button.tmsb-plain.tmsb-compact { font-size: 13px; padding: 0 14px; min-height: 0; }
-menubutton.tmsb-pill > button {
+button.tmsb-pill {
   min-height: 28px; padding: 0 12px; border-radius: 999px; border: none; box-shadow: none;
-  background-color: mix(@tmsb_surface, @tmsb_wash, 0.06); font-size: 12.5px;
+  background-color: mix(@tmsb_surface, @tmsb_wash, 0.06); font-size: 12.5px; font-weight: normal;
+  transition: background-color 200ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
-menubutton.tmsb-pill > button:hover { background-color: mix(@tmsb_surface, @tmsb_fg, 0.10); }
-menubutton.tmsb-pill > button:checked { background-color: mix(@tmsb_surface, @tmsb_fg, 0.16); }
-menubutton.tmsb-account > button {
+button.tmsb-pill:hover { background-color: mix(@tmsb_surface, @tmsb_fg, 0.10); }
+button.tmsb-pill:active, button.tmsb-pill.open { background-color: mix(@tmsb_surface, @tmsb_fg, 0.16); }
+button.tmsb-account {
   padding: 8px 10px; border-radius: 16px; border: 1px solid @tmsb_border; box-shadow: none;
-  background-color: mix(@tmsb_surface, @tmsb_wash, 0.03);
+  background-color: mix(@tmsb_surface, @tmsb_wash, 0.03); font-weight: normal;
+  transition: background-color 200ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
-menubutton.tmsb-account > button:hover { background-color: mix(@tmsb_surface, @tmsb_fg, 0.10); }
-menubutton.tmsb-account > button:checked { background-color: mix(@tmsb_surface, @tmsb_fg, 0.16); }
+button.tmsb-account:hover { background-color: mix(@tmsb_surface, @tmsb_fg, 0.10); }
+button.tmsb-account:active, button.tmsb-account.open { background-color: mix(@tmsb_surface, @tmsb_fg, 0.16); }
 
-popover.tmsb-menu > contents { border-radius: 14px; padding: 6px; background-color: @tmsb_surface; color: @tmsb_fg; }
+/* A menu drawn in the window (kit::Menu): opaque, on a colour of its own
+   that stands off the sidebar it opens over by night as well as by day,
+   with a hairline and a shadow; radius 14, rows 32 with radius 10. */
+menu-card > box.tmsb-menu {
+  border-radius: 14px; padding: 6px; background-color: @tmsb_menu; color: @tmsb_fg;
+  border: 1px solid @tmsb_menu_edge;
+  box-shadow: 0 10px 30px alpha(black, 0.22), 0 1px 4px alpha(black, 0.12);
+}
+menu-card > box.tmsb-menu > scrolledwindow { background: none; }
 button.tmsb-menu-row {
   min-height: 32px; padding: 0 10px; border-radius: 10px; border: none; box-shadow: none; background: none;
   font-weight: normal;
@@ -129,6 +143,9 @@ button.tmsb-menu-row:active { background-color: alpha(@tmsb_fg, 0.14); }
 button.tmsb-menu-row.tmsb-destructive { color: @tmsb_danger_text; }
 .tmsb-menu-heading { font-size: 11px; font-weight: 600; color: @tmsb_muted; margin: 6px 10px 2px 10px; }
 separator.tmsb-menu-rule { margin: 4px 6px; background-color: @tmsb_border; }
+
+.tmsb-field-row { padding-left: 14px; }
+.tmsb-field-row > entry.tmsb-field, .tmsb-field-row > passwordentry.tmsb-field { padding-left: 0; }
 
 .tmsb-toast {
   background-color: @tmsb_surface; border: 1px solid @tmsb_border; border-radius: 999px;
@@ -165,23 +182,29 @@ entry.tmsb-input, passwordentry.tmsb-input {
   background-color: mix(@tmsb_surface, @tmsb_wash, 0.04); border: 1px solid @tmsb_border;
   border-radius: 12px; min-height: 38px; padding: 0 12px; box-shadow: none; outline: none;
 }
+/* The chosen segment is a plate of its own colour (a raised grey by night,
+   white with a shadow by day) over the track, and its words are the
+   foreground's while the others' are muted: by night the chosen plate was
+   the track's own grey, and the two choices looked the same. */
 .tmsb-segmented {
-  background-color: mix(@tmsb_surface, @tmsb_wash, 0.07); border-radius: 999px; padding: 2px;
+  background-color: @tmsb_segment_track; border-radius: 999px; padding: 2px;
 }
 .tmsb-segmented > button {
   min-height: 28px; padding: 0 12px; border-radius: 999px; border: none; box-shadow: none; background: none;
-  font-size: 13px;
+  font-size: 13px; font-weight: 500; color: @tmsb_muted;
+  transition: background-color 200ms cubic-bezier(0.2, 0.9, 0.3, 1), color 200ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
-.tmsb-segmented > button:hover { background-color: alpha(@tmsb_fg, 0.06); }
-.tmsb-segmented > button:checked { background-color: @tmsb_surface_high; font-weight: 600; }
+.tmsb-segmented > button:hover { background-color: alpha(@tmsb_fg, 0.06); color: @tmsb_fg; }
+.tmsb-segmented > button:checked {
+  background-color: @tmsb_segment; color: @tmsb_fg; font-weight: 600;
+  box-shadow: 0 1px 3px alpha(black, 0.16), 0 0 0 1px alpha(@tmsb_wash, 0.06);
+}
 dialog.tmsb-sheet .dialog-contents, dialog.tmsb-sheet > widget > floating-sheet > sheet { background-color: @tmsb_bg; }
 .tmsb-under-way {
   font-size: 11px; font-weight: 600; color: @tmsb_on_tally; background-color: @tmsb_tally;
   border-radius: 999px; padding: 1px 8px;
 }
-calendar.tmsb-calendar { background: none; border: none; }
-calendar.tmsb-calendar > grid > label.day-number { min-height: 32px; }
-calendar.tmsb-calendar > grid > label.day-number:selected { background-color: @tmsb_tally; color: @tmsb_on_tally; border-radius: 999px; }
+.tmsb-month-well { padding: 10px 8px 6px 8px; }
 button.tmsb-choice-row {
   padding: 12px 14px; border-radius: 14px; border: 1px solid @tmsb_border; box-shadow: none;
   background-color: @tmsb_surface;

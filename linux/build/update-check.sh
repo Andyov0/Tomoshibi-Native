@@ -9,14 +9,14 @@
 #   --old     the image to start, a test image (appimage.sh test) whose core
 #             holds updates to a key of the tests' own (TOMOSHIBI_TEST_UPDATE_KEY)
 #
-# For an architecture the VM runs through Rosetta (x86_64), the image the
-# shelf offers must have its AppImage magic zeroed before it is signed, as
-# distro-inside.sh zeroes it in the image it starts: the update is started by
-# the app itself, and Rosetta's binfmt entry does not match the magic
-# (package.Dockerfile).
+# For an architecture the docker host runs through an emulator (x86_64 on
+# arm64), the image the shelf offers must have its AppImage magic zeroed
+# before it is signed, as distro-inside.sh zeroes it in the image it starts:
+# the update is started by the app itself, and such an emulator's binfmt
+# entry may not match the magic (package.Dockerfile).
 #   --shelf   the deployment's apps directory: apps.json, its linux-<arch>
 #             line signed with that key, and the newer image it names
-#   --server  a Linux build of the server for the VM's architecture, one that
+#   --server  a Linux build of the server for the docker host's architecture, one that
 #             knows the Linux shelves
 #   --port    the server's port, from the caller's range (it uses that one)
 #   --expect  installed (the default), or refused: the shelf's line is not
@@ -32,7 +32,7 @@
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
-context=${TOMOSHIBI_DOCKER_CONTEXT:-linux-build}
+context=${TOMOSHIBI_DOCKER_CONTEXT:-${DOCKER_CONTEXT:-default}}
 docker=(docker --context "$context")
 network=tomoshibi-linux-net
 

@@ -5,7 +5,7 @@
 #   linux/build/distro-check.sh <arch> <distro> <AppImage> --out DIR [options]
 #
 #   distro      ubuntu-24.04 | debian-13 | fedora-41
-#   --out DIR   a directory on the Mac for the pictures and the logs
+#   --out DIR   a directory on this machine for the pictures and the logs
 #   --label L   what the files are called (default <distro>-<arch>)
 #   --network N the container's network (default none: nothing reachable,
 #               the window is the one for a deployment that does not answer)
@@ -32,7 +32,7 @@
 set -euo pipefail
 
 here=$(cd "$(dirname "$0")" && pwd)
-context=${TOMOSHIBI_DOCKER_CONTEXT:-linux-build}
+context=${TOMOSHIBI_DOCKER_CONTEXT:-${DOCKER_CONTEXT:-default}}
 docker=(docker --context "$context")
 
 usage="usage: distro-check.sh <aarch64|x86_64> <ubuntu-24.04|debian-13|fedora-41> <AppImage> --out DIR [options]"
@@ -77,11 +77,11 @@ if [ "$have" != "$wanted" ]; then
     --label "tomoshibi.distro=$wanted" -t "$tag" -f "$here/distro.Dockerfile" "$here" >&2
 fi
 
-# Whether the VM runs this architecture's code itself or through Rosetta
-# (x86_64 on the arm64 VM): distro-inside.sh then zeroes the AppImage magic
-# in its copy of the image, which Rosetta's binfmt entry does not match
-# (package.Dockerfile says more). A machine of the image's own architecture
-# never needs it.
+# Whether the docker host runs this architecture's code itself or through
+# an emulator (x86_64 on an arm64 host): distro-inside.sh then zeroes the
+# AppImage magic in its copy of the image, which such an emulator's binfmt
+# entry may not match (package.Dockerfile says more). A machine of the
+# image's own architecture never needs it.
 vm_arch=$("${docker[@]}" version --format '{{.Server.Arch}}' 2>/dev/null || echo unknown)
 case $vm_arch-$arch in arm64-aarch64|amd64-x86_64) emulated=0 ;; *) emulated=1 ;; esac
 

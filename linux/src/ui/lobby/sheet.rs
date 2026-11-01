@@ -80,7 +80,7 @@ pub fn present(context: &Context, mode: Mode) {
         .width_chars(8)
         .build();
     room.add_css_class("tmsb-input");
-    room.add_css_class("tmsb-mono");
+    mono_once_typed(&room);
     room.set_widget_name("sheet.room");
     let scope_warning = gtk::Label::builder().wrap(true).xalign(0.0).build();
     scope_warning.add_css_class("tmsb-small");
@@ -152,7 +152,9 @@ pub fn present(context: &Context, mode: Mode) {
     column.append(&card);
     column.append(&form);
     column.append(&foot);
-    dialog.set_child(Some(&column));
+    // A layer of its own for the menus in it: the dialog is drawn over the
+    // lobby, and so over the lobby's layer.
+    dialog.set_child(Some(&kit::menu_layer(&column)));
 
     // ---- what it does -----------------------------------------------------
 
@@ -391,11 +393,15 @@ pub fn present(context: &Context, mode: Mode) {
     }
     close.connect_clicked(move |_| cancel_all());
 
-    // The call came, or the screen went elsewhere: the sheet goes.
+    // The call came, or the screen went elsewhere: the sheet goes, and what
+    // brought it there is not called off.
+    let arrived = Rc::new(std::cell::Cell::new(false));
     let dialog_weak = dialog.downgrade();
+    let arrived_now = arrived.clone();
     model.subscribe_while(&dialog, move |model, change| match change {
         Change::Screen if model.screen() != Screen::Lobby => {
             if let Some(dialog) = dialog_weak.upgrade() {
+                arrived_now.set(true);
                 dialog.force_close();
             }
         }
@@ -405,12 +411,24 @@ pub fn present(context: &Context, mode: Mode) {
         }
         _ => {}
     });
-    let weak = model.downgrade();
+    // Escape and a press outside close the sheet as Cancel does, and call
+    // off what it set going the same way. They closed it and nothing else:
+    // the dropped handle did not stop the task, and somebody who pressed
+    // Escape to take back a Join was put in the pre-join or the call a
+    // moment later.
+    let (weak, going_now) = (model.downgrade(), going.clone());
     dialog.connect_closed(move |_| {
-        if let Some(model) = weak.upgrade() {
-            if !model.problem_stays() {
-                model.clear_problem();
+        let Some(model) = weak.upgrade() else {
+            return;
+        };
+        if !arrived.get() {
+            if let Some(handle) = going_now.take() {
+                handle.abort();
             }
+            model.cancel_join();
+        }
+        if !model.problem_stays() {
+            model.clear_problem();
         }
     });
 
@@ -442,6 +460,19 @@ pub fn present(context: &Context, mode: Mode) {
     room.grab_focus();
 }
 
+/// A room's field is in the machine's monospace once something is in it,
+/// as the room is written everywhere else, and in the page's own type while
+/// it shows its prompt: the long prompt in monospace was cut off at both
+/// the sheet's widths ("...for one nobody ha..."), where the Mac's field
+/// changes type the same way.
+pub fn mono_once_typed(entry: &gtk::Entry) {
+    let follow = |entry: &gtk::Entry| {
+        pieces::set_class(entry, "tmsb-mono", !entry.text().is_empty());
+    };
+    follow(entry);
+    entry.connect_changed(follow);
+}
+
 /// A room's name with the part after `@` completed from the account's own
 /// scopes (ScopedRoomInput.tsx): one scope is written in at the `@`, several
 /// are offered, and a scope the account is not in is said under the field
@@ -458,29 +489,16 @@ pub fn scoped_room_field(
     };
     let scopes = account.scopes.clone();
     let admin = account.admin;
-    let column = gtk::Box::new(gtk::Orientation::Vertical, 2);
-    let popover = gtk::Popover::builder()
-        .child(&column)
-        .has_arrow(false)
-        .autohide(false)
-        .can_focus(false)
-        .build();
-    popover.add_css_class("tmsb-menu");
-    popover.set_parent(entry);
-    popover.set_position(gtk::PositionType::Bottom);
-    {
-        let popover = popover.downgrade();
-        entry.connect_destroy(move |_| {
-            if let Some(popover) = popover.upgrade() {
-                popover.unparent();
-            }
-        });
-    }
+    // Under the field and as wide as it, and not modal: the keyboard stays
+    // in the field, and a press elsewhere puts the suggestions away and
+    // goes on to what it pressed.
+    let menu = kit::Menu::new(entry, 0, kit::MenuSide::Below, kit::MenuAlign::Fill);
+    menu.set_modal(false);
     let previous = Rc::new(RefCell::new(entry.text().to_string()));
-    let (warning, warning_slot, popover_weak) = (
+    let (warning, warning_slot, menu_weak) = (
         warning.downgrade(),
         warning_slot.downgrade(),
-        popover.downgrade(),
+        menu.downgrade(),
     );
     entry.connect_changed(move |entry| {
         let text = entry.text().to_string();
@@ -501,15 +519,29 @@ pub fn scoped_room_field(
                 .collect(),
             None => Vec::new(),
         };
-        if let Some(popover) = popover_weak.upgrade() {
-            if let Some(column) = popover.child().and_then(|c| c.downcast::<gtk::Box>().ok()) {
+        if let Some(menu) = menu_weak.upgrade() {
+            let column = menu.column();
+            // The rows change only when the scopes offered do, so that the
+            // open menu does not flicker under each letter typed.
+            let shown: Vec<String> = {
+                let mut shown = Vec::new();
+                let mut child = column.first_child();
+                while let Some(row) = child {
+                    child = row.next_sibling();
+                    shown.push(row.widget_name().to_string());
+                }
+                shown
+            };
+            if shown != matches {
                 while let Some(child) = column.first_child() {
                     column.remove(&child);
                 }
                 for scope in &matches {
                     let row = pieces::menu_row(scope, None, false);
+                    row.set_widget_name(scope);
+                    row.set_can_focus(false);
                     let (entry_weak, scope, pop) =
-                        (entry.downgrade(), scope.clone(), popover.downgrade());
+                        (entry.downgrade(), scope.clone(), menu.downgrade());
                     row.connect_clicked(move |_| {
                         if let Some(entry) = entry_weak.upgrade() {
                             let text = entry.text().to_string();
@@ -517,6 +549,7 @@ pub fn scoped_room_field(
                                 entry.set_text(&format!("{room}@{scope}"));
                                 entry.set_position(-1);
                             }
+                            entry.grab_focus_without_selecting();
                         }
                         if let Some(pop) = pop.upgrade() {
                             pop.popdown();
@@ -526,9 +559,9 @@ pub fn scoped_room_field(
                 }
             }
             if matches.is_empty() {
-                popover.popdown();
+                menu.popdown();
             } else {
-                popover.popup();
+                menu.popup();
             }
         }
         let outside = typed_scope.as_ref().filter(|typed| {

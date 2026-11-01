@@ -12,7 +12,7 @@
 #             whose core must be for meet.example.com. For the tests: the
 #             distribution runs and the update from a local deployment.
 #             TOMOSHIBI_TEST_UPDATE_KEY gives it a key of the tests' own.
-#   --out     a directory on the Mac for the image and its list of contents
+#   --out     a directory on this machine for the image and its list of contents
 #   --no-build   package what build.sh last built for this checkout
 #
 # <version> is the one the update check compares and the deployment offers
@@ -39,7 +39,7 @@ done
 
 here=$(cd "$(dirname "$0")" && pwd)
 checkout=$(cd "$here/../.." && pwd)
-context=${TOMOSHIBI_DOCKER_CONTEXT:-linux-build}
+context=${TOMOSHIBI_DOCKER_CONTEXT:-${DOCKER_CONTEXT:-default}}
 docker=(docker --context "$context")
 
 case $kind in

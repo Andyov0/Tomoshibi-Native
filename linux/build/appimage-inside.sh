@@ -120,6 +120,44 @@ cp -L "$lib/libgpg-error.so.0" "$app/usr/lib/libgpg-error.so.0"
 mkdir -p "$app/usr/share/doc/libgpg-error0"
 cp /usr/share/doc/libgpg-error0/copyright "$app/usr/share/doc/libgpg-error0/"
 
+# Two libraries are lent rather than given: each in a folder of its own,
+# which AppRun puts on the library path only where the system has no copy
+# of its own (libpipewire), or only an older one (libstdc++). AppRun says
+# why each must be the system's where the system has it. libpipewire needs
+# nothing but the C library.
+lend=$app/usr/lib/lend
+mkdir -p "$lend/pipewire" "$lend/libstdc++"
+cp -L "$lib/libpipewire-0.3.so.0" "$lend/pipewire/libpipewire-0.3.so.0"
+cp -L "$lib/libstdc++.so.6" "$lend/libstdc++/libstdc++.so.6"
+for package in libpipewire-0.3-0t64 libstdc++6; do
+  mkdir -p "$app/usr/share/doc/$package"
+  cp "/usr/share/doc/$package/copyright" "$app/usr/share/doc/$package/"
+done
+
+# What the system must have, worked out from what the image's programs and
+# libraries ask of it (the versions they need of the C library and of
+# libstdc++, not the ones they define), for AppRun to check before it
+# starts anything.
+asked() {
+  find "$app/usr/bin" "$app/usr/lib" -type f ! -path "$lend/libstdc++/*" \
+    \( -name '*.so*' -o -perm -u+x \) -print0 \
+    | xargs -0 objdump -T 2>/dev/null | awk '/\*UND\*/' \
+    | grep -o "$1[0-9.]*" | sed "s/^$1//" | sort -t. -k1,1n -k2,2n -k3,3n | tail -1
+}
+mkdir -p "$app/usr/share/tomoshibi"
+needs_glibc=$(asked GLIBC_)
+needs_glibcxx=$(asked GLIBCXX_)
+[ -n "$needs_glibc" ] && [ -n "$needs_glibcxx" ] || { echo "appimage: could not read what the image needs" >&2; exit 1; }
+printf 'NEEDS_GLIBC=%s\nNEEDS_GLIBCXX=%s\n' "$needs_glibc" "$needs_glibcxx" >"$app/usr/share/tomoshibi/needs"
+echo "the image needs glibc $needs_glibc and GLIBCXX_$needs_glibcxx"
+# What AppRun says on an older system, in the app's four languages, from
+# the app's own phrases (apple/i18n/native.json).
+too_old="This computer's system is too old for Tomoshibi. It needs the GNU C library {needed} or newer (Ubuntu 24.04, Debian 13, Fedora 40 or later); this one has {found}."
+for language in en zh-Hans zh-Hant ja; do
+  said=$(jq -r --arg k "$too_old" --arg l "$language" '.phrases[$k][$l] // empty' "$WORK/apple/i18n/native.json")
+  printf '%s\n' "${said:-$too_old}" >"$app/usr/share/tomoshibi/too-old.$language"
+done
+
 gtk4-update-icon-cache -q -t -f "$app/usr/share/icons/Adwaita"
 gtk4-update-icon-cache -q -t -f "$app/usr/share/icons/hicolor"
 

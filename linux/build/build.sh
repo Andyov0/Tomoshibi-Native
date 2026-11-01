@@ -46,17 +46,20 @@
 # One build at a time per target volume: cargo locks the build directory for
 # the whole build, so a second checkout's build waits ("Blocking waiting for
 # file lock") rather than running beside it. That is chosen, not suffered:
-# the VM has 20 GiB for everybody and about 20 GB of disk left, and one
-# target directory per checkout would compile every crate again in each and
-# hold a copy of everything per checkout. A checkout that must not wait can
+# a build machine that several checkouts share has memory and disk for one
+# set of compiled crates, and one target directory per checkout would
+# compile every crate again in each and hold a copy of everything per
+# checkout. A checkout that must not wait can
 # be given a volume of its own with TOMOSHIBI_TARGET_VOLUME (the first build
 # in it compiles everything).
 #
 # Environment:
-#   TOMOSHIBI_DOCKER_CONTEXT   docker context (default linux-build)
+#   TOMOSHIBI_DOCKER_CONTEXT   the docker context to build in (otherwise
+#                              DOCKER_CONTEXT's, otherwise "default")
 #   TOMOSHIBI_BUILD_JOBS       cargo's parallel jobs (default 4): several
-#                              checkouts build on one VM, and rustc and the
-#                              linker at twelve jobs each ran it out of memory
+#                              builds can share one machine, and rustc and
+#                              the linker at twelve jobs each ran it out of
+#                              memory
 #   TOMOSHIBI_TARGET_VOLUME    the target volume (default
 #                              tomoshibi-linux-target-<arch>, shared)
 #   TOMOSHIBI_HOST, TOMOSHIBI_UPDATE_KEY   release builds only
@@ -70,7 +73,7 @@ shift $(( $# >= 2 ? 2 : $# ))
 
 here=$(cd "$(dirname "$0")" && pwd)
 checkout=$(cd "$here/../.." && pwd)
-context=${TOMOSHIBI_DOCKER_CONTEXT:-linux-build}
+context=${TOMOSHIBI_DOCKER_CONTEXT:-${DOCKER_CONTEXT:-default}}
 docker=(docker --context "$context")
 
 # shellcheck source=common.sh

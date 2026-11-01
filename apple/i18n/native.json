@@ -884,6 +884,12 @@
       "zh-Hans": "Tomoshibi 已更新，但没能自动重新打开。请再次打开它。",
       "zh-Hant": "Tomoshibi 已更新，但沒能自動重新開啟。請再次開啟它。",
       "ja": "Tomoshibi は更新されましたが、自動でもう一度開けませんでした。もう一度開いてください。"
+    },
+    "This computer's system is too old for Tomoshibi. It needs the GNU C library {needed} or newer (Ubuntu 24.04, Debian 13, Fedora 40 or later); this one has {found}.": {
+      "en": "This computer's system is too old for Tomoshibi. It needs the GNU C library {needed} or newer (Ubuntu 24.04, Debian 13, Fedora 40 or later); this one has {found}.",
+      "zh-Hans": "这台电脑的系统对 Tomoshibi 来说太旧了。它需要 GNU C 库 {needed} 或更新的版本（Ubuntu 24.04、Debian 13、Fedora 40 或更新）；这台电脑上是 {found}。",
+      "zh-Hant": "這台電腦的系統對 Tomoshibi 來說太舊了。它需要 GNU C 函式庫 {needed} 或更新的版本（Ubuntu 24.04、Debian 13、Fedora 40 或更新）；這台電腦上是 {found}。",
+      "ja": "このコンピューターのシステムは Tomoshibi には古すぎます。GNU C ライブラリ {needed} 以降が必要です（Ubuntu 24.04、Debian 13、Fedora 40 以降）。このコンピューターは {found} です。"
     }
   }
 }

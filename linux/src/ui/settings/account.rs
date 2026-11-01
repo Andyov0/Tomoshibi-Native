@@ -2,6 +2,8 @@
 //! here and your picture, what you can use, the passphrase, and guest links
 //! into your scopes' rooms. Somebody not signed in is told where to do it.
 
+use std::rc::Rc;
+
 use adw::prelude::*;
 use gtk::glib;
 
@@ -49,7 +51,7 @@ pub fn page(context: &Context) -> adw::PreferencesPage {
     let who = adw::PreferencesGroup::new();
     let head = gtk::Box::new(gtk::Orientation::Horizontal, 16);
     head.set_margin_bottom(6);
-    head.append(&pieces::initial(&account.name, 64));
+    head.append(&pieces::avatar(model, &account.name, 64));
     let names = gtk::Box::new(gtk::Orientation::Vertical, 4);
     names.set_valign(gtk::Align::Center);
     let name = gtk::Label::new(Some(&account.name));
@@ -227,12 +229,13 @@ fn passphrase_group(model: &AppModel) -> adw::PreferencesGroup {
     let said = gtk::Label::builder().wrap(true).xalign(0.0).build();
     said.add_css_class("caption");
     said.set_margin_top(10);
-    said.set_visible(false);
     group.add(&current);
     group.add(&next);
     let foot = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-    said.set_hexpand(true);
-    foot.append(&said);
+    // What came of a change arrives with a fade rather than at once.
+    let said_slot = pieces::fading(&said, false);
+    said_slot.set_hexpand(true);
+    foot.append(&said_slot);
     foot.append(&change);
     group.add(&foot);
     let ready = {
@@ -251,11 +254,12 @@ fn passphrase_group(model: &AppModel) -> adw::PreferencesGroup {
         current.connect_changed(move |_| ready());
     }
     next.connect_changed(move |_| ready());
-    let (weak, current_weak, next_weak, said_weak) = (
+    let (weak, current_weak, next_weak, said_weak, slot_weak) = (
         model.downgrade(),
         current.downgrade(),
         next.downgrade(),
         said.downgrade(),
+        said_slot.downgrade(),
     );
     change.connect_clicked(move |button| {
         let (Some(model), Some(current), Some(next)) =
@@ -265,16 +269,19 @@ fn passphrase_group(model: &AppModel) -> adw::PreferencesGroup {
         };
         button.set_sensitive(false);
         let (current_text, next_text) = (current.text().to_string(), next.text().to_string());
-        let (said, button, current, next) = (
+        let (said, slot, button, current, next) = (
             said_weak.clone(),
+            slot_weak.clone(),
             button.downgrade(),
             current.downgrade(),
             next.downgrade(),
         );
         glib::spawn_future_local(async move {
             let result = model.change_passphrase(current_text, next_text).await;
+            if let Some(slot) = slot.upgrade() {
+                slot.set_reveal_child(true);
+            }
             if let Some(said) = said.upgrade() {
-                said.set_visible(true);
                 match &result {
                     Ok(()) => {
                         said.set_label(&t("Changed."));
@@ -331,9 +338,14 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
         .title(t("Works until"))
         .model(&until_list)
         .build();
+    // When it starts working: now, or a day and a quarter hour chosen on
+    // the month (Account.tsx's "Works from", which the Mac offers as a
+    // calendar and a clock). The end above is counted from when it starts.
+    let (from, from_at) = works_from();
     group.add(&room);
     group.add(&scope);
     group.add(&name);
+    group.add(&from);
     group.add(&until);
     let make = kit::primary_button(&t("Make a link"));
     make.set_height_request(36);
@@ -346,7 +358,7 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
         .selectable(true)
         .build();
     said.add_css_class("caption");
-    said.set_visible(false);
+    let said_slot = pieces::unfolding(&said, false);
     let foot = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     foot.set_margin_top(10);
     foot.append(&stop);
@@ -356,7 +368,7 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
     foot.append(&make);
     group.add(&foot);
     said.set_margin_top(8);
-    group.add(&said);
+    group.add(&said_slot);
 
     let scopes = scopes.to_vec();
     let target = {
@@ -371,12 +383,13 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
         }
     };
     {
-        let (weak, target, name, until, said) = (
+        let (weak, target, name, until, said, from_at) = (
             model.downgrade(),
             target.clone(),
             name.downgrade(),
             until.downgrade(),
             said.downgrade(),
+            from_at.clone(),
         );
         make.connect_clicked(move |button| {
             let (Some(model), Some(room)) = (weak.upgrade(), target()) else {
@@ -386,22 +399,23 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
                 .upgrade()
                 .map(|name| name.text().to_string())
                 .unwrap_or_default();
+            let starts = from_at();
             let until_at = until
                 .upgrade()
                 .and_then(|until| hours.get(until.selected() as usize).copied())
                 .and_then(|hours| hours.parse::<i64>().ok())
-                .map(|hours| words::now() + hours * 3600);
+                .map(|hours| starts.unwrap_or_else(words::now) + hours * 3600);
             button.set_sensitive(false);
             let (button, said) = (button.downgrade(), said.clone());
             glib::spawn_future_local(async move {
-                let made = model.make_guest_link(room, who, None, until_at).await;
+                let made = model.make_guest_link(room, who, starts, until_at).await;
                 if let Some(button) = button.upgrade() {
                     button.set_sensitive(true);
                 }
                 let Some(said) = said.upgrade() else {
                     return;
                 };
-                said.set_visible(true);
+                reveal_parent(&said);
                 match made {
                     Ok(made) => {
                         pieces::copy(&made.link);
@@ -444,7 +458,7 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
                     button.set_sensitive(true);
                 }
                 if let Some(said) = said.upgrade() {
-                    said.set_visible(true);
+                    reveal_parent(&said);
                     match stopped {
                         Ok(1) => said.set_label(&t("One link stopped working.")),
                         Ok(count) => said.set_label(&t_with(
@@ -458,6 +472,121 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
         });
     }
     group
+}
+
+/// "Works from": a row whose switch says whether the link waits for a
+/// moment, opening onto the month and a quarter-hour clock; and what it
+/// says (`None` while it works from now).
+fn works_from() -> (adw::ExpanderRow, Rc<dyn Fn() -> Option<i64>>) {
+    use crate::app::schedule::{self, Day, LocalZone};
+    let (day, hour, minute) = schedule::start(words::now(), &LocalZone);
+    let chosen = Rc::new(std::cell::Cell::new((day, hour, minute)));
+    let row = adw::ExpanderRow::builder()
+        .title(t("Works from"))
+        .subtitle("—")
+        .show_enable_switch(true)
+        .enable_expansion(false)
+        .build();
+    row.set_widget_name("settings.guest-from");
+    let at = {
+        let (chosen, row) = (chosen.clone(), row.downgrade());
+        Rc::new(move || -> Option<i64> {
+            let row = row.upgrade()?;
+            if !row.enables_expansion() {
+                return None;
+            }
+            let (day, hour, minute) = chosen.get();
+            Some(schedule::instant(
+                day,
+                hour,
+                minute,
+                &LocalZone,
+                words::now(),
+            ))
+        }) as Rc<dyn Fn() -> Option<i64>>
+    };
+    let say = {
+        let (row, at) = (row.downgrade(), at.clone());
+        Rc::new(move || {
+            if let Some(row) = row.upgrade() {
+                row.set_subtitle(&at().map(words::said).unwrap_or_else(|| "—".to_owned()));
+            }
+        })
+    };
+    let today = {
+        let wall = words::Wall::local(words::now());
+        Day {
+            year: wall.year,
+            month: wall.month,
+            day: wall.day,
+        }
+    };
+    let month = {
+        let (chosen, say) = (chosen.clone(), say.clone());
+        crate::ui::lobby::calendar::month(day, today, today, today.add_days(365), move |day| {
+            let (_, hour, minute) = chosen.get();
+            chosen.set((day, hour, minute));
+            say();
+        })
+    };
+    month.set_margin_top(8);
+    month.set_margin_bottom(4);
+    month.set_margin_start(8);
+    month.set_margin_end(8);
+    let hours: Vec<String> = (0..24).map(|hour| format!("{hour:02}")).collect();
+    let hour_choice =
+        gtk::DropDown::from_strings(&hours.iter().map(String::as_str).collect::<Vec<_>>());
+    hour_choice.set_selected(hour);
+    hour_choice.update_property(&[gtk::accessible::Property::Label(&t("Hour"))]);
+    let minute_choice = gtk::DropDown::from_strings(&["00", "15", "30", "45"]);
+    minute_choice.set_selected(minute / 15);
+    minute_choice.update_property(&[gtk::accessible::Property::Label(&t("Minute"))]);
+    for choice in [&hour_choice, &minute_choice] {
+        let (chosen, say, hour_choice, minute_choice) = (
+            chosen.clone(),
+            say.clone(),
+            hour_choice.downgrade(),
+            minute_choice.downgrade(),
+        );
+        choice.connect_selected_notify(move |_| {
+            let (Some(hour), Some(minute)) = (hour_choice.upgrade(), minute_choice.upgrade())
+            else {
+                return;
+            };
+            let (day, _, _) = chosen.get();
+            chosen.set((day, hour.selected(), minute.selected() * 15));
+            say();
+        });
+    }
+    let clock = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+    clock.append(&hour_choice);
+    clock.append(&gtk::Label::new(Some(":")));
+    clock.append(&minute_choice);
+    let time = adw::ActionRow::builder().title(t("Time")).build();
+    clock.set_valign(gtk::Align::Center);
+    time.add_suffix(&clock);
+    let holder = gtk::ListBoxRow::builder()
+        .child(&month)
+        .activatable(false)
+        .selectable(false)
+        .build();
+    row.add_row(&holder);
+    row.add_row(&time);
+    row.connect_enable_expansion_notify(move |_| say());
+    // TOMOSHIBI_DEBUG_GUEST_FROM=1 opens it, for a picture.
+    #[cfg(debug_assertions)]
+    if std::env::var_os("TOMOSHIBI_DEBUG_GUEST_FROM").is_some() {
+        row.set_enable_expansion(true);
+        row.set_expanded(true);
+    }
+    (row, at)
+}
+
+/// Unfolds the revealer a line was put in.
+fn reveal_parent(line: &gtk::Label) {
+    if let Some(slot) = line.parent().and_downcast::<gtk::Revealer>() {
+        slot.set_reveal_child(true);
+    }
 }
 
 /// Account.tsx `Picture`: a picture chosen from the disk, scaled down to at
@@ -483,15 +612,27 @@ fn choose_picture(context: &Context) {
             let Some(path) = file.path() else {
                 return;
             };
-            let data_url = gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(&path, 256, 256, true)
-                .ok()
-                .and_then(|pixbuf| pixbuf.save_to_bufferv("jpeg", &[("quality", "82")]).ok())
-                .map(|bytes| format!("data:image/jpeg;base64,{}", glib::base64_encode(&bytes)));
-            let Some(data_url) = data_url else {
-                model.mention(t("That picture could not be used."));
-                return;
-            };
             glib::spawn_future_local(async move {
+                // Decoded, scaled and encoded on a thread of its own: a
+                // camera's photograph is tens of megapixels, and decoding it
+                // on the main thread held the window still for as long.
+                let data_url = gtk::gio::spawn_blocking(move || {
+                    gtk::gdk_pixbuf::Pixbuf::from_file_at_scale(&path, 256, 256, true)
+                        .ok()
+                        .and_then(|pixbuf| {
+                            pixbuf.save_to_bufferv("jpeg", &[("quality", "82")]).ok()
+                        })
+                        .map(|bytes| {
+                            format!("data:image/jpeg;base64,{}", glib::base64_encode(&bytes))
+                        })
+                })
+                .await
+                .ok()
+                .flatten();
+                let Some(data_url) = data_url else {
+                    model.mention(t("That picture could not be used."));
+                    return;
+                };
                 if let Err(said) = model.set_picture(data_url).await {
                     model.mention(said);
                 }

@@ -25,6 +25,9 @@
 #                            built against the system's glib, often newer,
 #                            and fail to load into this one with a warning
 #                            at every start; the app uses none of them
+#   LD_LIBRARY_PATH          only where a library the image lends is
+#                            missing from the system (below), and then only
+#                            that library's folder
 #
 # Nothing else. In particular not GDK_BACKEND or GTK_THEME, which
 # linuxdeploy's GTK plugin sets: the first would keep the app off Wayland
@@ -50,6 +53,143 @@ if [ -n "${TOMOSHIBI_APPRUN_SET+x}" ]; then
   unset TOMOSHIBI_APPRUN_SET
 fi
 
+# ---- what this system must have ----------------------------------------------
+#
+# The image is built on Ubuntu 24.04 and needs that generation's GNU C
+# library (the version is worked out when the image is made, in
+# usr/share/tomoshibi/needs): on an older one the program did not start at
+# all, and someone who opened it from a file manager saw nothing, only a
+# dynamic linker's complaint on a terminal nobody had open. An older system
+# is told so, in words, by whichever of the desktop's ways to say something
+# is there.
+NEEDS_GLIBC= NEEDS_GLIBCXX=
+[ -r "$here/usr/share/tomoshibi/needs" ] && . "$here/usr/share/tomoshibi/needs"
+
+# The first of two dotted versions, compared number by number, is older.
+older() {
+  awk -v a="$1" -v b="$2" 'BEGIN {
+    n = split(a, x, "."); m = split(b, y, ".")
+    for (i = 1; i <= (n > m ? n : m); i++) {
+      if (x[i] + 0 < y[i] + 0) exit 0
+      if (x[i] + 0 > y[i] + 0) exit 1
+    }
+    exit 1 }'
+}
+
+# The language to say it in, from the locale, as the app chooses its own.
+language() {
+  locale=${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}
+  case ${LANGUAGE:-$locale} in
+    zh_TW*|zh_HK*|zh_MO*|zh-Hant*) echo zh-Hant ;;
+    zh*) echo zh-Hans ;;
+    ja*) echo ja ;;
+    *) echo en ;;
+  esac
+}
+
+too_old() {
+  said=$(cat "$here/usr/share/tomoshibi/too-old.$(language)" 2>/dev/null \
+    || cat "$here/usr/share/tomoshibi/too-old.en" 2>/dev/null)
+  [ -n "$said" ] || said="This system is too old for Tomoshibi: it needs the GNU C library {needed} or newer, and has {found}."
+  said=$(printf '%s' "$said" | sed -e "s/{needed}/$1/g" -e "s/{found}/$2/g")
+  echo "tomoshibi: $said" >&2
+  if [ -n "${WAYLAND_DISPLAY:-}${DISPLAY:-}" ]; then
+    # Shown, whether it was closed with its button (0) or its window (1);
+    # anything else is a dialog that could not open, and the next is tried.
+    if command -v zenity >/dev/null 2>&1; then
+      zenity --error --title=Tomoshibi --width=420 --text="$said" >/dev/null 2>&1
+      [ $? -le 1 ] && return
+    fi
+    if command -v kdialog >/dev/null 2>&1; then
+      kdialog --title Tomoshibi --error "$said" >/dev/null 2>&1
+      [ $? -le 1 ] && return
+    fi
+    if command -v notify-send >/dev/null 2>&1; then
+      notify-send --app-name=Tomoshibi --icon=dialog-error Tomoshibi "$said" >/dev/null 2>&1 && return
+    fi
+    if command -v xmessage >/dev/null 2>&1; then
+      xmessage -center "$said" >/dev/null 2>&1 && return
+    fi
+  fi
+}
+
+if [ -n "$NEEDS_GLIBC" ]; then
+  found=$(getconf GNU_LIBC_VERSION 2>/dev/null | awk '{print $2}')
+  [ -n "$found" ] || found=$(ldd --version 2>&1 | awk 'NR == 1 {print $NF}')
+  case $found in [0-9]*.[0-9]*) ;; *) found=none ;; esac
+  if [ "$found" = none ] || older "$found" "$NEEDS_GLIBC"; then
+    too_old "$NEEDS_GLIBC" "$found"
+    exit 1
+  fi
+fi
+
+# ---- libraries the image lends where the system has none ---------------------
+#
+# Two libraries are the system's own when it has them and the image's only
+# when it does not, so each is in a folder of its own under usr/lib/lend,
+# put on the library path only then: libpipewire, which the program is
+# linked against but needs only for the camera and the screen, and which a
+# system without PipeWire (a plain Arch with weston) does not have, so the
+# program did not start at all (status 127, before any window); and
+# libstdc++, which a system of the same C library's generation can have
+# from an older compiler. The system's PipeWire library must win where it
+# has one, since it finds the system's own PipeWire modules, which the
+# image's would not; and a newer libstdc++ serves the older's users.
+triplet=
+case $(uname -m) in
+  x86_64) tag=x86-64; triplet=x86_64-linux-gnu ;;
+  aarch64) tag=AArch64; triplet=aarch64-linux-gnu ;;
+  *) tag= ;;
+esac
+# Where the system's copy of a library is, or nothing.
+system_library() {
+  for ldconfig in ldconfig /sbin/ldconfig /usr/sbin/ldconfig; do
+    if command -v "$ldconfig" >/dev/null 2>&1; then
+      at=$("$ldconfig" -p 2>/dev/null | awk -v name="$1" -v tag="$tag" \
+        '$1 == name && index($0, tag) { print $NF; exit }')
+      [ -n "$at" ] && { echo "$at"; return; }
+      break
+    fi
+  done
+  for folder in "/lib/$triplet" "/usr/lib/$triplet" /lib64 /usr/lib64 /lib /usr/lib; do
+    [ -e "$folder/$1" ] && { echo "$folder/$1"; return; }
+  done
+}
+lent=
+if [ -d "$here/usr/lib/lend/pipewire" ] && [ -z "$(system_library libpipewire-0.3.so.0)" ]; then
+  lent="$here/usr/lib/lend/pipewire"
+fi
+if [ -d "$here/usr/lib/lend/libstdc++" ] && [ -n "$NEEDS_GLIBCXX" ]; then
+  have=$(system_library libstdc++.so.6)
+  if [ -z "$have" ] || ! grep -qa "GLIBCXX_$NEEDS_GLIBCXX" "$have" 2>/dev/null; then
+    lent="${lent:+$lent:}$here/usr/lib/lend/libstdc++"
+  fi
+fi
+
+# ---- links ---------------------------------------------------------------------
+#
+# A link the app was opened with (the desktop entry's %U: an invitation's
+# tomoshibi://host/?invite=TOKEN) is handed to it in the environment, which
+# only this user can read, rather than on the command line, which every
+# user of the machine can; the app then starts afresh without it, so that
+# the runtime's own command line, which still has it, goes too
+# (update/relaunch.rs). Only when every argument is a link; anything else
+# is left as it was.
+links=
+for argument in "$@"; do
+  case $argument in
+    tomoshibi:*|http://*|https://*)
+      links="${links:+$links
+}$argument" ;;
+    *) links=; break ;;
+  esac
+done
+if [ -n "$links" ]; then
+  TOMOSHIBI_OPEN_LINKS=$links
+  export TOMOSHIBI_OPEN_LINKS
+  set --
+fi
+
 TOMOSHIBI_APPRUN_SET=
 set_for_app() {
   if eval "[ -n \"\${$1+x}\" ]"; then
@@ -62,6 +202,9 @@ set_for_app() {
 set_for_app XDG_DATA_DIRS "$here/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
 set_for_app GDK_PIXBUF_MODULE_FILE "$here/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
 set_for_app GIO_MODULE_DIR "$here/usr/lib/gio/modules"
+if [ -n "$lent" ]; then
+  set_for_app LD_LIBRARY_PATH "$lent${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
 export TOMOSHIBI_APPRUN_SET
 
 exec "$here/usr/bin/tomoshibi" "$@"

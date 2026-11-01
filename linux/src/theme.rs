@@ -363,6 +363,30 @@ fn named_colors(prefix: &str, palette: &Palette, accent: Accent, scheme: Scheme)
     define("tally", accent.color(scheme));
     define("tally_text", accent.text_color(scheme));
     define("on_tally", accent.on_color());
+    // A menu's ground and edge: by night a step above the surface, since a
+    // menu on the surface's own colour over the sidebar (which is the
+    // surface) was told apart only by a faint ring; by day the surface's
+    // white, which the shadow lifts off the page.
+    let (menu, menu_edge, segment, segment_track) = match scheme {
+        Scheme::Dark => (
+            palette.surface_high,
+            WHITE.with_alpha(0.12),
+            Shade::hex(0x636366),
+            WHITE.with_alpha(0.10),
+        ),
+        Scheme::Light => (
+            palette.surface,
+            BLACK.with_alpha(0.10),
+            WHITE,
+            BLACK.with_alpha(0.07),
+        ),
+    };
+    define("menu", menu);
+    define("menu_edge", menu_edge);
+    // The chosen segment of a choice of two (systemGray3 by night, as the
+    // system's own segmented control draws it, white by day) and its track.
+    define("segment", segment);
+    define("segment_track", segment_track);
     css
 }
 
@@ -432,7 +456,11 @@ button.tmsb-primary {
 }
 button.tmsb-primary:hover { background-color: mix(@tmsb_tally, @tmsb_fg, 0.10); }
 button.tmsb-primary:active { background-color: mix(@tmsb_tally, @tmsb_fg, 0.16); transform: scale(0.95); }
-button.tmsb-primary:disabled { background-color: @tmsb_surface_high; color: @tmsb_muted; }
+/* libadwaita draws a disabled button at half its opacity (button:disabled
+   { filter: opacity(0.5) }), which put the grey plate halfway into the
+   ground: by night it was darker than the Cancel beside it and could
+   hardly be seen. The plate is the one drawn, at its full colour. */
+button.tmsb-primary:disabled { background-color: @tmsb_surface_high; color: @tmsb_muted; filter: none; }
 button.tmsb-plain {
   background-color: mix(@tmsb_surface, @tmsb_wash, 0.06);
   color: @tmsb_fg;
@@ -445,7 +473,7 @@ button.tmsb-plain {
 }
 button.tmsb-plain:hover { background-color: mix(@tmsb_surface, @tmsb_fg, 0.10); }
 button.tmsb-plain:active { background-color: mix(@tmsb_surface, @tmsb_fg, 0.16); transform: scale(0.95); }
-button.tmsb-plain:disabled { opacity: 0.4; }
+button.tmsb-plain:disabled { opacity: 0.4; filter: none; }
 .tmsb-divider { background-color: @tmsb_border; min-height: 1px; }
 .tmsb-small { font-size: 11px; }
 .tmsb-footnote { font-size: 11px; color: @tmsb_muted; font-family: monospace; }
@@ -464,7 +492,7 @@ window.tmsb-window.tmsb-call button.tmsb-plain:active { background-color: mix(@t
 window.tmsb-window.tmsb-call button.tmsb-primary { background-color: @tmsb_call_tally; color: @tmsb_call_on_tally; }
 window.tmsb-window.tmsb-call button.tmsb-primary:hover { background-color: mix(@tmsb_call_tally, @tmsb_call_fg, 0.10); }
 window.tmsb-window.tmsb-call button.tmsb-primary:active { background-color: mix(@tmsb_call_tally, @tmsb_call_fg, 0.16); }
-window.tmsb-window.tmsb-call button.tmsb-primary:disabled { background-color: @tmsb_call_surface_high; color: @tmsb_call_muted; }
+window.tmsb-window.tmsb-call button.tmsb-primary:disabled { background-color: @tmsb_call_surface_high; color: @tmsb_call_muted; filter: none; }
 "#;
 
 thread_local! {
@@ -625,6 +653,31 @@ mod tests {
         let css = stylesheet(Scheme::Dark, Accent::Teal);
         assert!(css.contains("@define-color accent_bg_color @tmsb_tally;"));
         assert!(css.contains("@define-color tmsb_tally #40c8e0;"));
+    }
+
+    #[test]
+    fn a_disabled_primary_is_drawn_at_its_own_colour() {
+        // libadwaita's button:disabled halves the opacity of whatever is
+        // drawn; the neutral plate must not be put halfway into the ground.
+        let css = stylesheet(Scheme::Dark, Accent::Amber);
+        for rule in [
+            "button.tmsb-primary:disabled {",
+            "window.tmsb-window.tmsb-call button.tmsb-primary:disabled {",
+        ] {
+            let at = css.find(rule).unwrap_or_else(|| panic!("no rule {rule}"));
+            let body = &css[at..at + css[at..].find('}').unwrap()];
+            assert!(body.contains("filter: none"), "{rule} keeps the filter");
+        }
+    }
+
+    #[test]
+    fn a_menu_stands_off_the_sidebar_by_night() {
+        let css = stylesheet(Scheme::Dark, Accent::Amber);
+        assert!(css.contains(&format!(
+            "@define-color tmsb_menu {};",
+            DARK.surface_high.css()
+        )));
+        assert_ne!(DARK.surface_high.css(), DARK.surface.css());
     }
 
     #[test]

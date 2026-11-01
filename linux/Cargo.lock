@@ -3939,6 +3939,7 @@ dependencies = [
  "libwebrtc",
  "ort",
  "pipewire",
+ "reqwest",
  "serde",
  "serde_json",
  "tokio",

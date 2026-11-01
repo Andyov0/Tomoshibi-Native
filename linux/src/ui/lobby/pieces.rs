@@ -12,6 +12,7 @@ use crate::{
     app::{self, remote, AppModel, Change},
     i18n::{self, t, t_with, Language},
     theme::motion,
+    ui::kit,
 };
 
 // ---- symbols -----------------------------------------------------------
@@ -254,9 +255,178 @@ pub fn initial(name: &str, size: i32) -> gtk::Label {
     label
 }
 
+/// The account's picture over its initial (the Mac's `AccountAvatar`): the
+/// initial at once, the picture fading in over it once the deployment has
+/// sent it, and again whenever the account changes it. A picture that does
+/// not come leaves the initial.
+pub fn avatar(model: &AppModel, name: &str, size: i32) -> gtk::Overlay {
+    let overlay = gtk::Overlay::new();
+    overlay.set_size_request(size, size);
+    overlay.set_halign(gtk::Align::Center);
+    overlay.set_valign(gtk::Align::Center);
+    overlay.set_child(Some(&initial(name, size)));
+    let picture = gtk::Picture::builder()
+        .content_fit(gtk::ContentFit::Cover)
+        .can_shrink(true)
+        .width_request(size)
+        .height_request(size)
+        .build();
+    picture.add_css_class("tmsb-avatar-picture");
+    picture.set_overflow(gtk::Overflow::Hidden);
+    let slot = fading(&picture, false);
+    slot.set_can_target(false);
+    overlay.add_overlay(&slot);
+    overlay.set_accessible_role(gtk::AccessibleRole::Presentation);
+
+    let shown: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
+    let fill = {
+        let (picture, slot) = (picture.downgrade(), slot.downgrade());
+        move |model: &AppModel| {
+            let address = model.avatar_address();
+            if *shown.borrow() == address {
+                return;
+            }
+            shown.replace(address.clone());
+            let (Some(picture), Some(slot)) = (picture.upgrade(), slot.upgrade()) else {
+                return;
+            };
+            let Some(address) = address else {
+                slot.set_reveal_child(false);
+                return;
+            };
+            if let Some(texture) = PICTURES.with(|kept| kept.borrow().get(&address).cloned()) {
+                picture.set_paintable(Some(&texture));
+                slot.set_reveal_child(true);
+                return;
+            }
+            let (picture, slot, shown) = (picture.downgrade(), slot.downgrade(), shown.clone());
+            glib::spawn_future_local(async move {
+                let Some(bytes) = crate::app::account::fetch_picture(address.clone()).await else {
+                    return;
+                };
+                // Decoded off the main thread, at twice the size drawn for a
+                // sharp picture on a doubled display.
+                let decoded =
+                    gtk::gio::spawn_blocking(move || decode_picture(&bytes, size * 2)).await;
+                let Ok(Some(texture)) = decoded.map(|pixels| pixels.map(|p| p.texture())) else {
+                    return;
+                };
+                PICTURES.with(|kept| kept.borrow_mut().insert(address.clone(), texture.clone()));
+                // Not over a newer picture asked for meanwhile.
+                if shown.borrow().as_deref() != Some(address.as_str()) {
+                    return;
+                }
+                if let (Some(picture), Some(slot)) = (picture.upgrade(), slot.upgrade()) {
+                    picture.set_paintable(Some(&texture));
+                    slot.set_reveal_child(true);
+                }
+            });
+        }
+    };
+    fill(model);
+    model.subscribe_while(&overlay, move |model, change| {
+        if matches!(change, Change::Account) {
+            fill(model);
+        }
+    });
+    overlay
+}
+
+thread_local! {
+    /// The pictures fetched, by address (which carries the picture's
+    /// version), so that a lobby built again shows it at once.
+    static PICTURES: RefCell<std::collections::HashMap<String, gtk::gdk::Texture>> =
+        RefCell::new(std::collections::HashMap::new());
+}
+
+/// A decoded picture's pixels, which can cross threads where a GdkPixbuf
+/// is better not to.
+pub struct Pixels {
+    bytes: glib::Bytes,
+    width: i32,
+    height: i32,
+    stride: usize,
+    alpha: bool,
+}
+
+impl Pixels {
+    pub fn texture(&self) -> gtk::gdk::Texture {
+        gtk::gdk::MemoryTexture::new(
+            self.width,
+            self.height,
+            if self.alpha {
+                gtk::gdk::MemoryFormat::R8g8b8a8
+            } else {
+                gtk::gdk::MemoryFormat::R8g8b8
+            },
+            &self.bytes,
+            self.stride,
+        )
+        .upcast()
+    }
+}
+
+/// `bytes` decoded and scaled to fit `size` square; on any thread.
+pub fn decode_picture(bytes: &[u8], size: i32) -> Option<Pixels> {
+    let stream = gtk::gio::MemoryInputStream::from_bytes(&glib::Bytes::from(bytes));
+    let pixbuf = gtk::gdk_pixbuf::Pixbuf::from_stream_at_scale(
+        &stream,
+        size,
+        size,
+        true,
+        gtk::gio::Cancellable::NONE,
+    )
+    .ok()?;
+    Some(Pixels {
+        bytes: pixbuf.read_pixel_bytes(),
+        width: pixbuf.width(),
+        height: pixbuf.height(),
+        stride: pixbuf.rowstride() as usize,
+        alpha: pixbuf.has_alpha(),
+    })
+}
+
 /// Which of the six colours a name gets: the sum of its code points.
 pub fn initial_colour(name: &str) -> usize {
     name.chars().fold(0u32, |sum, c| sum.wrapping_add(c as u32)) as usize % 6
+}
+
+// ---- the identity box ------------------------------------------------------
+
+/// A field of the box that holds a name and a passphrase, with its symbol
+/// before it: the person for the name, the key for the passphrase, as the
+/// web's two fields have. The symbol is drawn beside the field rather than
+/// in it, because GtkPasswordEntry has no place for one: with the name's
+/// symbol inside its field and none beside the passphrase, the two lines
+/// of words started at different places.
+pub fn identity_field(symbol: &impl IsA<gtk::Widget>, field: &impl IsA<gtk::Widget>) -> gtk::Box {
+    let row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    row.add_css_class("tmsb-field-row");
+    let symbol = symbol.as_ref();
+    symbol.add_css_class("tmsb-muted");
+    symbol.set_valign(gtk::Align::Center);
+    row.append(symbol);
+    field.as_ref().set_hexpand(true);
+    row.append(field);
+    // A press on the symbol is a press on its field.
+    let press = gtk::GestureClick::new();
+    let weak = field.as_ref().downgrade();
+    press.connect_released(move |_, _, _, _| {
+        if let Some(field) = weak.upgrade() {
+            field.grab_focus();
+        }
+    });
+    symbol.add_controller(press);
+    row
+}
+
+/// The name's symbol and the passphrase's.
+pub fn name_symbol() -> gtk::Widget {
+    icon("avatar-default-symbolic", 16).upcast()
+}
+
+pub fn passphrase_symbol() -> gtk::Widget {
+    glyph(Glyph::Key, 16).upcast()
 }
 
 // ---- coming and going ----------------------------------------------------
@@ -281,6 +451,102 @@ pub fn unfolding(child: &impl IsA<gtk::Widget>, shown: bool) -> gtk::Revealer {
         .reveal_child(shown)
         .child(child)
         .build()
+}
+
+// ---- lists that change ------------------------------------------------------
+
+/// The rows of a list kept by what they show, so that a change to the list
+/// moves only what changed: a row that is new unfolds into place, a row
+/// that went folds away before it is removed, a row whose words changed is
+/// changed where it is, and the rest stay as they are. The lobby's lists
+/// were emptied and built again on every change, so every row vanished and
+/// reappeared at once whenever one of them changed.
+/// A row a list is to show: its key, what it looks like, and how to build
+/// it ([`KeptRows::show`]).
+pub type WantedRow = (String, String, Box<dyn Fn() -> gtk::Widget>);
+
+#[derive(Default)]
+pub struct KeptRows {
+    rows: RefCell<Vec<KeptRow>>,
+}
+
+struct KeptRow {
+    key: String,
+    looks: String,
+    row: gtk::ListBoxRow,
+    slot: gtk::Revealer,
+    leaving: Rc<std::cell::Cell<bool>>,
+}
+
+impl KeptRows {
+    /// Makes `list` show `wanted` in order: each a key (what the row is),
+    /// what it looks like now (a row whose looks change is built again in
+    /// place), and how to build it.
+    pub fn show(&self, list: &gtk::ListBox, wanted: Vec<WantedRow>) {
+        let mut rows = self.rows.borrow_mut();
+        // What goes.
+        for kept in rows.iter() {
+            if !kept.leaving.get() && !wanted.iter().any(|(key, _, _)| *key == kept.key) {
+                kept.leaving.set(true);
+                kept.slot.set_reveal_child(false);
+            }
+        }
+        // What comes back, stays or arrives, in order among the rows that
+        // are not leaving.
+        for (place, (key, looks, build)) in wanted.into_iter().enumerate() {
+            let place = place as i32;
+            let found = rows.iter().position(|kept| kept.key == key);
+            match found {
+                Some(index) => {
+                    let kept = &mut rows[index];
+                    kept.leaving.set(false);
+                    kept.slot.set_reveal_child(true);
+                    if kept.looks != looks {
+                        kept.slot.set_child(Some(&build()));
+                        kept.looks = looks;
+                    }
+                    let row = kept.row.clone();
+                    if row.index() != place {
+                        list.remove(&row);
+                        list.insert(&row, place);
+                    }
+                }
+                None => {
+                    let slot = unfolding(&build(), false);
+                    let row = gtk::ListBoxRow::builder()
+                        .child(&slot)
+                        .activatable(false)
+                        .build();
+                    list.insert(&row, place);
+                    let leaving = Rc::new(std::cell::Cell::new(false));
+                    // Removed once folded away, unless it came back meanwhile.
+                    let (weak_list, weak_row, still) =
+                        (list.downgrade(), row.downgrade(), leaving.clone());
+                    slot.connect_child_revealed_notify(move |slot| {
+                        if slot.is_child_revealed() || !still.get() {
+                            return;
+                        }
+                        if let (Some(list), Some(row)) = (weak_list.upgrade(), weak_row.upgrade()) {
+                            if row.parent().as_ref() == Some(list.upcast_ref()) {
+                                list.remove(&row);
+                            }
+                        }
+                    });
+                    // Unfolds once it is in the list, so that it is seen to.
+                    slot.set_reveal_child(true);
+                    rows.push(KeptRow {
+                        key,
+                        looks,
+                        row,
+                        slot,
+                        leaving,
+                    });
+                }
+            }
+        }
+        // Forget the rows that have been removed.
+        rows.retain(|kept| kept.row.parent().is_some());
+    }
 }
 
 /// A line under a heading in the muted voice.
@@ -494,31 +760,64 @@ pub fn menu_row(title: &str, detail: Option<&str>, checked: bool) -> gtk::Button
     let words = gtk::Label::new(Some(title));
     words.set_xalign(0.0);
     words.set_hexpand(true);
+    words.set_ellipsize(gtk::pango::EllipsizeMode::End);
     row.append(&words);
-    if let Some(detail) = detail {
-        let detail = gtk::Label::new(Some(detail));
-        detail.add_css_class("tmsb-muted");
-        detail.add_css_class("tmsb-small");
-        row.append(&detail);
-    }
+    let said = gtk::Label::new(None);
+    said.add_css_class("tmsb-muted");
+    said.add_css_class("tmsb-small");
+    row.append(&said);
     let check = icon("object-select-symbolic", 14);
-    check.set_opacity(if checked { 1.0 } else { 0.0 });
     check.add_css_class("tmsb-tally-text");
     row.append(&check);
-    let button = gtk::Button::builder().child(&row).build();
+    // Read out as one of a menu's choices, the chosen one checked.
+    let button = gtk::Button::builder()
+        .child(&row)
+        .accessible_role(gtk::AccessibleRole::MenuItemRadio)
+        .build();
     button.add_css_class("tmsb-menu-row");
+    button.update_property(&[gtk::accessible::Property::Label(title)]);
+    set_menu_row(&button, detail, checked);
     button
 }
 
-pub fn menu_popover(width: i32) -> (gtk::Popover, gtk::Box) {
-    let column = gtk::Box::new(gtk::Orientation::Vertical, 2);
-    column.set_width_request(width);
-    let popover = gtk::Popover::builder()
-        .child(&column)
-        .has_arrow(false)
-        .build();
-    popover.add_css_class("tmsb-menu");
-    (popover, column)
+/// A row of [`menu_row`]'s changed in place: its detail and its check. A
+/// menu that is open while what it lists changes (the servers' times
+/// arriving) keeps its rows, and the keyboard on the one it was on, rather
+/// than being built again under the pointer.
+pub fn set_menu_row(row: &gtk::Button, detail: Option<&str>, checked: bool) {
+    let Some(line) = row.child() else {
+        return;
+    };
+    let said = line
+        .first_child()
+        .and_then(|words| words.next_sibling())
+        .and_downcast::<gtk::Label>();
+    if let Some(said) = said {
+        said.set_label(detail.unwrap_or_default());
+        said.set_visible(detail.is_some());
+        if let Some(check) = said.next_sibling() {
+            check.set_opacity(if checked { 1.0 } else { 0.0 });
+        }
+    }
+    row.update_state(&[gtk::accessible::State::Checked(if checked {
+        gtk::AccessibleTristate::True
+    } else {
+        gtk::AccessibleTristate::False
+    })]);
+}
+
+/// A menu `width` wide hanging from `anchor` (kit::Menu: drawn in the
+/// window, arriving and leaving with a transition), and the column its rows
+/// go in.
+pub fn menu_for(
+    anchor: &impl IsA<gtk::Widget>,
+    width: i32,
+    side: kit::MenuSide,
+    align: kit::MenuAlign,
+) -> (kit::Menu, gtk::Box) {
+    let menu = kit::Menu::new(anchor, width, side, align);
+    let column = menu.column();
+    (menu, column)
 }
 
 pub fn menu_rule() -> gtk::Separator {
@@ -529,18 +828,16 @@ pub fn menu_rule() -> gtk::Separator {
 
 /// The language, before a call as on every web page; following the system
 /// until somebody chooses. The choice is kept under the web's own name.
-pub fn language_button(model: &AppModel) -> gtk::MenuButton {
-    let button = gtk::MenuButton::builder()
-        .child(&glyph(Glyph::Globe, 15))
-        .tooltip_text(t("Language"))
-        .valign(gtk::Align::Center)
-        .build();
+pub fn language_button(model: &AppModel) -> gtk::Button {
+    let button = kit::menu_button(&glyph(Glyph::Globe, 15));
+    button.set_tooltip_text(Some(&t("Language")));
+    button.set_valign(gtk::Align::Center);
     button.add_css_class("tmsb-round");
     button.add_css_class("tmsb-language");
     button.set_size_request(32, 32);
     button.set_widget_name("lobby.language");
     button.update_property(&[gtk::accessible::Property::Label(&t("Language"))]);
-    let (popover, column) = menu_popover(230);
+    let (menu, column) = menu_for(&button, 230, kit::MenuSide::Below, kit::MenuAlign::End);
     let system = Language::detect(i18n::system_languages().iter().map(String::as_str));
     let follow = menu_row(
         &t("Same as the system"),
@@ -550,10 +847,10 @@ pub fn language_button(model: &AppModel) -> gtk::MenuButton {
     column.append(&follow);
     column.append(&menu_rule());
     let weak = model.downgrade();
-    let popover_weak = popover.downgrade();
+    let menu_weak = menu.downgrade();
     follow.connect_clicked(move |_| {
-        if let Some(popover) = popover_weak.upgrade() {
-            popover.popdown();
+        if let Some(menu) = menu_weak.upgrade() {
+            menu.popdown();
         }
         if let Some(model) = weak.upgrade() {
             model.preferences().remove(i18n::STORAGE_KEY);
@@ -567,10 +864,10 @@ pub fn language_button(model: &AppModel) -> gtk::MenuButton {
             i18n::chosen() && i18n::language() == language,
         );
         let weak = model.downgrade();
-        let popover_weak = popover.downgrade();
+        let menu_weak = menu.downgrade();
         row.connect_clicked(move |_| {
-            if let Some(popover) = popover_weak.upgrade() {
-                popover.popdown();
+            if let Some(menu) = menu_weak.upgrade() {
+                menu.popdown();
             }
             if let Some(model) = weak.upgrade() {
                 model.preferences().set(i18n::STORAGE_KEY, language.code());
@@ -579,28 +876,25 @@ pub fn language_button(model: &AppModel) -> gtk::MenuButton {
         });
         column.append(&row);
     }
-    button.set_popover(Some(&popover));
     button
 }
 
 /// Where the call is held: the fastest automatically, or a relay somebody
 /// picks (ServerPicker.tsx), as a menu that measures when it opens.
-pub fn server_menu(model: &AppModel) -> gtk::MenuButton {
+pub fn server_menu(model: &AppModel) -> gtk::Button {
     let words = gtk::Label::new(None);
     words.set_ellipsize(gtk::pango::EllipsizeMode::End);
     words.set_max_width_chars(18);
     let row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
     row.append(&icon("network-server-symbolic", 13));
     row.append(&words);
-    let button = gtk::MenuButton::builder()
-        .child(&row)
-        .valign(gtk::Align::Center)
-        .tooltip_text(t("Server"))
-        .build();
+    row.append(&icon("pan-down-symbolic", 11));
+    let button = kit::menu_button(&row);
+    button.set_valign(gtk::Align::Center);
+    button.set_tooltip_text(Some(&t("Server")));
     button.add_css_class("tmsb-pill");
     button.set_widget_name("lobby.server");
-    let (popover, column) = menu_popover(260);
-    button.set_popover(Some(&popover));
+    let (menu, column) = menu_for(&button, 260, kit::MenuSide::Below, kit::MenuAlign::End);
     let fill_words = {
         let words = words.downgrade();
         move |model: &AppModel| {
@@ -613,25 +907,75 @@ pub fn server_menu(model: &AppModel) -> gtk::MenuButton {
         }
     };
     fill_words(model);
+    // The rows, by relay (None for Automatic), and what they were built
+    // for: the same relays are changed in place.
+    type Rows = (String, Vec<(Option<String>, gtk::Button)>);
+    let rows: Rc<RefCell<Rows>> = Rc::new(RefCell::new((String::new(), Vec::new())));
     let fill_menu = {
-        let (column, popover) = (column.downgrade(), popover.downgrade());
+        let (column, menu) = (column.downgrade(), menu.downgrade());
         move |model: &AppModel| {
-            let (Some(column), Some(popover)) = (column.upgrade(), popover.upgrade()) else {
+            let (Some(column), Some(menu)) = (column.upgrade(), menu.upgrade()) else {
                 return;
             };
+            let fastest = model.fastest_relay();
+            let automatic_detail = fastest
+                .as_ref()
+                .map(|(name, millis)| format!("{} · {:.0} ms", model.relay_label(name), millis));
+            let measured = model.lobby().measured.borrow().clone();
+            let detail_of = |name: &str| {
+                measured
+                    .as_ref()
+                    .and_then(|measured| measured.get(name).copied().flatten())
+                    .map(|millis| format!("{millis:.0} ms"))
+            };
+            let regions = model.relays_by_region();
+            let built_for = regions
+                .iter()
+                .map(|(region, relays)| {
+                    let names: Vec<String> = relays
+                        .iter()
+                        .map(|relay| {
+                            format!(
+                                "{}:{}:{}",
+                                relay.name,
+                                model.relay_label(&relay.name),
+                                relay.maintenance
+                            )
+                        })
+                        .collect();
+                    format!("{region}[{}]", names.join(","))
+                })
+                .collect::<Vec<_>>()
+                .join(";");
+            let chosen = model.relay_choice();
+            {
+                let kept = rows.borrow();
+                if kept.0 == built_for && !kept.1.is_empty() {
+                    for (relay, row) in &kept.1 {
+                        match relay {
+                            None => {
+                                set_menu_row(row, automatic_detail.as_deref(), chosen.is_none())
+                            }
+                            Some(name) => set_menu_row(
+                                row,
+                                detail_of(name).as_deref(),
+                                chosen.as_deref() == Some(name.as_str()),
+                            ),
+                        }
+                    }
+                    return;
+                }
+            }
             while let Some(child) = column.first_child() {
                 column.remove(&child);
             }
-            let fastest = model.fastest_relay();
+            let mut built = Vec::new();
             let automatic = menu_row(
                 &t("Automatic"),
-                fastest
-                    .as_ref()
-                    .map(|(name, millis)| format!("{} · {:.0} ms", model.relay_label(name), millis))
-                    .as_deref(),
-                model.relay_choice().is_none(),
+                automatic_detail.as_deref(),
+                chosen.is_none(),
             );
-            let (weak, pop) = (model.downgrade(), popover.downgrade());
+            let (weak, pop) = (model.downgrade(), menu.downgrade());
             automatic.connect_clicked(move |_| {
                 if let Some(model) = weak.upgrade() {
                     model.set_relay_choice(None);
@@ -641,9 +985,9 @@ pub fn server_menu(model: &AppModel) -> gtk::MenuButton {
                 }
             });
             column.append(&automatic);
+            built.push((None, automatic));
             column.append(&menu_rule());
-            let measured = model.lobby().measured.borrow().clone();
-            for (region, relays) in model.relays_by_region() {
+            for (region, relays) in regions {
                 if !region.is_empty() {
                     let label = gtk::Label::new(Some(&region));
                     label.set_xalign(0.0);
@@ -651,18 +995,14 @@ pub fn server_menu(model: &AppModel) -> gtk::MenuButton {
                     column.append(&label);
                 }
                 for relay in relays {
-                    let millis = measured
-                        .as_ref()
-                        .and_then(|measured| measured.get(&relay.name).copied().flatten())
-                        .map(|millis| format!("{millis:.0} ms"));
                     let row = menu_row(
                         &model.relay_label(&relay.name),
-                        millis.as_deref(),
-                        model.relay_choice().as_deref() == Some(&relay.name),
+                        detail_of(&relay.name).as_deref(),
+                        chosen.as_deref() == Some(&relay.name),
                     );
                     row.set_sensitive(!relay.maintenance);
                     let (weak, pop, name) =
-                        (model.downgrade(), popover.downgrade(), relay.name.clone());
+                        (model.downgrade(), menu.downgrade(), relay.name.clone());
                     row.connect_clicked(move |_| {
                         if let Some(model) = weak.upgrade() {
                             model.set_relay_choice(Some(name.clone()));
@@ -672,13 +1012,15 @@ pub fn server_menu(model: &AppModel) -> gtk::MenuButton {
                         }
                     });
                     column.append(&row);
+                    built.push((Some(relay.name.clone()), row));
                 }
             }
+            rows.replace((built_for, built));
         }
     };
     fill_menu(model);
     let weak = model.downgrade();
-    popover.connect_show(move |_| {
+    menu.connect_opened(move || {
         if let Some(model) = weak.upgrade() {
             model.measure_relays();
         }

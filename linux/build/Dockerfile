@@ -9,10 +9,10 @@
 # image is the toolchain alone and is rebuilt only when this file changes.
 
 # The base for one architecture, by digest. build.sh passes the digest of
-# ubuntu:24.04's image for the architecture it builds: the build VM has no
-# buildx, and the legacy builder takes the local ubuntu:24.04 (the VM's own
-# arm64) for an amd64 build whatever --platform says, which installed arm64
-# packages into the x86_64 image.
+# ubuntu:24.04's image for the architecture it builds: a docker host with no
+# buildx uses the legacy builder, which takes the local ubuntu:24.04 (the
+# host's own arm64) for an amd64 build whatever --platform says, and that
+# installed arm64 packages into the x86_64 image.
 ARG BASE=ubuntu:24.04
 FROM ${BASE}
 
@@ -69,14 +69,14 @@ ENV CXX=clang++-${LLVM_VERSION} \
 # Everything is linked with lld rather than GNU ld. Every binary that links
 # the core carries the prebuilt WebRTC, and GNU ld needed so much memory for
 # each that the core's test binaries, linked side by side, were killed by
-# the VM running out of it (ld terminated with signal 9); lld links the
+# the build machine running out of it (ld terminated with signal 9); lld links the
 # same in a fraction of the memory and the time. gcc stays the driver and
 # finds lld by its plain name.
 RUN ln -s /usr/lib/llvm-${LLVM_VERSION}/bin/ld.lld /usr/local/bin/ld.lld
 ENV CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_RUSTFLAGS="-C link-arg=-fuse-ld=lld" \
     CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS="-C link-arg=-fuse-ld=lld"
 
-# Rust at a fixed version, so that both architectures and every branch's build
+# Rust at a fixed version, so that both architectures and every build
 # agree. RUSTUP_HOME and the cargo binaries are in the image; the registry and
 # git checkouts under CARGO_HOME are volumes that build.sh mounts over them.
 ENV RUSTUP_HOME=/opt/rustup \

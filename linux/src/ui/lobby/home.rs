@@ -9,7 +9,7 @@
 //! The section somebody is in is kept in the model, so that a lobby built
 //! again (a change of language) opens where it was.
 
-use std::cell::Cell;
+use std::{cell::Cell, rc::Rc};
 
 use adw::prelude::*;
 use gtk::glib;
@@ -20,7 +20,7 @@ use super::{
     schedule, servers, sheet, stage, update_offer,
 };
 use crate::{
-    app::{self, lobby, words, AppModel, Change},
+    app::{self, lobby, log, words, AppModel, Change},
     i18n::{t, t_with},
     theme::motion,
     ui::{kit, settings, Context},
@@ -187,6 +187,32 @@ pub fn page(context: &Context) -> gtk::Widget {
     main.add_top_bar(&pieces::notice_card(model));
     main.set_content(Some(&pieces::with_toast(model, &sections)));
     main.add_css_class("tmsb-main");
+    // The stage reaches the top of the window under the bar, whose ground
+    // is clear, as the Mac's stage runs under its toolbar: below the bar,
+    // a camera picture had a strip of the page's ground above it, 46 high
+    // and light by day. The greeting and the other sections start below the
+    // bars, however tall the notice makes them.
+    main.set_extend_content_to_top_edge(true);
+    {
+        let (words, sections) = (home.2.downgrade(), sections.downgrade());
+        let follow = move |main: &adw::ToolbarView| {
+            let height = main.top_bar_height();
+            if let Some(words) = words.upgrade() {
+                words.set_margin_top(height + 10);
+            }
+            if let Some(sections) = sections.upgrade() {
+                let mut child = sections.first_child();
+                while let Some(section) = child {
+                    child = section.next_sibling();
+                    if sections.page(&section).name().as_deref() != Some(Place::Home.name()) {
+                        section.set_margin_top(height);
+                    }
+                }
+            }
+        };
+        follow(&main);
+        main.connect_top_bar_height_notify(follow);
+    }
 
     let split = adw::OverlaySplitView::builder()
         .sidebar(&sidebar)
@@ -274,6 +300,12 @@ pub fn page(context: &Context) -> gtk::Widget {
                     Place::Servers => servers::section(&ctx),
                     Place::Home => unreachable!(),
                 };
+                // Below the bars the stage runs under (above).
+                if let Some(main) = sections.ancestor(adw::ToolbarView::static_type()) {
+                    if let Ok(main) = main.downcast::<adw::ToolbarView>() {
+                        section.set_margin_top(main.top_bar_height());
+                    }
+                }
                 sections.add_named(&section, Some(place.name()));
             }
             sections.set_visible_child_name(place.name());
@@ -287,7 +319,12 @@ pub fn page(context: &Context) -> gtk::Widget {
     };
     show_place(model);
 
+    let (upcoming_rows, recent_rows) = (
+        Rc::new(pieces::KeptRows::default()),
+        Rc::new(pieces::KeptRows::default()),
+    );
     let fill = {
+        let (upcoming_rows, recent_rows) = (upcoming_rows.clone(), recent_rows.clone());
         let (
             servers_row,
             server_slot,
@@ -321,18 +358,39 @@ pub fn page(context: &Context) -> gtk::Widget {
             }
             if let (Some(list), Some(revealer)) = (upcoming.upgrade(), upcoming_revealer.upgrade())
             {
-                list.remove_all();
-                for one in coming.iter().take(5) {
-                    list.append(&meeting_row(model, one));
-                }
+                let wanted = coming
+                    .iter()
+                    .take(5)
+                    .map(|one| {
+                        let looks = format!("{}|{}|{}", one.room, one.at, one.started);
+                        let key = one_key(&one.id, &one.room);
+                        let (weak, one) = (model.downgrade(), one.clone());
+                        let build: Box<dyn Fn() -> gtk::Widget> =
+                            Box::new(move || match weak.upgrade() {
+                                Some(model) => meeting_row(&model, &one),
+                                None => gtk::Box::new(gtk::Orientation::Vertical, 0).upcast(),
+                            });
+                        (key, looks, build)
+                    })
+                    .collect();
+                upcoming_rows.show(&list, wanted);
                 revealer.set_reveal_child(!coming.is_empty());
             }
             if let (Some(list), Some(revealer)) = (recent.upgrade(), recent_revealer.upgrade()) {
-                list.remove_all();
                 let recents = model.recent_here();
-                for one in recents.iter().take(6) {
-                    list.append(&recent_row(&ctx, one));
-                }
+                let wanted = recents
+                    .iter()
+                    .take(6)
+                    .map(|one| {
+                        let looks = words::lately(one.at_ms / 1000);
+                        let key = one.room.clone();
+                        let (ctx, one) = (ctx.clone(), one.clone());
+                        let build: Box<dyn Fn() -> gtk::Widget> =
+                            Box::new(move || recent_row(&ctx, &one));
+                        (key, looks, build)
+                    })
+                    .collect();
+                recent_rows.show(&list, wanted);
                 revealer.set_reveal_child(!recents.is_empty());
             }
         }
@@ -369,7 +427,7 @@ pub fn page(context: &Context) -> gtk::Widget {
     }
 
     open_from_debug(context, &bin, false);
-    bin.upcast()
+    kit::menu_layer(&bin).upcast()
 }
 
 /// TOMOSHIBI_DEBUG_LOBBY: a part of the lobby opened at start, once, for a
@@ -390,10 +448,58 @@ pub fn open_from_debug(context: &Context, anchor: &impl IsA<gtk::Widget>, signin
     }
     let ctx = context.clone();
     let anchor = anchor.as_ref().downgrade();
-    glib::timeout_add_local_once(std::time::Duration::from_millis(400), move || {
+    // A menu once the screen has arrived, so that a picture of its own
+    // arrival is not taken over the screen's; the rest as before.
+    // `<menu>-close` opens it and closes it a second later, for a picture
+    // of it leaving.
+    let (part, closes) = match part.strip_suffix("-close") {
+        Some(menu) => (menu.to_owned(), true),
+        None => (part, false),
+    };
+    let after = if matches!(part.as_str(), "account" | "language" | "server") {
+        1500
+    } else {
+        400
+    };
+    glib::timeout_add_local_once(std::time::Duration::from_millis(after), move || {
         let model = &ctx.model;
         match part.as_str() {
             "start" => sheet::present(&ctx, sheet::Mode::Start),
+            // Start pressed and the sheet closed at once, as Escape or a
+            // press outside closes it: nothing must come of the press.
+            "start-escape" => {
+                sheet::present(&ctx, sheet::Mode::Start);
+                let ctx = ctx.clone();
+                glib::timeout_add_local_once(std::time::Duration::from_millis(600), move || {
+                    let Some(window) = ctx.window() else {
+                        return;
+                    };
+                    let Some(dialog) = window.visible_dialog() else {
+                        return;
+                    };
+                    let root = dialog.clone().upcast::<gtk::Widget>();
+                    if let Some(room) = find(&root, "sheet.room").and_downcast::<gtk::Entry>() {
+                        room.set_text("escape-test");
+                    }
+                    if let Some(go) = find(&root, "sheet.go").and_downcast::<gtk::Button>() {
+                        log("pressing Start, then closing the sheet as Escape does");
+                        go.emit_clicked();
+                    }
+                    dialog.close();
+                    let model = ctx.model.downgrade();
+                    glib::timeout_add_local_once(
+                        std::time::Duration::from_millis(4000),
+                        move || {
+                            if let Some(model) = model.upgrade() {
+                                log(&format!(
+                                    "after the sheet closed: {}",
+                                    model.screen().name()
+                                ));
+                            }
+                        },
+                    );
+                });
+            }
             "join" => sheet::present(&ctx, sheet::Mode::Join(String::new())),
             "again" => {
                 let room = model
@@ -411,16 +517,17 @@ pub fn open_from_debug(context: &Context, anchor: &impl IsA<gtk::Widget>, signin
                 if let Some(anchor) = anchor.upgrade() {
                     let name = format!("lobby.{part}");
                     let name = name.as_str();
-                    if let Some(button) =
-                        find(&anchor, name).and_then(|w| w.downcast::<gtk::MenuButton>().ok())
-                    {
-                        // Without a press there is no input serial, and a
-                        // compositor refuses a popup that grabs without
-                        // one: a picture's menu is opened without the grab.
-                        if let Some(popover) = button.popover() {
-                            popover.set_autohide(false);
+                    if let Some(menu) = find(&anchor, name).and_then(|w| kit::Menu::of(&w)) {
+                        menu.popup();
+                        if closes {
+                            glib::timeout_add_local_once(
+                                std::time::Duration::from_millis(1000),
+                                move || {
+                                    log("closing the menu");
+                                    menu.popdown();
+                                },
+                            );
                         }
-                        button.popup();
                     }
                 }
             }
@@ -481,7 +588,7 @@ fn section_title(text: &str) -> gtk::Label {
 
 /// An arranged meeting in the sidebar: its room and when; it opens as its
 /// link does.
-fn meeting_row(model: &AppModel, one: &tomoshibi_protocol::api::Arrangement) -> gtk::ListBoxRow {
+fn meeting_row(model: &AppModel, one: &tomoshibi_protocol::api::Arrangement) -> gtk::Widget {
     let column = gtk::Box::new(gtk::Orientation::Vertical, 1);
     let room = gtk::Label::new(Some(&one.room));
     room.set_xalign(0.0);
@@ -509,17 +616,24 @@ fn meeting_row(model: &AppModel, one: &tomoshibi_protocol::api::Arrangement) -> 
             model.open_meeting(&one);
         }
     });
-    gtk::ListBoxRow::builder()
-        .child(&button)
-        .activatable(false)
-        .build()
+    button.upcast()
+}
+
+/// What an arranged meeting's row is kept by: its id, or its room for a
+/// deployment that gives none.
+fn one_key(id: &str, room: &str) -> String {
+    if id.is_empty() {
+        format!("room:{room}")
+    } else {
+        id.to_owned()
+    }
 }
 
 /// A recent room: the row opens it again (joined if a meeting is live in
 /// it, started again under the same name if not); the cross that takes it
 /// off the list shows under the pointer, as a sidebar's own rows show what
 /// they offer.
-fn recent_row(context: &Context, recent: &lobby::Recent) -> gtk::ListBoxRow {
+fn recent_row(context: &Context, recent: &lobby::Recent) -> gtk::Widget {
     let row_box = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     row_box.append(&pieces::initial(&recent.room, 26));
     let column = gtk::Box::new(gtk::Orientation::Vertical, 1);
@@ -567,10 +681,7 @@ fn recent_row(context: &Context, recent: &lobby::Recent) -> gtk::ListBoxRow {
             model.forget_recent(&recent);
         }
     });
-    gtk::ListBoxRow::builder()
-        .child(&line)
-        .activatable(false)
-        .build()
+    line.upcast()
 }
 
 /// How much of the fleet is answering, in a light and two numbers
@@ -619,9 +730,9 @@ fn fleet_line(model: &AppModel) -> gtk::Revealer {
 
 /// The account, the settings and signing out, as the app's own menu over
 /// the sidebar's foot.
-fn account_button(context: &Context, name: &str) -> gtk::MenuButton {
+fn account_button(context: &Context, name: &str) -> gtk::Button {
     let row = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-    row.append(&pieces::initial(name, 30));
+    row.append(&pieces::avatar(&context.model, name, 30));
     let label = gtk::Label::new(Some(name));
     label.set_xalign(0.0);
     label.set_hexpand(true);
@@ -629,22 +740,19 @@ fn account_button(context: &Context, name: &str) -> gtk::MenuButton {
     label.add_css_class("tmsb-strong");
     row.append(&label);
     row.append(&icon("pan-down-symbolic", 12));
-    let button = gtk::MenuButton::builder()
-        .child(&row)
-        .direction(gtk::ArrowType::Up)
-        .tooltip_text(t("Settings"))
-        .build();
+    let button = kit::menu_button(&row);
+    button.set_tooltip_text(Some(&t("Settings")));
     button.add_css_class("tmsb-account");
     button.set_widget_name("lobby.account");
-    let (popover, column) = pieces::menu_popover(262);
+    let (menu, column) =
+        pieces::menu_for(&button, 262, kit::MenuSide::Above, kit::MenuAlign::Start);
     let settings_row = menu_item(&t("Settings"), "emblem-system-symbolic");
     let sign_out_row = menu_item(&t("Sign out"), "system-log-out-symbolic");
     sign_out_row.add_css_class("tmsb-destructive");
     column.append(&settings_row);
     column.append(&pieces::menu_rule());
     column.append(&sign_out_row);
-    button.set_popover(Some(&popover));
-    let (ctx, pop) = (context.clone(), popover.downgrade());
+    let (ctx, pop) = (context.clone(), menu.downgrade());
     settings_row.connect_clicked(move |_| {
         if let Some(pop) = pop.upgrade() {
             pop.popdown();
@@ -653,7 +761,7 @@ fn account_button(context: &Context, name: &str) -> gtk::MenuButton {
             settings::present(&ctx, &window, None);
         }
     });
-    let (ctx, pop) = (context.clone(), popover.downgrade());
+    let (ctx, pop) = (context.clone(), menu.downgrade());
     sign_out_row.connect_clicked(move |_| {
         if let Some(pop) = pop.upgrade() {
             pop.popdown();
@@ -670,7 +778,10 @@ fn menu_item(title: &str, symbol: &str) -> gtk::Button {
     label.set_xalign(0.0);
     label.set_hexpand(true);
     row.append(&label);
-    let button = gtk::Button::builder().child(&row).build();
+    let button = gtk::Button::builder()
+        .child(&row)
+        .accessible_role(gtk::AccessibleRole::MenuItem)
+        .build();
     button.add_css_class("tmsb-menu-row");
     button
 }
@@ -704,7 +815,7 @@ pub fn ask_to_sign_out(context: &Context) {
 
 /// Home: the picture of yourself, a greeting, and the switches for how you
 /// will arrive.
-fn home_stage(context: &Context, name: &str) -> (gtk::Overlay, Portraits) {
+fn home_stage(context: &Context, name: &str) -> (gtk::Overlay, Portraits, kit::Arrival) {
     let stage = stage::stage(context, super::animals::Placement::Stage);
     let overlay = gtk::Overlay::new();
     overlay.set_child(Some(&stage.widget));
@@ -736,5 +847,5 @@ fn home_stage(context: &Context, name: &str) -> (gtk::Overlay, Portraits) {
     switches.set_valign(gtk::Align::End);
     switches.set_margin_bottom(28);
     overlay.add_overlay(&switches);
-    (overlay, stage.portraits)
+    (overlay, stage.portraits, words)
 }

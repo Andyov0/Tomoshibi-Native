@@ -31,10 +31,10 @@
 # The two AppImages are extracted here, at build time, so that a container
 # with no FUSE (every container) runs them as plain programs. Before that, the
 # AppImage magic (the bytes "AI" and the type, 2, at offset 8 of the ELF
-# header's padding) is zeroed in these downloaded copies: the build VM runs
-# x86_64 code with Rosetta, whose binfmt entry matches the whole ELF
-# identification, padding included, and an x86_64 AppImage with its magic
-# there was "Exec format error" in the x86_64 image. A machine that runs
+# header's padding) is zeroed in these downloaded copies: an arm64 docker
+# host may run x86_64 code through an emulator whose binfmt entry matches the
+# whole ELF identification, padding included, and an x86_64 AppImage with
+# its magic there was "Exec format error" in the x86_64 image. A machine that runs
 # x86_64 code itself ignores the padding, and the runtime does not read it.
 ARG BUILD_IMAGE
 FROM ${BUILD_IMAGE}
