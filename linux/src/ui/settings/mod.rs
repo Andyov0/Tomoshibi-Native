@@ -133,4 +133,16 @@ const CSS: &str = r#"
 .tmsb-settings .tmsb-profile-name { font-size: 19px; font-weight: 600; }
 .tmsb-settings .tmsb-about-name { font-size: 26px; font-weight: 700; }
 .tmsb-settings .tmsb-mono { font-family: monospace; }
+.tmsb-settings .tmsb-check {
+  background-color: @tmsb_surface; border-radius: 20px; border: 1px solid alpha(@tmsb_wash, 0.08);
+}
+.tmsb-settings .tmsb-hearing {
+  min-height: 32px; padding: 0 12px; border-radius: 999px;
+  background-color: alpha(@tmsb_bg, 0.86); color: @tmsb_fg; font-size: 12px; font-weight: 500;
+}
+.tmsb-settings .tmsb-meter > box {
+  border-radius: 2px; background-color: alpha(@tmsb_fg, 0.12);
+  transition: background-color 80ms ease-out;
+}
+.tmsb-settings .tmsb-meter > box.lit { background-color: @tmsb_tally; }
 "#;
