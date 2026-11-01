@@ -9,7 +9,7 @@
 //! The section somebody is in is kept in the model, so that a lobby built
 //! again (a change of language) opens where it was.
 
-use std::cell::Cell;
+use std::{cell::Cell, rc::Rc};
 
 use adw::prelude::*;
 use gtk::glib;
@@ -319,7 +319,12 @@ pub fn page(context: &Context) -> gtk::Widget {
     };
     show_place(model);
 
+    let (upcoming_rows, recent_rows) = (
+        Rc::new(pieces::KeptRows::default()),
+        Rc::new(pieces::KeptRows::default()),
+    );
     let fill = {
+        let (upcoming_rows, recent_rows) = (upcoming_rows.clone(), recent_rows.clone());
         let (
             servers_row,
             server_slot,
@@ -353,18 +358,37 @@ pub fn page(context: &Context) -> gtk::Widget {
             }
             if let (Some(list), Some(revealer)) = (upcoming.upgrade(), upcoming_revealer.upgrade())
             {
-                list.remove_all();
-                for one in coming.iter().take(5) {
-                    list.append(&meeting_row(model, one));
-                }
+                let wanted = coming
+                    .iter()
+                    .take(5)
+                    .map(|one| {
+                        let looks = format!("{}|{}|{}", one.room, one.at, one.started);
+                        let key = one_key(&one.id, &one.room);
+                        let (weak, one) = (model.downgrade(), one.clone());
+                        let build: Box<dyn Fn() -> gtk::Widget> = Box::new(move || match weak.upgrade() {
+                            Some(model) => meeting_row(&model, &one),
+                            None => gtk::Box::new(gtk::Orientation::Vertical, 0).upcast(),
+                        });
+                        (key, looks, build)
+                    })
+                    .collect();
+                upcoming_rows.show(&list, wanted);
                 revealer.set_reveal_child(!coming.is_empty());
             }
             if let (Some(list), Some(revealer)) = (recent.upgrade(), recent_revealer.upgrade()) {
-                list.remove_all();
                 let recents = model.recent_here();
-                for one in recents.iter().take(6) {
-                    list.append(&recent_row(&ctx, one));
-                }
+                let wanted = recents
+                    .iter()
+                    .take(6)
+                    .map(|one| {
+                        let looks = words::lately(one.at_ms / 1000);
+                        let key = one.room.clone();
+                        let (ctx, one) = (ctx.clone(), one.clone());
+                        let build: Box<dyn Fn() -> gtk::Widget> = Box::new(move || recent_row(&ctx, &one));
+                        (key, looks, build)
+                    })
+                    .collect();
+                recent_rows.show(&list, wanted);
                 revealer.set_reveal_child(!recents.is_empty());
             }
         }
@@ -556,7 +580,7 @@ fn section_title(text: &str) -> gtk::Label {
 
 /// An arranged meeting in the sidebar: its room and when; it opens as its
 /// link does.
-fn meeting_row(model: &AppModel, one: &tomoshibi_protocol::api::Arrangement) -> gtk::ListBoxRow {
+fn meeting_row(model: &AppModel, one: &tomoshibi_protocol::api::Arrangement) -> gtk::Widget {
     let column = gtk::Box::new(gtk::Orientation::Vertical, 1);
     let room = gtk::Label::new(Some(&one.room));
     room.set_xalign(0.0);
@@ -584,17 +608,24 @@ fn meeting_row(model: &AppModel, one: &tomoshibi_protocol::api::Arrangement) -> 
             model.open_meeting(&one);
         }
     });
-    gtk::ListBoxRow::builder()
-        .child(&button)
-        .activatable(false)
-        .build()
+    button.upcast()
+}
+
+/// What an arranged meeting's row is kept by: its id, or its room for a
+/// deployment that gives none.
+fn one_key(id: &str, room: &str) -> String {
+    if id.is_empty() {
+        format!("room:{room}")
+    } else {
+        id.to_owned()
+    }
 }
 
 /// A recent room: the row opens it again (joined if a meeting is live in
 /// it, started again under the same name if not); the cross that takes it
 /// off the list shows under the pointer, as a sidebar's own rows show what
 /// they offer.
-fn recent_row(context: &Context, recent: &lobby::Recent) -> gtk::ListBoxRow {
+fn recent_row(context: &Context, recent: &lobby::Recent) -> gtk::Widget {
     let row_box = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     row_box.append(&pieces::initial(&recent.room, 26));
     let column = gtk::Box::new(gtk::Orientation::Vertical, 1);
@@ -642,10 +673,7 @@ fn recent_row(context: &Context, recent: &lobby::Recent) -> gtk::ListBoxRow {
             model.forget_recent(&recent);
         }
     });
-    gtk::ListBoxRow::builder()
-        .child(&line)
-        .activatable(false)
-        .build()
+    line.upcast()
 }
 
 /// How much of the fleet is answering, in a light and two numbers

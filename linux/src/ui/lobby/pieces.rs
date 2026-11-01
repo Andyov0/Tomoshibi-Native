@@ -452,6 +452,99 @@ pub fn unfolding(child: &impl IsA<gtk::Widget>, shown: bool) -> gtk::Revealer {
         .build()
 }
 
+// ---- lists that change ------------------------------------------------------
+
+/// The rows of a list kept by what they show, so that a change to the list
+/// moves only what changed: a row that is new unfolds into place, a row
+/// that went folds away before it is removed, a row whose words changed is
+/// changed where it is, and the rest stay as they are. The lobby's lists
+/// were emptied and built again on every change, so every row vanished and
+/// reappeared at once whenever one of them changed.
+#[derive(Default)]
+pub struct KeptRows {
+    rows: RefCell<Vec<KeptRow>>,
+}
+
+struct KeptRow {
+    key: String,
+    looks: String,
+    row: gtk::ListBoxRow,
+    slot: gtk::Revealer,
+    leaving: Rc<std::cell::Cell<bool>>,
+}
+
+impl KeptRows {
+    /// Makes `list` show `wanted` in order: each a key (what the row is),
+    /// what it looks like now (a row whose looks change is built again in
+    /// place), and how to build it.
+    pub fn show(&self, list: &gtk::ListBox, wanted: Vec<(String, String, Box<dyn Fn() -> gtk::Widget>)>) {
+        let mut rows = self.rows.borrow_mut();
+        // What goes.
+        for kept in rows.iter() {
+            if !kept.leaving.get() && !wanted.iter().any(|(key, _, _)| *key == kept.key) {
+                kept.leaving.set(true);
+                kept.slot.set_reveal_child(false);
+            }
+        }
+        // What comes back, stays or arrives, in order among the rows that
+        // are not leaving.
+        let mut place = 0;
+        for (key, looks, build) in wanted {
+            let found = rows.iter().position(|kept| kept.key == key);
+            match found {
+                Some(index) => {
+                    let kept = &mut rows[index];
+                    kept.leaving.set(false);
+                    kept.slot.set_reveal_child(true);
+                    if kept.looks != looks {
+                        kept.slot.set_child(Some(&build()));
+                        kept.looks = looks;
+                    }
+                    let row = kept.row.clone();
+                    if row.index() != place {
+                        list.remove(&row);
+                        list.insert(&row, place);
+                    }
+                }
+                None => {
+                    let slot = unfolding(&build(), false);
+                    let row = gtk::ListBoxRow::builder()
+                        .child(&slot)
+                        .activatable(false)
+                        .build();
+                    list.insert(&row, place);
+                    let leaving = Rc::new(std::cell::Cell::new(false));
+                    // Removed once folded away, unless it came back meanwhile.
+                    let (weak_list, weak_row, still) =
+                        (list.downgrade(), row.downgrade(), leaving.clone());
+                    slot.connect_child_revealed_notify(move |slot| {
+                        if slot.is_child_revealed() || !still.get() {
+                            return;
+                        }
+                        if let (Some(list), Some(row)) = (weak_list.upgrade(), weak_row.upgrade()) {
+                            if row.parent().as_ref() == Some(list.upcast_ref()) {
+                                list.remove(&row);
+                            }
+                        }
+                    });
+                    // Unfolds once it is in the list, so that it is seen to.
+                    slot.set_reveal_child(true);
+                    rows.push(KeptRow {
+                        key,
+                        looks,
+                        row,
+                        slot,
+                        leaving,
+                    });
+                }
+            }
+            place += 1;
+        }
+        // Forget the rows that have been removed.
+        rows.retain(|kept| kept.row.parent().is_some());
+    }
+}
+
 /// A line under a heading in the muted voice.
 pub fn note(text: &str) -> gtk::Label {
     let label = gtk::Label::builder()

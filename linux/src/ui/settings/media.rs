@@ -11,7 +11,7 @@ use crate::{
     app::{self, remote, AppModel, DeviceSlot},
     i18n::t,
     media::{Device, DeviceKind},
-    ui::Context,
+    ui::{kit, Context},
 };
 
 pub fn page(context: &Context) -> adw::PreferencesPage {
@@ -122,7 +122,7 @@ pub fn page(context: &Context) -> adw::PreferencesPage {
     model.subscribe_while(&forget_row, move |model, change| {
         if change == app::CHANGED {
             if let Some(row) = row_weak.upgrade() {
-                row.set_visible(any_chosen(model));
+                kit::fade_visible(&row, any_chosen(model));
             }
         }
     });

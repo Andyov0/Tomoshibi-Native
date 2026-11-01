@@ -227,12 +227,13 @@ fn passphrase_group(model: &AppModel) -> adw::PreferencesGroup {
     let said = gtk::Label::builder().wrap(true).xalign(0.0).build();
     said.add_css_class("caption");
     said.set_margin_top(10);
-    said.set_visible(false);
     group.add(&current);
     group.add(&next);
     let foot = gtk::Box::new(gtk::Orientation::Horizontal, 10);
-    said.set_hexpand(true);
-    foot.append(&said);
+    // What came of a change arrives with a fade rather than at once.
+    let said_slot = pieces::fading(&said, false);
+    said_slot.set_hexpand(true);
+    foot.append(&said_slot);
     foot.append(&change);
     group.add(&foot);
     let ready = {
@@ -251,11 +252,12 @@ fn passphrase_group(model: &AppModel) -> adw::PreferencesGroup {
         current.connect_changed(move |_| ready());
     }
     next.connect_changed(move |_| ready());
-    let (weak, current_weak, next_weak, said_weak) = (
+    let (weak, current_weak, next_weak, said_weak, slot_weak) = (
         model.downgrade(),
         current.downgrade(),
         next.downgrade(),
         said.downgrade(),
+        said_slot.downgrade(),
     );
     change.connect_clicked(move |button| {
         let (Some(model), Some(current), Some(next)) =
@@ -265,16 +267,19 @@ fn passphrase_group(model: &AppModel) -> adw::PreferencesGroup {
         };
         button.set_sensitive(false);
         let (current_text, next_text) = (current.text().to_string(), next.text().to_string());
-        let (said, button, current, next) = (
+        let (said, slot, button, current, next) = (
             said_weak.clone(),
+            slot_weak.clone(),
             button.downgrade(),
             current.downgrade(),
             next.downgrade(),
         );
         glib::spawn_future_local(async move {
             let result = model.change_passphrase(current_text, next_text).await;
+            if let Some(slot) = slot.upgrade() {
+                slot.set_reveal_child(true);
+            }
             if let Some(said) = said.upgrade() {
-                said.set_visible(true);
                 match &result {
                     Ok(()) => {
                         said.set_label(&t("Changed."));
@@ -346,7 +351,7 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
         .selectable(true)
         .build();
     said.add_css_class("caption");
-    said.set_visible(false);
+    let said_slot = pieces::unfolding(&said, false);
     let foot = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     foot.set_margin_top(10);
     foot.append(&stop);
@@ -356,7 +361,7 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
     foot.append(&make);
     group.add(&foot);
     said.set_margin_top(8);
-    group.add(&said);
+    group.add(&said_slot);
 
     let scopes = scopes.to_vec();
     let target = {
@@ -401,7 +406,7 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
                 let Some(said) = said.upgrade() else {
                     return;
                 };
-                said.set_visible(true);
+                reveal_parent(&said);
                 match made {
                     Ok(made) => {
                         pieces::copy(&made.link);
@@ -444,7 +449,7 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
                     button.set_sensitive(true);
                 }
                 if let Some(said) = said.upgrade() {
-                    said.set_visible(true);
+                    reveal_parent(&said);
                     match stopped {
                         Ok(1) => said.set_label(&t("One link stopped working.")),
                         Ok(count) => said.set_label(&t_with(
@@ -458,6 +463,13 @@ fn guest_links(model: &AppModel, scopes: &[String]) -> adw::PreferencesGroup {
         });
     }
     group
+}
+
+/// Unfolds the revealer a line was put in.
+fn reveal_parent(line: &gtk::Label) {
+    if let Some(slot) = line.parent().and_downcast::<gtk::Revealer>() {
+        slot.set_reveal_child(true);
+    }
 }
 
 /// Account.tsx `Picture`: a picture chosen from the disk, scaled down to at

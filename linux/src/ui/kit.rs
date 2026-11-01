@@ -848,3 +848,53 @@ pub fn menu_button(child: &impl IsA<gtk::Widget>) -> gtk::Button {
     });
     button
 }
+
+/// Shows or hides `widget` with a fade rather than at once, for a widget
+/// that cannot be put in a revealer (a row of a preferences list is the
+/// list's own child): fading in from wherever it is, or fading out and then
+/// hidden. Skipped when animations are off, as every timed animation is.
+pub fn fade_visible(widget: &impl IsA<gtk::Widget>, shown: bool) {
+    let widget = widget.as_ref();
+    // SAFETY: the key is only ever set here, with this type.
+    let running = unsafe { widget.steal_data::<adw::TimedAnimation>("tmsb-fade") };
+    if let Some(running) = running {
+        running.pause();
+    }
+    let visible = widget.is_visible();
+    if shown == visible && (!shown || widget.opacity() >= 1.0) {
+        return;
+    }
+    if shown && !visible {
+        widget.set_opacity(0.0);
+        widget.set_visible(true);
+    }
+    let target = adw::PropertyAnimationTarget::new(widget, "opacity");
+    let animation = adw::TimedAnimation::builder()
+        .widget(widget)
+        .value_from(widget.opacity())
+        .value_to(if shown { 1.0 } else { 0.0 })
+        .duration(if shown { motion::SETTLE_MS } else { motion::LEAVE_MS })
+        .easing(if shown {
+            settle()
+        } else {
+            adw::Easing::EaseInCubic
+        })
+        .target(&target)
+        .build();
+    if !shown {
+        let weak = widget.downgrade();
+        animation.connect_done(move |animation| {
+            if let Some(widget) = weak.upgrade() {
+                if animation.value() <= 0.0 {
+                    widget.set_visible(false);
+                    widget.set_opacity(1.0);
+                }
+            }
+        });
+    }
+    // SAFETY: read back above with the same type.
+    unsafe {
+        widget.set_data("tmsb-fade", animation.clone());
+    }
+    animation.play();
+}
