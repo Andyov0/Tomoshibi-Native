@@ -601,7 +601,7 @@ fn describe(widget: &gtk::Widget, depth: usize, lines: &mut String) {
     let name = widget.widget_name();
     let _ = writeln!(
         lines,
-        "{:indent$}{} {bounds}{classes}{}{said}{}",
+        "{:indent$}{} {bounds}{classes}{}{said}{}{}",
         "",
         widget.type_().name(),
         if name.as_str() != widget.type_().name() {
@@ -611,6 +611,14 @@ fn describe(widget: &gtk::Widget, depth: usize, lines: &mut String) {
         },
         if widget.opacity() < 1.0 {
             format!(" (opacity {:.2})", widget.opacity())
+        } else {
+            String::new()
+        },
+        // TOMOSHIBI_DEBUG_TREE_WIDTHS: the least and the natural width each
+        // asks for, to find what holds a column wider than it was given.
+        if std::env::var_os("TOMOSHIBI_DEBUG_TREE_WIDTHS").is_some() {
+            let (least, natural, _, _) = widget.measure(gtk::Orientation::Horizontal, -1);
+            format!(" [w {least}/{natural}]")
         } else {
             String::new()
         },
