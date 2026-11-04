@@ -571,9 +571,12 @@ public struct RoomView: View {
         if let column {
             // In the system's own column, under its status bar, where its
             // own bars stand on this screen, and at the column's foot, where
-            // the thumb is.
+            // the thumb is. Stepping aside off the edge the column is on: the
+            // left one for an app in the left half of Split View, where it
+            // stepped 110 points to the right, into the room.
+            let off: CGFloat = column.midX < whole.width / 2 ? -110 : 110
             return BarPlace(axis: .vertical, frame: column, alignment: .bottom,
-                            padding: EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0), away: CGSize(width: 110, height: 0))
+                            padding: EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0), away: CGSize(width: off, height: 0))
         }
         if let folded {
             // At the foot of the half the controls keep to: the first page

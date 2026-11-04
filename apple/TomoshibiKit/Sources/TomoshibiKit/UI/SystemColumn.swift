@@ -83,10 +83,21 @@ enum SystemColumn {
             occlusions = proxy.reservedRegions(kind: .occlusion).filter(\.isActive).map(\.frame)
             creases = proxy.reservedRegions(kind: .division).filter(\.isActive).map(\.frame)
         }
+        // The camera's region at the head of the outer display's column
+        // takes in the clock and the signal below the camera (0 to 174
+        // points on the iPhone Duo simulator), and grows into the Dynamic
+        // Island while a Live Activity runs (to 264 with music playing):
+        // the head follows it down, as the system's own back button does.
+        occlusions = FoldDebug.grownIsland(occlusions, height: proxy.size.height)
         let ours = own || kept > 0
-        return VerticalBar.column(x: x, width: width, height: proxy.size.height, top: ours ? 0 : insets.top,
-                                  occlusions: occlusions, creases: creases, least: least.height,
-                                  headroom: ours ? 0 : VerticalBar.systemHeadroom)
+        let column = VerticalBar.column(x: x, width: width, height: proxy.size.height, top: ours ? 0 : insets.top,
+                                        occlusions: occlusions, creases: creases, least: least.height,
+                                        headroom: ours ? 0 : VerticalBar.systemHeadroom)
+        if FoldDebug.logsGeometry {
+            Logger(subsystem: "app.tomoshibi", category: "geometry").notice(
+                "GEOMETRY column-head edge=\(String(describing: edge), privacy: .public) size=\(proxy.size.debugDescription, privacy: .public) safe=(t \(insets.top), l \(insets.leading), b \(insets.bottom), r \(insets.trailing)) occlusions=\(occlusions.map(\.debugDescription), privacy: .public) column=\(column?.debugDescription ?? "none", privacy: .public)")
+        }
+        return column
     }
 
     /// Whether the window `proxy` measures holds a division region, active
@@ -334,7 +345,11 @@ private struct SystemColumnBar<Head: View, Foot: View>: ViewModifier {
         let kept = outside.kept(barEdge, window: window.size, rightToLeft: rightToLeft)
         let keptEdge: HorizontalEdge? = kept > 0 ? barEdge : nil
         let inside = keptOut == nil ? 0 : kept
-        let column = sides.reach(barEdge) >= least ? sides.on(barEdge) : nil
+        // The system's column whenever it holds a control, the screen's own
+        // only where it has been tall enough (VerticalBar `usable`).
+        let found = sides.on(barEdge)
+        let column = VerticalBar.usable(height: found?.height ?? 0, reach: sides.reach(barEdge),
+                                        least: least, system: keptEdge == nil) ? found : nil
         content
             .overlay(alignment: .topLeading) {
                 Color.clear
@@ -360,6 +375,10 @@ private struct SystemColumnBar<Head: View, Foot: View>: ViewModifier {
                     .overlay(alignment: .topLeading) {
                         ZStack(alignment: .topLeading) {
                             if let column {
+                                // Where the column is shorter than the head and
+                                // the foot (a Live Activity has taken its head),
+                                // the foot's capsule is what gives way, its
+                                // buttons scrolling inside it (ColumnCapsule).
                                 VStack(spacing: 12) {
                                     head
                                     Spacer(minLength: 0)
@@ -453,11 +472,71 @@ private struct SystemColumnBar<Head: View, Foot: View>: ViewModifier {
 struct ColumnCapsule<Content: View>: View {
     @ViewBuilder var content: Content
 
+    /// Whole wherever the column holds it. Where it does not, the system's
+    /// column shortened from its head by a Live Activity (SystemColumn), the
+    /// capsule is as tall as the column leaves it and its buttons scroll
+    /// inside it, clipped to a capsule as narrow as they are so that one
+    /// half out of sight is rounded off like the capsule, the last of them
+    /// (the lobby's Start, the join screen's camera) in sight first. The
+    /// column was given up instead, and the controls on the right went with
+    /// it while music played. Popovers hang in the screen's own layer
+    /// (`floatingPopoverLayer`), outside the scroll view's clip.
     var body: some View {
-        VStack(spacing: 6) { content }
-            .padding(7)
-            .glassBacking(Capsule())
-            .fixedSize()
+        ViewThatFits(in: .vertical) {
+            stack
+            // As many whole buttons as the column leaves room for, and
+            // settling on whole buttons after a scroll: the first cut of
+            // this showed the bottom of the camera switch over the rest as
+            // a black sliver. The indicator shows once as the capsule comes,
+            // to say there is more above.
+            WholeRows(pitch: Self.pitch, gap: Self.gap) {
+                ScrollView(.vertical) {
+                    // On the stack itself, whose buttons are what a scroll
+                    // settles on: on the stack sized to fit, it found none,
+                    // and every scroll went back to where it started.
+                    VStack(spacing: Self.gap) { content }
+                        .scrollTargetLayout()
+                        .fixedSize()
+                }
+                .scrollIndicators(.automatic)
+                .scrollIndicatorsFlash(onAppear: true)
+                .scrollBounceBehavior(.basedOnSize)
+                .scrollTargetBehavior(.viewAligned)
+                .defaultScrollAnchor(.bottom)
+                .clipShape(Capsule())
+            }
+        }
+        .padding(7)
+        .glassBacking(Capsule())
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    /// A forty-eight point button and the gap below it.
+    private static var pitch: CGFloat { 48 + gap }
+    private static var gap: CGFloat { 6 }
+
+    private var stack: some View {
+        VStack(spacing: Self.gap) { content }.fixedSize()
+    }
+}
+
+/// Its one view as tall as the most whole rows `pitch` apart that the height
+/// offered holds, less the `gap` after the last, and at least one row
+/// (ColumnCapsule, scrolling).
+private struct WholeRows: Layout {
+    let pitch: CGFloat
+    let gap: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        guard let view = subviews.first else { return .zero }
+        guard let offered = proposal.height, offered.isFinite else { return view.sizeThatFits(proposal) }
+        let rows = max(1, ((offered + gap) / pitch).rounded(.down))
+        let height = rows * pitch - gap
+        return CGSize(width: view.sizeThatFits(ProposedViewSize(width: proposal.width, height: height)).width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        subviews.first?.place(at: bounds.origin, proposal: ProposedViewSize(bounds.size))
     }
 }
 

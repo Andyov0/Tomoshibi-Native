@@ -174,6 +174,54 @@ enum FoldDebug {
         #endif
     }()
 
+    /// TOMOSHIBI_DEBUG_ISLAND=<points>, under the same two conditions: the
+    /// regions occluding the head of a column grown that much further down,
+    /// as a Live Activity grows the outer display's camera region into the
+    /// Dynamic Island. The simulator grows it by 90 points for music playing
+    /// in Safari; this stands in for whatever more a phone's grows it by,
+    /// which a script cannot bring about. A release build never reads it.
+    static let island: CGFloat? = {
+        #if DEBUG
+        let all = ProcessInfo.processInfo.environment
+        guard all["TOMOSHIBI_BASE"] != nil, let points = all["TOMOSHIBI_DEBUG_ISLAND"].flatMap(Double.init) else { return nil }
+        return CGFloat(points)
+        #else
+        return nil
+        #endif
+    }()
+
+    /// TOMOSHIBI_DEBUG_SIDE_INSET=leading:<points> or trailing:<points>,
+    /// under the same two conditions: the safe area made that much narrower
+    /// on that side at the app's root, standing in for the column the system
+    /// keeps outside the safe area there. A phone's inner display on its side
+    /// keeps one of some 85 points down its right (the owner's photograph,
+    /// 2026-10-26), and in Split View presumably down the left of the app on
+    /// the left, where its controls go; the simulator's keeps none either
+    /// way, and lays the app out over the whole half. A release build never
+    /// reads it.
+    static let sideInset: (edges: Edge.Set, points: CGFloat)? = {
+        #if DEBUG
+        let all = ProcessInfo.processInfo.environment
+        guard all["TOMOSHIBI_BASE"] != nil, let value = all["TOMOSHIBI_DEBUG_SIDE_INSET"] else { return nil }
+        let parts = value.split(separator: ":")
+        guard parts.count == 2, let points = Double(parts[1]) else { return nil }
+        switch parts[0] {
+        case "leading": return (.leading, CGFloat(points))
+        case "trailing": return (.trailing, CGFloat(points))
+        default: return nil
+        }
+        #else
+        return nil
+        #endif
+    }()
+
+    /// `regions`, those in the upper half of a view `height` tall grown
+    /// down by the `island` stand-in.
+    static func grownIsland(_ regions: [CGRect], height: CGFloat) -> [CGRect] {
+        guard let island else { return regions }
+        return regions.map { $0.midY < height / 2 ? CGRect(x: $0.minX, y: $0.minY, width: $0.width, height: $0.height + island) : $0 }
+    }
+
     static let logsGeometry: Bool = {
         #if DEBUG
         let all = ProcessInfo.processInfo.environment

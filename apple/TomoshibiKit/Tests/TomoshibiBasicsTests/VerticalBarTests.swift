@@ -178,4 +178,32 @@ final class VerticalBarTests: XCTestCase {
         XCTAssertNil(VerticalBar.column(x: 867, width: 84, height: 300, top: 0, occlusions: [], creases: [], least: 340))
         XCTAssertNotNil(VerticalBar.column(x: 867, width: 84, height: 629, top: 0, occlusions: [], creases: [], least: 340))
     }
+
+    // MARK: Whether a screen uses it
+
+    /// The outer display's column as the iPhone Duo simulator reports it:
+    /// the camera's region over its head to 174 points, and to 264 with
+    /// music playing (a Live Activity in the Dynamic Island), in a view 644
+    /// tall. A phone may grow it further than the simulator does.
+    func testTheSystemsColumnStaysWhileALiveActivityShortensIt() {
+        let quiet = CGRect(x: 382, y: 0, width: 84, height: 174)
+        let playing = CGRect(x: 382, y: 0, width: 84, height: 264)
+        let grown = CGRect(x: 382, y: 0, width: 84, height: 420)
+        for region in [quiet, playing, grown] {
+            let column = VerticalBar.column(x: 382, width: 84, height: 644, top: 0,
+                                            occlusions: [region], creases: [], least: 0)
+            XCTAssertEqual(column?.minY, region.maxY + 8, "the head below the island")
+            XCTAssertTrue(VerticalBar.usable(height: column?.height ?? 0, reach: column?.height ?? 0, least: 300, system: true),
+                          "the lobby keeps its controls in the system's column with the island to \(region.maxY)")
+        }
+        // Shorter than one control, the column holds nothing.
+        XCTAssertFalse(VerticalBar.usable(height: VerticalBar.leastControl - 1, reach: 600, least: 120, system: true))
+    }
+
+    func testTheScreensOwnColumnStillNeedsItsHeight() {
+        XCTAssertFalse(VerticalBar.usable(height: 380, reach: 380, least: 420, system: false),
+                       "a column of the screen's own that was never tall enough is not kept")
+        XCTAssertTrue(VerticalBar.usable(height: 200, reach: 560, least: 420, system: false),
+                      "one a keyboard has shortened since is")
+    }
 }

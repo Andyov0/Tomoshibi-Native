@@ -1621,8 +1621,8 @@ struct PhoneLobby: View {
 
     /// The head of the column on the inner display on its side, where it is
     /// the app's (`ownHead`): the account, which opens the settings as the
-    /// outer display's does, or on the server page the way back. Nothing on
-    /// the outer display, whose head the system keeps.
+    /// outer display's does, or on the server page the way back. On the
+    /// outer display, whose head the system keeps, the room its item takes.
     ///
     /// The server is chosen from the lists' row for it, as on the outer
     /// display. It stood under the account here as well, opening the start
@@ -1646,6 +1646,16 @@ struct PhoneLobby: View {
                 }
             }
             .animation(Theme.settle, value: state.place == .servers)
+        } else {
+            // The room the system's own item takes at the head (the account,
+            // or the server page's way back), kept clear: a column the
+            // Dynamic Island has shortened lays the foot out under the head
+            // (SystemColumn), and with nothing here the foot's first switch
+            // went in under the account.
+            Color.clear
+                .frame(width: 48, height: 48)
+                .accessibilityHidden(true)
+                .allowsHitTesting(false)
         }
     }
 

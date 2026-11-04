@@ -33,6 +33,31 @@ public enum VerticalBar {
     /// system says nothing covers it (`column`): below the clock and the
     /// signal the inner display on its side stands there.
     public static let systemHeadroom: CGFloat = 100
+    /// The least the system's own column has to give for the screens to
+    /// stand their controls in it: one forty-eight point control and the
+    /// gap above it (`usable`).
+    public static let leastControl: CGFloat = 60
+
+    /// Whether a screen stands its controls in a column `height` tall, the
+    /// tallest it has been `reach`, where they need `least`.
+    ///
+    /// A column of the screen's own (`system` false, the inner display on
+    /// its side) is kept only where it has been tall enough for them, and a
+    /// screen without one lays them out as on any other iPhone: the column
+    /// was the screen's choice, and it chooses the whole width instead.
+    ///
+    /// The system's own column (the outer display's) is there whatever the
+    /// screen does, outside its safe area, and is used whenever it holds a
+    /// single control: the screen takes up the rest of its controls in a
+    /// part of the column that scrolls (SystemColumn). It was given up below
+    /// `least` like the screen's own, and a Live Activity (music playing)
+    /// grows the camera's region into the Dynamic Island and shortens the
+    /// column from its head: the owner found the controls on the right gone
+    /// while music played, laid out across a screen that the system's column
+    /// still took a quarter of, empty.
+    public static func usable(height: CGFloat, reach: CGFloat, least: CGFloat, system: Bool) -> Bool {
+        system ? height >= leastControl : reach >= least
+    }
 
     /// The edge the system lays its bars down, for a window `window` big.
     ///

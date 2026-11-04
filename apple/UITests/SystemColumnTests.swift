@@ -124,4 +124,30 @@ final class SystemColumnTests: XCTestCase {
         same.tap()
         XCTAssertTrue(same.waitForNonExistence(timeout: 5), "closed by the choice")
     }
+
+    /// A Live Activity grows the camera's region down the column into the
+    /// Dynamic Island (music playing: 90 points on the simulator, more on a
+    /// phone), stood in for here 330 points further: the lobby keeps its
+    /// controls in the column rather than giving it up for the join bar, its
+    /// Start in sight at the capsule's foot and the rest a scroll away.
+    func testTheLobbysColumnKeepsItsControlsUnderAGrownIsland() throws {
+        continueAfterFailure = false
+        let app = try launch(["TOMOSHIBI_DEBUG_ISLAND": "330"])
+        let start = app.buttons["Start a meeting"]
+        inColumn(start, app, "the lobby's Start, under the grown island")
+        XCTAssertTrue(start.isHittable, "Start in sight")
+        XCTAssertFalse(app.textFields["Room name or invite link"].exists, "no join bar: the column is kept")
+        let join = app.buttons["Join a meeting"]
+        XCTAssertFalse(join.isHittable, "Join scrolled out of the capsule's sight")
+        // A finger drawn slowly down the capsule a button's length and a
+        // half. Drawn at once from one point to the other, the drag reached
+        // the capsule as a press on Start, and opened the start sheet.
+        start.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+            .press(forDuration: 0.1, thenDragTo: start.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 1.8)),
+                   withVelocity: .slow, thenHoldForDuration: 0.1)
+        for _ in 0..<20 where !join.isHittable { usleep(500_000) }
+        XCTAssertTrue(join.isHittable, "Join in sight after a scroll")
+        join.tap()
+        inColumn(app.buttons["Cancel"], app, "the join sheet's close")
+    }
 }

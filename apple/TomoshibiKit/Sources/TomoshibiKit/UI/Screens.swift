@@ -143,6 +143,9 @@ public struct AppRoot: View {
         // The system's word for the window as a whole, for a screen it does
         // not reach (VerticalBarWindow).
         .readsVerticalBarEdge { VerticalBarWindow.shared.reported = $0 }
+        // A test's stand-in for the column the system keeps outside the safe
+        // area on one side (FoldDebug `sideInset`); nothing otherwise.
+        .safeAreaPadding(FoldDebug.sideInset?.edges ?? [], FoldDebug.sideInset?.points ?? 0)
         #endif
         // The window in the call's appearance while the call is the screen,
         // and in the system's otherwise, following it as it changes. On the
