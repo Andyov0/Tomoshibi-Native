@@ -15,11 +15,14 @@ import TomoshibiBasics
 ///
 /// The window's close button and ⌘W are what ask (`guardClose`). SwiftUI
 /// owns the window's delegate, so rather than standing in front of it the
-/// close button is pointed here, and the Close command asks the same.
+/// close button is pointed here, and the Close command asks the same. The
+/// window is then closed as the button would have closed it (CloseButtons),
+/// never with `performClose`, which presses the button pointed here.
 @MainActor
 public final class MacWindows: NSObject, NSApplicationDelegate {
     public private(set) weak var app: AppModel?
     private var watching = false
+    private let buttons = CloseButtons()
 
     public static weak var shared: MacWindows?
 
@@ -62,9 +65,7 @@ public final class MacWindows: NSObject, NSApplicationDelegate {
     /// Points each window's close button at `closePressed`, once.
     private func guardButtons() {
         for window in callWindows {
-            guard let button = window.standardWindowButton(.closeButton), button.action != #selector(closePressed(_:)) else { continue }
-            button.target = self
-            button.action = #selector(closePressed(_:))
+            buttons.point(window, at: self, action: #selector(closePressed(_:)))
         }
     }
 
@@ -76,7 +77,7 @@ public final class MacWindows: NSObject, NSApplicationDelegate {
     /// Closes the window, having asked first if the screen is being shared.
     public func guardClose(_ window: NSWindow) {
         guard let call = app?.call, call.sharing.active else {
-            window.performClose(nil)
+            buttons.close(window)
             return
         }
         let alert = NSAlert()
@@ -86,15 +87,16 @@ public final class MacWindows: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: t("Keep sharing"))
         alert.addButton(withTitle: t("Stop sharing and close"))
         alert.addButton(withTitle: t("Cancel"))
+        let buttons = buttons
         alert.beginSheetModal(for: window) { answer in
             MainActor.assumeIsolated {
                 switch answer {
                 case .alertFirstButtonReturn:
-                    window.performClose(nil)
+                    buttons.close(window)
                 case .alertSecondButtonReturn:
                     Task { @MainActor in
                         await call.sharing.stopScreen()
-                        window.performClose(nil)
+                        buttons.close(window)
                     }
                 default:
                     break
