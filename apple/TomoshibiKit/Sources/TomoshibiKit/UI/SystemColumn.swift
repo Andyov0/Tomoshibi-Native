@@ -126,6 +126,18 @@ enum SystemColumn {
         guard let window = windows.first(where: \.isKeyWindow) ?? windows.first else { return measured }
         return window.bounds.size
     }
+
+    /// Whether the app's window shares its display with another app, side
+    /// by side (VerticalBar `split`): narrower than the display, whose
+    /// bounds follow the way it is held as the window's do.
+    @MainActor
+    static func split() -> Bool {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let windows = scenes.flatMap(\.windows)
+        guard let window = windows.first(where: \.isKeyWindow) ?? windows.first,
+              let screen = window.windowScene?.screen else { return false }
+        return VerticalBar.split(window: window.bounds.size, screen: screen.bounds.size)
+    }
     #endif
 }
 
@@ -144,6 +156,8 @@ final class VerticalBarWindow {
     var size: CGSize = .zero
     var reported: HorizontalEdge?
     var divided = false
+    /// The window shares the display in Split View (SystemColumn `split`).
+    var split = false
 
     /// The edge the system lays its bars down in this window, by its own
     /// word, a test's stand-in for it, or the fold of the inner display on
@@ -165,7 +179,7 @@ final class VerticalBarWindow {
         let now = SystemColumn.windowSize(measured: size)
         let edge = VerticalBar.edge(reported: reported, rehearsed: FoldDebug.verticalEdge, divided: divided,
                                     window: now, rightToLeft: rightToLeft)
-        return VerticalBar.sideways(edge: edge, regular: regular, window: now)
+        return VerticalBar.sideways(edge: edge, regular: regular, window: now, split: SystemColumn.split())
     }
 }
 
@@ -197,10 +211,10 @@ struct ColumnOutside: Equatable {
 
     /// The width the screen keeps for a column of its own on `edge` in a
     /// window `window` big (VerticalBar `kept`).
-    func kept(_ edge: HorizontalEdge?, window: CGSize, rightToLeft: Bool) -> CGFloat {
+    func kept(_ edge: HorizontalEdge?, window: CGSize, split: Bool, rightToLeft: Bool) -> CGFloat {
         guard let edge, frame.width > 0 else { return 0 }
         let reaches = VerticalBar.reaches(edge, frame: frame, inset: inset(edge), window: window, rightToLeft: rightToLeft)
-        return VerticalBar.kept(edge: edge, inset: inset(edge), reaches: reaches, window: window)
+        return VerticalBar.kept(edge: edge, inset: inset(edge), reaches: reaches, window: window, split: split)
     }
 }
 #endif
@@ -242,9 +256,38 @@ extension View {
     }
 
     /// Lays this view out beside the column a screen keeps for itself
-    /// (`systemColumn`'s `kept`): that much more safe area on its side.
+    /// (`systemColumn`'s `kept`): that much more safe area on its side, less
+    /// what the system already keeps there for itself.
+    ///
+    /// An app in the left half of Split View has the system's bars down its
+    /// left, and inside a navigation stack the system keeps a strip of some
+    /// 85 points there for them whether it stands anything in it or not,
+    /// in the safe area of the stack's pages and of nothing outside it. The
+    /// column is drawn in that strip; padded by its width as well, the
+    /// lobby's page stood 170 points from the left, with an empty strip
+    /// between the column and the preview (iPhone Duo simulator,
+    /// 2026-11-05).
     func besideKeptColumn(_ kept: KeptColumn) -> some View {
-        safeAreaPadding(kept.edge == .leading ? .leading : .trailing, kept.width)
+        modifier(BesideKeptColumn(kept: kept))
+    }
+}
+
+private struct BesideKeptColumn: ViewModifier {
+    let kept: KeptColumn
+    /// The safe area the view has on the column's side without this padding.
+    @State private var already: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        let leading = kept.edge == .leading
+        content
+            .safeAreaPadding(leading ? .leading : .trailing, max(0, kept.width - already))
+            // Outside the padding, so that what it reads is the system's
+            // and not this padding's own.
+            .background {
+                Color.clear.onGeometryChange(for: CGFloat.self) { proxy in
+                    leading ? proxy.safeAreaInsets.leading : proxy.safeAreaInsets.trailing
+                } action: { already = $0 }
+            }
     }
 }
 
@@ -342,7 +385,7 @@ private struct SystemColumnBar<Head: View, Foot: View>: ViewModifier {
         // the word does not reach, the fold of the inner display on its
         // side, a test's stand-in).
         let barEdge = edge ?? window.edge(rightToLeft: rightToLeft)
-        let kept = outside.kept(barEdge, window: window.size, rightToLeft: rightToLeft)
+        let kept = outside.kept(barEdge, window: window.size, split: window.split, rightToLeft: rightToLeft)
         let keptEdge: HorizontalEdge? = kept > 0 ? barEdge : nil
         let inside = keptOut == nil ? 0 : kept
         // The system's column whenever it holds a control, the screen's own
@@ -434,12 +477,12 @@ private struct SystemColumnBar<Head: View, Foot: View>: ViewModifier {
                             withTransaction(arriving) {
                                 outside = now
                                 measured = true
-                                keptOnArrival = now.kept(barEdge, window: window.size, rightToLeft: rightToLeft) > 0
+                                keptOnArrival = now.kept(barEdge, window: window.size, split: window.split, rightToLeft: rightToLeft) > 0
                             }
                         }
                         if FoldDebug.logsGeometry {
                             Logger(subsystem: "app.tomoshibi", category: "geometry").notice(
-                                "GEOMETRY column outside frame=\(now.frame.debugDescription, privacy: .public) leading=\(now.leading, privacy: .public) trailing=\(now.trailing, privacy: .public) edge=\(String(describing: barEdge), privacy: .public) window=\(window.size.debugDescription, privacy: .public) kept=\(now.kept(barEdge, window: window.size, rightToLeft: rightToLeft), privacy: .public)")
+                                "GEOMETRY column outside frame=\(now.frame.debugDescription, privacy: .public) leading=\(now.leading, privacy: .public) trailing=\(now.trailing, privacy: .public) edge=\(String(describing: barEdge), privacy: .public) window=\(window.size.debugDescription, privacy: .public) kept=\(now.kept(barEdge, window: window.size, split: window.split, rightToLeft: rightToLeft), privacy: .public) split=\(window.split, privacy: .public)")
                         }
                     }
             }

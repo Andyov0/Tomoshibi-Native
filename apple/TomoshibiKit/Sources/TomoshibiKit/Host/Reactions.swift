@@ -191,6 +191,11 @@ struct HandControl: View {
     /// height in a row, its width in a column): the compact bar's forty.
     var size: CGFloat = 44
 
+    /// The side of the screen the bar stands down (`barSide`): the tray
+    /// opens from it towards the pictures.
+    @Environment(\.barSide) private var side
+    private var fromLeft: Bool { !row && side == .leading }
+
     private var board: ReactionBoard { ReactionBoard.of(model.call) }
     private var open: Bool { popovers.open == ReactionBoard.tray }
 
@@ -242,7 +247,7 @@ struct HandControl: View {
                 // language as "chevron.backward" would be. Named as the left
                 // chevron because every symbol the views name has an Android
                 // one (SymbolsTest), and the backward one had none.
-                Image(systemName: row ? "chevron.up" : "chevron.left")
+                Image(systemName: row ? "chevron.up" : fromLeft ? "chevron.right" : "chevron.left")
                     .flipsForRightToLeftLayoutDirection(!row)
                     .font(.system(size: 11, weight: .bold))
                     .rotationEffect(.degrees(open ? 180 : 0))
@@ -256,14 +261,14 @@ struct HandControl: View {
             .help(t("Reactions"))
         }
         .animation(Theme.settle, value: model.handUp)
-        .overlay(alignment: row ? .bottom : .trailing) {
+        .overlay(alignment: row ? .bottom : fromLeft ? .leading : .trailing) {
             if open {
-                let anchor: UnitPoint = row ? .bottom : .trailing
+                let anchor: UnitPoint = row ? .bottom : fromLeft ? .leading : .trailing
                 tray
                     .fixedSize()
                     // Clear of the bar's own edge as well as the control's,
                     // by the same distance whatever the bar's size.
-                    .offset(x: row ? 0 : -(size + 34), y: row ? -(size + 14) : 0)
+                    .offset(x: row ? 0 : fromLeft ? size + 34 : -(size + 34), y: row ? -(size + 14) : 0)
                     .closesOnEscape(popovers)
                     .transition(.asymmetric(
                         insertion: .opacity.combined(with: .scale(scale: 0.94, anchor: anchor)).animation(Theme.settle),

@@ -96,8 +96,24 @@ public enum VerticalBar {
     /// (2026-10-26). A compact width is the outer display whichever way it is
     /// held, which has those screens already, and taller than wide is the
     /// inner display upright, whose bars are an ordinary iPhone's.
-    public static func sideways(edge: HorizontalEdge?, regular: Bool, window: CGSize) -> Bool {
-        regular && edge != nil && window.width > window.height
+    ///
+    /// An app sharing the inner display in Split View (`split`) is laid out
+    /// so as well, whatever its shape, wherever the system lays its bars down
+    /// a side of it: each app's down its outer edge, the left one's down the
+    /// left. The system laid the lobby's account down the left there and
+    /// kept the strip it stood in for itself, inside the lobby's navigation
+    /// stack, and the column was never found: the microphone and the camera
+    /// stayed on the preview, half under the bar across its top, and Start
+    /// and Join across the half (the owner's photograph, 2026-11-05).
+    public static func sideways(edge: HorizontalEdge?, regular: Bool, window: CGSize, split: Bool = false) -> Bool {
+        guard edge != nil else { return false }
+        return split || (regular && window.width > window.height)
+    }
+
+    /// Whether a window `window` big shares a display `screen` big with
+    /// another app, side by side (Split View): narrower than the display.
+    public static func split(window: CGSize, screen: CGSize) -> Bool {
+        window.width > 0 && screen.width > 0 && window.width < screen.width - 1
     }
 
     /// Whether a view whose frame in its window is `frame`, `inset` short of
@@ -132,9 +148,12 @@ public enum VerticalBar {
     /// Taller than wide is asked of the window whatever the system says:
     /// the outer display stands upright with its column, and a passing
     /// moment in which it reported the edge before the column (a scene
-    /// moving between displays) is not a reason to make it narrower.
-    public static func kept(edge: HorizontalEdge?, inset: CGFloat, reaches: Bool, window: CGSize) -> CGFloat {
-        guard edge != nil, inset < leastWidth, reaches, window.width > window.height else { return 0 }
+    /// moving between displays) is not a reason to make it narrower. An app
+    /// in Split View (`split`) keeps one whatever its shape, down the side
+    /// the system names (`sideways`); the outer display is never split.
+    public static func kept(edge: HorizontalEdge?, inset: CGFloat, reaches: Bool, window: CGSize,
+                            split: Bool = false) -> CGFloat {
+        guard edge != nil, inset < leastWidth, reaches, split || window.width > window.height else { return 0 }
         return width - max(0, inset)
     }
 

@@ -206,4 +206,28 @@ final class VerticalBarTests: XCTestCase {
         XCTAssertTrue(VerticalBar.usable(height: 200, reach: 560, least: 420, system: false),
                       "one a keyboard has shortened since is")
     }
+
+    // MARK: Split View
+
+    /// The left half of the inner display on its side in Split View, as the
+    /// iPhone Duo simulator measures it: 469 by 669 of a display 951 wide,
+    /// the system's bars down its left and no safe area kept for them
+    /// outside the lobby's navigation stack.
+    func testAnAppInTheLeftHalfOfSplitViewKeepsAColumnDownTheLeft() {
+        let half = CGSize(width: 469, height: 669)
+        XCTAssertTrue(VerticalBar.split(window: half, screen: side), "narrower than the display")
+        XCTAssertFalse(VerticalBar.split(window: side, screen: side), "the whole display")
+        XCTAssertFalse(VerticalBar.split(window: outer, screen: outer), "the outer display")
+        XCTAssertFalse(VerticalBar.split(window: .zero, screen: side), "before the window is measured")
+        XCTAssertTrue(VerticalBar.sideways(edge: .leading, regular: false, window: half, split: true),
+                      "laid out as the outer display, its controls down the left")
+        XCTAssertEqual(VerticalBar.kept(edge: .leading, inset: 0, reaches: true, window: half, split: true), 84)
+        XCTAssertFalse(VerticalBar.sideways(edge: .leading, regular: false, window: half, split: false),
+                       "the same shape not in Split View is the inner display upright")
+        XCTAssertEqual(VerticalBar.kept(edge: .leading, inset: 0, reaches: true, window: half, split: false), 0)
+        XCTAssertFalse(VerticalBar.sideways(edge: nil, regular: false, window: half, split: true),
+                       "Split View where the system keeps its bars across the top (the inner display upright)")
+        XCTAssertEqual(VerticalBar.kept(edge: .leading, inset: 85, reaches: true, window: half, split: true), 0,
+                       "a column the system keeps itself is the system's")
+    }
 }

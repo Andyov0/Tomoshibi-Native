@@ -100,7 +100,8 @@ public struct RoomView: View {
             // A column too short for the bar is not kept: the bar goes back
             // across the foot, and the room has the whole width.
             let edge = barEdge ?? windowEdge
-            let wanted = filled ? 0 : ColumnOutside(geometry).kept(edge, window: window, rightToLeft: rightToLeft)
+            let wanted = filled ? 0 : ColumnOutside(geometry).kept(edge, window: window, split: VerticalBarWindow.shared.split,
+                                                                   rightToLeft: rightToLeft)
             let column = filled ? nil : SystemColumn.frame(geometry, edge: edge,
                                                            least: CGSize(width: ControlBar.columnWidth, height: ControlBar.columnHeight),
                                                            kept: wanted)
@@ -160,6 +161,7 @@ public struct RoomView: View {
                 // so that it moves there rather than being made again.
                 .overlay(alignment: .topLeading) {
                     controls(bar.axis, shown: shown)
+                        .environment(\.barSide, bar.side)
                         .padding(bar.padding)
                         .frame(width: bar.frame.width, height: bar.frame.height, alignment: bar.alignment)
                         .offset(x: bar.frame.minX + (shown ? 0 : bar.away.width), y: bar.frame.minY + (shown ? 0 : bar.away.height))
@@ -565,6 +567,9 @@ public struct RoomView: View {
         var alignment: Alignment
         var padding: EdgeInsets
         var away: CGSize
+        /// The side of the screen the bar stands down, for its popovers to
+        /// open away from (`barSide`).
+        var side: HorizontalEdge = .trailing
     }
 
     static func barPlace(whole: CGSize, inset: EdgeInsets, side: Bool, column: CGRect?, folded: Plan.Folded?) -> BarPlace {
@@ -574,9 +579,10 @@ public struct RoomView: View {
             // the thumb is. Stepping aside off the edge the column is on: the
             // left one for an app in the left half of Split View, where it
             // stepped 110 points to the right, into the room.
-            let off: CGFloat = column.midX < whole.width / 2 ? -110 : 110
+            let left = column.midX < whole.width / 2
             return BarPlace(axis: .vertical, frame: column, alignment: .bottom,
-                            padding: EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0), away: CGSize(width: off, height: 0))
+                            padding: EdgeInsets(top: 0, leading: 0, bottom: 8, trailing: 0),
+                            away: CGSize(width: left ? -110 : 110, height: 0), side: left ? .leading : .trailing)
         }
         if let folded {
             // At the foot of the half the controls keep to: the first page

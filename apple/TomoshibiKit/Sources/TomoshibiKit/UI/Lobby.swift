@@ -1453,8 +1453,12 @@ struct PhoneLobby: View {
     /// again; the words in the join bar are the lobby's (LobbyState).
     @Environment(\.verticalSizeClass) private var heightClass
     private var short: Bool { heightClass == .compact }
-    /// The preview beside the lists rather than above them.
-    private var beside: Bool { short || sideways }
+    /// The preview beside the lists rather than above them: not in Split
+    /// View, whose half of the inner display is the outer display's width
+    /// beside its column, and is laid out as the outer display is, the
+    /// preview above the lists. Beside lists 350 points wide, the preview
+    /// had what was left of 384.
+    private var beside: Bool { short || (sideways && !VerticalBarWindow.shared.split) }
     /// The column's head is the app's: the account, or the way back from
     /// the server page, which the system stands under the clock of the outer
     /// display as items of its navigation bar.

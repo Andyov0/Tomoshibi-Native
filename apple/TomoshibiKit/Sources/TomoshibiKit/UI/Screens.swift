@@ -96,6 +96,7 @@ public struct AppRoot: View {
                 } action: { shape in
                     VerticalBarWindow.shared.size = SystemColumn.windowSize(measured: shape.size)
                     VerticalBarWindow.shared.divided = shape.divided
+                    VerticalBarWindow.shared.split = SystemColumn.split()
                     if FoldDebug.logsGeometry {
                         Logger(subsystem: "app.tomoshibi", category: "geometry").notice(
                             "GEOMETRY window \(VerticalBarWindow.shared.size.debugDescription, privacy: .public) measured \(shape.size.debugDescription, privacy: .public) divided=\(shape.divided, privacy: .public)")

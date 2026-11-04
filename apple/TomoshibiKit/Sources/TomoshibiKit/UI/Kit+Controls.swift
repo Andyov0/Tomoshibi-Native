@@ -22,7 +22,10 @@ import AppKit
 /// lifted it above the control was not applied there. A popover that hangs
 /// from the edge needs no guide and cannot cover what it belongs to.
 struct ControlPopover<Panel: View>: ViewModifier {
-    enum Edge { case top, leading }
+    /// Above the control, or beside it on the side towards the pictures:
+    /// to its left in a column down the right of the screen, to its right
+    /// in one down the left (`barSide`).
+    enum Edge { case top, leading, trailing }
 
     let id: String
     let popovers: Popovers
@@ -34,13 +37,17 @@ struct ControlPopover<Panel: View>: ViewModifier {
     func body(content: Content) -> some View {
         let open = popovers.open == id
         content
-            .overlay(alignment: edge == .top ? .top : .leading) {
-                if edge == .top {
+            .overlay(alignment: edge == .top ? .top : edge == .leading ? .leading : .trailing) {
+                switch edge {
+                case .top:
                     Color.clear.frame(height: 0)
                         .overlay(alignment: place == .end ? .bottomTrailing : .bottom) { pane(open) }
-                } else {
+                case .leading:
                     Color.clear.frame(width: 0)
                         .overlay(alignment: place == .end ? .bottomTrailing : .trailing) { pane(open) }
+                case .trailing:
+                    Color.clear.frame(width: 0)
+                        .overlay(alignment: place == .end ? .bottomLeading : .leading) { pane(open) }
                 }
             }
             // Above the buttons that follow it in the bar, which are drawn
@@ -51,7 +58,11 @@ struct ControlPopover<Panel: View>: ViewModifier {
     @ViewBuilder
     private func pane(_ open: Bool) -> some View {
         if open {
-            let anchor: UnitPoint = edge == .top ? (place == .end ? .bottomTrailing : .bottom) : (place == .end ? .bottomTrailing : .trailing)
+            let anchor: UnitPoint = switch edge {
+            case .top: place == .end ? .bottomTrailing : .bottom
+            case .leading: place == .end ? .bottomTrailing : .trailing
+            case .trailing: place == .end ? .bottomLeading : .leading
+            }
             panel()
                 .frame(width: width)
                 // Opaque, as every menu is (Kit `menuSurface`): over the
@@ -60,7 +71,7 @@ struct ControlPopover<Panel: View>: ViewModifier {
                 .fixedSize(horizontal: false, vertical: true)
                 // Clear of the bar's own edge as well as the control's: the
                 // bar's padding is seven points.
-                .padding(edge == .top ? .bottom : .trailing, 19)
+                .padding(edge == .top ? .bottom : edge == .leading ? .trailing : .leading, 19)
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .scale(scale: 0.92, anchor: anchor)).animation(Theme.settle),
                     removal: .opacity.combined(with: .scale(scale: 0.96, anchor: anchor)).animation(Theme.leave)
@@ -68,6 +79,34 @@ struct ControlPopover<Panel: View>: ViewModifier {
                 .escapeCloses(popovers)
         }
     }
+}
+
+/// A bar's popover on the side of its control that the bar's side says
+/// (`barSide`), read where the popover is hung.
+private struct BarPopoverSide<Panel: View>: ViewModifier {
+    let id: String
+    let popovers: Popovers
+    let axis: Axis
+    let place: BarPopoverPlace
+    let width: CGFloat
+    @ViewBuilder let panel: () -> Panel
+    @Environment(\.barSide) private var side
+
+    func body(content: Content) -> some View {
+        let edge: ControlPopover<Panel>.Edge = axis == .horizontal ? .top : side == .leading ? .trailing : .leading
+        content.modifier(ControlPopover(id: id, popovers: popovers, edge: edge, place: place, width: width, panel: panel))
+    }
+}
+
+extension EnvironmentValues {
+    /// The side of the screen the call's bar stands down while it runs down
+    /// the side (RoomView `barPlace`): the right, but for an app in the left
+    /// half of Split View, whose controls the system lays down its left.
+    /// The bar's popovers and the reactions open away from it, towards the
+    /// pictures; opened to the left from a column down the left, they were
+    /// off the screen, and pressing the reactions' arrow seemed to do
+    /// nothing (iPhone Duo simulator, 2026-11-05).
+    @Entry var barSide: HorizontalEdge = .trailing
 }
 
 /// Where along its control a bar's popover sits: centred on it, or flush
@@ -83,8 +122,7 @@ extension View {
     /// call, beside it down the side.
     func barPopover<Panel: View>(_ id: String, in popovers: Popovers, axis: Axis, place: BarPopoverPlace = .centre,
                                  width: CGFloat = 280, @ViewBuilder panel: @escaping () -> Panel) -> some View {
-        modifier(ControlPopover(id: id, popovers: popovers, edge: axis == .horizontal ? .top : .leading,
-                                place: place, width: width, panel: panel))
+        modifier(BarPopoverSide(id: id, popovers: popovers, axis: axis, place: place, width: width, panel: panel))
     }
 
     /// Escape closes the open popover: the Mac's exit command, a hardware
