@@ -23,6 +23,9 @@ struct GlassSlider: View {
     /// steps in twentieths.
     var step: Double = 0.05
     let label: String
+    /// The most it goes to: one, or past it to three times as sent
+    /// (HearingSetting.maxVolume), when it is marked at one (`VolumeMark`).
+    var maximum: Double = 1
     @Environment(\.isEnabled) private var enabled
     @State private var hovering = false
     @State private var dragging = false
@@ -34,7 +37,7 @@ struct GlassSlider: View {
             let thumb: CGFloat = lit ? 17 : 14
             let width = geometry.size.width
             let travel = max(1, width - thumb)
-            let x = thumb / 2 + CGFloat(min(1, max(0, value))) * travel
+            let x = thumb / 2 + CGFloat(min(1, max(0, value / maximum))) * travel
             ZStack(alignment: .leading) {
                 Capsule()
                     .fill(Theme.sunk(0.28))
@@ -46,6 +49,9 @@ struct GlassSlider: View {
                 Capsule()
                     .fill(Theme.foreground.opacity(0.9))
                     .frame(width: max(lit ? 6 : 5, x), height: lit ? 6 : 5)
+                if maximum > 1 {
+                    VolumeMark(lit: lit).offset(x: thumb / 2 + CGFloat(1 / maximum) * travel - 1)
+                }
                 Circle()
                     .fill(Color.white)
                     .overlay(Circle().stroke(Color.black.opacity(0.12), lineWidth: 0.5))
@@ -60,7 +66,7 @@ struct GlassSlider: View {
                     .onChanged { drag in
                         guard enabled else { return }
                         dragging = true
-                        set(Double((drag.location.x - thumb / 2) / travel))
+                        set(VolumeMark.settle(Double((drag.location.x - thumb / 2) / travel) * maximum, maximum))
                     }
                     .onEnded { _ in dragging = false }
             )
@@ -90,8 +96,29 @@ struct GlassSlider: View {
     /// Rounded to the step rather than given one: a stepped system slider
     /// draws a tick for every twentieth.
     private func set(_ raw: Double) {
-        let snapped = (min(1, max(0, raw)) / step).rounded() * step
-        if abs(snapped - value) > 0.0001 { value = min(1, max(0, snapped)) }
+        let snapped = (min(maximum, max(0, raw)) / step).rounded() * step
+        if abs(snapped - value) > 0.0001 { value = min(maximum, max(0, snapped)) }
+    }
+}
+
+/// The mark at as sent on a volume slider that goes past it (the web's
+/// VolumeRange, whose browser draws a listed value as a tick): past it is where
+/// hearing can be harmed, and a drag back finds as sent rather than a hair
+/// either side, where a readout of 102% says it is still too loud.
+struct VolumeMark: View {
+    var lit: Bool
+
+    var body: some View {
+        Capsule()
+            .fill(Theme.ink.opacity(0.45))
+            .frame(width: 2, height: lit ? 12 : 10)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+    }
+
+    /// One, for a drag let go within six hundredths of it on a slider that goes past it.
+    static func settle(_ value: Double, _ maximum: Double) -> Double {
+        maximum > 1 && abs(value - 1) < 0.06 ? 1 : value
     }
 }
 

@@ -66,14 +66,17 @@ final class HearingTests: XCTestCase {
 
     func testWhatTheWebWroteIsReadAndWhatWasEditedByHandIsClamped() {
         let book = HearingBook(stored: """
-        {"AAAAAAAAAA/voice":{"volume":3,"blocked":false},
+        {"AAAAAAAAAA/voice":{"volume":7,"blocked":false},
+         "FFFFFFFFFF/voice":{"volume":2.5,"blocked":false},
          "BBBBBBBBBB/voice":{"volume":-1},
          "CCCCCCCCCC/voice":{"volume":"loud","blocked":1},
          "DDDDDDDDDD/voice":{"volume":false,"blocked":true},
          "EEEEEEEEEE/voice":{"volume":0.4,"blocked":true}}
         """)
         func setting(_ key: String) -> HearingSetting { book.setting(HearingFiling(key: key, keeps: true), .voice) }
-        XCTAssertEqual(setting("AAAAAAAAAA"), HearingSetting(volume: 1, blocked: false))
+        // Three times as sent at most (maxVolume); up to that, as written.
+        XCTAssertEqual(setting("AAAAAAAAAA"), HearingSetting(volume: 3, blocked: false))
+        XCTAssertEqual(setting("FFFFFFFFFF"), HearingSetting(volume: 2.5, blocked: false))
         XCTAssertEqual(setting("BBBBBBBBBB"), HearingSetting(volume: 0, blocked: false))
         // A string is not a volume and a 1 is not a block, as `=== true` has it.
         XCTAssertEqual(setting("CCCCCCCCCC"), HearingSetting(volume: 1, blocked: false))
@@ -91,9 +94,11 @@ final class HearingTests: XCTestCase {
     func testAVolumeOutsideTheRangeIsClampedOnTheWayIn() {
         var book = HearingBook()
         book.set(proven, .screen, HearingSetting(volume: 7, blocked: false))
-        // Clamped to 1 and not blocked: as sent, so nothing is kept at all.
-        XCTAssertEqual(book.setting(proven, .screen), .asSent)
-        XCTAssertNil(book.stored)
+        // Clamped to three times as sent, and kept, as the web writes it.
+        XCTAssertEqual(book.setting(proven, .screen), HearingSetting(volume: 3, blocked: false))
+        XCTAssertEqual(book.stored, #"{"ABCDEFGHIJ/screen":{"volume":3,"blocked":false}}"#)
+        book.set(proven, .screen, HearingSetting(volume: -2, blocked: false))
+        XCTAssertEqual(book.setting(proven, .screen).volume, 0)
     }
 
     func testSilencedIsABlockOrNothingToHear() {

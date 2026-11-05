@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import TomoshibiBasics
 import os
 import TomoshibiCore
 
@@ -48,7 +49,9 @@ final class LosslessPlayback: LosslessSink, @unchecked Sendable {
         }
 
         func set(_ level: Float) {
-            target.withLock { $0 = max(0, min(1, level)) }
+            // Up to three times as sent (HearingSetting.maxVolume): this gain
+            // multiplies the samples, so past one is only a larger number.
+            target.withLock { $0 = max(0, min(Float(HearingSetting.maxVolume), level)) }
         }
 
         /// Called on the audio thread: one short lock, no allocation.

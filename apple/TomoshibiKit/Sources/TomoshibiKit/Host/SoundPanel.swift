@@ -157,17 +157,23 @@ private struct SoundRow: View {
                 // Disabled rather than hidden while blocked: nothing is
                 // arriving to be made louder, and a slider that moves while the
                 // sound stays off is a control that lies.
+                // To three times as sent, warned of as it crosses one
+                // (CallModel.louderThanSent).
                 GlassSlider(value: Binding(
                     get: { feature.setting(person, sound).volume },
-                    set: { feature.setVolume(person, sound, $0) }
-                ), label: t("{name}'s volume", ["name": name]))
+                    set: { volume in
+                        if volume > 1, feature.setting(person, sound).volume <= 1 { feature.call.louderThanSent() }
+                        feature.setVolume(person, sound, volume)
+                    }
+                ), label: t("{name}'s volume", ["name": name]), maximum: HearingSetting.maxVolume)
                 .disabled(setting.blocked)
 
                 // Read at a glance, because a slider near one end tells nobody
                 // whether it is at nought.
                 Text(setting.blocked ? t("Muted") : "\(Int((setting.volume * 100).rounded()))%")
                     .font(.system(size: 11, weight: .medium).monospacedDigit())
-                    .foregroundStyle(Theme.muted)
+                    // Past as sent in the colour that marks something live.
+                    .foregroundStyle(!setting.blocked && setting.volume > 1 ? Theme.tallyInk : Theme.muted)
                     .lineLimit(1)
                     .fixedSize()
                     .frame(minWidth: 42, alignment: .trailing)

@@ -22,6 +22,11 @@ final class PCMRing: @unchecked Sendable {
     private var read = 0
     private var count = 0
     private var playing = false
+    /// What every sample is multiplied by as it is played: the part of a
+    /// listener's volume past one (CallAudio `setVolume`). A node's own volume
+    /// stops at one, AVAudioMixing's range, so a sound turned up past as sent
+    /// is made louder here, on the samples.
+    private var boost: Float = 1
     private let lock = OSAllocatedUnfairLock()
     #if DEBUG
     /// Frames written in and played out, and the loudest played, since the
@@ -110,7 +115,7 @@ final class PCMRing: @unchecked Sendable {
                 let channel = min(index, channels - 1)
                 for frame in 0..<frames {
                     if frame < available {
-                        data[frame] = samples[((read + frame) % capacity) * channels + channel]
+                        data[frame] = samples[((read + frame) % capacity) * channels + channel] * boost
                         #if DEBUG
                         debugPeak = max(debugPeak, abs(data[frame]))
                         #endif
@@ -125,6 +130,12 @@ final class PCMRing: @unchecked Sendable {
             debugRendered += frames
             #endif
         }
+    }
+
+    /// Sets `boost`, one or more.
+    func setBoost(_ factor: Float) {
+        let factor = max(1, factor)
+        lock.withLockUnchecked { boost = factor }
     }
 
     func clear() {

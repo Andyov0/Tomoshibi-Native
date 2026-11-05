@@ -268,6 +268,20 @@ public final class CallModel {
         announce(CallToast(said, lasts: NoticeTimes.atMost))
     }
 
+    /// A volume taken past as loud as it was sent (notices.ts
+    /// `louderThanSent`): up to three times, which can harm somebody's
+    /// hearing, said as a slider crosses one, every time. One at a time, under
+    /// one key, so dragging back and forth over the line does not stack them.
+    ///
+    /// Without the web's second line, that on speakers the person turned up
+    /// may hear themselves back: that is the browser's, whose Web Audio is out
+    /// of reach of its echo cancelling. Here every sound plays through the one
+    /// engine whose voice processing cancels what it plays, louder or not.
+    public func louderThanSent() {
+        announce(CallToast(t("Above 100% can harm your hearing"), kind: .warning, lasts: NoticeTimes.atMost,
+                           key: "louder-than-sent", closable: true))
+    }
+
     /// The uplink card for this participant's own share, while it stands
     /// (strain.ts): what the line carries, what the share needs, what fits.
     public private(set) var strainHint: StrainHint?

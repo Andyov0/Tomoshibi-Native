@@ -24,7 +24,8 @@ public enum Sound: String, CaseIterable, Sendable {
 
 /// What somebody has decided about one sound.
 public struct HearingSetting: Equatable, Sendable {
-    /// Between silent and as loud as it was sent.
+    /// From silent to three times as loud as it was sent (`maxVolume`); one
+    /// is as sent.
     public var volume: Double
     /// Stopped at the media server rather than turned down here: a volume of
     /// nought still downloads every packet of a shared film and throws it
@@ -38,6 +39,11 @@ public struct HearingSetting: Equatable, Sendable {
 
     /// Untouched, which is what everybody is until somebody says otherwise.
     public static let asSent = HearingSetting(volume: 1, blocked: false)
+
+    /// The loudest anybody may make somebody else: three times as loud as it
+    /// was sent (hearing.ts `MAX_VOLUME`; the owner asked for it on
+    /// 2026-11-05). Past one the slider says it can harm hearing.
+    public static let maxVolume: Double = 3
 
     /// Whether this is something somebody has decided not to hear.
     public var silenced: Bool { blocked || volume == 0 }
@@ -152,11 +158,10 @@ public struct HearingBook: Equatable, Sendable {
         "\(filing.key)/\(sound.rawValue)"
     }
 
-    /// A volume between nought and one. A slider cannot produce anything
-    /// else; a hand-edited entry can, and a player handed 3 would be three
-    /// times as loud as the person sent it (hearing.ts `level`).
+    /// A volume between nought and three times as sent (hearing.ts `level`).
+    /// A slider cannot produce anything else; a hand-edited entry can.
     static func clamp(_ volume: Double) -> Double {
-        volume.isFinite ? min(1, max(0, volume)) : HearingSetting.asSent.volume
+        volume.isFinite ? min(HearingSetting.maxVolume, max(0, volume)) : HearingSetting.asSent.volume
     }
 
     /// A stored volume, read as the web reads one: only a number is a

@@ -93,7 +93,8 @@ private struct DeskTab: View {
                         HearingRow(name: t("{name} (music)", ["name": player.name.isEmpty ? player.id : player.name]),
                                    setting: desk.hearing(of: player.id),
                                    setVolume: { desk.setVolume(of: player.id, $0) },
-                                   setBlocked: { desk.setBlocked(of: player.id, $0) })
+                                   setBlocked: { desk.setBlocked(of: player.id, $0) },
+                                   louder: { desk.call.louderThanSent() })
                             .padding(12)
                             .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Theme.ink.opacity(0.05)))
                             .transition(Theme.arrive)
@@ -231,18 +232,22 @@ private struct NowPlaying: View {
                         .font(.system(size: 11.5))
                         .foregroundStyle(Theme.muted)
                         .fixedSize()
-                    MediaSlider(value: Binding(get: { Double(desk.monitorVolume) }, set: { desk.monitorVolume = Float($0) }), step: 0.05)
+                    MediaSlider(value: Binding(get: { Double(desk.monitorVolume) }, set: { volume in
+                        if volume > 1, desk.monitorVolume <= 1 { desk.call.louderThanSent() }
+                        desk.monitorVolume = Float(volume)
+                    }), range: 0...HearingSetting.maxVolume, step: 0.05, mark: 1)
                         .accessibilityLabel(t("Music volume in your speakers"))
                     Text("\(Int((desk.monitorVolume * 100).rounded()))%")
                         .font(.system(size: 11, weight: .medium).monospacedDigit())
-                        .foregroundStyle(Theme.muted)
+                        .foregroundStyle(desk.monitorVolume > 1 ? Theme.tallyInk : Theme.muted)
                         .frame(width: 38, alignment: .trailing)
                 }
                 .transition(Theme.arrive)
             } else {
                 HearingRow(name: t("Music"), setting: desk.hearing(of: state.holder),
                            setVolume: { desk.setVolume(of: state.holder, $0) },
-                           setBlocked: { desk.setBlocked(of: state.holder, $0) })
+                           setBlocked: { desk.setBlocked(of: state.holder, $0) },
+                           louder: { desk.call.louderThanSent() })
                     .transition(Theme.arrive)
             }
 

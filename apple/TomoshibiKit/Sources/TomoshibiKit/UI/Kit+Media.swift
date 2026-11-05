@@ -23,6 +23,10 @@ struct MediaSlider: View {
     /// The value is rounded to this as it is set: the web's volume ranges
     /// move in twentieths (`step={0.05}`).
     var step: Double?
+    /// A volume's as sent, on a slider that goes past it: drawn as a tick, a
+    /// drag let go near it settles on it, and it is read out as the volume's
+    /// own percentage rather than how far along the track (VolumeMark).
+    var mark: Double?
     var tint: Color = Theme.foreground
     /// Told when a change starts and ends, for a scrubber that only seeks
     /// once it is let go. Every way of changing the value ends what it
@@ -56,6 +60,10 @@ struct MediaSlider: View {
                 Capsule().fill(Theme.ink.opacity(0.14)).frame(height: track)
                 Capsule().fill(tint.opacity(enabled ? 1 : 0.5))
                     .frame(width: max(track, (width - knob) * fraction + knob / 2), height: track)
+                if let mark, range.upperBound > range.lowerBound {
+                    VolumeMark(lit: lifted)
+                        .offset(x: knob / 2 + (width - knob) * (mark - range.lowerBound) / (range.upperBound - range.lowerBound) - 1)
+                }
                 Circle()
                     .fill(Color.white)
                     .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
@@ -93,7 +101,7 @@ struct MediaSlider: View {
         .animation(Theme.settle, value: dragging)
         .animation(.easeOut(duration: 0.15), value: hovering)
         .accessibilityElement()
-        .accessibilityValue("\(Int((fraction * 100).rounded()))%")
+        .accessibilityValue("\(Int(((mark == nil ? fraction : value) * 100).rounded()))%")
         .accessibilityAdjustableAction { direction in
             switch direction {
             case .increment: step(by: 1)
@@ -123,6 +131,7 @@ struct MediaSlider: View {
     private func set(_ fraction: Double) {
         let clamped = min(1, max(0, fraction))
         var next = range.lowerBound + clamped * (range.upperBound - range.lowerBound)
+        if let mark, abs(next - mark) < 0.06 { next = mark }
         if let step, step > 0 { next = (next / step).rounded() * step }
         if next != value { value = next }
     }
@@ -459,6 +468,8 @@ struct HearingRow: View {
     let setting: HearingSetting
     let setVolume: (Double) -> Void
     let setBlocked: (Bool) -> Void
+    /// Said as the volume crosses past as sent (CallModel.louderThanSent).
+    var louder: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -476,13 +487,16 @@ struct HearingRow: View {
                 // Disabled rather than hidden while blocked: nothing arrives
                 // to be made louder, and a slider that moves while the sound
                 // stays off is a control that lies.
-                MediaSlider(value: Binding(get: { setting.volume }, set: setVolume), step: 0.05)
+                MediaSlider(value: Binding(get: { setting.volume }, set: { volume in
+                    if volume > 1, setting.volume <= 1 { louder() }
+                    setVolume(volume)
+                }), range: 0...HearingSetting.maxVolume, step: 0.05, mark: 1)
                     .disabled(setting.blocked)
                     .opacity(setting.blocked ? 0.45 : 1)
                     .accessibilityLabel(t("{name}'s volume", ["name": name]))
                 Text(setting.blocked ? t("Muted") : "\(Int((setting.volume * 100).rounded()))%")
                     .font(.system(size: 11, weight: .medium).monospacedDigit())
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(!setting.blocked && setting.volume > 1 ? Theme.tallyInk : Theme.muted)
                     .frame(width: 42, alignment: .trailing)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)

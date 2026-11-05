@@ -1171,6 +1171,36 @@
         }
       }
     },
+    "Above 100% can harm your hearing" : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Above 100% can harm your hearing"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "100% を超える音量は聴力に影響するおそれがあります"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "超过 100% 可能会影响听力"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "超過 100% 可能會影響聽力"
+          }
+        }
+      }
+    },
     "Accent colour" : {
       "extractionState" : "manual",
       "generatesSymbol" : false,

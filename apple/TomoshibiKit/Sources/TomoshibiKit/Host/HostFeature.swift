@@ -356,6 +356,16 @@ public final class HostFeature {
                 guard let track = Self.track(of: person, sound) else { continue }
                 let setting = Hearing.shared.setting(person.id, sound)
                 call.audio.setVolume(sid: track.sid, Float(setting.blocked ? 0 : setting.volume))
+                if sound == .screen {
+                    // A screen's sound may be arriving losslessly instead, on
+                    // a stream of its own that only this level reaches; this
+                    // row turned only the Opus track's node, and a lossless
+                    // share played at its old level whatever the panel said.
+                    // The music's is CallModel.hear's, from the song desk.
+                    call.lossless.setLevel(person.id, music: false, Float(setting.blocked ? 0 : setting.volume))
+                    let core = call.call, id = person.id
+                    Task { await core.setHearing(identity: id, music: false, level: Float(setting.volume), blocked: setting.blocked) }
+                }
                 if setting.blocked {
                     // Repeating it costs nothing: the media library sends the
                     // server an update only when the answer changes. Noted

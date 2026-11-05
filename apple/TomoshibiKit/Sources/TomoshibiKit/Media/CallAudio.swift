@@ -742,11 +742,12 @@ public final class CallAudio {
         player.ring.clear()
     }
 
-    /// The listener's own setting for this sound, 0 to 1.
+    /// The listener's own setting for this sound, 0 to three times as sent
+    /// (`HearingSetting.maxVolume`).
     public func setVolume(sid: String, _ volume: Float) {
         guard let player = players[sid] else { return }
-        player.volume = max(0, min(1, volume))
-        player.node.volume = player.volume * player.duck
+        player.volume = max(0, min(Float(HearingSetting.maxVolume), volume))
+        level(player)
     }
 
     /// The music's dip while somebody talks (web/src/live/duck.ts), applied on
@@ -754,7 +755,15 @@ public final class CallAudio {
     public func setDuck(sid: String, _ factor: Float) {
         guard let player = players[sid] else { return }
         player.duck = max(0, min(1, factor))
-        player.node.volume = player.volume * player.duck
+        level(player)
+    }
+
+    /// Up to one on the node, whose volume (AVAudioMixing) goes no further;
+    /// past one on the samples as the ring plays them (PCMRing `boost`).
+    private func level(_ player: Player) {
+        let level = player.volume * player.duck
+        player.node.volume = min(1, level)
+        player.ring.setBoost(level)
     }
 }
 

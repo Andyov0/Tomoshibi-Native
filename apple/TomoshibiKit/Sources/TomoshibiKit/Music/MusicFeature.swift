@@ -202,7 +202,8 @@ final class SongDesk {
         // A volume nothing was kept for is full, and so is one that is not a
         // volume: sound.ts once read "nothing kept" as nought and played the
         // music to everybody but its own speakers.
-        if let kept = defaults?.string(forKey: Self.monitorKey).flatMap(Float.init), kept >= 0, kept <= 1 {
+        if let kept = defaults?.string(forKey: Self.monitorKey).flatMap(Float.init), kept >= 0,
+           kept <= Float(HearingSetting.maxVolume) {
             monitorVolume = kept
         } else {
             monitorVolume = 1
