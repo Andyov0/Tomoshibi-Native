@@ -5401,6 +5401,36 @@
         }
       }
     },
+    "Could not load {title}. It stays at the top of the queue; Next song tries it again." : {
+      "extractionState" : "manual",
+      "generatesSymbol" : false,
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not load {title}. It stays at the top of the queue; Next song tries it again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「{title}」を読み込めませんでした。キューの先頭に残しています。「次の曲」でもう一度試します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「{title}」加载失败，已留在列表最前面；按「下一首」会再试一次。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「{title}」載入失敗，已留在清單最前面；按「下一首」會再試一次。"
+          }
+        }
+      }
+    },
     "Could not reach the meeting. Trying again." : {
       "extractionState" : "manual",
       "generatesSymbol" : false,

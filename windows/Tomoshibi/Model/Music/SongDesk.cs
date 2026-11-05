@@ -310,6 +310,7 @@ internal sealed class SongDesk : Observable, IBarOffer
         foreach (var packet in output.Packets) Send(packet);
         foreach (var action in output.Actions) Perform(action);
         foreach (var entry in output.Skipped) Say(T("Skipped {title}: the library's account cannot play it.", ("title", entry.Title)));
+        foreach (var entry in output.Failed) Say(T("Could not load {title}. It stays at the top of the queue; Next song tries it again.", ("title", entry.Title)));
         if (output.Changed) Refresh();
     }
 

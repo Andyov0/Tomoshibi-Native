@@ -914,6 +914,12 @@
       "zh-Hans": "对方用的暗号和你不同，这里看不到也听不到对方。",
       "zh-Hant": "對方用的暗號和你不同，這裡看不到也聽不到對方。",
       "ja": "この人は別の合言葉で通話を封じているため、ここでは映像も音声も届きません。"
+    },
+    "Could not load {title}. It stays at the top of the queue; Next song tries it again.": {
+      "en": "Could not load {title}. It stays at the top of the queue; Next song tries it again.",
+      "zh-Hans": "「{title}」加载失败，已留在列表最前面；按「下一首」会再试一次。",
+      "zh-Hant": "「{title}」載入失敗，已留在清單最前面；按「下一首」會再試一次。",
+      "ja": "「{title}」を読み込めませんでした。キューの先頭に残しています。「次の曲」でもう一度試します。"
     }
   }
 }

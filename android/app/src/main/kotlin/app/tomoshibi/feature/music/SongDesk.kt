@@ -381,6 +381,7 @@ class SongDesk internal constructor(
         for (packet in out.packets) outbox.trySend(packet)
         for (action in out.actions) perform(action)
         for (entry in out.skipped) say(t("Skipped {title}: the library's account cannot play it.", mapOf("title" to entry.title)))
+        for (entry in out.failed) say(t("Could not load {title}. It stays at the top of the queue; Next song tries it again.", mapOf("title" to entry.title)))
         if (out.changed) refresh()
     }
 

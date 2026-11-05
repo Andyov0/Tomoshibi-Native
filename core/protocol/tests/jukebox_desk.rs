@@ -1,7 +1,9 @@
 //! The song desk.
 //!
 //! The web client's own cases (web/src/live/jukebox.test.ts), ported one for
-//! one. What would go wrong quietly: a song taken off the queue and never
+//! one, but for a song that cannot be fetched: the web goes on to the next,
+//! and the desk here stops at it and keeps the queue (`the_queue`, below).
+//! What would go wrong quietly: a song taken off the queue and never
 //! played, two played at once, a skip that two impatient people turn into
 //! skipping two songs, a request that lands under the wrong name, anything
 //! said to the room in a sealed call, and a desk everybody still believes in
@@ -54,10 +56,13 @@ struct Room {
     stopped: usize,
     paused: Vec<bool>,
     skipped: Vec<DeskEntry>,
+    failed: Vec<DeskEntry>,
     searched: Vec<String>,
     unavailable: HashSet<String>,
     /// Songs whose fetch fails outright.
     failing: HashSet<String>,
+    /// Songs whose next fetch fails, once.
+    flaky: HashSet<String>,
     /// Songs held on their way until released, as a slow library holds them.
     slowed: HashSet<String>,
     held: HashMap<String, u64>,
@@ -84,9 +89,11 @@ impl Room {
             stopped: 0,
             paused: Vec::new(),
             skipped: Vec::new(),
+            failed: Vec::new(),
             searched: Vec::new(),
             unavailable: HashSet::new(),
             failing: HashSet::new(),
+            flaky: HashSet::new(),
             slowed: HashSet::new(),
             held: HashMap::new(),
             slow_publish: HashSet::new(),
@@ -105,12 +112,13 @@ impl Room {
             self.raw.push(String::from_utf8(packet.payload).unwrap());
         }
         self.skipped.extend(out.skipped);
+        self.failed.extend(out.failed);
         for action in out.actions {
             let answer = match action {
                 DeskAction::Prepare { request, entry } => {
                     if self.unavailable.contains(&entry.id) {
                         Some(self.desk.prepared(request, DeskPrepared::Unavailable, self.clock))
-                    } else if self.failing.contains(&entry.id) {
+                    } else if self.failing.contains(&entry.id) || self.flaky.remove(&entry.id) {
                         Some(self.desk.prepared(request, DeskPrepared::Failed, self.clock))
                     } else {
                         self.fetched.push(format!("{}/{}", entry.source, entry.id));
@@ -295,7 +303,18 @@ mod the_queue {
     }
 
     #[test]
-    fn gives_up_a_song_that_fails_ahead_and_again_and_plays_the_one_after() {
+    fn tries_a_song_once_more_when_fetching_it_fails_as_it_is_wanted() {
+        let mut room = holding(&["gfriend-2"]);
+        room.flaky.insert("a".into());
+
+        room.add(&["a"]);
+
+        assert_eq!(room.played, Room::titles(&["a"]));
+        assert!(room.failed.is_empty());
+    }
+
+    #[test]
+    fn stops_at_a_song_that_fails_ahead_and_again_and_keeps_it_and_the_rest() {
         let mut room = holding(&["gfriend-2"]);
         room.add(&["a"]);
         room.failing.insert("b".into());
@@ -303,8 +322,53 @@ mod the_queue {
 
         room.end_last();
 
-        assert_eq!(room.played, Room::titles(&["a", "c"]));
-        assert_eq!(room.skipped.iter().map(|one| one.id.as_str()).collect::<Vec<_>>(), vec!["b"]);
+        assert_eq!(room.played, Room::titles(&["a"]));
+        assert_eq!(room.queue(), vec!["b", "c"]);
+        assert!(room.state().now.is_none());
+        assert_eq!(room.failed.iter().map(|one| one.id.as_str()).collect::<Vec<_>>(), vec!["b"]);
+        assert!(room.skipped.is_empty());
+
+        // The library back, the next press plays it, and then the rest.
+        room.failing.remove("b");
+        room.skip();
+        assert_eq!(room.played, Room::titles(&["a", "b"]));
+        assert_eq!(room.queue(), vec!["c"]);
+    }
+
+    #[test]
+    fn keeps_the_queue_when_next_is_pressed_while_the_library_cannot_be_reached() {
+        // The owner's evening (2026-11-05): one press of "next" while every
+        // fetch failed emptied the queue song by song.
+        let mut room = holding(&["gfriend-2"]);
+        room.add(&["a", "b", "c", "d", "e"]);
+        for id in ["c", "d", "e"] {
+            room.failing.insert(id.into());
+        }
+
+        room.skip();
+        assert_eq!(room.played, Room::titles(&["a", "b"]));
+        room.skip();
+
+        assert_eq!(room.queue(), vec!["c", "d", "e"]);
+        assert_eq!(room.failed.iter().map(|one| one.id.as_str()).collect::<Vec<_>>(), vec!["c"]);
+        assert!(room.skipped.is_empty());
+        assert!(room.state().now.is_none());
+    }
+
+    #[test]
+    fn still_skips_every_song_the_account_may_not_play_and_plays_the_first_it_may() {
+        let mut room = holding(&["gfriend-2"]);
+        room.add(&["a"]);
+        for id in ["b", "c"] {
+            room.unavailable.insert(id.into());
+        }
+        room.add(&["b", "c", "d"]);
+
+        room.end_last();
+
+        assert_eq!(room.played, Room::titles(&["a", "d"]));
+        assert_eq!(room.skipped.iter().map(|one| one.id.as_str()).collect::<Vec<_>>(), vec!["b", "c"]);
+        assert!(room.failed.is_empty());
     }
 }
 

@@ -200,8 +200,14 @@ pub struct DeskOutput {
     pub packets: Vec<DeskPacket>,
     /// To do, in this order.
     pub actions: Vec<DeskAction>,
-    /// Songs skipped because they could not be played, for the app to say.
+    /// Songs skipped because the library's account may not play them, for the
+    /// app to say.
     pub skipped: Vec<DeskEntry>,
+    /// A song that could not be fetched, twice over, or not started: kept at
+    /// the top of the queue with the music stopped, for the app to say. The
+    /// library or the way to it failed, not the song, and the next press of
+    /// "next" tries it again (see `hold`).
+    pub failed: Vec<DeskEntry>,
     /// What [`JukeboxDesk::state`] returns is different now.
     pub changed: bool,
     /// For an intent: it was taken. False where nobody runs a desk to take
@@ -516,6 +522,7 @@ impl Inner {
         self.out.packets.extend(said.packets);
         self.out.actions.extend(said.actions);
         self.out.skipped.extend(said.skipped);
+        self.out.failed.extend(said.failed);
         self.out.changed |= said.changed;
     }
 
@@ -765,9 +772,10 @@ struct Ahead {
 
 #[derive(Debug, PartialEq)]
 enum Stage {
-    /// Being fetched and decoded. `retry` where the request was the one made
-    /// ahead of time, whose failure is tried once more before the song is
-    /// given up, as the web retries a prefetch that failed.
+    /// Being fetched and decoded. `retry` while a failure is still to be
+    /// tried once more: every song is fetched twice before the desk stops at
+    /// it, the one made ahead of time as the web retries a prefetch that
+    /// failed, and now one asked for when it is wanted as well.
     Preparing { retry: bool },
     /// Being published, which waits on the media server.
     Publishing,
@@ -1060,7 +1068,7 @@ impl Desk {
             entry: entry.clone(),
             request: 0,
             aborted: false,
-            stage: Stage::Preparing { retry: false },
+            stage: Stage::Preparing { retry: true },
             quality: None,
         });
         self.changed(now);
@@ -1080,6 +1088,22 @@ impl Desk {
             fetching.request = request;
         }
         self.out.actions.push(DeskAction::Prepare { request, entry });
+    }
+
+    /// A song that could not be fetched, twice, or not published: the
+    /// library, the way to it or the media server failing rather than the
+    /// song. Put back at the top of the queue and the music stopped, so that
+    /// nothing more is lost. The desk used to go on to the next song, as the
+    /// web's does, and while the trouble lasted each song after failed in
+    /// turn: one press of "next" emptied the owner's queue song by song, each
+    /// said to be one the account could not play (2026-11-05). The next press
+    /// of "next", or a song added, tries it again.
+    fn hold(&mut self, entry: DeskEntry, now: u64) {
+        self.queue.insert(0, entry.clone());
+        self.out.failed.push(entry);
+        self.now = None;
+        self.out.actions.push(DeskAction::Stop);
+        self.finish(now);
     }
 
     /// The song on its way is done with -- played, or there was none -- and
@@ -1144,7 +1168,7 @@ impl Desk {
                 let action = DeskAction::Play { request: fetching.request, entry: fetching.entry.clone() };
                 self.out.actions.push(action);
             }
-            // Fetched ahead and failed: tried once more now.
+            // Failed, fetched ahead or just now: tried once more.
             DeskPrepared::Failed if retry => {
                 let entry = fetching.entry.clone();
                 let request = self.request_id();
@@ -1154,11 +1178,18 @@ impl Desk {
                 }
                 self.out.actions.push(DeskAction::Prepare { request, entry });
             }
-            DeskPrepared::Unavailable | DeskPrepared::Failed => {
+            // The account may not play this one: the next may be another
+            // matter, and is tried.
+            DeskPrepared::Unavailable => {
                 if let Some(fetching) = self.fetching.take() {
                     self.out.skipped.push(fetching.entry);
                 }
                 self.step(now);
+            }
+            DeskPrepared::Failed => {
+                if let Some(fetching) = self.fetching.take() {
+                    self.hold(fetching.entry, now);
+                }
             }
         }
     }
@@ -1172,10 +1203,14 @@ impl Desk {
         }
         let Some(fetching) = self.fetching.take() else { return };
         if !ok {
-            if !fetching.aborted {
-                self.out.skipped.push(fetching.entry);
+            // Abandoned while it was being published: on to the next, as
+            // asked. Otherwise the media server would not take it, which is
+            // no more the song's doing than a failed fetch.
+            if fetching.aborted {
+                self.step(now);
+            } else {
+                self.hold(fetching.entry, now);
             }
-            self.step(now);
             return;
         }
         self.now = Some(fetching.entry);

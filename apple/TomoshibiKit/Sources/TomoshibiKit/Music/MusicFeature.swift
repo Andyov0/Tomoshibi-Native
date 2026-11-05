@@ -370,6 +370,9 @@ final class SongDesk {
         for entry in out.skipped {
             say(t("Skipped {title}: the library's account cannot play it.", ["title": entry.title]))
         }
+        for entry in out.failed {
+            say(t("Could not load {title}. It stays at the top of the queue; Next song tries it again.", ["title": entry.title]))
+        }
         if out.changed { refresh() }
     }
 
