@@ -11,7 +11,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// The build within the version. The owner's rule (2026-10-22): a small fix
 /// keeps the version and takes the next build; a large update takes a new
 /// version and starts again at 1. Raised with the other platforms' numbers.
-pub const BUILD: &str = "1";
+pub const BUILD: &str = "2";
 
 /// The version as the update check compares it and the deployment offers it:
 /// 0.1.7 for build 1, 0.1.7.2 for build 2 (the core's version_with_build).
