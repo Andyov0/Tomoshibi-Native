@@ -1226,41 +1226,39 @@ private struct LobbySidebar: View {
 }
 
 #if os(macOS)
-/// The Mac lobby's sidebar on macOS 27 as macOS 26 draws it: a panel
-/// floating eight points in from the window's edges, rounded at every corner,
-/// over the stage that runs on under it, its selection a quiet grey.
+/// The Mac lobby's sidebar on macOS 27 in macOS 26's colours: a panel a
+/// step lighter than the stage, standing off it with a soft shadow, its
+/// selection a quiet grey, and the window's edge its own on the other three
+/// sides.
 ///
-/// macOS 27 lays a split view's sidebar against the window's edge instead,
-/// glass the whole height of the window with square corners, and selects in
-/// the accent colour. The owner, with the same build on a Mac mini on 26.6.2
-/// and a MacBook on 27.0 side by side, found 26's the better looking and asked
-/// for it on both (2026-11-05). Neither SwiftUI nor AppKit on 27 has a switch
-/// for it, so on 27 the panel is drawn here, inside the system's column: the
-/// split view itself, its resizing, its collapsing and its toolbar, stays the
-/// system's. 26 is left entirely to the system, which draws this already.
+/// macOS 27 draws a split view's sidebar as glass the whole height of the
+/// window and selects in the accent colour. The owner, with the same build on
+/// a Mac mini on 26.6.2 and a MacBook on 27.0 side by side, found 26's the
+/// better looking and asked for it on both (2026-11-05). Neither SwiftUI nor
+/// AppKit on 27 has a switch for it, so on 27 the panel is drawn here, inside
+/// the system's column: the split view itself, its resizing, its collapsing
+/// and its toolbar, stays the system's. 26 is left entirely to the system.
+///
+/// 26 floats its panel eight points in from the window's edges, and so did
+/// this at first; on 27, with nothing behind the panel but the stage's
+/// colour, those eight points stood round it as a frame, and the owner asked
+/// for it gone (2026-11-05). The panel runs to the window's edges.
 enum FloatingSidebar {
     /// The panel: the stage's colour with white over it by day, a step
     /// lighter than the stage at night, as 26's glass comes out over it.
     static let panel = Theme.surface.opacity(0.7)
 
-    /// From the window's edges to the panel, and from the panel to the
-    /// stage (26's). Inset from the column's trailing edge too: the panel's
-    /// shadow is cut off at that edge, and stood as a step there where the
-    /// panel ran to it.
+    /// What is on the panel, moved in from the window's edges by as much as
+    /// 26's panel is: its buttons and rows stand where they do on 26.
     static let inset: CGFloat = 8
-    /// The panel's corners (26's, concentric with the window's).
-    static let radius: CGFloat = 16
 
     static var drawn: Bool {
         if #available(macOS 27.0, *) { return !GlassSupport.forcedFallback }
         return false
     }
 
-    /// The panel's shadow carried on over the stage. The column the panel
-    /// stands in ends eight points past it, and the shadow ended there with
-    /// it, a step from grey to the stage's colour down the whole height;
-    /// 26's fades out over the stage. This takes it on from where the column
-    /// cut it off.
+    /// The panel's shadow, over the stage. Drawn on the stage's side of the
+    /// column's edge: in the sidebar's own column it is cut off at that edge.
     struct ShadowOnStage: View {
         var body: some View {
             LinearGradient(colors: [.black.opacity(0.05), .clear], startPoint: .leading, endPoint: .trailing)
@@ -1268,17 +1266,6 @@ enum FloatingSidebar {
                 .ignoresSafeArea(edges: .vertical)
                 .allowsHitTesting(false)
                 .accessibilityHidden(true)
-        }
-    }
-
-    /// Everything about a rounded rectangle but the rectangle itself, forty
-    /// points out, filled even-odd: where its shadow may show.
-    struct Outside: Shape {
-        let radius: CGFloat
-        func path(in rect: CGRect) -> Path {
-            var path = Path(rect.insetBy(dx: -40, dy: -40))
-            path.addPath(RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: rect))
-            return path
         }
     }
 }
@@ -1294,37 +1281,19 @@ extension View {
                 .padding(.horizontal, FloatingSidebar.inset)
                 .padding(.bottom, FloatingSidebar.inset)
                 .background {
+                    // Over 27's own glass, the whole of the column: the
+                    // stage's colour, and the panel's over it. Its own colour
+                    // rather than glass: glass greys itself while the window
+                    // is in the background, and under it is only the stage's
+                    // colour, which glass has nothing to show of.
                     ZStack {
-                        // Over 27's own glass, which stops at the column's
-                        // edge and left a hard line there beside the stage:
-                        // the stage's colour runs on under the panel instead,
-                        // as it does on 26.
                         Theme.background
-                        // 26's panel stands off what is under it with a soft
-                        // shadow all round. Drawn only outside the panel,
-                        // which is not wholly opaque: a shadow under it, as
-                        // under glass, greyed the whole of it.
-                        RoundedRectangle(cornerRadius: FloatingSidebar.radius, style: .continuous)
-                            .fill(Theme.background)
-                            .shadow(color: .black.opacity(0.10), radius: 8, y: 1)
-                            .mask {
-                                FloatingSidebar.Outside(radius: FloatingSidebar.radius)
-                                    .fill(style: FillStyle(eoFill: true))
-                            }
-                            .padding(FloatingSidebar.inset)
-                        // A panel of its own colour rather than glass: under
-                        // it is only the stage's colour, which glass has
-                        // nothing to show of, and glass greys itself while the
-                        // window is in the background, which left the stage's
-                        // colour round it as a white frame (the owner's
-                        // screenshot, 2026-11-05).
-                        RoundedRectangle(cornerRadius: FloatingSidebar.radius, style: .continuous)
-                            .fill(FloatingSidebar.panel)
-                            .overlay {
-                                RoundedRectangle(cornerRadius: FloatingSidebar.radius, style: .continuous)
-                                    .strokeBorder(Theme.border.opacity(0.6), lineWidth: 0.5)
-                            }
-                            .padding(FloatingSidebar.inset)
+                        FloatingSidebar.panel
+                    }
+                    // Its edge beside the stage, as 26's panel has one; the
+                    // shadow off it is over the stage (ShadowOnStage).
+                    .overlay(alignment: .trailing) {
+                        Theme.border.opacity(0.6).frame(width: 0.5)
                     }
                     .ignoresSafeArea()
                 }
