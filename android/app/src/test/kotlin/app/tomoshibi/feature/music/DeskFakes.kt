@@ -19,9 +19,10 @@ internal fun deskOutput(
     packets: List<DeskPacket> = emptyList(),
     actions: List<DeskAction> = emptyList(),
     skipped: List<DeskEntry> = emptyList(),
+    failed: List<DeskEntry> = emptyList(),
     changed: Boolean = false,
     accepted: Boolean = true,
-) = DeskOutput(packets, actions, skipped, changed, accepted)
+) = DeskOutput(packets, actions, skipped, failed, changed, accepted)
 
 internal fun entry(key: String, title: String = "Song $key", by: String = "Ada", artists: List<String> = listOf("The Band")) =
     DeskEntry("netease", "id-$key", title, artists, "Album", "", 214.0, key, by)

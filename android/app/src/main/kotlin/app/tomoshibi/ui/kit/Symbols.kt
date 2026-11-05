@@ -117,6 +117,7 @@ import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material.icons.rounded.VideocamOff
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material.icons.rounded.VideoSettings
+import androidx.compose.material.icons.rounded.ViewSidebar
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.WarningAmber
@@ -291,6 +292,9 @@ private val symbols: Map<String, SfSymbol> by lazy {
     "rectangle.portrait.and.arrow.right" to SfSymbol({ Icons.AutoMirrored.Rounded.Logout }, 1.390f, 1.230f, 0.120f, 0.090f, 1.140f, 1.040f),
     "return" to SfSymbol({ Icons.AutoMirrored.Rounded.KeyboardReturn }, 1.280f, 1.080f, 0.120f, 0.090f, 1.050f, 0.890f),
     "server.rack" to SfSymbol({ Icons.Rounded.Dns }, 1.400f, 1.080f, 0.120f, 0.090f, 1.160f, 0.890f),
+    // The Mac lobby's button that hides its sidebar; measured as
+    // list.bullet.rectangle, whose frame and ink it shares.
+    "sidebar.left" to SfSymbol({ Icons.Rounded.ViewSidebar }, 1.400f, 1.080f, 0.120f, 0.090f, 1.160f, 0.890f),
     "signature" to SfSymbol({ Icons.Rounded.Gesture }, 1.710f, 1.260f, 0.120f, 0.090f, 1.480f, 1.070f),
     "slider.horizontal.3" to SfSymbol({ Icons.Rounded.Tune }, 1.230f, 1.010f, 0.120f, 0.090f, 1.000f, 0.820f),
     "sparkles" to SfSymbol({ Icons.Rounded.AutoAwesome }, 1.110f, 1.300f, 0.100f, 0.090f, 0.910f, 1.110f),
