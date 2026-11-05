@@ -31,6 +31,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import app.tomoshibi.basics.Theme
 import app.tomoshibi.basics.t
+import app.tomoshibi.model.HearingSetting
 import app.tomoshibi.model.Person
 import app.tomoshibi.model.Sound
 import app.tomoshibi.model.host.HostFeature
@@ -186,12 +187,18 @@ private fun SoundRow(feature: HostFeature, person: Person, sound: Sound, name: S
             // Disabled rather than hidden while blocked: nothing is arriving
             // to be made louder, and a slider that moves while the sound
             // stays off is a control that lies.
+            // To three times as sent, warned of as it crosses one
+            // (CallModel.louderThanSent).
             GlassSlider(
                 setting.volume,
-                { feature.setVolume(person, sound, it) },
+                { next ->
+                    if (next > 1 && feature.setting(person, sound).volume <= 1) feature.call.louderThanSent()
+                    feature.setVolume(person, sound, next)
+                },
                 t("{name}'s volume", mapOf("name" to name)),
                 Modifier.weight(1f),
                 enabled = !setting.blocked,
+                maximum = HearingSetting.MAX_VOLUME,
             )
             // Read at a glance, because a slider near one end tells nobody
             // whether it is at nought.
@@ -202,7 +209,9 @@ private fun SoundRow(feature: HostFeature, person: Person, sound: Sound, name: S
                 contentAlignment = Alignment.CenterEnd,
                 label = "volume",
             ) { said ->
-                KitText(said, font = Font(11f, Font.Medium, digits = true), color = Theme.muted, lines = 1, align = TextAlign.End)
+                // Past as sent in the colour that marks something live.
+                KitText(said, font = Font(11f, Font.Medium, digits = true),
+                    color = if (!setting.blocked && setting.volume > 1) Theme.tallyInk else Theme.muted, lines = 1, align = TextAlign.End)
             }
         }
     }

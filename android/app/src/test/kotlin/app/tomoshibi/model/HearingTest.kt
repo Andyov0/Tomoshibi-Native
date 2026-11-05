@@ -77,7 +77,8 @@ class HearingTest {
     fun whatTheWebWroteIsReadAndWhatWasEditedByHandIsClamped() {
         val book = HearingBook(
             """
-            {"AAAAAAAAAA/voice":{"volume":3,"blocked":false},
+            {"AAAAAAAAAA/voice":{"volume":7,"blocked":false},
+             "FFFFFFFFFF/voice":{"volume":2.5,"blocked":false},
              "BBBBBBBBBB/voice":{"volume":-1},
              "CCCCCCCCCC/voice":{"volume":"loud","blocked":1},
              "DDDDDDDDDD/voice":{"volume":false,"blocked":true},
@@ -85,7 +86,9 @@ class HearingTest {
             """.trimIndent(),
         )
         fun setting(key: String) = book.setting(HearingFiling(key, keeps = true), Sound.Voice)
-        assertEquals(HearingSetting(1.0, false), setting("AAAAAAAAAA"))
+        // Three times as sent at most (MAX_VOLUME); up to that, as written.
+        assertEquals(HearingSetting(3.0, false), setting("AAAAAAAAAA"))
+        assertEquals(HearingSetting(2.5, false), setting("FFFFFFFFFF"))
         assertEquals(HearingSetting(0.0, false), setting("BBBBBBBBBB"))
         // A string is not a volume and a 1 is not a block, as `=== true` has it.
         assertEquals(HearingSetting(1.0, false), setting("CCCCCCCCCC"))
@@ -105,9 +108,11 @@ class HearingTest {
     fun aVolumeOutsideTheRangeIsClampedOnTheWayIn() {
         val book = HearingBook()
         book.set(proven, Sound.Screen, HearingSetting(7.0, false))
-        // Clamped to 1 and not blocked: as sent, so nothing is kept at all.
-        assertEquals(HearingSetting.asSent, book.setting(proven, Sound.Screen))
-        assertNull(book.stored)
+        // Clamped to three times as sent, and kept, as the web writes it.
+        assertEquals(HearingSetting(3.0, false), book.setting(proven, Sound.Screen))
+        assertEquals(HearingSetting(3.0, false), HearingBook(book.stored).setting(proven, Sound.Screen))
+        book.set(proven, Sound.Screen, HearingSetting(-2.0, false))
+        assertEquals(0.0, book.setting(proven, Sound.Screen).volume, 0.0)
     }
 
     @Test

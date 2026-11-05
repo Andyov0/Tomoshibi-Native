@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import app.tomoshibi.basics.Theme
 import app.tomoshibi.basics.t
+import app.tomoshibi.model.HearingSetting
 import kotlin.math.roundToInt
 
 // The pieces the song desk and watching together are drawn with
@@ -100,6 +101,12 @@ fun MediaSlider(
     tint: Color = Theme.foreground,
     enabled: Boolean = true,
     label: String? = null,
+    /**
+     * A volume's as sent, on a slider that goes past it: drawn as a tick, a
+     * drag near it settles on it, and it is read out as the volume's own
+     * percentage rather than how far along the track ([VolumeMark]).
+     */
+    mark: Double? = null,
     editing: (Boolean) -> Unit = {},
 ) {
     val on = enabled && LocalEnabled.current
@@ -114,6 +121,7 @@ fun MediaSlider(
     val knobScale by animateFloatAsState(if (dragging) 1.18f else 1f, Theme.settle(), label = "knob")
     fun set(raw: Float) {
         var next = range.start + raw.coerceIn(0f, 1f) * span
+        if (mark != null && kotlin.math.abs(next - mark) < 0.06) next = mark
         if (step != null && step > 0) next = (next / step).roundToInt() * step
         if (next != current) onValueChange(next)
     }
@@ -129,13 +137,25 @@ fun MediaSlider(
         modifier
             .height(22.dp)
             .hoverable(hover, on)
-            .sliderSemantics(label, fraction.toDouble(), 0.05, on) { target ->
-                // A screen reader's step: begun, moved and finished at once,
-                // so a scrubber seeks to it as it would to a drag let go there.
-                currentEditing(true)
-                set(target.toFloat())
-                currentEditing(false)
-            }
+            .then(
+                if (mark != null && range.start == 0.0) {
+                    // A volume past as sent is read out as itself (250%), and
+                    // stepped in twentieths of it.
+                    Modifier.sliderSemantics(label, value, 0.05, on, range.endInclusive) { target ->
+                        currentEditing(true)
+                        set((target / span).toFloat())
+                        currentEditing(false)
+                    }
+                } else {
+                    Modifier.sliderSemantics(label, fraction.toDouble(), 0.05, on) { target ->
+                        // A screen reader's step: begun, moved and finished at once,
+                        // so a scrubber seeks to it as it would to a drag let go there.
+                        currentEditing(true)
+                        set(target.toFloat())
+                        currentEditing(false)
+                    }
+                },
+            )
             .pointerInput(on, range, step) {
                 if (!on) return@pointerInput
                 awaitEachGesture {
@@ -164,6 +184,9 @@ fun MediaSlider(
                 .size(maxOf(track, (width - knob) * fraction + knob / 2), track)
                 .background(tint.copy(alpha = tint.alpha * if (on) 1f else 0.5f), Capsule),
         )
+        if (mark != null && span > 0) {
+            VolumeMark(dragging || hovering, Modifier.offset(x = knob / 2 + (width - knob) * ((mark - range.start) / span).toFloat() - 1.dp))
+        }
         Box(
             Modifier
                 .offset(x = (width - knob) * fraction)
@@ -472,6 +495,8 @@ fun HearingRow(
     setVolume: (Double) -> Unit,
     setBlocked: (Boolean) -> Unit,
     modifier: Modifier = Modifier,
+    /** Said as the volume crosses past as sent (CallModel.louderThanSent). */
+    louder: () -> Unit = {},
 ) {
     val silenced = blocked || volume == 0.0
     val nameInk by animateColorAsState(if (silenced) Theme.muted else Theme.foreground, Theme.settle(), label = "name")
@@ -490,11 +515,16 @@ fun HearingRow(
             )
             MediaSlider(
                 volume,
-                setVolume,
+                { next ->
+                    if (next > 1 && volume <= 1) louder()
+                    setVolume(next)
+                },
                 Modifier.weight(1f).alpha(sliderShown),
+                range = 0.0..HearingSetting.MAX_VOLUME,
                 step = 0.05,
                 enabled = !blocked,
                 label = t("{name}'s volume", mapOf("name" to name)),
+                mark = 1.0,
             )
             AnimatedContent(
                 if (blocked) t("Muted") else "${(volume * 100).roundToInt()}%",
@@ -503,8 +533,9 @@ fun HearingRow(
                 contentAlignment = Alignment.CenterEnd,
                 label = "volume",
             ) { said ->
-                KitText(said, Modifier.fillMaxWidth(), font = Font(11f, Font.Medium, digits = true), color = Theme.muted,
-                    lines = 1, align = TextAlign.End)
+                // Past as sent in the colour that marks something live.
+                KitText(said, Modifier.fillMaxWidth(), font = Font(11f, Font.Medium, digits = true),
+                    color = if (!blocked && volume > 1) Theme.tallyInk else Theme.muted, lines = 1, align = TextAlign.End)
             }
         }
     }

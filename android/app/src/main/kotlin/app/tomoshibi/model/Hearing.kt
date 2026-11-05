@@ -20,7 +20,7 @@ enum class Sound(val key: String) { Voice("voice"), Screen("screen"), Music("mus
 
 /** What somebody has decided about one sound. */
 data class HearingSetting(
-    /** Between silent and as loud as it was sent. */
+    /** From silent to three times as loud as it was sent ([MAX_VOLUME]); one is as sent. */
     val volume: Double,
     /**
      * Stopped at the media server rather than turned down here: a volume of
@@ -34,6 +34,13 @@ data class HearingSetting(
     companion object {
         /** Untouched, which is what everybody is until somebody says otherwise. */
         val asSent = HearingSetting(1.0, false)
+
+        /**
+         * The loudest anybody may make somebody else: three times as loud as
+         * it was sent (hearing.ts `MAX_VOLUME`; the owner asked for it on
+         * 2026-11-05). Past one the slider says it can harm hearing.
+         */
+        const val MAX_VOLUME = 3.0
     }
 }
 
@@ -102,11 +109,12 @@ class HearingBook private constructor(private val entries: MutableMap<String, He
         private fun place(filing: HearingFiling, sound: Sound) = "${filing.key}/${sound.key}"
 
         /**
-         * A volume between nought and one. A slider cannot produce anything
-         * else; a hand-edited entry can, and a player handed 3 would be three
-         * times as loud as the person sent it (hearing.ts `level`).
+         * A volume between nought and three times as sent (hearing.ts
+         * `level`). A slider cannot produce anything else; a hand-edited
+         * entry can.
          */
-        fun clamp(volume: Double): Double = if (volume.isFinite()) volume.coerceIn(0.0, 1.0) else HearingSetting.asSent.volume
+        fun clamp(volume: Double): Double =
+            if (volume.isFinite()) volume.coerceIn(0.0, HearingSetting.MAX_VOLUME) else HearingSetting.asSent.volume
 
         private fun read(stored: String?): MutableMap<String, Held> {
             val out = HashMap<String, Held>()

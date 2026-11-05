@@ -91,6 +91,11 @@ fun GlassSlider(
     modifier: Modifier = Modifier,
     step: Double = 0.05,
     enabled: Boolean = true,
+    /**
+     * The most it goes to: one, or past it to three times as sent
+     * (HearingSetting.MAX_VOLUME), when it is marked at one ([VolumeMark]).
+     */
+    maximum: Double = 1.0,
 ) {
     val on = enabled && LocalEnabled.current
     val hover = remember { MutableInteractionSource() }
@@ -99,18 +104,18 @@ fun GlassSlider(
     val lit = (hovering || dragging) && on
     val thumb by animateDpAsState(if (lit) 17.dp else 14.dp, Theme.settle(), label = "thumb")
     val track by animateDpAsState(if (lit) 6.dp else 5.dp, Theme.settle(), label = "track")
-    val shown by animateFloatAsState(value.coerceIn(0.0, 1.0).toFloat(), Motion.follow(), label = "value")
+    val shown by animateFloatAsState((value / maximum).coerceIn(0.0, 1.0).toFloat(), Motion.follow(), label = "value")
     val shadow by animateDpAsState(if (dragging) 5.dp else 3.dp, Theme.settle(), label = "shadow")
     fun set(raw: Double) {
-        val snapped = (raw.coerceIn(0.0, 1.0) / step).roundToInt() * step
-        if (abs(snapped - value) > 0.0001) onValueChange(snapped.coerceIn(0.0, 1.0))
+        val snapped = (raw.coerceIn(0.0, maximum) / step).roundToInt() * step
+        if (abs(snapped - value) > 0.0001) onValueChange(snapped.coerceIn(0.0, maximum))
     }
     BoxWithConstraints(
         modifier
             .height(22.dp)
             .alpha(if (on) 1f else 0.4f)
             .hoverable(hover, on)
-            .sliderSemantics(label, value, step, on) { set(it) }
+            .sliderSemantics(label, value, step, on, maximum) { set(it) }
             .focusable(on)
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
@@ -128,9 +133,9 @@ fun GlassSlider(
                     val travel = maxOf(1f, size.width - thumb.toPx())
                     dragging = true
                     try {
-                        set(((down.position.x - half) / travel).toDouble())
+                        set(settleAtMark((down.position.x - half) / travel * maximum, maximum))
                         horizontalDrag(down.id) { change ->
-                            set(((change.position.x - half) / travel).toDouble())
+                            set(settleAtMark((change.position.x - half) / travel * maximum, maximum))
                             change.consume()
                         }
                     } finally {
@@ -156,6 +161,7 @@ fun GlassSlider(
                 .size(maxOf(track, x), track)
                 .background(Theme.foreground.copy(alpha = 0.9f), Capsule),
         )
+        if (maximum > 1) VolumeMark(lit, Modifier.offset(x = thumb / 2 + travel * (1 / maximum).toFloat() - 1.dp))
         Box(
             Modifier
                 .offset(x = x - thumb / 2)
@@ -169,19 +175,44 @@ fun GlassSlider(
 
 /**
  * What a screen reader is told of a slider: its name, where it is as a
- * percentage, and the twentieths it moves in.
+ * percentage, and the twentieths it moves in, from nought to [maximum] (one,
+ * or three for a volume that goes past as sent).
  */
-internal fun Modifier.sliderSemantics(label: String?, value: Double, step: Double, enabled: Boolean, set: (Double) -> Unit) =
+internal fun Modifier.sliderSemantics(
+    label: String?,
+    value: Double,
+    step: Double,
+    enabled: Boolean,
+    maximum: Double = 1.0,
+    set: (Double) -> Unit,
+) =
     semanticsOf {
         if (label != null) contentDescription = label
         stateDescription = "${(value * 100).roundToInt()}%"
-        progressBarRangeInfo = ProgressBarRangeInfo(value.toFloat(), 0f..1f, ((1 / step).roundToInt() - 1).coerceAtLeast(0))
+        progressBarRangeInfo = ProgressBarRangeInfo(
+            value.toFloat(), 0f..maximum.toFloat(), ((maximum / step).roundToInt() - 1).coerceAtLeast(0),
+        )
         if (!enabled) disabled()
         setProgress { target ->
             set(target.toDouble())
             true
         }
     }
+
+/**
+ * The mark at as sent on a volume slider that goes past it (the web's
+ * VolumeRange, whose browser draws a listed value as a tick): past it is where
+ * hearing can be harmed, and a drag back finds as sent rather than a hair
+ * either side, where a readout of 102% says it is still too loud.
+ */
+@Composable
+internal fun VolumeMark(lit: Boolean, modifier: Modifier = Modifier) {
+    val height by animateDpAsState(if (lit) 12.dp else 10.dp, Theme.settle(), label = "mark")
+    Box(modifier.size(2.dp, height).background(Theme.wash.copy(alpha = 0.45f), Capsule))
+}
+
+/** One, for a drag let go within six hundredths of it on a slider that goes past it ([VolumeMark]). */
+internal fun settleAtMark(value: Double, maximum: Double): Double = if (maximum > 1 && abs(value - 1) < 0.06) 1.0 else value
 
 private fun Modifier.semanticsOf(block: androidx.compose.ui.semantics.SemanticsPropertyReceiver.() -> Unit) =
     then(Modifier.clearAndSetSemantics(block))

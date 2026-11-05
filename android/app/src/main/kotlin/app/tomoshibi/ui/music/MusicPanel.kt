@@ -54,6 +54,7 @@ import app.tomoshibi.feature.music.SongDesk
 import app.tomoshibi.feature.watch.clockOf
 import app.tomoshibi.model.AppModel
 import app.tomoshibi.model.CallModel
+import app.tomoshibi.model.HearingSetting
 import app.tomoshibi.ui.kit.Appear
 import app.tomoshibi.ui.kit.Font
 import app.tomoshibi.ui.kit.GlassSwitch
@@ -206,6 +207,7 @@ private fun DeskTab(desk: SongDesk) {
                                 setting.volume, setting.blocked,
                                 { desk.setVolume(player.id, it) }, { desk.setBlocked(player.id, it) },
                                 Modifier.background(Theme.wash.copy(alpha = 0.05f), rounded(16f)).padding(12.dp),
+                                louder = { desk.call.louderThanSent() },
                             )
                         }
                         else -> Idle(desk)
@@ -327,18 +329,28 @@ private fun NowPlaying(desk: SongDesk, state: DeskState, now: DeskEntry) {
                             )
                             KitText(t("In your speakers"), font = Font(11.5f), color = Theme.muted, lines = 1)
                             MediaSlider(
-                                desk.monitorVolume.toDouble(), { desk.monitorVolume = it.toFloat() }, Modifier.weight(1f),
-                                step = 0.05, label = t("Music volume in your speakers"),
+                                desk.monitorVolume.toDouble(),
+                                { next ->
+                                    if (next > 1 && desk.monitorVolume <= 1) desk.call.louderThanSent()
+                                    desk.monitorVolume = next.toFloat()
+                                },
+                                Modifier.weight(1f),
+                                range = 0.0..HearingSetting.MAX_VOLUME,
+                                step = 0.05, label = t("Music volume in your speakers"), mark = 1.0,
                             )
                             KitText(
                                 "${(desk.monitorVolume * 100).roundToInt()}%", Modifier.width(38.dp),
-                                font = Font(11f, Font.Medium, digits = true), color = Theme.muted, lines = 1, align = TextAlign.End,
+                                font = Font(11f, Font.Medium, digits = true),
+                                color = if (desk.monitorVolume > 1) Theme.tallyInk else Theme.muted, lines = 1, align = TextAlign.End,
                             )
                         }
                     }
                 } else {
                     val setting = desk.hearing(state.holder)
-                    HearingRow(t("Music"), setting.volume, setting.blocked, { desk.setVolume(state.holder, it) }, { desk.setBlocked(state.holder, it) })
+                    HearingRow(
+                        t("Music"), setting.volume, setting.blocked, { desk.setVolume(state.holder, it) }, { desk.setBlocked(state.holder, it) },
+                        louder = { desk.call.louderThanSent() },
+                    )
                 }
             }
 

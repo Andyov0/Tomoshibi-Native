@@ -3,6 +3,7 @@ package app.tomoshibi.media
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import app.tomoshibi.model.HearingSetting
 import kotlin.math.exp
 import uniffi.tomoshibi_core.LosslessSink
 
@@ -75,8 +76,11 @@ class LosslessPlayback(private val audio: CallAudio) : LosslessSink {
     fun setLevel(identity: String, music: Boolean, level: Float) {
         val key = key(identity, music)
         synchronized(lock) {
-            levels[key] = level.coerceIn(0f, 1f)
-            streams[key]?.volume = level.coerceIn(0f, 1f)
+            // Up to three times as sent (HearingSetting.MAX_VOLUME), as the
+            // Opus track's own volume (CallAudio.setVolume).
+            val clamped = level.coerceIn(0f, HearingSetting.MAX_VOLUME.toFloat())
+            levels[key] = clamped
+            streams[key]?.volume = clamped
         }
     }
 

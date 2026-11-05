@@ -164,7 +164,8 @@ class SongDesk internal constructor(
         // A volume nothing was kept for is full, and so is one that is not a
         // volume: sound.ts once read "nothing kept" as nought and played the
         // music to everybody but its own speakers.
-        Rehearsal.choices?.string(MONITOR_KEY)?.toFloatOrNull()?.takeIf { it in 0f..1f } ?: 1f,
+        Rehearsal.choices?.string(MONITOR_KEY)?.toFloatOrNull()
+            ?.takeIf { it in 0f..HearingSetting.MAX_VOLUME.toFloat() } ?: 1f,
     )
     /**
      * How loud the music playing from here is in this phone's own speakers

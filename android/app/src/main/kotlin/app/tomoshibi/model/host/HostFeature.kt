@@ -367,6 +367,22 @@ class HostFeature private constructor(val call: CallModel) {
                 val track = track(person, sound) ?: continue
                 val setting = Hearing.shared.setting(person.id, sound)
                 call.audio.setVolume(track.sid, if (setting.blocked) 0f else setting.volume.toFloat())
+                if (sound == Sound.Screen) {
+                    // A screen's sound may be arriving losslessly instead, on
+                    // a stream of its own that only this level reaches; this
+                    // row turned only the Opus track's source, and a lossless
+                    // share played at its old level whatever the panel said.
+                    // The music's is CallModel.hear's, from the song desk.
+                    call.lossless.setLevel(person.id, music = false, if (setting.blocked) 0f else setting.volume.toFloat())
+                    val id = person.id
+                    call.scope.launch {
+                        try {
+                            call.call.setHearing(id, false, setting.volume.toFloat(), setting.blocked)
+                        } catch (fault: Exception) {
+                            Log.d(TAG, "host: the screen's lossless hearing for $id was not taken: ${fault.message}")
+                        }
+                    }
+                }
                 if (setting.blocked) {
                     // Noted before it is asked, not after it succeeded: the
                     // media library switches the track off here before it

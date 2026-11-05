@@ -16,6 +16,7 @@ import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
+import app.tomoshibi.model.HearingSetting
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.math.sqrt
 import uniffi.tomoshibi_core.AudioInput
@@ -162,9 +163,15 @@ class CallAudio(
         source.ring.clear()
     }
 
-    /** The listener's own setting for this sound, 0 to 1. */
+    /**
+     * The listener's own setting for this sound, from nought to three times as
+     * sent ([HearingSetting.MAX_VOLUME]). The mixer multiplies the samples by
+     * it and holds the sum to full scale before the track (`mix`), so past one
+     * is only a larger number here; a sound made louder than full scale is
+     * clipped there, as the web's gain node is by the browser's output.
+     */
     fun setVolume(sid: String, volume: Float) {
-        players[sid]?.volume = volume.coerceIn(0f, 1f)
+        players[sid]?.volume = volume.coerceIn(0f, HearingSetting.MAX_VOLUME.toFloat())
     }
 
     /** The music's dip while somebody talks (web/src/live/duck.ts), applied on top of the listener's own setting. */

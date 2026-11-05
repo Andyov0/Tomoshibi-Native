@@ -344,6 +344,22 @@ class CallModel internal constructor(
     }
 
     /**
+     * A volume taken past as loud as it was sent (notices.ts
+     * `louderThanSent`): up to three times, which can harm somebody's hearing,
+     * said as a slider crosses one, every time. One at a time, under one key,
+     * so dragging back and forth over the line does not stack them.
+     *
+     * Without the web's second line, that on speakers the person turned up may
+     * hear themselves back: that is the browser's, whose Web Audio is out of
+     * reach of its echo cancelling. Here every sound is mixed into the one
+     * track the platform's echo canceller is given as what it plays.
+     */
+    fun louderThanSent() {
+        announce(CallToast(t("Above 100% can harm your hearing"), kind = CallToast.Kind.Warning, lasts = NoticeTimes.AT_MOST,
+            key = "louder-than-sent", closable = true))
+    }
+
+    /**
      * Says that a camera or a microphone would not start (notices.ts
      * `deviceFailed`): ten seconds at most, with a close button, and taken
      * down at once by the next start of the same device that works.
