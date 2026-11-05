@@ -2,6 +2,9 @@ import AVFoundation
 import AVKit
 import Foundation
 import TomoshibiBasics
+#if os(iOS)
+import UIKit
+#endif
 import WebKit
 
 /// A file or an HLS playlist, from where it is or relayed: AVPlayer, which
@@ -25,6 +28,10 @@ final class AVBackend: NSObject, WatchBackend {
     /// What this app last told the player, to tell a press in the picture in
     /// picture window from its own doing.
     private var asked: Bool?
+    /// The app went to the background since it was last in front.
+    private var away = false
+    private var appTokens: [NSObjectProtocol] = []
+    private var saidUnsupported = false
     private var largest: CGSize = .zero
     /// The viewer's own ceiling, read when the video is opened, as the web
     /// reads it (WatchScreen.tsx: "read when the video is opened, so a change
@@ -50,6 +57,9 @@ final class AVBackend: NSObject, WatchBackend {
             let rate = player.rate
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.rateChanged(rate) } }
         })
+        #if os(iOS)
+        watchTheApp()
+        #endif
         load(at: nil)
     }
 
@@ -209,6 +219,8 @@ final class AVBackend: NSObject, WatchBackend {
         pip?.stopPictureInPicture()
         pipWatch.removeAll()
         pip = nil
+        for token in appTokens { NotificationCenter.default.removeObserver(token) }
+        appTokens.removeAll()
         playerWatch.removeAll()
         itemWatch.removeAll()
         for token in itemTokens { NotificationCenter.default.removeObserver(token) }
@@ -222,12 +234,29 @@ final class AVBackend: NSObject, WatchBackend {
 
     /// Made once the layer is on screen, which picture in picture needs.
     func layerShown() {
-        guard pip == nil, layer.player != nil, AVPictureInPictureController.isPictureInPictureSupported() else { return }
+        guard pip == nil, layer.player != nil else { return }
+        guard AVPictureInPictureController.isPictureInPictureSupported() else {
+            // Said once: this is asked at every layout of the stage.
+            if !saidUnsupported { WatchDebug.log("pip unsupported") }
+            saidUnsupported = true
+            return
+        }
         let made: AVPictureInPictureController? = AVPictureInPictureController(playerLayer: layer)
         guard let made else { return }
         // No skipping in that window: a seek there would move this player
         // alone, and the keeper would move it straight back.
         made.requiresLinearPlayback = true
+        #if os(iOS)
+        // Into the small window by itself as the app leaves, as a video app's
+        // player goes. Without it the window opened only from the button on
+        // the stage: an Emby film and a Bilibili video watched in a call on an
+        // iPhone went with the app to the home screen and were shown nowhere
+        // (reported 2026-11-06). The call's own small window, which also
+        // starts by itself, stands aside meanwhile
+        // (WatchFeature.holdsSmallWindow), or the system picks one of the two.
+        made.canStartPictureInPictureAutomaticallyFromInline = true
+        made.delegate = self
+        #endif
         pip = made
         pipWatch.append(made.observe(\.isPictureInPicturePossible, options: [.initial, .new]) { [weak self] _, _ in
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.reportPictureInPicture() } }
@@ -267,7 +296,41 @@ final class AVBackend: NSObject, WatchBackend {
             owner?.pressedInPictureInPicture(playing: true)
         }
     }
+
+    #if os(iOS)
+    /// Back in front after being away: the small window is closed and the
+    /// picture goes back to the stage, as FaceTime's does and the call's own
+    /// small window does (PictureInPictureHost). Left open, it sat over the
+    /// very stage it was showing. Only after the app was really away: Control
+    /// Center pulled down and put back is no reason to close a window somebody
+    /// opened from the stage.
+    private func watchTheApp() {
+        let center = NotificationCenter.default
+        appTokens.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.away = true }
+        })
+        appTokens.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.away else { return }
+                self.away = false
+                if let pip = self.pip, pip.isPictureInPictureActive { pip.stopPictureInPicture() }
+            }
+        })
+    }
+    #endif
 }
+
+#if os(iOS)
+extension AVBackend: AVPictureInPictureControllerDelegate {
+    /// The window's own button back to the app: the layer never left the
+    /// stage, so there is nothing to put back; nothing here is touched, so it
+    /// is answered from wherever AVKit asks.
+    nonisolated func pictureInPictureController(_ controller: AVPictureInPictureController,
+                                    restoreUserInterfaceForPictureInPictureStopWithCompletionHandler completion: @escaping (Bool) -> Void) {
+        completion(true)
+    }
+}
+#endif
 
 /// YouTube's own embedded player, where YouTube can be reached (youtube.ts):
 /// its media addresses are bound to whoever resolved them, so nobody can be
@@ -283,7 +346,7 @@ final class YouTubeBackend: NSObject, WatchBackend, WKNavigationDelegate, WKUIDe
     /// not a long wait at a black tile (youtube.ts `LOAD_MS`).
     static let loadMs = 6000
     /// YT.PlayerState, by the numbers the API sends.
-    static let ended = 0, playingState = 1, buffering = 3
+    static let ended = 0, playingState = 1, paused = 2, buffering = 3
 
     let web: WKWebView
     private weak var owner: WatchPlayer?
@@ -292,6 +355,22 @@ final class YouTubeBackend: NSObject, WatchBackend, WKNavigationDelegate, WKUIDe
     private var reportedAt = 0.0
     private var state = -1
     private var loaded = false
+    #if os(iOS)
+    /// The frame YouTube's video element is in, as the script that watches
+    /// it last reported from: YouTube's own, from another origin, which the
+    /// page cannot reach into.
+    private var videoFrame: WKFrameInfo?
+    private var pipPossible = false
+    private var pipActive = false
+    /// What this app last asked of the player, to tell a press in the small
+    /// window from its own doing, as AVBackend tells it.
+    private var asked: Bool?
+    /// The small window was asked for as the app stopped being in front; it is
+    /// closed again when the app is back, whether or not the app went away.
+    private var openedLeaving = false
+    private var away = false
+    private var appTokens: [NSObjectProtocol] = []
+    #endif
 
     init(id: String, base: String, owner: WatchPlayer) {
         self.owner = owner
@@ -304,6 +383,12 @@ final class YouTubeBackend: NSObject, WatchBackend, WKNavigationDelegate, WKUIDe
         #endif
         let relay = MessageRelay()
         configuration.userContentController.add(relay, name: "watch")
+        #if os(iOS)
+        configuration.allowsPictureInPictureMediaPlayback = true
+        configuration.userContentController.addUserScript(WKUserScript(
+            source: Self.pipScript, injectionTime: .atDocumentEnd, forMainFrameOnly: false, in: Self.pipWorld))
+        configuration.userContentController.add(relay, contentWorld: Self.pipWorld, name: "pip")
+        #endif
         web = WKWebView(frame: .zero, configuration: configuration)
         super.init()
         relay.target = self
@@ -313,6 +398,7 @@ final class YouTubeBackend: NSObject, WatchBackend, WKNavigationDelegate, WKUIDe
         web.isOpaque = false
         web.backgroundColor = .black
         web.scrollView.isScrollEnabled = false
+        watchTheApp()
         #endif
         let origin = URL(string: base).flatMap { url -> String? in
             guard let scheme = url.scheme, let host = url.host else { return nil }
@@ -334,14 +420,34 @@ final class YouTubeBackend: NSObject, WatchBackend, WKNavigationDelegate, WKUIDe
     var youtube: Bool { true }
     var flowing: Bool { state == Self.playingState }
 
-    func play() { run("watch.play()") }
-    func pause() { run("watch.pause()") }
+    func play() {
+        #if os(iOS)
+        asked = true
+        #endif
+        run("watch.play()")
+    }
+
+    func pause() {
+        #if os(iOS)
+        asked = false
+        #endif
+        run("watch.pause()")
+    }
+
     func seek(_ to: Double) { run("watch.seek(\(max(0, to)))") }
     func setRate(_ rate: Double) {}
     func setVolume(_ level: Double, muted: Bool) { run("watch.volume(\(level), \(muted))") }
     func setTappable(_ on: Bool) { run("watch.tappable(\(on))") }
 
     func stop() {
+        #if os(iOS)
+        // Closed before the player goes, rather than left to whatever WebKit
+        // does with a small window whose video was taken out of the page.
+        if pipActive { setPictureInPicture(false) }
+        for token in appTokens { NotificationCenter.default.removeObserver(token) }
+        appTokens.removeAll()
+        web.configuration.userContentController.removeScriptMessageHandler(forName: "pip", contentWorld: Self.pipWorld)
+        #endif
         run("watch.destroy()")
         web.configuration.userContentController.removeScriptMessageHandler(forName: "watch")
         web.stopLoading()
@@ -368,6 +474,9 @@ final class YouTubeBackend: NSObject, WatchBackend, WKNavigationDelegate, WKUIDe
             if kind == "state" || state != was {
                 if state == Self.playingState { owner?.backendBegan(self) }
                 if state == Self.ended, was != Self.ended { owner?.backendEnded(self) }
+                #if os(iOS)
+                pressedInSmallWindow()
+                #endif
             }
         case "error":
             owner?.youtubeRefused(self, code: (message["code"] as? Int) ?? 0)
@@ -397,6 +506,124 @@ final class YouTubeBackend: NSObject, WatchBackend, WKNavigationDelegate, WKUIDe
                  windowFeatures: WKWindowFeatures) -> WKWebView? {
         nil
     }
+
+    #if os(iOS)
+    // MARK: Picture in picture
+
+    /// YouTube's video is a video element in YouTube's frame, and the small
+    /// window it can go into is WebKit's: no layer of this app's own carries
+    /// it. WebKit also pauses a page's video once the app is in the
+    /// background unless that window holds it, so a window of the app's own
+    /// with the web view in it would show a still picture.
+    ///
+    /// The script runs in every frame, YouTube's among them, in a world of
+    /// its own: YouTube's scripts can neither see it nor speak to `pip`. It
+    /// says whether the video in its frame can go into the small window and
+    /// whether it is there, and takes it in and out when asked; asked through
+    /// `evaluateJavaScript`, which WebKit counts as a press, as entering the
+    /// small window requires.
+    private static let pipWorld = WKContentWorld.world(name: "tomoshibi-pip")
+
+    private static let pipScript = """
+    (() => {
+      if (window.tomoshibiPip) return;
+      const say = (message) => window.webkit.messageHandlers.pip.postMessage(message);
+      let video = null;
+      const report = () => say({
+        possible: !!video && typeof video.webkitSupportsPresentationMode === "function"
+          && video.webkitSupportsPresentationMode("picture-in-picture"),
+        active: !!video && video.webkitPresentationMode === "picture-in-picture",
+      });
+      // YouTube puts its video element in after the frame has loaded, and may
+      // put another in its place.
+      const look = () => {
+        const found = document.querySelector("video");
+        if (!found || found === video) return;
+        video = found;
+        for (const name of ["webkitpresentationmodechanged", "loadedmetadata", "emptied"]) {
+          video.addEventListener(name, report);
+        }
+        report();
+      };
+      new MutationObserver(look).observe(document.documentElement, { childList: true, subtree: true });
+      look();
+      window.tomoshibiPip = (on) => {
+        look();
+        if (!video) return false;
+        video.webkitSetPresentationMode(on ? "picture-in-picture" : "inline");
+        return true;
+      };
+    })();
+    """
+
+    fileprivate func heardPip(_ body: Any, frame: WKFrameInfo) {
+        guard let message = body as? [String: Any] else { return }
+        let possible = message["possible"] as? Bool ?? false
+        let active = message["active"] as? Bool ?? false
+        if possible || active { videoFrame = frame }
+        pipPossible = possible
+        pipActive = active
+        owner?.pictureInPicture(possible: possible, active: active)
+        WatchDebug.log("pip possible=\(possible) active=\(active) youtube")
+    }
+
+    func togglePictureInPicture() {
+        setPictureInPicture(!pipActive)
+    }
+
+    private func setPictureInPicture(_ on: Bool) {
+        guard let videoFrame else { return }
+        web.evaluateJavaScript("window.tomoshibiPip && window.tomoshibiPip(\(on))", in: videoFrame, in: Self.pipWorld) { result in
+            if case .failure(let error) = result { WatchDebug.log("pip \(on) failed \(error)") }
+        }
+    }
+
+    /// The small window's own play and pause drive YouTube's player alone; a
+    /// change nobody here asked for, while that window is up, was pressed
+    /// there and is passed to the show, which the keeper would otherwise undo.
+    private func pressedInSmallWindow() {
+        guard pipActive, let asked else { return }
+        if state == Self.paused, asked {
+            self.asked = false
+            owner?.pressedInPictureInPicture(playing: false)
+        } else if state == Self.playingState, !asked {
+            self.asked = true
+            owner?.pressedInPictureInPicture(playing: true)
+        }
+    }
+
+    /// This video plays inline, never full screen, and WebKit offers no
+    /// switch for a page's inline video to go into the small window by itself
+    /// as the app leaves; left alone it was paused in the background (in the
+    /// simulator, 2026-11-06). So it is asked to go as the app stops being in
+    /// front, while the app can still open the window, and only while the
+    /// video plays, as AVPlayer's goes. That moment is also Control Center
+    /// being pulled down, which is not leaving, so a window opened then closes
+    /// again when the app is back in front without having been away; one the
+    /// app was away behind closes on the way back, as AVBackend's does.
+    private func watchTheApp() {
+        let center = NotificationCenter.default
+        appTokens.append(center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.pipPossible, !self.pipActive, self.state == Self.playingState else { return }
+                self.openedLeaving = true
+                self.setPictureInPicture(true)
+            }
+        })
+        appTokens.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.away = true }
+        })
+        appTokens.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let close = self.away || self.openedLeaving
+                self.away = false
+                self.openedLeaving = false
+                if close, self.pipActive { self.setPictureInPicture(false) }
+            }
+        })
+    }
+    #endif
 
     private static func page(id: String, origin: String, api: String) -> String {
         // Every value as a JSON string, so nothing in one can end the script.
@@ -466,6 +693,13 @@ private final class MessageRelay: NSObject, WKScriptMessageHandler {
 
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         let body = message.body
+        #if os(iOS)
+        if message.name == "pip" {
+            let frame = message.frameInfo
+            MainActor.assumeIsolated { target?.heardPip(body, frame: frame) }
+            return
+        }
+        #endif
         MainActor.assumeIsolated { target?.heard(body) }
     }
 }

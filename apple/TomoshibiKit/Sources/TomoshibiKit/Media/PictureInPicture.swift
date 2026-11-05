@@ -35,17 +35,21 @@ struct PictureInPictureHost: UIViewRepresentable {
     let call: Call
     let sid: String?
     var camera = false
+    /// The video watched together goes into the small window instead
+    /// (WatchFeature.holdsSmallWindow): this one does not start by itself,
+    /// and is not fed every frame for a window it will not open.
+    var yields = false
 
     func makeUIView(context: Context) -> HostView {
         HostView(call: call)
     }
 
     func updateUIView(_ view: HostView, context: Context) {
-        view.follow(sid, camera: camera)
+        view.follow(sid, camera: camera, yields: yields)
     }
 
     static func dismantleUIView(_ view: HostView, coordinator: ()) {
-        view.follow(nil, camera: false)
+        view.follow(nil, camera: false, yields: false)
     }
 
     final class HostView: UIView, AVPictureInPictureSampleBufferPlaybackDelegate, AVPictureInPictureControllerDelegate {
@@ -59,6 +63,7 @@ struct PictureInPictureHost: UIViewRepresentable {
         /// Whether the picture is a camera, its shape, and the small
         /// window's size, for whether it fills the window.
         private var camera = false
+        private var yields = false
         private var picture = CGSize.zero
         private var smallWindow = CGSize.zero
         private var controller: AVPictureInPictureController?
@@ -112,9 +117,13 @@ struct PictureInPictureHost: UIViewRepresentable {
             renderer.layer.frame = bounds
         }
 
-        func follow(_ next: String?, camera: Bool) {
+        func follow(_ next: String?, camera: Bool, yields: Bool) {
             sid = next
             self.camera = camera
+            if yields != self.yields {
+                self.yields = yields
+                controller?.canStartPictureInPictureAutomaticallyFromInline = !yields
+            }
             feed()
             reframe()
         }
@@ -125,9 +134,10 @@ struct PictureInPictureHost: UIViewRepresentable {
         }
 
         /// On the picture it would show, every frame of it while the app is
-        /// away or the small window is open and two a second otherwise.
+        /// away or the small window is open and two a second otherwise; two a
+        /// second while away, too, behind the video watched together.
         private func feed() {
-            let showing = away || controller?.isPictureInPictureActive == true
+            let showing = (away && !yields) || controller?.isPictureInPictureActive == true
             if sid != fed {
                 if let fed { VideoHub.existing(call)?.remove(renderer, from: fed) }
                 fed = sid

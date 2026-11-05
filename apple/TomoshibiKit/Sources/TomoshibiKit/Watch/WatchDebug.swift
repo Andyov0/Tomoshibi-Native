@@ -32,8 +32,8 @@ import TomoshibiCore
 /// - `TOMOSHIBI_DEBUG_WATCH_LINKS=1` stands in for a deployment's watch
 ///   gateway, for one that has none: this person may start a show, and a
 ///   link to a file or a playlist on this machine (127.0.0.1 or localhost,
-///   nothing else) reads as a video that plays from there; anything else is
-///   "not a video". `TOMOSHIBI_DEBUG_WATCH_RELAY=<address>` gives each such
+///   nothing else) reads as a video that plays from there, and a YouTube link
+///   as that video in YouTube's player; anything else is "not a video". `TOMOSHIBI_DEBUG_WATCH_RELAY=<address>` gives each such
 ///   video a relay, the address with the link's path after it, standing in
 ///   for the deployment's own. What crosses the call is unchanged: the show
 ///   carries the stand-in's ticket as it would the gateway's.
@@ -80,11 +80,26 @@ enum WatchDebug {
     /// What the stand-in makes of a pasted link.
     @MainActor static func resolve(_ text: String) -> ResolvedLink {
         let link = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: link), ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
-              ["127.0.0.1", "localhost"].contains(url.host?.lowercased() ?? ""),
+        guard let url = URL(string: link), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+            return .notPlayable(reason: .notAVideo)
+        }
+        if youtubeID(url) != nil { return .playable(video: video(link, url)) }
+        guard ["127.0.0.1", "localhost"].contains(url.host?.lowercased() ?? ""),
               ["mp4", "m4v", "mov", "m3u8", "webm", "mkv", "ogv", "ogg"].contains(url.pathExtension.lowercased())
         else { return .notPlayable(reason: .notAVideo) }
         return .playable(video: video(link, url))
+    }
+
+    /// A YouTube video's id, from `youtube.com/watch?v=` or `youtu.be/`: the
+    /// one source played through a page rather than a file, which nothing on
+    /// this machine stands in for. A test of what its player does (its small
+    /// window, which is WebKit's) needs YouTube's own; the gateway's answer
+    /// for such a link is a YouTube kind and the id, as it is here.
+    private static func youtubeID(_ url: URL) -> String? {
+        let host = url.host?.lowercased() ?? ""
+        if host == "youtu.be" { return url.pathComponents.dropFirst().first }
+        guard host == "youtube.com" || host == "www.youtube.com" || host == "m.youtube.com", url.path == "/watch" else { return nil }
+        return URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == "v" }?.value
     }
 
     /// What a stand-in ticket plays, or nil for a ticket that is not one.
@@ -110,6 +125,10 @@ enum WatchDebug {
         for byte in link.utf8 { hash = (hash ^ UInt64(byte)) &* 0x0000_0100_0000_01b3 }
         let ticket = "debugwatch-" + String(hash, radix: 16)
         tickets[ticket] = link
+        if let id = youtubeID(url) {
+            return ResolvedVideo(ticket: ticket, title: "YouTube " + id, duration: 0, cover: "", link: link, live: false, relay: false,
+                                 play: ResolvedPlay(kind: .youtube, url: nil, id: id), proxy: nil, grantor: nil)
+        }
         let hls = url.pathExtension.lowercased() == "m3u8"
         let proxy = relay.map { ResolvedProxy(kind: hls ? .hls : .file, url: $0 + url.path) }
         // How long the video is, where the link says (`?duration=6`), as a

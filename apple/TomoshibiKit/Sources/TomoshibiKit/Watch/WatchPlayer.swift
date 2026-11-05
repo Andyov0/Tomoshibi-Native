@@ -403,7 +403,14 @@ final class WatchPlayer {
     }
 
     func togglePictureInPicture() {
-        (backend as? AVBackend)?.togglePictureInPicture()
+        if let av = backend as? AVBackend {
+            av.togglePictureInPicture()
+        }
+        #if os(iOS)
+        if let youtube = backend as? YouTubeBackend {
+            youtube.togglePictureInPicture()
+        }
+        #endif
     }
 
     /// A refused YouTube player is started by a press inside YouTube's own

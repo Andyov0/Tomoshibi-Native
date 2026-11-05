@@ -302,7 +302,8 @@ public struct RoomView: View {
             // copy of a shared screen edging out from behind the stage.
             let small = model.pictureInPictureSid
             PictureInPictureHost(call: model.call, sid: small,
-                                 camera: small != nil && model.surfaces.contains { $0.sid == small && $0.kind == .camera })
+                                 camera: small != nil && model.surfaces.contains { $0.sid == small && $0.kind == .camera },
+                                 yields: watch.holdsSmallWindow)
                 .frame(width: size.width, height: size.height)
                 .allowsHitTesting(false)
                 .zIndex(-4)
