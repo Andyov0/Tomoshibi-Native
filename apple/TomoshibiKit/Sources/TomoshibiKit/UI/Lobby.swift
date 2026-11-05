@@ -1081,6 +1081,9 @@ struct SidebarLobby: View {
     var body: some View {
         NavigationSplitView(columnVisibility: $columns) {
             LobbySidebar(app: app, account: account, state: state)
+                #if os(macOS)
+                .floatingSidebar(columns: $columns)
+                #endif
                 .navigationSplitViewColumnWidth(min: 240, ideal: 284, max: 340)
                 .floatingPopoverLayer(state.popovers)
                 #if os(iOS)
@@ -1118,6 +1121,13 @@ struct SidebarLobby: View {
                 LobbyNoticeCard(remote: app.remote).keptToOnePage(.reading)
             }
             .animation(Theme.settle, value: app.remote.notice?.id)
+            #if os(macOS)
+            .overlay(alignment: .leading) {
+                if FloatingSidebar.drawn && columns != .detailOnly {
+                    FloatingSidebar.ShadowOnStage().transition(.opacity)
+                }
+            }
+            #endif
         }
         #if os(iOS)
         .navigationSplitViewStyle(.balanced)
@@ -1174,6 +1184,9 @@ private struct LobbySidebar: View {
         }
         .listStyle(.sidebar)
         .tint(Theme.tally)
+        #if os(macOS)
+        .floatingSidebarList()
+        #endif
         .safeAreaInset(edge: .top) {
             HStack(spacing: 8) {
                 Button { state.sheet = .start } label: {
@@ -1211,6 +1224,180 @@ private struct LobbySidebar: View {
         #endif
     }
 }
+
+#if os(macOS)
+/// The Mac lobby's sidebar on macOS 27 as macOS 26 draws it: a panel
+/// floating eight points in from the window's edges, rounded at every corner,
+/// over the stage that runs on under it, its selection a quiet grey.
+///
+/// macOS 27 lays a split view's sidebar against the window's edge instead,
+/// glass the whole height of the window with square corners, and selects in
+/// the accent colour. The owner, with the same build on a Mac mini on 26.6.2
+/// and a MacBook on 27.0 side by side, found 26's the better looking and asked
+/// for it on both (2026-11-05). Neither SwiftUI nor AppKit on 27 has a switch
+/// for it, so on 27 the panel is drawn here, inside the system's column: the
+/// split view itself, its resizing, its collapsing and its toolbar, stays the
+/// system's. 26 is left entirely to the system, which draws this already.
+enum FloatingSidebar {
+    /// The panel: the stage's colour with white over it by day, a step
+    /// lighter than the stage at night, as 26's glass comes out over it.
+    static let panel = Theme.surface.opacity(0.7)
+
+    /// From the window's edges to the panel, and from the panel to the
+    /// stage (26's). Inset from the column's trailing edge too: the panel's
+    /// shadow is cut off at that edge, and stood as a step there where the
+    /// panel ran to it.
+    static let inset: CGFloat = 8
+    /// The panel's corners (26's, concentric with the window's).
+    static let radius: CGFloat = 16
+
+    static var drawn: Bool {
+        if #available(macOS 27.0, *) { return !GlassSupport.forcedFallback }
+        return false
+    }
+
+    /// The panel's shadow carried on over the stage. The column the panel
+    /// stands in ends eight points past it, and the shadow ended there with
+    /// it, a step from grey to the stage's colour down the whole height;
+    /// 26's fades out over the stage. This takes it on from where the column
+    /// cut it off.
+    struct ShadowOnStage: View {
+        var body: some View {
+            LinearGradient(colors: [.black.opacity(0.05), .clear], startPoint: .leading, endPoint: .trailing)
+                .frame(width: 20)
+                .ignoresSafeArea(edges: .vertical)
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+        }
+    }
+
+    /// Everything about a rounded rectangle but the rectangle itself, forty
+    /// points out, filled even-odd: where its shadow may show.
+    struct Outside: Shape {
+        let radius: CGFloat
+        func path(in rect: CGRect) -> Path {
+            var path = Path(rect.insetBy(dx: -40, dy: -40))
+            path.addPath(RoundedRectangle(cornerRadius: radius, style: .continuous).path(in: rect))
+            return path
+        }
+    }
+}
+
+extension View {
+    /// The panel behind the sidebar's content and the content moved in onto
+    /// it; the sidebar button as 26 draws it, plain, without the circle of
+    /// glass 27 gives a toolbar item. Nothing at all before macOS 27.
+    @ViewBuilder
+    func floatingSidebar(columns: Binding<NavigationSplitViewVisibility>) -> some View {
+        if #available(macOS 27.0, *), FloatingSidebar.drawn {
+            self
+                .padding(.horizontal, FloatingSidebar.inset)
+                .padding(.bottom, FloatingSidebar.inset)
+                .background {
+                    ZStack {
+                        // Over 27's own glass, which stops at the column's
+                        // edge and left a hard line there beside the stage:
+                        // the stage's colour runs on under the panel instead,
+                        // as it does on 26.
+                        Theme.background
+                        // 26's panel stands off what is under it with a soft
+                        // shadow all round. Drawn only outside the panel,
+                        // which is not wholly opaque: a shadow under it, as
+                        // under glass, greyed the whole of it.
+                        RoundedRectangle(cornerRadius: FloatingSidebar.radius, style: .continuous)
+                            .fill(Theme.background)
+                            .shadow(color: .black.opacity(0.10), radius: 8, y: 1)
+                            .mask {
+                                FloatingSidebar.Outside(radius: FloatingSidebar.radius)
+                                    .fill(style: FillStyle(eoFill: true))
+                            }
+                            .padding(FloatingSidebar.inset)
+                        // A panel of its own colour rather than glass: under
+                        // it is only the stage's colour, which glass has
+                        // nothing to show of, and glass greys itself while the
+                        // window is in the background, which left the stage's
+                        // colour round it as a white frame (the owner's
+                        // screenshot, 2026-11-05).
+                        RoundedRectangle(cornerRadius: FloatingSidebar.radius, style: .continuous)
+                            .fill(FloatingSidebar.panel)
+                            .overlay {
+                                RoundedRectangle(cornerRadius: FloatingSidebar.radius, style: .continuous)
+                                    .strokeBorder(Theme.border.opacity(0.6), lineWidth: 0.5)
+                            }
+                            .padding(FloatingSidebar.inset)
+                    }
+                    .ignoresSafeArea()
+                }
+                .toolbar(removing: .sidebarToggle)
+                .toolbar {
+                    // At the sidebar's trailing end, where 26 has it, rather
+                    // than beside the window's buttons.
+                    ToolbarSpacer(.flexible)
+                    ToolbarItem(placement: .automatic) {
+                        Button {
+                            withAnimation(Theme.settle) { columns.wrappedValue = columns.wrappedValue == .detailOnly ? .all : .detailOnly }
+                        } label: {
+                            Image(systemName: "sidebar.left")
+                        }
+                        .help(columns.wrappedValue == .detailOnly ? t("Show the sidebar") : t("Hide the sidebar"))
+                    }
+                    .sharedBackgroundVisibility(.hidden)
+                }
+        } else {
+            self
+        }
+    }
+
+    /// The sidebar's list on the panel: no backdrop of its own over it, and
+    /// its selection grey as 26's, which 27 draws in the accent colour while
+    /// the list holds the keyboard. SwiftUI's `focusable(false)` alone left
+    /// the list taking the keyboard on some launches, so the table under it
+    /// is told to refuse it (QuietSidebarList). The rows are still pressed
+    /// with the pointer; on 27 the arrow keys no longer move through them.
+    @ViewBuilder
+    func floatingSidebarList() -> some View {
+        if FloatingSidebar.drawn {
+            self.scrollContentBackground(.hidden).focusable(false)
+                .background(QuietSidebarList())
+        } else {
+            self
+        }
+    }
+}
+#endif
+
+#if os(macOS)
+/// Finds the table SwiftUI draws the sidebar's list with, in the sidebar's
+/// own column of the split view, and has it refuse the keyboard, so that its
+/// selection is never drawn in the accent colour (FloatingSidebar).
+private struct QuietSidebarList: NSViewRepresentable {
+    func makeNSView(context: Context) -> Finder { Finder() }
+    func updateNSView(_ finder: Finder, context: Context) { finder.quieten() }
+
+    final class Finder: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            DispatchQueue.main.async { [weak self] in self?.quieten() }
+        }
+
+        func quieten() {
+            guard let window else { return }
+            // Up to the split view's own child: the sidebar's column, and
+            // nothing of the stage's.
+            var column: NSView = self
+            while let up = column.superview, !(up is NSSplitView) { column = up }
+            for table in Self.tables(in: column) where !table.refusesFirstResponder {
+                table.refusesFirstResponder = true
+                if window.firstResponder === table { window.makeFirstResponder(nil) }
+            }
+        }
+
+        private static func tables(in view: NSView) -> [NSTableView] {
+            (view as? NSTableView).map { [$0] } ?? view.subviews.flatMap { tables(in: $0) }
+        }
+    }
+}
+#endif
 
 extension LobbySidebar {
     /// A sidebar entry with its symbol drawn in the person's colour, as the

@@ -837,6 +837,12 @@
       "zh-Hant": "Tomoshibi 正在安裝更新，稍後會自動重新開啟，屆時再開始或加入會議。",
       "ja": "Tomoshibi はアップデートをインストール中で、まもなく自動でもう一度開きます。会議の開始や参加はそのあとにしてください。"
     },
+    "Hide the sidebar": {
+      "en": "Hide the sidebar",
+      "zh-Hans": "隐藏侧边栏",
+      "zh-Hant": "隱藏側邊欄",
+      "ja": "サイドバーを非表示"
+    },
     "Show the sidebar": {
       "en": "Show the sidebar",
       "zh-Hans": "显示侧边栏",

@@ -66,7 +66,7 @@ import UIKit
 ///     choose-menu <menu> <item>  that menu item chosen (Mac)
 ///     click <x> <y> [settings]   a plain click at a point in the main or the
 ///                                Settings window, from its top left (Mac)
-///     language <code> | accent <name>
+///     language <code> | accent <name> | appearance dark|light|system (Mac)
 ///                                a choice in the settings
 ///     close-problem              the cross on the line saying why a press
 ///                                did not take
@@ -212,6 +212,15 @@ enum AppDebug {
             guard let name = rest.first, let accent = Accent(rawValue: name) else { return "accent <name>" }
             Appearance.shared.accent = accent
             return "accent \(Appearance.shared.accent.rawValue)"
+        #if os(macOS)
+        case "appearance":
+            // This process's day or night, without the system's setting:
+            // the Mac follows the system, and a test that turned the system
+            // dark turned it dark for whoever uses the machine.
+            guard let name = rest.first, ["dark", "light", "system"].contains(name) else { return "appearance dark|light|system" }
+            NSApp.appearance = name == "system" ? nil : NSAppearance(named: name == "dark" ? .darkAqua : .aqua)
+            return "appearance \(name)"
+        #endif
         case "close-problem":
             // The cross on the line under the form.
             app.problem = nil
