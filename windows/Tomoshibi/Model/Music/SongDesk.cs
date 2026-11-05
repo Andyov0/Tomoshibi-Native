@@ -184,7 +184,7 @@ internal sealed class SongDesk : Observable, IBarOffer
         get => _monitorVolume;
         set
         {
-            _monitorVolume = Math.Clamp(value, 0f, 1f);
+            _monitorVolume = Math.Clamp(value, 0f, (float)HearingSetting.MaxVolume);
             if (_monitorVolume == 1f) Call.Choices?.Remove(MusicKeys.Monitor);
             else Call.Choices?.Set(MusicKeys.Monitor, _monitorVolume.ToString(CultureInfo.InvariantCulture));
             if (_monitor != null) _monitor.Volume = _monitorVolume;

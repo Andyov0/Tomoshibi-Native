@@ -94,7 +94,9 @@ internal sealed class LosslessPlayback : LosslessSink, IDisposable
         var key = Key(identity, music);
         lock (_gate)
         {
-            _levels[key] = Math.Clamp(level, 0f, 1f);
+            // Up to three times as sent (HearingSetting.MaxVolume): the stream
+            // multiplies its samples by it as it renders them.
+            _levels[key] = Math.Clamp(level, 0f, (float)HearingSetting.MaxVolume);
             if (_streams.TryGetValue(key, out var stream)) stream.Volume = _levels[key];
         }
     }

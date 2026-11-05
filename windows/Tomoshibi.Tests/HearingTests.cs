@@ -79,14 +79,17 @@ public class HearingTests
     public void WhatTheWebWroteIsReadAndWhatWasEditedByHandIsClamped()
     {
         var book = new HearingBook("""
-            {"AAAAAAAAAA/voice":{"volume":3,"blocked":false},
+            {"AAAAAAAAAA/voice":{"volume":7,"blocked":false},
+             "FFFFFFFFFF/voice":{"volume":2.5,"blocked":false},
              "BBBBBBBBBB/voice":{"volume":-1},
              "CCCCCCCCCC/voice":{"volume":"loud","blocked":1},
              "DDDDDDDDDD/voice":{"volume":false,"blocked":true},
              "EEEEEEEEEE/voice":{"volume":0.4,"blocked":true}}
             """);
         HearingSetting Setting(string key) => book.Setting(new HearingFiling(key, true), Sound.Voice);
-        Assert.Equal(new HearingSetting(1.0, false), Setting("AAAAAAAAAA"));
+        // Three times as sent at most (MaxVolume); up to that, as written.
+        Assert.Equal(new HearingSetting(3.0, false), Setting("AAAAAAAAAA"));
+        Assert.Equal(new HearingSetting(2.5, false), Setting("FFFFFFFFFF"));
         Assert.Equal(new HearingSetting(0.0, false), Setting("BBBBBBBBBB"));
         // A string is not a volume and a 1 is not a block, as `=== true` has it.
         Assert.Equal(new HearingSetting(1.0, false), Setting("CCCCCCCCCC"));
@@ -108,9 +111,11 @@ public class HearingTests
     {
         var book = new HearingBook();
         book.Set(Proven, Sound.Screen, new HearingSetting(7.0, false));
-        // Clamped to 1 and not blocked: as sent, so nothing is kept at all.
-        Assert.Equal(HearingSetting.AsSent, book.Setting(Proven, Sound.Screen));
-        Assert.Null(book.Stored);
+        // Clamped to three times as sent, and kept, as the web writes it.
+        Assert.Equal(new HearingSetting(3.0, false), book.Setting(Proven, Sound.Screen));
+        Assert.Equal(new HearingSetting(3.0, false), new HearingBook(book.Stored).Setting(Proven, Sound.Screen));
+        book.Set(Proven, Sound.Screen, new HearingSetting(-2.0, false));
+        Assert.Equal(0.0, book.Setting(Proven, Sound.Screen).Volume);
     }
 
     [Fact]

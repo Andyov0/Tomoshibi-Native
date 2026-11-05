@@ -246,11 +246,21 @@ internal sealed class DeskTab : MusicTabView
         var amount = K.Text($"{Math.Round(_desk.MonitorVolume * 100)}%", 11, K.Medium, Ink.Muted, lines: 1, align: TextAlignment.Right, tabular: true);
         amount.Width = 38;
         amount.VerticalAlignment = VerticalAlignment.Center;
-        var slider = MediaKit.Slider(_desk.MonitorVolume, level =>
+        amount.Foreground = _desk.MonitorVolume > 1 ? Ink.TallyText : Ink.Muted;
+        // Named before it is made, so that its own change can move it.
+        Slider slider = null!;
+        slider = MediaKit.Slider(_desk.MonitorVolume, level =>
         {
-            _desk.MonitorVolume = (float)level;
-            amount.Text = $"{Math.Round(level * 100)}%";
-        }, 0, 1, 0.05, label: T("Music volume in your speakers"));
+            // Settles on as sent near it, and says past it that it can harm
+            // hearing, as the people's volumes do (SoundPanel.SoundRow).
+            var next = MediaKit.SettleAtMark(level, HearingSetting.MaxVolume);
+            if (next != level) slider.Value = next;
+            if (next > 1 && _desk.MonitorVolume <= 1) _desk.Call.LouderThanSent();
+            _desk.MonitorVolume = (float)next;
+            amount.Text = $"{Math.Round(next * 100)}%";
+            amount.Foreground = next > 1 ? Ink.TallyText : Ink.Muted;
+        }, 0, HearingSetting.MaxVolume, 0.05, label: T("Music volume in your speakers"));
+        MediaKit.Marked(slider);
         return K.Line(8,
             K.Fixed(new Border { Width = 18, Child = K.Symbol("speaker.wave.2.fill", 11, Ink.Muted) }),
             K.Fixed(K.Text(T("In your speakers"), 11.5, ink: Ink.Muted, lines: 1).At(HorizontalAlignment.Left, VerticalAlignment.Center)),

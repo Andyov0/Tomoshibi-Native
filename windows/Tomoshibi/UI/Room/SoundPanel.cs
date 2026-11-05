@@ -174,7 +174,19 @@ internal sealed class SoundPanel : Grid
             _slider.ValueChanged += (_, e) =>
             {
                 if (_setting || _person is not { } person) return;
-                _feature.SetVolume(person, _sound, e.NewValue);
+                // A drag that comes within six hundredths of as sent settles
+                // on it rather than a hair either side (VolumeMark.settle).
+                var next = MediaKit.SettleAtMark(e.NewValue, _slider.Maximum);
+                if (next != e.NewValue)
+                {
+                    _setting = true;
+                    _slider.Value = next;
+                    _setting = false;
+                }
+                // To three times as sent, warned of as it crosses one
+                // (CallModel.LouderThanSent).
+                if (next > 1 && HostFeature.Setting(person, _sound).Volume <= 1) _feature.Call.LouderThanSent();
+                _feature.SetVolume(person, _sound, next);
             };
             _amount.MinWidth = 42;
             var line = K.Line(10, K.Fixed(_mute), K.Flex(_slider), K.Fixed(_amount.At(HorizontalAlignment.Right, VerticalAlignment.Center)));
@@ -186,7 +198,8 @@ internal sealed class SoundPanel : Grid
         /// The other apps' slider (Notices.kt <c>GlassSlider</c>) on a
         /// Windows one, which keeps the keyboard and the screen reader: a
         /// dark track with a hairline, the part below the value in white,
-        /// a white thumb, in twentieths. Left as it
+        /// a white thumb, in twentieths, to three times as sent with the
+        /// system's own tick at each whole (MediaKit.Marked). Left as it
         /// comes, the system's slider is drawn in the accent colour, which
         /// here is the tally, the colour of things that are on.
         /// </summary>
@@ -195,13 +208,14 @@ internal sealed class SoundPanel : Grid
             var slider = new Slider
             {
                 Minimum = 0,
-                Maximum = 1,
+                Maximum = HearingSetting.MaxVolume,
                 StepFrequency = 0.05,
                 SmallChange = 0.05,
                 LargeChange = 0.25,
                 IsThumbToolTipEnabled = false,
                 VerticalAlignment = VerticalAlignment.Center,
             };
+            MediaKit.Marked(slider);
             var track = Ink.Well(0.28f);
             var fill = Ink.ForegroundAt(0.9f);
             var thumb = Ink.Brush(Shade.White);
@@ -245,6 +259,8 @@ internal sealed class SoundPanel : Grid
             // Read at a glance, because a slider near one end tells nobody
             // whether it is at nought.
             _amount.Text = setting.Blocked ? T("Muted") : $"{Math.Round(setting.Volume * 100)}%";
+            // Past as sent in the colour that marks something live.
+            _amount.Foreground = !setting.Blocked && setting.Volume > 1 ? Ink.TallyText : Ink.Muted;
         }
     }
 }

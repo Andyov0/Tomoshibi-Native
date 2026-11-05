@@ -299,7 +299,7 @@ internal sealed class MonitorSound : PulledSound
 
     public float Volume
     {
-        set => Volatile.Write(ref _volume, Math.Clamp(value, 0f, 1f));
+        set => Volatile.Write(ref _volume, Math.Clamp(value, 0f, (float)HearingSetting.MaxVolume));
     }
 
     public float Duck

@@ -272,6 +272,22 @@ internal static class MediaKit
     /// its own. Android's note: an interrupted drag that never ended left the
     /// scrubber editing for good, and the controls over the video never hid.
     /// </summary>
+    /// <summary>
+    /// A volume slider that goes past as sent, marked as the system marks a
+    /// slider: a tick at each whole, so at 100% and 200% (the web's
+    /// VolumeRange draws one at 100%, its browser's own tick for a listed
+    /// value). Past 100% is where hearing can be harmed.
+    /// </summary>
+    public static void Marked(Slider slider)
+    {
+        slider.TickFrequency = 1;
+        slider.TickPlacement = Microsoft.UI.Xaml.Controls.Primitives.TickPlacement.Inline;
+        foreach (var state in new[] { "", "PointerOver", "Pressed", "Disabled" }) slider.Resources["SliderTickBarFill" + state] = Ink.Wash(0.45f);
+    }
+
+    /// <summary>One, for a value within six hundredths of it on a slider that goes past it (Notices.kt <c>settleAtMark</c>).</summary>
+    public static double SettleAtMark(double value, double maximum) => maximum > 1 && Math.Abs(value - 1) < 0.06 ? 1 : value;
+
     public static Slider Slider(double value, Action<double> changed, double minimum = 0, double maximum = 1, double step = 0, Brush? tint = null, string? label = null, Action<bool>? editing = null)
     {
         var slider = new Slider

@@ -46,6 +46,13 @@ public readonly record struct HearingSetting(double Volume, bool Blocked)
     /// <summary>Untouched, which is what everybody is until somebody says otherwise.</summary>
     public static readonly HearingSetting AsSent = new(1.0, false);
 
+    /// <summary>
+    /// The loudest anybody may make somebody else: three times as loud as it
+    /// was sent (hearing.ts <c>MAX_VOLUME</c>; the owner asked for it on
+    /// 2026-11-05). Past one the slider says it can harm hearing.
+    /// </summary>
+    public const double MaxVolume = 3.0;
+
     /// <summary>Whether this is something somebody has decided not to hear.</summary>
     public bool Silenced => Blocked || Volume == 0.0;
 }
@@ -130,11 +137,12 @@ public sealed class HearingBook
     private static string Place(HearingFiling filing, Sound sound) => $"{filing.Key}/{sound.Key()}";
 
     /// <summary>
-    /// A volume between nought and one. A slider cannot produce anything
-    /// else; a hand-edited entry can, and a player handed 3 would be three
-    /// times as loud as the person sent it (hearing.ts <c>level</c>).
+    /// A volume between nought and three times as sent (hearing.ts
+    /// <c>level</c>). A slider cannot produce anything else; a hand-edited
+    /// entry can.
     /// </summary>
-    public static double Clamp(double volume) => double.IsFinite(volume) ? Math.Clamp(volume, 0.0, 1.0) : HearingSetting.AsSent.Volume;
+    public static double Clamp(double volume) =>
+        double.IsFinite(volume) ? Math.Clamp(volume, 0.0, HearingSetting.MaxVolume) : HearingSetting.AsSent.Volume;
 
     private static Dictionary<string, Held> Read(string? stored)
     {

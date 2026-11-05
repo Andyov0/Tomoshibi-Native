@@ -144,5 +144,6 @@ public static class MusicKeys
 
     /// <summary>A monitor volume nothing was kept for is full, and so is one that is not a volume: sound.ts once read "nothing kept" as nought and played the music to everybody but its own speakers.</summary>
     public static float MonitorLevel(string? kept) =>
-        kept != null && float.TryParse(kept, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var level) && level is >= 0f and <= 1f ? level : 1f;
+        kept != null && float.TryParse(kept, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var level)
+            && level >= 0f && level <= (float)HearingSetting.MaxVolume ? level : 1f;
 }

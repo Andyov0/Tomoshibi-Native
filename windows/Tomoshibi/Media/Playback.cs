@@ -198,12 +198,17 @@ internal sealed class Playback : IDisposable
                 var format = AudioEncodingProperties.CreatePcm(rate, channels, 32);
                 format.Subtype = MediaEncodingSubtypes.Float;
                 node = graph.Audio.CreateFrameInputNode(format);
-                node.OutgoingGain = Level(sid);
+                node.OutgoingGain = Math.Min(1f, Level(sid));
                 node.AddOutgoingConnection(graph.Output);
                 graph.Pushed[sid] = node;
             }
         }
         if (node.QueuedSampleCount > rate * MostQueuedSeconds) return;
+        // The part of the level past one, on the samples as they are made
+        // into a frame (SetGain).
+        float boost;
+        lock (_gate) boost = Math.Max(1f, Level(sid));
+        var scale = boost / 32768f;
         var samples = pcm.Length / 2;
         var frame = new AudioFrame((uint)(samples * sizeof(float)));
         using (var buffer = frame.LockBuffer(AudioBufferAccessMode.Write))
@@ -211,7 +216,7 @@ internal sealed class Playback : IDisposable
         {
             var (data, _) = ComCalls.Bytes(reference);
             var floats = (float*)data;
-            for (var i = 0; i < samples; i++) floats[i] = (short)(pcm[2 * i] | pcm[2 * i + 1] << 8) / 32768f;
+            for (var i = 0; i < samples; i++) floats[i] = (short)(pcm[2 * i] | pcm[2 * i + 1] << 8) * scale;
         }
         try
         {
@@ -224,13 +229,22 @@ internal sealed class Playback : IDisposable
         }
     }
 
-    /// <summary>How loud one pushed sound plays, from nought to as sent; kept for a sound that arrives later.</summary>
+    /// <summary>
+    /// How loud one pushed sound plays, from nought to three times as sent
+    /// (<see cref="HearingSetting.MaxVolume"/>); kept for a sound that arrives
+    /// later. Up to one it is the node's gain; past one the node stays at one
+    /// and the rest multiplies the samples as they are made into frames
+    /// (<see cref="Play"/>), so that the sound is made louder by a means whose
+    /// arithmetic is this file's own rather than by a gain whose range past
+    /// one the platform does not promise. The frames already queued, under a
+    /// fifth of a second, play at the level they were made at.
+    /// </summary>
     public void SetGain(string sid, float gain)
     {
         lock (_gate)
         {
-            _gains[sid] = Math.Clamp(gain, 0f, 1f);
-            if (_graph.Pushed.TryGetValue(sid, out var node)) node.OutgoingGain = Level(sid);
+            _gains[sid] = Math.Clamp(gain, 0f, (float)HearingSetting.MaxVolume);
+            if (_graph.Pushed.TryGetValue(sid, out var node)) node.OutgoingGain = Math.Min(1f, Level(sid));
         }
     }
 
@@ -240,7 +254,7 @@ internal sealed class Playback : IDisposable
         lock (_gate)
         {
             _ducks[sid] = Math.Clamp(factor, 0f, 1f);
-            if (_graph.Pushed.TryGetValue(sid, out var node)) node.OutgoingGain = Level(sid);
+            if (_graph.Pushed.TryGetValue(sid, out var node)) node.OutgoingGain = Math.Min(1f, Level(sid));
         }
     }
 

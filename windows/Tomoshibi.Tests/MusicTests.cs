@@ -158,7 +158,9 @@ public class MusicPacerTests
     {
         Assert.Equal(1f, MusicKeys.MonitorLevel(null));
         Assert.Equal(1f, MusicKeys.MonitorLevel("loud"));
-        Assert.Equal(1f, MusicKeys.MonitorLevel("1.5"));
+        // Up to three times as sent, as the people's volumes (HearingSetting.MaxVolume).
+        Assert.Equal(1.5f, MusicKeys.MonitorLevel("1.5"));
+        Assert.Equal(1f, MusicKeys.MonitorLevel("3.5"));
         Assert.Equal(0.25f, MusicKeys.MonitorLevel("0.25"));
         Assert.Equal(0f, MusicKeys.MonitorLevel("0"));
     }

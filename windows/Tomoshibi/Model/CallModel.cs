@@ -715,6 +715,20 @@ internal sealed class CallModel : Observable, IDisposable
     public void ActionFailed(string reason) =>
         Announce(new CallToast(reason, Kind: CallToast.Kinds.Failure, Lasts: NoticeTimes.AtMost));
 
+    /// <summary>
+    /// A volume taken past as loud as it was sent (notices.ts
+    /// <c>louderThanSent</c>): up to three times, which can harm somebody's
+    /// hearing, said as a slider crosses one, every time. One at a time, under
+    /// one key, so dragging back and forth over the line does not stack them.
+    /// Without the web's second line, that on speakers the person turned up
+    /// may hear themselves back: that is the browser's, whose Web Audio is out
+    /// of reach of its echo cancelling, and here the one graph that plays
+    /// every sound is what the system's echo cancelling is given.
+    /// </summary>
+    public void LouderThanSent() =>
+        Announce(new CallToast(T("Above 100% can harm your hearing"), Kind: CallToast.Kinds.Warning, Lasts: NoticeTimes.AtMost,
+            Key: "louder-than-sent", Closable: true));
+
     /// <summary>Says that a camera or a microphone would not start (notices.ts <c>deviceFailed</c>), taken down by the next start that works.</summary>
     private void DeviceFailed(bool camera)
     {
