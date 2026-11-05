@@ -146,6 +146,9 @@ pub enum ToastKind {
     Info,
     /// Somebody else taking the stage, anything else happening now.
     Signal,
+    /// Something somebody chose that may not be what they want (a volume
+    /// past as sent), edged as a signal is, as the other apps edge it.
+    Warning,
     Failure,
 }
 
@@ -171,6 +174,20 @@ impl Toast {
             lasts_ms: Some(NOTICE_MOMENT_MS),
             closable: false,
             key: None,
+        }
+    }
+
+    /// A volume taken past as loud as it was sent (notices.ts
+    /// `louderThanSent`): said for the web's ten seconds, closable, and under
+    /// one key, so that dragging back and forth over the line does not stack
+    /// them.
+    pub fn louder_than_sent() -> Toast {
+        Toast {
+            kind: ToastKind::Warning,
+            lasts_ms: Some(10_000),
+            closable: true,
+            key: Some("louder-than-sent".to_owned()),
+            ..Toast::said(crate::i18n::t("Above 100% can harm your hearing"))
         }
     }
 

@@ -365,6 +365,7 @@ button.tmsb-signal.round { padding: 0; min-width: 32px; }
   border-left: 3px solid transparent;
 }
 .tmsb-toast.signal { border-left-color: @tmsb_call_tally; }
+.tmsb-toast.warning { border-left-color: @tmsb_call_tally; }
 .tmsb-toast.failure { border-left-color: @tmsb_call_danger; }
 .tmsb-toast .title { font-size: 13px; font-weight: 500; }
 .tmsb-toast .detail { font-size: 12px; color: @tmsb_call_muted; }

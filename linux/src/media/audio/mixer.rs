@@ -79,6 +79,11 @@ const QUIET: i32 = 64;
 /// sped up.
 const NO_GAP: u32 = 25;
 
+/// The loudest anybody may make somebody else: three times as loud as it was
+/// sent (hearing.ts `MAX_VOLUME`; the owner asked for it on 2026-11-05). Past
+/// one the slider says it can harm hearing.
+pub const MAX_VOLUME: f32 = 3.0;
+
 /// The level the limiter holds the mix under: -1 dBFS.
 const CEILING_LEVEL: f32 = 0.891 * 32767.0;
 /// Where the soft knee begins, for what overshoots inside a frame.
@@ -460,11 +465,14 @@ impl Mixer {
         }
     }
 
-    /// One person's level for everything of theirs, from nought to one.
+    /// One person's level for everything of theirs, from nought to three
+    /// times as sent ([`MAX_VOLUME`]). Past one is only a larger number here:
+    /// the samples are multiplied by it, and the limiter holds the sum under
+    /// full scale as it holds two loud voices together.
     pub fn set_level(&self, identity: &str, level: f32) {
         self.state()
             .levels
-            .insert(identity.to_owned(), level.clamp(0.0, 1.0));
+            .insert(identity.to_owned(), level.clamp(0.0, MAX_VOLUME));
     }
 
     /// One person's level for their screen's sound (`music` false) or their
@@ -473,7 +481,7 @@ impl Mixer {
         let kind = if music { Kind::Music } else { Kind::Screen };
         self.state()
             .kind_levels
-            .insert((identity.to_owned(), kind), level.clamp(0.0, 1.0));
+            .insert((identity.to_owned(), kind), level.clamp(0.0, MAX_VOLUME));
     }
 
     /// How far a person's music is turned down under speech, from nought to
@@ -772,6 +780,39 @@ mod tests {
         let out = feed(&mixer);
         assert!(
             out.iter().all(|&s| (s - 12_500).abs() <= 2),
+            "{:?}",
+            &out[..4]
+        );
+    }
+
+    /// A person turned up past as sent comes out that much louder, up to
+    /// three times and no further. With the old clamp at one, 2.5 played as
+    /// sent.
+    #[test]
+    fn a_level_past_one_makes_the_sound_louder_up_to_three_times() {
+        let mixer = Mixer::new();
+        mixer.add("TR_a", "ann");
+        mixer.set_level("ann", 2.5);
+        let feed = |mixer: &Mixer| {
+            mixer.push("TR_a", &tone(1, 1, 4000), 1);
+            mixed(mixer)
+        };
+        for _ in 0..4 {
+            feed(&mixer);
+        }
+        let out = feed(&mixer);
+        assert!(
+            out.iter().all(|&s| (s - 10_000).abs() <= 2),
+            "{:?}",
+            &out[..4]
+        );
+        mixer.set_level("ann", 7.0);
+        for _ in 0..4 {
+            feed(&mixer);
+        }
+        let out = feed(&mixer);
+        assert!(
+            out.iter().all(|&s| (s - 12_000).abs() <= 2),
             "{:?}",
             &out[..4]
         );

@@ -2709,6 +2709,7 @@ fn toast_widget(model: &AppModel, id: u64, toast: &Toast) -> gtk::Widget {
     card.add_css_class("tmsb-toast");
     match toast.kind {
         ToastKind::Signal => card.add_css_class("signal"),
+        ToastKind::Warning => card.add_css_class("warning"),
         ToastKind::Failure => card.add_css_class("failure"),
         ToastKind::Info => {}
     }

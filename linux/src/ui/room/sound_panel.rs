@@ -30,6 +30,7 @@ use super::{
 use crate::{
     app::AppModel,
     i18n::{t, t_with},
+    media::audio::mixer::MAX_VOLUME,
     theme::motion,
 };
 
@@ -63,6 +64,7 @@ button.tmsb-sound-mute.blocked {
   box-shadow: inset 0 0 0 1px alpha(@tmsb_call_wash, 0.16);
 }
 .tmsb-sound-percent { font-size: 11px; font-weight: 500; color: @tmsb_call_muted; font-feature-settings: "tnum"; }
+.tmsb-sound-percent.louder { color: @tmsb_tally_text; }
 .tmsb-panel scale:disabled { opacity: 0.4; }
 "#;
 
@@ -268,10 +270,19 @@ impl SoundRow {
         let mute = gtk::Button::from_icon_name("audio-volume-high-symbolic");
         mute.add_css_class("tmsb-sound-mute");
         mute.set_valign(gtk::Align::Center);
-        let scale = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.0, 100.0, 5.0);
+        // To three times as sent, marked at as sent (the web's VolumeRange
+        // lists it, and its browser draws a tick there): past it is where
+        // hearing can be harmed.
+        let scale = gtk::Scale::with_range(
+            gtk::Orientation::Horizontal,
+            0.0,
+            f64::from(MAX_VOLUME) * 100.0,
+            5.0,
+        );
         scale.set_hexpand(true);
         scale.set_draw_value(false);
         scale.set_value(100.0);
+        scale.add_mark(100.0, gtk::PositionType::Bottom, None);
         scale.set_widget_name(&format!(
             "volume:{identity}{}",
             match sound {
@@ -294,19 +305,29 @@ impl SoundRow {
                 return;
             }
             if let Some(model) = weak.upgrade() {
-                let blocked = model
+                // A drag that comes within six of as sent settles on it rather
+                // than a hair either side.
+                if scale.value() != 100.0 && (scale.value() - 100.0).abs() < 6.0 {
+                    hush.set(true);
+                    scale.set_value(100.0);
+                    hush.set(false);
+                }
+                let was = model
                     .kept::<RoomState>()
                     .view
                     .borrow()
-                    .hearing_of(&who, sound)
-                    .blocked;
+                    .hearing_of(&who, sound);
+                let level = (scale.value() / 100.0) as f32;
+                if level > 1.0 && was.level <= 1.0 {
+                    super::louder_than_sent(&model);
+                }
                 super::set_hearing(
                     &model,
                     &who,
                     sound,
                     Hearing {
-                        level: (scale.value() / 100.0) as f32,
-                        blocked,
+                        level,
+                        blocked: was.blocked,
                     },
                 );
             }
@@ -400,6 +421,12 @@ impl SoundRow {
         if self.percent.label() != reading {
             self.percent.set_label(&reading);
         }
+        // Past as sent in the colour that marks something live.
+        set_class(
+            &self.percent,
+            "louder",
+            !hearing.blocked && hearing.level > 1.0,
+        );
     }
 }
 

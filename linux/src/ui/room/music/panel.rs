@@ -242,7 +242,14 @@ pub(in crate::ui::room) fn panel(model: &AppModel) -> PanelView {
     controls.append(&vote_slide);
     // The listener's own volume of it, or the holder's own speakers.
     let volume_label = muted("");
-    let volume = gtk::Scale::with_range(gtk::Orientation::Horizontal, 0.0, 100.0, 1.0);
+    // To three times as sent, marked at as sent, as the sound panel's.
+    let volume = gtk::Scale::with_range(
+        gtk::Orientation::Horizontal,
+        0.0,
+        f64::from(crate::media::audio::mixer::MAX_VOLUME) * 100.0,
+        1.0,
+    );
+    volume.add_mark(100.0, gtk::PositionType::Bottom, None);
     volume.set_draw_value(false);
     volume.set_hexpand(true);
     volume.set_widget_name("music.volume");
@@ -419,14 +426,27 @@ pub(in crate::ui::room) fn panel(model: &AppModel) -> PanelView {
             let (Some(desk), Some(model)) = (weak.upgrade(), model_weak.upgrade()) else {
                 return;
             };
+            // Settles on as sent near it, and says past it that it can harm
+            // hearing, as the sound panel's does.
+            if scale.value() != 100.0 && (scale.value() - 100.0).abs() < 6.0 {
+                scale.set_value(100.0);
+                return;
+            }
             let level = (scale.value() / 100.0) as f32;
             if desk.playing_here() {
-                if (monitor_level(&model) - level).abs() > 0.005 {
+                let was = monitor_level(&model);
+                if (was - level).abs() > 0.005 {
+                    if level > 1.0 && was <= 1.0 {
+                        crate::ui::room::louder_than_sent(&model);
+                    }
                     desk.set_monitor_volume(&model, level);
                 }
             } else if let Some(who) = playing_person(&model, &desk) {
                 let (was, blocked) = desk.hearing_of(&who);
                 if (was - level).abs() > 0.005 {
+                    if level > 1.0 && was <= 1.0 {
+                        crate::ui::room::louder_than_sent(&model);
+                    }
                     desk.set_hearing(&model, &who, level, blocked);
                 }
             }

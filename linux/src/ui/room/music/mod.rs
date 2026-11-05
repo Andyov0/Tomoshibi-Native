@@ -436,6 +436,15 @@ impl SongDesk {
                 &[("title", &entry.title)],
             ));
         }
+        // A song that could not be fetched twice over is kept at the top of
+        // the queue with the music stopped (the core's `hold`): said, so that
+        // a desk gone quiet is not taken for one still loading.
+        for entry in out.failed {
+            self.say(t_with(
+                "Could not load {title}. It stays at the top of the queue; Next song tries it again.",
+                &[("title", &entry.title)],
+            ));
+        }
         if out.changed {
             self.refresh();
         }
@@ -936,8 +945,8 @@ impl SongDesk {
     /// How loud the music from here is in this machine's own speakers, which
     /// changes nothing sent.
     pub fn set_monitor_volume(&self, model: &AppModel, level: f32) {
-        let level = level.clamp(0.0, 1.0);
-        if level >= 1.0 {
+        let level = level.clamp(0.0, crate::media::audio::mixer::MAX_VOLUME);
+        if level == 1.0 {
             model.preferences().remove(MONITOR_KEY);
         } else {
             model.preferences().set(MONITOR_KEY, level.to_string());
@@ -1119,7 +1128,7 @@ fn monitor_volume(model: &AppModel) -> f32 {
         .preferences()
         .string(MONITOR_KEY)
         .and_then(|kept| kept.parse::<f32>().ok())
-        .filter(|level| (0.0..=1.0).contains(level))
+        .filter(|level| (0.0..=crate::media::audio::mixer::MAX_VOLUME).contains(level))
         .unwrap_or(1.0)
 }
 

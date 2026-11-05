@@ -861,6 +861,16 @@ fn let_go_of_devices(model: &AppModel) {
 
 // ---- notices -----------------------------------------------------------
 
+/// Says, as a volume crosses past as sent, that up to three times can harm
+/// somebody's hearing, every time it is crossed. Without the web's second
+/// line, that on speakers the person turned up may hear themselves back: that
+/// is the browser's, whose Web Audio is out of reach of its echo cancelling;
+/// here every sound is mixed into the one stream the echo canceller is given
+/// as what plays.
+pub(crate) fn louder_than_sent(model: &AppModel) {
+    announce(model, Toast::louder_than_sent());
+}
+
 /// Says something in the corner, for as long as it says it lasts; said
 /// again under the same key it replaces the one there.
 fn announce(model: &AppModel, toast: Toast) {
