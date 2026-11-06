@@ -252,8 +252,9 @@ final class AVBackend: NSObject, WatchBackend {
         // the stage: an Emby film and a Bilibili video watched in a call on an
         // iPhone went with the app to the home screen and were shown nowhere
         // (reported 2026-11-06). The call's own small window, which also
-        // starts by itself, stands aside meanwhile
-        // (WatchFeature.holdsSmallWindow), or the system picks one of the two.
+        // starts by itself, has no controller meanwhile
+        // (WatchFeature.holdsSmallWindow): with two that would start, the
+        // system opened neither.
         made.canStartPictureInPictureAutomaticallyFromInline = true
         made.delegate = self
         #endif
@@ -367,7 +368,6 @@ final class YouTubeBackend: NSObject, WatchBackend, WKNavigationDelegate, WKUIDe
     private var asked: Bool?
     /// The small window was asked for as the app stopped being in front; it is
     /// closed again when the app is back, whether or not the app went away.
-    private var openedLeaving = false
     private var away = false
     private var appTokens: [NSObjectProtocol] = []
     #endif
@@ -594,32 +594,30 @@ final class YouTubeBackend: NSObject, WatchBackend, WKNavigationDelegate, WKUIDe
 
     /// This video plays inline, never full screen, and WebKit offers no
     /// switch for a page's inline video to go into the small window by itself
-    /// as the app leaves; left alone it was paused in the background (in the
-    /// simulator, 2026-11-06). So it is asked to go as the app stops being in
-    /// front, while the app can still open the window, and only while the
-    /// video plays, as AVPlayer's goes. That moment is also Control Center
-    /// being pulled down, which is not leaving, so a window opened then closes
-    /// again when the app is back in front without having been away; one the
-    /// app was away behind closes on the way back, as AVBackend's does.
+    /// as the app leaves; left alone it is paused in the background. It goes
+    /// there from the stage's button, pressed in front, and stays there as the
+    /// app leaves; a window the app was away behind closes on the way back, as
+    /// AVBackend's does.
+    ///
+    /// It is not asked to go as the app stops being in front. That was tried
+    /// (0.1.7 (6)) and never opened a window: WebKit makes the window's
+    /// controller only when asked, a controller made once the app is no
+    /// longer active cannot start ("startPictureInPicture failed; status =
+    /// 0"), and the system will not start it by itself either, the video
+    /// having been moved off the page into WebKit's own layer. The page was
+    /// left believing it was in the small window, and from then on the
+    /// stage's button did nothing for the rest of the call (all in the
+    /// simulator through a real press of the home button, 2026-11-07).
     private func watchTheApp() {
         let center = NotificationCenter.default
-        appTokens.append(center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self, self.pipPossible, !self.pipActive, self.state == Self.playingState else { return }
-                self.openedLeaving = true
-                self.setPictureInPicture(true)
-            }
-        })
         appTokens.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.away = true }
         })
         appTokens.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated {
-                guard let self else { return }
-                let close = self.away || self.openedLeaving
+                guard let self, self.away else { return }
                 self.away = false
-                self.openedLeaving = false
-                if close, self.pipActive { self.setPictureInPicture(false) }
+                if self.pipActive { self.setPictureInPicture(false) }
             }
         })
     }

@@ -36,12 +36,13 @@ struct PictureInPictureHost: UIViewRepresentable {
     let sid: String?
     var camera = false
     /// The video watched together goes into the small window instead
-    /// (WatchFeature.holdsSmallWindow): this one does not start by itself,
-    /// and is not fed every frame for a window it will not open.
+    /// (WatchFeature.holdsSmallWindow): this one has no controller
+    /// meanwhile (`arrange`), and is not fed every frame for a window it
+    /// will not open.
     var yields = false
 
     func makeUIView(context: Context) -> HostView {
-        HostView(call: call)
+        HostView(call: call, yields: yields)
     }
 
     func updateUIView(_ view: HostView, context: Context) {
@@ -70,8 +71,9 @@ struct PictureInPictureHost: UIViewRepresentable {
         private var away = UIApplication.shared.applicationState != .active
         private var watching: [NSObjectProtocol] = []
 
-        init(call: Call) {
+        init(call: Call, yields: Bool) {
             self.call = call
+            self.yields = yields
             super.init(frame: .zero)
             renderer.layer.videoGravity = .resizeAspect
             renderer.show(atMostEvery: away ? 0 : 0.5)
@@ -85,13 +87,7 @@ struct PictureInPictureHost: UIViewRepresentable {
             }
             full = away
             layer.addSublayer(renderer.layer)
-            if AVPictureInPictureController.isPictureInPictureSupported() {
-                let source = AVPictureInPictureController.ContentSource(sampleBufferDisplayLayer: renderer.layer, playbackDelegate: self)
-                let controller = AVPictureInPictureController(contentSource: source)
-                controller.canStartPictureInPictureAutomaticallyFromInline = true
-                controller.delegate = self
-                self.controller = controller
-            }
+            arrange()
             let center = NotificationCenter.default
             watching.append(center.addObserver(forName: UIApplication.willResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.away = true; self?.feed() }
@@ -122,10 +118,34 @@ struct PictureInPictureHost: UIViewRepresentable {
             self.camera = camera
             if yields != self.yields {
                 self.yields = yields
-                controller?.canStartPictureInPictureAutomaticallyFromInline = !yields
+                arrange()
             }
             feed()
             reframe()
+        }
+
+        /// The controller exists only while the call may have the small
+        /// window. Standing aside by turning off its automatic start was not
+        /// enough: the system never heard of the change, and as the app left
+        /// it found two controllers that would each start, called that
+        /// ambiguous and opened neither, so a video watched together went
+        /// nowhere (logged in the simulator, 2026-11-07; on an iPhone the
+        /// video's window never opened with the microphone off). Released,
+        /// with its source taken away first, it is no longer asked, as Apple
+        /// says to keep a controller from starting by itself. One whose window
+        /// is open is left until that window closes.
+        private func arrange() {
+            let wanted = !yields && AVPictureInPictureController.isPictureInPictureSupported()
+            if wanted, controller == nil {
+                let source = AVPictureInPictureController.ContentSource(sampleBufferDisplayLayer: renderer.layer, playbackDelegate: self)
+                let made = AVPictureInPictureController(contentSource: source)
+                made.canStartPictureInPictureAutomaticallyFromInline = true
+                made.delegate = self
+                controller = made
+            } else if !wanted, let controller, !controller.isPictureInPictureActive {
+                controller.contentSource = nil
+                self.controller = nil
+            }
         }
 
         private func reframe() {
@@ -159,6 +179,7 @@ struct PictureInPictureHost: UIViewRepresentable {
         }
 
         func pictureInPictureControllerDidStopPictureInPicture(_ controller: AVPictureInPictureController) {
+            arrange()
             feed()
         }
 

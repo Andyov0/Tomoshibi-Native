@@ -42,12 +42,15 @@ public final class WatchFeature {
 
     /// Whether the video watched together, rather than the call's own picture
     /// (PictureInPictureHost), goes into the small window as the app leaves:
-    /// while it is there, or while it plays and can go. Each may start by
-    /// itself, and of two that may the system picks one; the call's, in a
-    /// call where nobody's camera is on, has nothing to show.
+    /// while it is there, or while it plays and can go by itself. Of two that
+    /// would start by themselves the system opens neither ("desired effect is
+    /// ambiguous", SpringBoard's log), so the call's stands aside. YouTube's
+    /// cannot go by itself (YouTubeBackend `watchTheApp`), and does not hold
+    /// the window until it is in it.
     public var holdsSmallWindow: Bool {
         guard let player = engine.player else { return false }
-        return player.pictureInPictureActive || (player.pictureInPicturePossible && playing)
+        if player.pictureInPictureActive { return true }
+        return player.pictureInPicturePossible && playing && player.backend?.youtube == false
     }
 
     public init(call: CallModel) {
