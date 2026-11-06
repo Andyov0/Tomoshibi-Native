@@ -90,6 +90,10 @@ struct ControlBar: View {
     /// Whether the compact bar is the one drawn: nil until the first layout
     /// has said which fits (`fitting`).
     @State private var compact: Bool?
+    /// Counted up each time the app comes back in front, for the compact
+    /// bar's measure to be made afresh (`fitting`).
+    @State private var measure = 0
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         Group {
@@ -133,7 +137,35 @@ struct ControlBar: View {
     private var fitting: some View {
         FirstThatFits(axis: layoutAxis) {
             probe(compact: false)
+            // Which bar is drawn is what the compact one last said: whether
+            // it is the one put in place. One bar says it, so the two cannot
+            // disagree.
+            //
+            // Made afresh each time the app comes back in front, because
+            // a change can go unsaid. Going to the background, an iPhone
+            // lays the app out on its side for the app switcher's picture,
+            // where the whole bar fits across the foot, and then upright
+            // again, where only the compact one fits in the column; the
+            // first was said and the second never was (logged on the iPhone
+            // Duo simulator: chosen=false on its side, and nothing after).
+            // The whole bar was drawn over a place the compact bar's size,
+            // eleven buttons in a column with room for seven, under the clock
+            // and off the foot with hanging up (reported on an iPhone Duo
+            // 2026-11-06, back from the home screen while watching
+            // together). A measure made afresh says where it is at once.
             probe(compact: true)
+                .onGeometryChange(for: Bool.self) { $0.frame(in: .named(Self.fits)).minX > -FirstThatFits.away / 2 } action: { chosen in
+                    guard self.compact != chosen else { return }
+                    if self.compact == nil {
+                        self.compact = chosen
+                    } else {
+                        withAnimation(Theme.settle) { self.compact = chosen }
+                    }
+                }
+                .id(measure)
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { measure += 1 }
         }
         .coordinateSpace(.named(Self.fits))
         .overlay {
@@ -150,22 +182,13 @@ struct ControlBar: View {
 
     private static let fits = "bar.fits"
 
-    /// One of the two bars, out of sight and out of reach, measured; it says
-    /// whether it is the one the layout chose (`FirstThatFits` puts the
-    /// other far off).
+    /// One of the two bars, out of sight and out of reach, measured
+    /// (`FirstThatFits` puts the one not chosen far off).
     private func probe(compact: Bool) -> some View {
         bar(compact: compact, probing: true)
             .hidden()
             .allowsHitTesting(false)
             .accessibilityHidden(true)
-            .onGeometryChange(for: Bool.self) { $0.frame(in: .named(Self.fits)).minX > -FirstThatFits.away / 2 } action: { chosen in
-                guard chosen, self.compact != compact else { return }
-                if self.compact == nil {
-                    self.compact = compact
-                } else {
-                    withAnimation(Theme.settle) { self.compact = compact }
-                }
-            }
     }
 
     private func bar(compact: Bool, probing: Bool = false) -> some View {
